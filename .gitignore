@@ -31,3 +31,8 @@ test-results/
 
 # local working files
 /local/
+
+# local assistant tooling (never committed)
+CLAUDE.md
+.claude/
+.mcp.json
