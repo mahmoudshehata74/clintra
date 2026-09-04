@@ -1,0 +1,33 @@
+﻿# dependencies
+node_modules/
+vendor/
+
+# build output
+dist/
+build/
+.vite/
+
+# environment
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editor and OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# tests
+coverage/
+playwright-report/
+test-results/
+
+# local working files
+/local/
