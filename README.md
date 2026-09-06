@@ -9,6 +9,13 @@ Clinic operating system for Egypt. Arabic (RTL), offline-first.
 - `docs/`     - internal documentation
 - `e2e/`      - end-to-end tests
 
-## Requirements
-- Node.js 22+ and pnpm 9+
-- PHP 8.3+ and Composer (needed only for `api/`, later)
+## Development
+Requires Node.js 22+ and pnpm (version pinned in `web/package.json`).
+
+```
+pnpm --dir web install
+pnpm --dir web dev
+```
+
+## Deployment
+Pushes to `main` deploy automatically via Vercel.
