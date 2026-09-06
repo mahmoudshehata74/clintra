@@ -4,15 +4,9 @@ import type { ScheduleMode } from "../domain/scheduleMode";
 import type { Role } from "../domain/role";
 import type { LocationScope, PractitionerScope } from "../domain/scope";
 import type { Piastres } from "../domain/money";
+import type { ClinicDay, ClockTime, Instant } from "../domain/time";
 
-/** A local calendar date in Africa/Cairo, formatted "YYYY-MM-DD". */
-export type ClinicDay = string;
-
-/** A 24-hour clock time, formatted "HH:MM". */
-export type ClockTime = string;
-
-/** An instant in time, as an ISO 8601 UTC string. */
-export type Instant = string;
+export type { ClinicDay, ClockTime, Instant };
 
 export const PlanTier = {
   Small: "small",

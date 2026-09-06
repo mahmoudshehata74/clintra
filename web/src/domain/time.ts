@@ -1,0 +1,79 @@
+/** A local calendar date in Africa/Cairo, formatted "YYYY-MM-DD". */
+export type ClinicDay = string;
+
+/** A 24-hour clock time, formatted "HH:MM". */
+export type ClockTime = string;
+
+/** An instant in time, as an ISO 8601 UTC string. */
+export type Instant = string;
+
+const CAIRO_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Africa/Cairo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const CAIRO_TIME_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Africa/Cairo",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+// Africa/Cairo observes DST (Egypt reinstated it in 2023: UTC+2 in winter,
+// UTC+3 in summer), so its offset cannot be hardcoded — it must be read from
+// the timezone database for the specific instant in question.
+const CAIRO_INSTANT_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Africa/Cairo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
+function partValue(parts: Intl.DateTimeFormatPart[], type: string): string {
+  return parts.find((part) => part.type === type)?.value ?? "00";
+}
+
+/** Africa/Cairo's UTC offset, in minutes, at the given instant. */
+function cairoOffsetMinutes(instant: Date): number {
+  const parts = CAIRO_INSTANT_FORMATTER.formatToParts(instant);
+  const wallClockAsUtc = Date.UTC(
+    Number(partValue(parts, "year")),
+    Number(partValue(parts, "month")) - 1,
+    Number(partValue(parts, "day")),
+    Number(partValue(parts, "hour")),
+    Number(partValue(parts, "minute")),
+    Number(partValue(parts, "second")),
+  );
+  return (wallClockAsUtc - instant.getTime()) / 60_000;
+}
+
+/** Today's clinic day in Africa/Cairo, derived from the current instant (or a given one). */
+export function todayInCairo(now: Date = new Date()): ClinicDay {
+  const parts = CAIRO_DATE_FORMATTER.formatToParts(now);
+  return `${partValue(parts, "year")}-${partValue(parts, "month")}-${partValue(parts, "day")}`;
+}
+
+/** The weekday (0 = Sunday .. 6 = Saturday) of a clinic day. Calendar math only, no timezone conversion needed. */
+export function weekdayOf(day: ClinicDay): number {
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, date)).getUTCDay();
+}
+
+/** The Africa/Cairo clock time ("HH:MM") an instant falls on. */
+export function clockTimeInCairo(instant: Instant): ClockTime {
+  const parts = CAIRO_TIME_FORMATTER.formatToParts(new Date(instant));
+  return `${partValue(parts, "hour")}:${partValue(parts, "minute")}`;
+}
+
+/** The UTC instant corresponding to a clinic day and clock time in Africa/Cairo. */
+export function cairoInstant(day: ClinicDay, time: ClockTime): Instant {
+  const naiveUtc = new Date(`${day}T${time}:00Z`);
+  const offsetMinutes = cairoOffsetMinutes(naiveUtc);
+  return new Date(naiveUtc.getTime() - offsetMinutes * 60_000).toISOString();
+}

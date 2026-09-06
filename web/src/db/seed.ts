@@ -1,6 +1,11 @@
 import { id } from "../domain/id";
 import { Role } from "../domain/role";
 import { LocationScope, PractitionerScope } from "../domain/scope";
+import { ScheduleMode } from "../domain/scheduleMode";
+import { cairoInstant, todayInCairo, weekdayOf } from "../domain/time";
+import { CancelReason, VisitStatus } from "../domain/visitStatus";
+import { VisitSource } from "../domain/visitSource";
+import { generateSlotTimes } from "../domain/schedule";
 import type { Piastres } from "../domain/money";
 import type { ClintraDatabase } from "./database";
 import {
@@ -9,20 +14,25 @@ import {
   SpecialtyTemplatePricingMode,
   type Membership,
   type Organization,
+  type Patient,
   type Practitioner,
   type PractitionerLocation,
+  type Schedule,
   type Service,
   type SpecialtyTemplate,
   type Location,
   type User,
+  type Visit,
 } from "./types";
 
 const GENERAL_SPECIALTY_KEY = "general";
 
 /**
  * Seeds one organization, one location, one practitioner, one assistant
- * membership and three services with Arabic names. Only runs when the
- * database is empty, and is safe to call more than once.
+ * membership, three services with Arabic names, a slots-mode schedule for
+ * today's weekday, five patients and five visits spread across today in
+ * different statuses. Only runs when the database is empty, and is safe to
+ * call more than once.
  */
 export async function seedDatabase(db: ClintraDatabase): Promise<void> {
   const existingCount = await db.organizations.count();
@@ -31,6 +41,7 @@ export async function seedDatabase(db: ClintraDatabase): Promise<void> {
   }
 
   const now = new Date().toISOString();
+  const today = todayInCairo();
 
   const organization: Organization = {
     id: id(),
@@ -128,6 +139,76 @@ export async function seedDatabase(db: ClintraDatabase): Promise<void> {
     },
   ];
 
+  const schedule: Schedule = {
+    id: id(),
+    practitioner_id: practitioner.id,
+    location_id: location.id,
+    weekday: weekdayOf(today),
+    start_time: "09:00",
+    end_time: "14:00",
+    mode: ScheduleMode.Slots,
+    slot_minutes: 30,
+    max_capacity: null,
+    resource_count: 1,
+  };
+
+  const patients: Patient[] = [
+    "منى عبد الله",
+    "كريم فتحي",
+    "ياسمين توفيق",
+    "عمر جمال",
+    "هدى رجب",
+  ].map((full_name) => ({
+    id: id(),
+    org_id: organization.id,
+    full_name,
+    phone: null,
+    gender: null,
+    birth_year: null,
+    note: null,
+    created_at: now,
+  }));
+
+  const slotTimes = generateSlotTimes(schedule);
+  const visitPlan: { status: Visit["status"]; cancelReason: Visit["cancel_reason"] }[] = [
+    { status: VisitStatus.Booked, cancelReason: null },
+    { status: VisitStatus.Arrived, cancelReason: null },
+    { status: VisitStatus.Completed, cancelReason: null },
+    { status: VisitStatus.NoShow, cancelReason: CancelReason.NoShow },
+    { status: VisitStatus.Cancelled, cancelReason: CancelReason.Patient },
+  ];
+
+  const visits: Visit[] = visitPlan.map((plan, index) => {
+    const time = slotTimes[index];
+    const scheduledAt = cairoInstant(today, time);
+    const isArrivedOrLater =
+      plan.status === VisitStatus.Arrived || plan.status === VisitStatus.Completed;
+    const isCompleted = plan.status === VisitStatus.Completed;
+
+    return {
+      id: id(),
+      org_id: organization.id,
+      location_id: location.id,
+      practitioner_id: practitioner.id,
+      patient_id: patients[index].id,
+      service_id: services[index % services.length].id,
+      care_plan_item_id: null,
+      visit_date: today,
+      position: index + 1,
+      scheduled_at: scheduledAt,
+      status: plan.status,
+      is_overbooked: false,
+      source: VisitSource.Phone,
+      arrived_at: isArrivedOrLater ? scheduledAt : null,
+      started_at: isCompleted ? scheduledAt : null,
+      ended_at: isCompleted ? cairoInstant(today, slotTimes[index + 1] ?? "14:00") : null,
+      cancel_reason: plan.cancelReason,
+      rescheduled_from: null,
+      created_by: assistantMembership.id,
+      created_at: now,
+    };
+  });
+
   await db.transaction(
     "rw",
     [
@@ -139,6 +220,9 @@ export async function seedDatabase(db: ClintraDatabase): Promise<void> {
       db.users,
       db.memberships,
       db.services,
+      db.schedules,
+      db.patients,
+      db.visits,
     ],
     async () => {
       await db.organizations.add(organization);
@@ -149,6 +233,9 @@ export async function seedDatabase(db: ClintraDatabase): Promise<void> {
       await db.users.add(assistantUser);
       await db.memberships.add(assistantMembership);
       await db.services.bulkAdd(services);
+      await db.schedules.add(schedule);
+      await db.patients.bulkAdd(patients);
+      await db.visits.bulkAdd(visits);
     },
   );
 }
