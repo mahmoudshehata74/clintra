@@ -17,6 +17,13 @@
   --radius-frame: 12px;
 }
 
+@layer utilities {
+  .ltr-run {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+}
+
 html,
 body,
 #root {

@@ -1,3 +1,5 @@
+import Ltr from "./components/Ltr";
+
 const tokens = [
   { name: "الحبر", value: "#16211D" },
   { name: "الأخضر", value: "#1D5B4A" },
@@ -30,7 +32,9 @@ export default function App() {
             />
             <span className="text-sm">
               {t.name}
-              <span className="block text-muted">{t.value}</span>
+              <span className="block text-muted">
+                <Ltr>{t.value}</Ltr>
+              </span>
             </span>
           </li>
         ))}
