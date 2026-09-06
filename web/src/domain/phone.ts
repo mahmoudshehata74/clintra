@@ -11,17 +11,67 @@ function toWesternDigits(value: string): string {
   });
 }
 
+/** Kind of Egyptian line a normalised number belongs to. */
+export const PhoneKind = {
+  Mobile: "mobile",
+  Landline: "landline",
+} as const;
+
+export type PhoneKind = (typeof PhoneKind)[keyof typeof PhoneKind];
+
 const EGYPT_MOBILE_NATIONAL_NUMBER = /^1[0125]\d{8}$/;
 
+// Verified against the Egyptian numbering plan (Cairo/Giza/Qalyubia = 2, Alexandria = 3, and the
+// two-digit governorate codes below). The 10th of Ramadan codes (15, 554) are deliberately
+// excluded: "15" overlaps the WE mobile prefix's digit space and could not be confirmed with
+// confidence from consistent sources.
+const EGYPT_LANDLINE_TWO_DIGIT_CODES = [
+  "13", "40", "45", "46", "47", "48", "50", "55", "57", "62", "64", "65",
+  "66", "68", "69", "82", "84", "86", "88", "92", "93", "95", "96", "97",
+];
+
+const EGYPT_LANDLINE_TWO_DIGIT_NUMBER = new RegExp(
+  `^(?:${EGYPT_LANDLINE_TWO_DIGIT_CODES.join("|")})\\d{7}$`,
+);
+
+interface PhoneClassification {
+  readonly kind: PhoneKind;
+  readonly areaCodeLength: number;
+}
+
+function classifyNationalNumber(national: string): PhoneClassification | null {
+  if (EGYPT_MOBILE_NATIONAL_NUMBER.test(national)) {
+    return { kind: PhoneKind.Mobile, areaCodeLength: 2 };
+  }
+  if (/^2\d{8}$/.test(national) || /^3\d{7}$/.test(national)) {
+    return { kind: PhoneKind.Landline, areaCodeLength: 1 };
+  }
+  if (EGYPT_LANDLINE_TWO_DIGIT_NUMBER.test(national)) {
+    return { kind: PhoneKind.Landline, areaCodeLength: 2 };
+  }
+  return null;
+}
+
+function groupDigitsFromRight(digits: string, groupSize: number): string[] {
+  const groups: string[] = [];
+  let end = digits.length;
+  while (end > 0) {
+    const start = Math.max(0, end - groupSize);
+    groups.unshift(digits.slice(start, end));
+    end = start;
+  }
+  return groups;
+}
+
 export type NormalizePhoneResult =
-  | { readonly ok: true; readonly value: string }
+  | { readonly ok: true; readonly value: string; readonly kind: PhoneKind }
   | { readonly ok: false; readonly error: string };
 
 /**
- * Normalises a user-entered Egyptian mobile number into E.164 (+20XXXXXXXXXX). Accepts local
- * (01001234567), bare national (1001234567), +20 and 0020 international forms, Arabic-Indic
- * digits, and common spacing/punctuation. Returns a clear failure instead of throwing or guessing
- * when the input cannot be normalised.
+ * Normalises a user-entered Egyptian mobile or landline number into E.164 (+20 followed by the
+ * national number, no leading zero). Accepts local, bare national, +20 and 0020 international
+ * forms, Arabic-Indic digits, and common spacing/punctuation. Returns a clear failure instead of
+ * throwing or guessing when the input cannot be normalised.
  */
 export function normalizeEgyptianPhone(input: string): NormalizePhoneResult {
   const digitsAndPlus = toWesternDigits(input).replace(/[^\d+]/g, "");
@@ -36,20 +86,32 @@ export function normalizeEgyptianPhone(input: string): NormalizePhoneResult {
     national = national.slice(1);
   }
 
-  if (!EGYPT_MOBILE_NATIONAL_NUMBER.test(national)) {
+  const classification = classifyNationalNumber(national);
+  if (!classification) {
     return { ok: false, error: "invalid_phone" };
   }
 
-  return { ok: true, value: `+20${national}` };
+  return { ok: true, value: `+20${national}`, kind: classification.kind };
 }
 
-/** Formats an E.164 Egyptian mobile number for local display, e.g. +201001234567 -> "010 0123 4567". */
+/**
+ * Formats an E.164 Egyptian number for local display, grouping the trunk-prefixed area/operator
+ * code separately from the subscriber number, e.g. +201001234567 -> "010 0123 4567" (mobile) or
+ * +20221234567 -> "02 1234 5678" (landline).
+ */
 export function formatEgyptianPhoneForDisplay(e164: string): string {
-  const match = /^\+20(1[0125]\d{8})$/.exec(e164);
+  const match = /^\+20(\d+)$/.exec(e164);
   if (!match) {
     return e164;
   }
 
-  const local = `0${match[1]}`;
-  return `${local.slice(0, 3)} ${local.slice(3, 7)} ${local.slice(7, 11)}`;
+  const national = match[1];
+  const classification = classifyNationalNumber(national);
+  if (!classification) {
+    return e164;
+  }
+
+  const prefix = `0${national.slice(0, classification.areaCodeLength)}`;
+  const subscriber = national.slice(classification.areaCodeLength);
+  return [prefix, ...groupDigitsFromRight(subscriber, 4)].join(" ");
 }
