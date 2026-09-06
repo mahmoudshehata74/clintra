@@ -12,11 +12,12 @@ export const VisitStatus = {
 
 export type VisitStatus = (typeof VisitStatus)[keyof typeof VisitStatus];
 
-/** Reason recorded when a visit becomes cancelled or no_show. no_show is a distinct status, not a merged reason. */
+/** Reason recorded when a visit becomes cancelled, no_show or rescheduled. no_show is a distinct status, not a merged reason. */
 export const CancelReason = {
   Patient: "patient",
   Clinic: "clinic",
   NoShow: "no_show",
+  Postpone: "postpone",
 } as const;
 
 export type CancelReason = (typeof CancelReason)[keyof typeof CancelReason];
