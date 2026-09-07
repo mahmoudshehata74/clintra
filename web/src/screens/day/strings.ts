@@ -25,6 +25,9 @@ export const dayScreenStrings = {
   // action available for five minutes.
   attendanceMarked: "اتسجل حضور المريض",
   undoAction: "تراجع",
+  // Shown instead of the undo option when the undo is refused: the window
+  // passed, or the visit changed since the mark, so nothing was written.
+  undoRefused: "التراجع مش متاح دلوقتي",
   countersTotalBooked: "إجمالي الحجوزات",
   countersArrived: "حضروا",
   countersCompleted: "خلصوا",

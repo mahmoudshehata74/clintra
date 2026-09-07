@@ -24,9 +24,14 @@ export interface MutationInput<T> {
  * an audit_log row, and (c) appends a sync_ops row for the future sync
  * transport. If any part fails, all three roll back together — a change that
  * is applied but unlogged, or logged but unqueued, is a defect.
+ *
+ * Returns the id of the audit_log row it wrote, so a caller that may need to
+ * undo this exact mutation later (and no other) has something to identify it
+ * by, rather than a snapshot that cannot be checked against later history.
  */
-export async function mutate<T>(db: ClintraDatabase, input: MutationInput<T>): Promise<void> {
+export async function mutate<T>(db: ClintraDatabase, input: MutationInput<T>): Promise<string> {
   const now = new Date().toISOString();
+  const auditLogId = id();
 
   await db.transaction("rw", input.table, db.audit_log, db.sync_ops, async () => {
     if (input.action === AuditAction.Delete) {
@@ -39,7 +44,7 @@ export async function mutate<T>(db: ClintraDatabase, input: MutationInput<T>): P
     }
 
     await db.audit_log.add({
-      id: id(),
+      id: auditLogId,
       org_id: input.orgId,
       actor_membership_id: input.actorMembershipId,
       entity: input.entity,
@@ -61,4 +66,6 @@ export async function mutate<T>(db: ClintraDatabase, input: MutationInput<T>): P
       synced_at: null,
     });
   });
+
+  return auditLogId;
 }

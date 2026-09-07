@@ -4,7 +4,7 @@ import { db } from "../../db/database";
 import { seedDatabase } from "../../db/seed";
 import type { Location, Patient, Practitioner, Schedule, Service, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
-import { markVisitArrived, restoreVisitSnapshot } from "../../db/visitAttendance";
+import { markVisitArrived, undoMostRecentVisitArrival } from "../../db/visitAttendance";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import { formatCairoDisplayDateParts, todayInCairo, weekdayOf } from "../../domain/time";
 import AttendanceToast from "./AttendanceToast";
@@ -28,8 +28,13 @@ interface DynamicData {
 const EMPTY_DYNAMIC_DATA: DynamicData = { visits: [], patientsById: new Map(), servicesById: new Map() };
 
 // The undo action stays available for five minutes after marking a visit
-// arrived, per the specification.
+// arrived, per the specification. This is a UI-side mirror of the real
+// enforcement inside undoMostRecentVisitArrival; the toast disappearing here
+// is a convenience, not the guarantee.
 const UNDO_WINDOW_MS = 5 * 60 * 1000;
+const REFUSED_TOAST_MS = 4 * 1000;
+
+type ToastState = { kind: "success"; auditLogId: string } | { kind: "refused" };
 
 function toggleButtonClass(isSelected: boolean): string {
   return isSelected
@@ -44,7 +49,7 @@ export default function DayScreen() {
   const [staticData, setStaticData] = useState<StaticData | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [selectedPractitionerId, setSelectedPractitionerId] = useState<string | null>(null);
-  const [undoSnapshot, setUndoSnapshot] = useState<Visit | null>(null);
+  const [toastState, setToastState] = useState<ToastState | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,32 +133,32 @@ export default function DayScreen() {
     }, [staticData, practitionersToShow, today, selectedLocationId]) ?? EMPTY_DYNAMIC_DATA;
 
   useEffect(() => {
-    if (!undoSnapshot) {
+    if (!toastState) {
       return;
     }
-    const timeout = setTimeout(() => setUndoSnapshot(null), UNDO_WINDOW_MS);
+    const timeoutMs = toastState.kind === "success" ? UNDO_WINDOW_MS : REFUSED_TOAST_MS;
+    const timeout = setTimeout(() => setToastState(null), timeoutMs);
     return () => clearTimeout(timeout);
-  }, [undoSnapshot]);
+  }, [toastState]);
 
   async function handleMarkArrived(visit: Visit) {
     try {
-      const previous = await markVisitArrived(db, visit.id);
-      setUndoSnapshot(previous);
+      const auditLogId = await markVisitArrived(db, visit.id);
+      setToastState({ kind: "success", auditLogId });
     } catch (error) {
       console.error(error);
     }
   }
 
   async function handleUndo() {
-    if (!undoSnapshot) {
+    if (!toastState || toastState.kind !== "success") {
       return;
     }
     try {
-      await restoreVisitSnapshot(db, undoSnapshot);
+      const outcome = await undoMostRecentVisitArrival(db, toastState.auditLogId);
+      setToastState(outcome.ok ? null : { kind: "refused" });
     } catch (error) {
       console.error(error);
-    } finally {
-      setUndoSnapshot(null);
     }
   }
 
@@ -175,7 +180,7 @@ export default function DayScreen() {
   );
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
+    <main className={`mx-auto max-w-3xl px-6 pt-16 ${toastState ? "pb-28" : "pb-16"}`}>
       <h1 className="font-display text-4xl font-semibold text-green">Clintra</h1>
       <p className="mt-2 text-muted">
         {formatCairoDisplayDateParts(today).map((part, index) =>
@@ -259,7 +264,7 @@ export default function DayScreen() {
         })}
       </div>
 
-      {undoSnapshot && <AttendanceToast onUndo={handleUndo} />}
+      {toastState && <AttendanceToast variant={toastState.kind} onUndo={handleUndo} />}
     </main>
   );
 }
