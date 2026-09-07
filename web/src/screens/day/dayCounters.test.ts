@@ -34,47 +34,74 @@ describe("computeDayCounters", () => {
     expect(computeDayCounters([])).toEqual({ total: 0, arrived: 0, completed: 0, remaining: 0 });
   });
 
-  it("counts total as every visit regardless of status", () => {
-    const visits = [
-      makeVisit(VisitStatus.Booked, 1),
-      makeVisit(VisitStatus.Cancelled, 2),
-      makeVisit(VisitStatus.NoShow, 3),
-    ];
-    expect(computeDayCounters(visits).total).toBe(3);
+  describe("total (إجمالي الحجوزات): every visit recorded for today, whatever its status", () => {
+    it("counts every visit regardless of status", () => {
+      const visits = [
+        makeVisit(VisitStatus.Booked, 1),
+        makeVisit(VisitStatus.Cancelled, 2),
+        makeVisit(VisitStatus.NoShow, 3),
+      ];
+      expect(computeDayCounters(visits).total).toBe(3);
+    });
   });
 
-  it("counts arrived, in_room and completed visits as arrived", () => {
-    const visits = [
-      makeVisit(VisitStatus.Booked, 1),
-      makeVisit(VisitStatus.Confirmed, 2),
-      makeVisit(VisitStatus.Arrived, 3),
-      makeVisit(VisitStatus.InRoom, 4),
-      makeVisit(VisitStatus.Completed, 5),
-    ];
-    expect(computeDayCounters(visits).arrived).toBe(3);
+  describe("arrived (حضروا): arrived, in_room and completed", () => {
+    it("counts arrived, in_room and completed visits, and nothing else", () => {
+      const visits = [
+        makeVisit(VisitStatus.Booked, 1),
+        makeVisit(VisitStatus.Confirmed, 2),
+        makeVisit(VisitStatus.Arrived, 3),
+        makeVisit(VisitStatus.InRoom, 4),
+        makeVisit(VisitStatus.Completed, 5),
+        makeVisit(VisitStatus.Cancelled, 6),
+        makeVisit(VisitStatus.NoShow, 7),
+      ];
+      expect(computeDayCounters(visits).arrived).toBe(3);
+    });
   });
 
-  it("counts only completed visits as completed", () => {
-    const visits = [
-      makeVisit(VisitStatus.InRoom, 1),
-      makeVisit(VisitStatus.Completed, 2),
-      makeVisit(VisitStatus.Completed, 3),
-    ];
-    expect(computeDayCounters(visits).completed).toBe(2);
+  describe("completed (خلصوا): completed only", () => {
+    it("counts only completed visits", () => {
+      const visits = [
+        makeVisit(VisitStatus.Arrived, 1),
+        makeVisit(VisitStatus.InRoom, 2),
+        makeVisit(VisitStatus.Completed, 3),
+        makeVisit(VisitStatus.Completed, 4),
+      ];
+      expect(computeDayCounters(visits).completed).toBe(2);
+    });
   });
 
-  it("excludes completed, cancelled, no_show and rescheduled from remaining", () => {
-    const visits = [
-      makeVisit(VisitStatus.Booked, 1),
-      makeVisit(VisitStatus.Confirmed, 2),
-      makeVisit(VisitStatus.Arrived, 3),
-      makeVisit(VisitStatus.InRoom, 4),
-      makeVisit(VisitStatus.Completed, 5),
-      makeVisit(VisitStatus.Cancelled, 6),
-      makeVisit(VisitStatus.NoShow, 7),
-      makeVisit(VisitStatus.Rescheduled, 8),
-    ];
-    expect(computeDayCounters(visits).remaining).toBe(4);
+  describe("remaining (متبقي): booked and confirmed only", () => {
+    it("counts only booked and confirmed visits", () => {
+      const visits = [
+        makeVisit(VisitStatus.Booked, 1),
+        makeVisit(VisitStatus.Confirmed, 2),
+      ];
+      expect(computeDayCounters(visits).remaining).toBe(2);
+    });
+
+    it("does not count a patient who already arrived as remaining", () => {
+      const visits = [makeVisit(VisitStatus.Arrived, 1), makeVisit(VisitStatus.InRoom, 2)];
+      expect(computeDayCounters(visits).remaining).toBe(0);
+    });
+
+    it("does not count a completed visit as remaining", () => {
+      expect(computeDayCounters([makeVisit(VisitStatus.Completed, 1)]).remaining).toBe(0);
+    });
+
+    it("does not count a cancelled or a no_show visit as remaining, even when both are present", () => {
+      const visits = [
+        makeVisit(VisitStatus.Booked, 1),
+        makeVisit(VisitStatus.Cancelled, 2),
+        makeVisit(VisitStatus.NoShow, 3),
+      ];
+      expect(computeDayCounters(visits).remaining).toBe(1);
+    });
+
+    it("does not count a rescheduled visit as remaining", () => {
+      expect(computeDayCounters([makeVisit(VisitStatus.Rescheduled, 1)]).remaining).toBe(0);
+    });
   });
 
   it("matches the seeded five-visit day", () => {
@@ -89,7 +116,7 @@ describe("computeDayCounters", () => {
       total: 5,
       arrived: 2,
       completed: 1,
-      remaining: 2,
+      remaining: 1,
     });
   });
 });

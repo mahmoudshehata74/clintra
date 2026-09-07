@@ -21,6 +21,16 @@ const CAIRO_TIME_FORMATTER = new Intl.DateTimeFormat("en-GB", {
   hour12: false,
 });
 
+// "-u-nu-latn" keeps Arabic weekday/month names from ar-EG while forcing
+// Western digits for the day number, matching the Western digits used
+// elsewhere on screen (clock times, money, phone numbers).
+const CAIRO_DISPLAY_DATE_FORMATTER = new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
+  timeZone: "Africa/Cairo",
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+});
+
 // Africa/Cairo observes DST (Egypt reinstated it in 2023: UTC+2 in winter,
 // UTC+3 in summer), so its offset cannot be hardcoded — it must be read from
 // the timezone database for the specific instant in question.
@@ -76,4 +86,25 @@ export function cairoInstant(day: ClinicDay, time: ClockTime): Instant {
   const naiveUtc = new Date(`${day}T${time}:00Z`);
   const offsetMinutes = cairoOffsetMinutes(naiveUtc);
   return new Date(naiveUtc.getTime() - offsetMinutes * 60_000).toISOString();
+}
+
+function cairoDisplayDateParts(day: ClinicDay): Intl.DateTimeFormatPart[] {
+  const [year, month, date] = day.split("-").map(Number);
+  return CAIRO_DISPLAY_DATE_FORMATTER.formatToParts(new Date(Date.UTC(year, month - 1, date, 12)));
+}
+
+/** A clinic day formatted the way an Egyptian clinic assistant reads a date: Arabic weekday, day number, Arabic month. */
+export function formatCairoDisplayDate(day: ClinicDay): string {
+  return cairoDisplayDateParts(day)
+    .map((part) => part.value)
+    .join("");
+}
+
+/**
+ * The same display date, split into parts so the caller can isolate the
+ * numeric day part (a Latin digit run) from the surrounding Arabic weekday
+ * and month names, instead of forcing the whole string left-to-right.
+ */
+export function formatCairoDisplayDateParts(day: ClinicDay): readonly Intl.DateTimeFormatPart[] {
+  return cairoDisplayDateParts(day);
 }

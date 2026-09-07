@@ -1,36 +1,50 @@
 import { VisitStatus, type VisitStatus as VisitStatusType } from "../../domain/visitStatus";
 
-export type StatusColor = "amber" | "green" | "red";
+export interface StatusVisual {
+  /** Border/fill classes for the slot row container. */
+  containerClassName: string;
+  /** Classes for the patient name text. */
+  nameClassName: string;
+}
 
-const WAITING = new Set<string>([VisitStatus.Booked, VisitStatus.Confirmed, VisitStatus.Arrived]);
+const WAITING = new Set<string>([VisitStatus.Booked, VisitStatus.Confirmed]);
 const IN_PROGRESS_OR_DONE = new Set<string>([VisitStatus.InRoom, VisitStatus.Completed]);
-const STOPPED = new Set<string>([VisitStatus.Cancelled, VisitStatus.NoShow]);
 
 /**
- * Muted display colour for a visit status: amber for waiting-type statuses,
- * green for in-progress and completed, red for cancelled and no_show. A
- * rescheduled visit no longer occupies its original slot (the booking moved
- * to a new visit), so it has no colour here — the caller renders that slot
- * as empty instead of booked.
+ * Visual treatment for a visit status. Five states are distinguished, not
+ * just three colours: a booked/confirmed visit is a thin amber border only —
+ * arrived gets that same amber border PLUS a soft fill and a bolder name,
+ * because a patient sitting in the waiting room right now is the single most
+ * important fact on this screen and must not look like a plain booking.
+ * Likewise cancelled and no_show both use red but are never rendered the
+ * same: cancelled is dashed and dimmed (removed from the schedule), no_show
+ * is solid at full opacity (was expected, did not appear) — the specification
+ * treats them as distinct statuses for missed-revenue reporting, so they must
+ * be visually distinct too. A rescheduled visit no longer occupies its
+ * original slot (the booking moved to a new visit), so it has no treatment
+ * here — the caller renders that slot as empty instead of booked.
  */
-export function statusColor(status: VisitStatusType): StatusColor | null {
+export function statusVisual(status: VisitStatusType): StatusVisual | null {
   if (WAITING.has(status)) {
-    return "amber";
+    return { containerClassName: "border-s-4 border-s-amber", nameClassName: "" };
+  }
+  if (status === VisitStatus.Arrived) {
+    return {
+      containerClassName: "border-s-4 border-s-amber bg-amber/10",
+      nameClassName: "font-semibold",
+    };
   }
   if (IN_PROGRESS_OR_DONE.has(status)) {
-    return "green";
+    return { containerClassName: "border-s-4 border-s-green", nameClassName: "" };
   }
-  if (STOPPED.has(status)) {
-    return "red";
+  if (status === VisitStatus.Cancelled) {
+    return {
+      containerClassName: "border-s-4 border-dashed border-s-red opacity-60",
+      nameClassName: "line-through",
+    };
+  }
+  if (status === VisitStatus.NoShow) {
+    return { containerClassName: "border-s-4 border-s-red", nameClassName: "" };
   }
   return null;
 }
-
-// Muted: a small accent border, not a full saturated fill, since this screen
-// is read continuously for eight hours a day. border-s-4 is the width
-// (inline-start, i.e. the leading edge in RTL); the colour class is separate.
-export const STATUS_ACCENT_BORDER_CLASS: Record<StatusColor, string> = {
-  amber: "border-s-4 border-s-amber",
-  green: "border-s-4 border-s-green",
-  red: "border-s-4 border-s-red",
-};

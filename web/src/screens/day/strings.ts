@@ -9,6 +9,15 @@ export const dayScreenStrings = {
   scheduleNotConfigured: "مواعيد العمل لسه مش متسجلة",
   scheduleNotConfiguredHint: "تتسجل من الإعدادات",
   emptySlot: "الموعد فاضي",
+  // Short status words shown on every booked row, so status is never
+  // communicated by colour alone.
+  statusBooked: "محجوز",
+  statusConfirmed: "اتأكد",
+  statusArrived: "وصل",
+  statusInRoom: "جوه",
+  statusCompleted: "خلص",
+  statusCancelled: "اتلغى",
+  statusNoShow: "غاب",
   countersTotalBooked: "إجمالي الحجوزات",
   countersArrived: "حضروا",
   countersCompleted: "خلصوا",

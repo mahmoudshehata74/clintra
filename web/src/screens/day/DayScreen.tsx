@@ -4,7 +4,7 @@ import { db } from "../../db/database";
 import { seedDatabase } from "../../db/seed";
 import type { Location, Patient, Practitioner, Schedule, Service, Visit } from "../../db/types";
 import { ScheduleMode } from "../../domain/scheduleMode";
-import { todayInCairo, weekdayOf } from "../../domain/time";
+import { formatCairoDisplayDateParts, todayInCairo, weekdayOf } from "../../domain/time";
 import Counters from "./Counters";
 import { computeDayCounters } from "./dayCounters";
 import PractitionerColumn from "./PractitionerColumn";
@@ -156,7 +156,13 @@ export default function DayScreen() {
     <main className="mx-auto max-w-3xl px-6 py-16">
       <h1 className="font-display text-4xl font-semibold text-green">Clintra</h1>
       <p className="mt-2 text-muted">
-        <Ltr>{today}</Ltr>
+        {formatCairoDisplayDateParts(today).map((part, index) =>
+          part.type === "day" ? (
+            <Ltr key={index}>{part.value}</Ltr>
+          ) : (
+            <span key={index}>{part.value}</span>
+          ),
+        )}
       </p>
 
       {showLocationSwitcher && (

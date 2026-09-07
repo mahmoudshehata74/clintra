@@ -14,20 +14,18 @@ const ARRIVED_OR_LATER = new Set<string>([
   VisitStatus.Completed,
 ]);
 
-// A visit no longer occupies today once it is done, cancelled, a no-show, or
-// moved elsewhere by a reschedule.
-const SETTLED = new Set<string>([
-  VisitStatus.Completed,
-  VisitStatus.Cancelled,
-  VisitStatus.NoShow,
-  VisitStatus.Rescheduled,
-]);
+// Only a patient still genuinely expected counts as remaining. Anyone who
+// already arrived is no longer "remaining" (they are here), and a cancelled
+// or no_show visit is not coming at all — counting either as remaining would
+// tell the doctor people are still on their way when nobody is.
+const STILL_EXPECTED = new Set<string>([VisitStatus.Booked, VisitStatus.Confirmed]);
 
 /**
  * Counts visible today: total booked (every visit dated today, whatever its
  * current status), arrived (reached at least the arrived stage), completed,
- * and remaining (not yet settled). Always derived from the visit records
- * passed in, never stored.
+ * and remaining (booked or confirmed only — not yet arrived, not cancelled,
+ * not a no-show). Always derived from the visit records passed in, never
+ * stored.
  */
 export function computeDayCounters(visits: readonly Visit[]): DayCounters {
   let arrived = 0;
@@ -41,7 +39,7 @@ export function computeDayCounters(visits: readonly Visit[]): DayCounters {
     if (visit.status === VisitStatus.Completed) {
       completed += 1;
     }
-    if (!SETTLED.has(visit.status)) {
+    if (STILL_EXPECTED.has(visit.status)) {
       remaining += 1;
     }
   }

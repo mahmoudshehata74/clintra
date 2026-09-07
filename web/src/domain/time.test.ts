@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cairoInstant, clockTimeInCairo, todayInCairo, weekdayOf } from "./time";
+import { cairoInstant, clockTimeInCairo, formatCairoDisplayDate, todayInCairo, weekdayOf } from "./time";
 
 describe("todayInCairo", () => {
   it("formats an instant as YYYY-MM-DD in Africa/Cairo", () => {
@@ -49,5 +49,16 @@ describe("cairoInstant", () => {
   it("round-trips with clockTimeInCairo", () => {
     const instant = cairoInstant("2026-09-06", "11:30");
     expect(clockTimeInCairo(instant)).toBe("11:30");
+  });
+});
+
+describe("formatCairoDisplayDate", () => {
+  it("renders the Arabic weekday, Western day number and Arabic month", () => {
+    // 2026-09-07 is a Monday.
+    expect(formatCairoDisplayDate("2026-09-07")).toBe("الاثنين، 7 سبتمبر");
+  });
+
+  it("uses Western digits for the day number, not Arabic-Indic", () => {
+    expect(formatCairoDisplayDate("2026-09-07")).not.toMatch(/[٠-٩]/);
   });
 });
