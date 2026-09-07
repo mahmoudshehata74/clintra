@@ -6,6 +6,7 @@ const ALL_STATUSES = Object.values(VisitStatus);
 
 const VALID_TRANSITIONS: readonly (readonly [VisitStatus, VisitStatus])[] = [
   [VisitStatus.Booked, VisitStatus.Confirmed],
+  [VisitStatus.Booked, VisitStatus.Arrived],
   [VisitStatus.Confirmed, VisitStatus.Arrived],
   [VisitStatus.Arrived, VisitStatus.InRoom],
   [VisitStatus.InRoom, VisitStatus.Completed],
@@ -21,7 +22,6 @@ describe("canTransitionVisitStatus", () => {
 
   it.each([
     [VisitStatus.Confirmed, VisitStatus.Cancelled],
-    [VisitStatus.Booked, VisitStatus.Arrived],
     [VisitStatus.Booked, VisitStatus.Completed],
     [VisitStatus.Arrived, VisitStatus.Completed],
     [VisitStatus.InRoom, VisitStatus.Arrived],

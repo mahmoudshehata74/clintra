@@ -134,6 +134,17 @@ Two fields the specification left open:
 - `practitioners.specialty_id`: in v1 it always references the single
   `specialty_templates` row with key `"general"`.
 
+## v2 additions
+
+### sync_ops
+op_id, entity, entity_id, action (create|update|delete), payload, device_id,
+created_at, synced_at?
+
+Queued by the audited mutation pipeline (see `web/src/db/mutate.ts`) for the
+future sync transport. `op_id` is its own primary key, distinct from
+`entity_id`. Added in local database version 2; version 1's tables are
+unchanged.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.

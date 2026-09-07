@@ -3,8 +3,11 @@ import Ltr from "../../components/Ltr";
 import { db } from "../../db/database";
 import { seedDatabase } from "../../db/seed";
 import type { Location, Patient, Practitioner, Schedule, Service, Visit } from "../../db/types";
+import { useLiveQuery } from "../../db/useLiveQuery";
+import { markVisitArrived, restoreVisitSnapshot } from "../../db/visitAttendance";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import { formatCairoDisplayDateParts, todayInCairo, weekdayOf } from "../../domain/time";
+import AttendanceToast from "./AttendanceToast";
 import Counters from "./Counters";
 import { computeDayCounters } from "./dayCounters";
 import PractitionerColumn from "./PractitionerColumn";
@@ -22,6 +25,12 @@ interface DynamicData {
   servicesById: Map<string, Service>;
 }
 
+const EMPTY_DYNAMIC_DATA: DynamicData = { visits: [], patientsById: new Map(), servicesById: new Map() };
+
+// The undo action stays available for five minutes after marking a visit
+// arrived, per the specification.
+const UNDO_WINDOW_MS = 5 * 60 * 1000;
+
 function toggleButtonClass(isSelected: boolean): string {
   return isSelected
     ? "rounded-[--radius-el] border border-green bg-green-soft px-3 py-1 text-sm"
@@ -33,13 +42,9 @@ export default function DayScreen() {
   const weekday = weekdayOf(today);
 
   const [staticData, setStaticData] = useState<StaticData | null>(null);
-  const [dynamicData, setDynamicData] = useState<DynamicData>({
-    visits: [],
-    patientsById: new Map(),
-    servicesById: new Map(),
-  });
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [selectedPractitionerId, setSelectedPractitionerId] = useState<string | null>(null);
+  const [undoSnapshot, setUndoSnapshot] = useState<Visit | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,17 +85,15 @@ export default function DayScreen() {
     return staticData.practitioners;
   }, [staticData, selectedPractitionerId]);
 
-  useEffect(() => {
-    // Nothing to fetch: practitionersToShow is only ever empty before
-    // staticData has loaded, or when the org truly has none, in which case
-    // the initial empty dynamicData already reflects that correctly.
-    if (!staticData || practitionersToShow.length === 0) {
-      return;
-    }
+  // Live query: re-emits automatically whenever any write touches the visits
+  // table (e.g. a one-tap attendance mark or its undo), so the row and the
+  // counters update without a manual refetch.
+  const dynamicData =
+    useLiveQuery<DynamicData>(async () => {
+      if (!staticData || practitionersToShow.length === 0) {
+        return EMPTY_DYNAMIC_DATA;
+      }
 
-    let cancelled = false;
-
-    async function load() {
       const visitsPerPractitioner = await Promise.all(
         practitionersToShow.map((practitioner) =>
           db.visits.where("[practitioner_id+visit_date]").equals([practitioner.id, today]).toArray(),
@@ -114,10 +117,6 @@ export default function DayScreen() {
         db.services.bulkGet(serviceIds),
       ]);
 
-      if (cancelled) {
-        return;
-      }
-
       const patientsById = new Map(
         patients.filter((patient): patient is Patient => patient != null).map((patient) => [patient.id, patient]),
       );
@@ -125,15 +124,38 @@ export default function DayScreen() {
         services.filter((service): service is Service => service != null).map((service) => [service.id, service]),
       );
 
-      setDynamicData({ visits, patientsById, servicesById });
+      return { visits, patientsById, servicesById };
+    }, [staticData, practitionersToShow, today, selectedLocationId]) ?? EMPTY_DYNAMIC_DATA;
+
+  useEffect(() => {
+    if (!undoSnapshot) {
+      return;
     }
+    const timeout = setTimeout(() => setUndoSnapshot(null), UNDO_WINDOW_MS);
+    return () => clearTimeout(timeout);
+  }, [undoSnapshot]);
 
-    void load();
+  async function handleMarkArrived(visit: Visit) {
+    try {
+      const previous = await markVisitArrived(db, visit.id);
+      setUndoSnapshot(previous);
+    } catch (error) {
+      console.error(error);
+    }
+  }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [staticData, today, selectedLocationId, practitionersToShow]);
+  async function handleUndo() {
+    if (!undoSnapshot) {
+      return;
+    }
+    try {
+      await restoreVisitSnapshot(db, undoSnapshot);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setUndoSnapshot(null);
+    }
+  }
 
   if (!staticData) {
     return (
@@ -231,10 +253,13 @@ export default function DayScreen() {
               visits={visitsForPractitioner}
               patientsById={dynamicData.patientsById}
               servicesById={dynamicData.servicesById}
+              onMarkArrived={handleMarkArrived}
             />
           );
         })}
       </div>
+
+      {undoSnapshot && <AttendanceToast onUndo={handleUndo} />}
     </main>
   );
 }

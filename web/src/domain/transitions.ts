@@ -4,6 +4,9 @@ import { VisitStatus } from "./visitStatus";
 export const VISIT_TRANSITIONS: Readonly<Record<VisitStatus, readonly VisitStatus[]>> = {
   [VisitStatus.Booked]: [
     VisitStatus.Confirmed,
+    // A patient can show up without ever being phoned to confirm; one-tap
+    // attendance must work directly from booked, not only from confirmed.
+    VisitStatus.Arrived,
     VisitStatus.Cancelled,
     VisitStatus.NoShow,
     VisitStatus.Rescheduled,

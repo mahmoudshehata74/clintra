@@ -275,6 +275,22 @@ export interface AuditLog {
   at: Instant;
 }
 
+/**
+ * One outbound change, queued for the future sync transport. Added in
+ * database version 2, alongside the audited mutation pipeline (see
+ * db/mutate.ts). op_id is its own primary key, distinct from entity_id.
+ */
+export interface SyncOp {
+  op_id: string;
+  entity: string;
+  entity_id: string;
+  action: AuditAction;
+  payload: unknown;
+  device_id: string;
+  created_at: Instant;
+  synced_at: Instant | null;
+}
+
 // Declared now, unused in v1, no screens.
 
 export const SpecialtyTemplateGeneration = {

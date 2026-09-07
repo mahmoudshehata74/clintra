@@ -21,6 +21,10 @@ export const dayScreenStrings = {
   // Shown under the patient name on a cancelled or no_show row: the slot is
   // free again, but the screen stays read-only so this is text only.
   slotAvailableAgain: "الميعاد ده فاضي تاني",
+  // Shown in the light toast after a one-tap attendance mark, with an undo
+  // action available for five minutes.
+  attendanceMarked: "اتسجل حضور المريض",
+  undoAction: "تراجع",
   countersTotalBooked: "إجمالي الحجوزات",
   countersArrived: "حضروا",
   countersCompleted: "خلصوا",

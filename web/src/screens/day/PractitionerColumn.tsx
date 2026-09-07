@@ -1,9 +1,12 @@
 import { generateSlotTimes } from "../../domain/schedule";
 import { clockTimeInCairo } from "../../domain/time";
+import { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Schedule, Service, Visit } from "../../db/types";
 import { resolveDayScheduleState } from "./scheduleState";
 import SlotRow from "./SlotRow";
 import { dayScreenStrings } from "./strings";
+
+const TAPPABLE_FOR_ARRIVAL = new Set<string>([VisitStatus.Booked, VisitStatus.Confirmed]);
 
 interface PractitionerColumnProps {
   practitionerName: string;
@@ -15,6 +18,7 @@ interface PractitionerColumnProps {
   visits: readonly Visit[];
   patientsById: ReadonlyMap<string, Patient>;
   servicesById: ReadonlyMap<string, Service>;
+  onMarkArrived: (visit: Visit) => void;
 }
 
 export default function PractitionerColumn({
@@ -25,6 +29,7 @@ export default function PractitionerColumn({
   visits,
   patientsById,
   servicesById,
+  onMarkArrived,
 }: PractitionerColumnProps) {
   const scheduleState = resolveDayScheduleState(todaysSchedule, hasAnySchedule);
 
@@ -62,7 +67,17 @@ export default function PractitionerColumn({
           const visit = visitsByTime.get(time);
           const patient = visit ? patientsById.get(visit.patient_id) : undefined;
           const service = visit?.service_id ? servicesById.get(visit.service_id) : undefined;
-          return <SlotRow key={time} time={time} visit={visit} patient={patient} service={service} />;
+          const canMarkArrived = Boolean(visit && TAPPABLE_FOR_ARRIVAL.has(visit.status));
+          return (
+            <SlotRow
+              key={time}
+              time={time}
+              visit={visit}
+              patient={patient}
+              service={service}
+              onMarkArrived={canMarkArrived && visit ? () => onMarkArrived(visit) : undefined}
+            />
+          );
         })}
       </ul>
     </div>
