@@ -18,6 +18,9 @@ export const dayScreenStrings = {
   statusCompleted: "خلص",
   statusCancelled: "اتلغى",
   statusNoShow: "غاب",
+  // Shown under the patient name on a cancelled or no_show row: the slot is
+  // free again, but the screen stays read-only so this is text only.
+  slotAvailableAgain: "الميعاد ده فاضي تاني",
   countersTotalBooked: "إجمالي الحجوزات",
   countersArrived: "حضروا",
   countersCompleted: "خلصوا",

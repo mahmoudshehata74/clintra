@@ -21,6 +21,8 @@ const STATUS_LABEL: Record<string, string> = {
   [VisitStatus.NoShow]: dayScreenStrings.statusNoShow,
 };
 
+const REOPENED_STATUSES = new Set<string>([VisitStatus.Cancelled, VisitStatus.NoShow]);
+
 export default function SlotRow({ time, visit, patient, service }: SlotRowProps) {
   // A visit with no visual treatment (only "rescheduled" today) no longer
   // occupies this slot, so it renders as empty rather than booked.
@@ -36,12 +38,15 @@ export default function SlotRow({ time, visit, patient, service }: SlotRowProps)
         <Ltr>{time}</Ltr>
       </span>
       {visual && visit ? (
-        <span className="flex flex-1 items-center justify-between gap-3">
-          <span className="flex flex-col">
+        <span className="flex flex-col">
+          <span className="flex items-baseline gap-2">
             <span className={visual.nameClassName}>{patient?.full_name}</span>
-            {service && <span className="text-sm text-muted">{service.name}</span>}
+            <span className="text-sm text-muted">{STATUS_LABEL[visit.status]}</span>
           </span>
-          <span className="text-sm text-muted">{STATUS_LABEL[visit.status]}</span>
+          {REOPENED_STATUSES.has(visit.status) && (
+            <span className="text-sm text-muted">{dayScreenStrings.slotAvailableAgain}</span>
+          )}
+          {service && <span className="text-sm text-muted">{service.name}</span>}
         </span>
       ) : (
         <span className="text-muted">{dayScreenStrings.emptySlot}</span>

@@ -17,12 +17,14 @@ const IN_PROGRESS_OR_DONE = new Set<string>([VisitStatus.InRoom, VisitStatus.Com
  * because a patient sitting in the waiting room right now is the single most
  * important fact on this screen and must not look like a plain booking.
  * Likewise cancelled and no_show both use red but are never rendered the
- * same: cancelled is dashed and dimmed (removed from the schedule), no_show
- * is solid at full opacity (was expected, did not appear) — the specification
- * treats them as distinct statuses for missed-revenue reporting, so they must
- * be visually distinct too. A rescheduled visit no longer occupies its
- * original slot (the booking moved to a new visit), so it has no treatment
- * here — the caller renders that slot as empty instead of booked.
+ * same: cancelled is dashed with a struck-through name (removed from the
+ * schedule), no_show is solid (was expected, did not appear) — the
+ * specification treats them as distinct statuses for missed-revenue
+ * reporting, so they must be visually distinct too. Neither is dimmed: staff
+ * still need to read these rows clearly to decide whether to offer the slot
+ * to someone else. A rescheduled visit no longer occupies its original slot
+ * (the booking moved to a new visit), so it has no treatment here — the
+ * caller renders that slot as empty instead of booked.
  */
 export function statusVisual(status: VisitStatusType): StatusVisual | null {
   if (WAITING.has(status)) {
@@ -39,7 +41,7 @@ export function statusVisual(status: VisitStatusType): StatusVisual | null {
   }
   if (status === VisitStatus.Cancelled) {
     return {
-      containerClassName: "border-s-4 border-dashed border-s-red opacity-60",
+      containerClassName: "border-s-4 border-dashed border-s-red",
       nameClassName: "line-through",
     };
   }
