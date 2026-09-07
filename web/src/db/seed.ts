@@ -32,17 +32,46 @@ const GENERAL_SPECIALTY_KEY = "general";
  * membership, three services with Arabic names, a slots-mode schedule for
  * today's weekday, five patients and five visits spread across today in
  * different statuses. Only runs when the database is empty, and is safe to
- * call more than once.
+ * call more than once — including when two calls run concurrently (e.g. two
+ * open tabs), since the emptiness check and every write happen inside one
+ * transaction: IndexedDB serializes overlapping readwrite transactions on the
+ * same stores, so a second concurrent call always sees the first call's
+ * committed rows before deciding whether to write anything.
  */
 export async function seedDatabase(db: ClintraDatabase): Promise<void> {
-  const existingCount = await db.organizations.count();
-  if (existingCount > 0) {
-    return;
-  }
-
   const now = new Date().toISOString();
   const today = todayInCairo();
 
+  await db.transaction(
+    "rw",
+    [
+      db.organizations,
+      db.locations,
+      db.specialty_templates,
+      db.practitioners,
+      db.practitioner_locations,
+      db.users,
+      db.memberships,
+      db.services,
+      db.schedules,
+      db.patients,
+      db.visits,
+    ],
+    async () => {
+      // The emptiness check and every write below share this one transaction,
+      // so a concurrent call is serialized against this one by IndexedDB and
+      // always sees these rows already committed before it decides anything.
+      const existingCount = await db.organizations.count();
+      if (existingCount > 0) {
+        return;
+      }
+
+      await writeSeedData(db, now, today);
+    },
+  );
+}
+
+async function writeSeedData(db: ClintraDatabase, now: string, today: string): Promise<void> {
   const organization: Organization = {
     id: id(),
     name: "عيادة النور",
@@ -209,33 +238,15 @@ export async function seedDatabase(db: ClintraDatabase): Promise<void> {
     };
   });
 
-  await db.transaction(
-    "rw",
-    [
-      db.organizations,
-      db.locations,
-      db.specialty_templates,
-      db.practitioners,
-      db.practitioner_locations,
-      db.users,
-      db.memberships,
-      db.services,
-      db.schedules,
-      db.patients,
-      db.visits,
-    ],
-    async () => {
-      await db.organizations.add(organization);
-      await db.locations.add(location);
-      await db.specialty_templates.add(specialtyTemplate);
-      await db.practitioners.add(practitioner);
-      await db.practitioner_locations.add(practitionerLocation);
-      await db.users.add(assistantUser);
-      await db.memberships.add(assistantMembership);
-      await db.services.bulkAdd(services);
-      await db.schedules.add(schedule);
-      await db.patients.bulkAdd(patients);
-      await db.visits.bulkAdd(visits);
-    },
-  );
+  await db.organizations.add(organization);
+  await db.locations.add(location);
+  await db.specialty_templates.add(specialtyTemplate);
+  await db.practitioners.add(practitioner);
+  await db.practitioner_locations.add(practitionerLocation);
+  await db.users.add(assistantUser);
+  await db.memberships.add(assistantMembership);
+  await db.services.bulkAdd(services);
+  await db.schedules.add(schedule);
+  await db.patients.bulkAdd(patients);
+  await db.visits.bulkAdd(visits);
 }

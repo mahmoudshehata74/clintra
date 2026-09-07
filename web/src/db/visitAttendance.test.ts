@@ -43,6 +43,24 @@ describe("markVisitArrived", () => {
     expect(await db.audit_log.count()).toBe(0);
     expect(await db.sync_ops.count()).toBe(0);
   });
+
+  it("survives closing and reopening the same database, simulating a page reload", async () => {
+    const name = `clintra-attendance-reload-test-${crypto.randomUUID()}`;
+    const dbBeforeReload = new ClintraDatabase(name);
+    await seedDatabase(dbBeforeReload);
+    const bookedVisit = findByPosition(await dbBeforeReload.visits.toArray(), 1);
+
+    await markVisitArrived(dbBeforeReload, bookedVisit.id);
+    dbBeforeReload.close();
+
+    // A fresh connection to the same database name, running the exact
+    // startup sequence the day screen runs on every mount.
+    const dbAfterReload = new ClintraDatabase(name);
+    await seedDatabase(dbAfterReload);
+
+    const reread = await dbAfterReload.visits.get(bookedVisit.id);
+    expect(reread?.status).toBe(VisitStatus.Arrived);
+  });
 });
 
 describe("restoreVisitSnapshot (undo)", () => {

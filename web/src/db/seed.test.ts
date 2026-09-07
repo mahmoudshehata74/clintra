@@ -42,4 +42,21 @@ describe("seedDatabase", () => {
 
     expect(specialty?.key).toBe("general");
   });
+
+  it("does not create duplicate data when two connections seed the same empty database concurrently", async () => {
+    // Regression test: this reproduces two tabs (or a double effect
+    // invocation) both loading the app for the first time against an empty
+    // database. Before the fix, the emptiness check ran outside the write
+    // transaction, so both calls could read "empty" before either committed,
+    // producing two organizations and ten visits instead of one and five.
+    const name = `clintra-seed-race-test-${crypto.randomUUID()}`;
+    const dbA = new ClintraDatabase(name);
+    const dbB = new ClintraDatabase(name);
+
+    await Promise.all([seedDatabase(dbA), seedDatabase(dbB)]);
+
+    expect(await dbA.organizations.count()).toBe(1);
+    expect(await dbA.practitioners.count()).toBe(1);
+    expect(await dbA.visits.count()).toBe(5);
+  });
 });
