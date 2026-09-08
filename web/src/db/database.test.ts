@@ -139,4 +139,52 @@ describe("patients indexes", () => {
     expect(byPhone).toHaveLength(1);
     expect(byPhone[0].full_name).toBe("كريم فتحي");
   });
+
+  it("allows two patients to share the same phone — families share phone numbers", async () => {
+    await db.patients.add({
+      id: id(),
+      org_id: ORG_ID,
+      full_name: "أحمد محمود",
+      phone: "+201001234567",
+      gender: null,
+      birth_year: null,
+      note: null,
+      created_at: new Date().toISOString(),
+    });
+
+    await expect(
+      db.patients.add({
+        id: id(),
+        org_id: ORG_ID,
+        full_name: "ابن أحمد محمود",
+        phone: "+201001234567",
+        gender: null,
+        birth_year: null,
+        note: null,
+        created_at: new Date().toISOString(),
+      }),
+    ).resolves.toBeTruthy();
+  });
+});
+
+describe("users index", () => {
+  it("rejects a second user with the same phone — unlike patients, users has no household-sharing case", async () => {
+    await db.users.add({
+      id: id(),
+      full_name: "سارة حسن",
+      phone: "+201123456789",
+      email: null,
+      is_active: true,
+    });
+
+    await expect(
+      db.users.add({
+        id: id(),
+        full_name: "شخص آخر",
+        phone: "+201123456789",
+        email: null,
+        is_active: true,
+      }),
+    ).rejects.toThrow();
+  });
 });

@@ -105,6 +105,14 @@ export class ClintraDatabase extends Dexie {
       visits:
         "id, [org_id+location_id+visit_date+status], [practitioner_id+visit_date], &[practitioner_id+visit_date+position], &[practitioner_id+visit_date+unique_scheduled_at]",
     });
+
+    // Adds a unique index on users.phone — global, not per organization,
+    // since users has no org_id of its own (a user's organizations are its
+    // memberships). See docs/schema.md's v4 additions for why this differs
+    // from patients.phone, which stays deliberately non-unique.
+    this.version(4).stores({
+      users: "id, &phone",
+    });
   }
 }
 

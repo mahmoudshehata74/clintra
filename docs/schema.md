@@ -28,6 +28,9 @@ id, org_id, name, address, phone, is_active
 ### users
 id, full_name, phone, email?, is_active
 
+`phone` is unique — see v4 additions for why this differs from
+`patients.phone`.
+
 ### memberships
 id, user_id, org_id, role, location_scope, practitioner_scope,
 practitioner_id? (required only when practitioner_scope is self), pin_hash,
@@ -79,6 +82,13 @@ tashkeel (U+0610-061A, U+064B-065F, U+0670, U+06D6-06ED) is stripped;
 Arabic-Indic digits U+0660-0669 fold to ASCII 0-9; runs of whitespace
 (including non-breaking space) collapse to one space; case is folded. No
 other hamza-carrier (e.g. plain U+0621 ء) is folded.
+
+`phone` is intentionally not unique per organization. Families share phone
+numbers — a spouse or a child registering against a parent's phone is a
+normal, valid case, not a data-entry accident. The safeguard against
+unintentional duplicates is the search results row showing each match's
+last-visit date, which staff read before creating a new patient. Any future
+migration must not add a unique index here.
 
 ### visits
 id, org_id, location_id, practitioner_id, patient_id, service_id?,
@@ -169,6 +179,23 @@ practitioner per day, except when `is_overbooked` is true" (see Rules below)
 that index entirely, which is how the `is_overbooked` exception is expressed.
 Added in local database version 3; versions 1 and 2 are unchanged.
 
+## v4 additions
+
+### users.phone
+
+Unique, globally rather than per organization: `users` has no `org_id` of
+its own — only `memberships` does, since a user's organizations are its
+memberships (one `user_id` can have a `membership` row in more than one
+org). A per-org unique key is therefore not something `users` can express,
+and would not match what the table represents. Unlike `patients.phone`,
+there is no household-sharing rationale for staff: a `users` row is one
+real person's login identity, and each of that person's org-scoped roles is
+its own `memberships` row referencing the same `user_id`. Letting two
+`users` rows share a phone would risk fragmenting one real person's
+activity across two disconnected identities instead of one `user` with
+multiple memberships. Backs a unique index on `phone` in the local store.
+Added in local database version 4; versions 1-3 are unchanged.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.
@@ -180,3 +207,6 @@ Added in local database version 3; versions 1 and 2 are unchanged.
 - `no_show` is a status in its own right and is never merged with `cancelled`.
 - An invoice can never be voided once any payment exists against it.
 - Every payment carries its own receipt number.
+- A user's `phone` is unique (see v4 additions); a patient's `phone` is
+  deliberately not (see the patients table note) — these are different
+  entities with different rules, not an inconsistency.
