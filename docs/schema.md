@@ -69,6 +69,17 @@ end_time?, shift_minutes?
 ### patients
 id, org_id, full_name, phone?, gender?, birth_year?, note?, created_at
 
+`full_name` search folds letter variants for comparison only: storage is
+never rewritten and the UI always displays exactly what was typed. The
+Laravel patients search endpoint must apply the identical fold. Exact code
+points folded (see `web/src/domain/arabicText.ts`): U+0649 (ى) -> U+064A
+(ي); U+0629 (ة) -> U+0647 (ه); U+0623 (أ), U+0625 (إ), U+0622 (آ) and U+0671
+(ٱ) all -> U+0627 (ا); U+0624 (ؤ) -> U+0648 (و); U+0626 (ئ) -> U+064A (ي);
+tashkeel (U+0610-061A, U+064B-065F, U+0670, U+06D6-06ED) is stripped;
+Arabic-Indic digits U+0660-0669 fold to ASCII 0-9; runs of whitespace
+(including non-breaking space) collapse to one space; case is folded. No
+other hamza-carrier (e.g. plain U+0621 ء) is folded.
+
 ### visits
 id, org_id, location_id, practitioner_id, patient_id, service_id?,
 care_plan_item_id? (left null in v1), visit_date, position, scheduled_at?

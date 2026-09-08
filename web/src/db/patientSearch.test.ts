@@ -126,3 +126,60 @@ describe("searchPatients", () => {
     expect(byId.get(withoutHistory.id)).toBeNull();
   });
 });
+
+describe("searchPatients arabic letter and digit folding", () => {
+  it("finds a patient stored with ى (alef maksura) when searching with ي, and vice versa", async () => {
+    const storedWithAlefMaksura = makePatient({ full_name: "هدى رجب" });
+    const storedWithYeh = makePatient({ full_name: "هدي فتحي" });
+    await db.patients.bulkAdd([storedWithAlefMaksura, storedWithYeh]);
+
+    const byYeh = await searchPatients(db, "هدي رجب");
+    expect(byYeh.map((r) => r.patient.id)).toEqual([storedWithAlefMaksura.id]);
+
+    const byAlefMaksura = await searchPatients(db, "هدى فتحي");
+    expect(byAlefMaksura.map((r) => r.patient.id)).toEqual([storedWithYeh.id]);
+  });
+
+  it("finds a bare-alef query against أ, إ and آ alef-hamza variants", async () => {
+    const withHamzaAbove = makePatient({ full_name: "أحمد سامي" });
+    const withHamzaBelow = makePatient({ full_name: "إحمد سامي" });
+    const withMadda = makePatient({ full_name: "آحمد سامي" });
+    await db.patients.bulkAdd([withHamzaAbove, withHamzaBelow, withMadda]);
+
+    const results = await searchPatients(db, "احمد");
+    const foundIds = new Set(results.map((r) => r.patient.id));
+    expect(foundIds).toEqual(new Set([withHamzaAbove.id, withHamzaBelow.id, withMadda.id]));
+  });
+
+  it("finds a taa marbouta name when searching with haa", async () => {
+    const patient = makePatient({ full_name: "فاطمة حسين" });
+    await db.patients.add(patient);
+
+    const results = await searchPatients(db, "فاطمه");
+    expect(results.map((r) => r.patient.id)).toEqual([patient.id]);
+  });
+
+  it("does not fold a bare hamza (ء) into a waw-hamza (ؤ), beyond what is explicitly listed", async () => {
+    const patient = makePatient({ full_name: "رؤوف سعد" });
+    await db.patients.add(patient);
+
+    const results = await searchPatients(db, "رءوف");
+    expect(results).toEqual([]);
+  });
+
+  it("finds a name with a single space when the stored name has a run of spaces", async () => {
+    const patient = makePatient({ full_name: "محمد   علي" });
+    await db.patients.add(patient);
+
+    const results = await searchPatients(db, "محمد علي");
+    expect(results.map((r) => r.patient.id)).toEqual([patient.id]);
+  });
+
+  it("finds an Arabic-Indic digit sequence in a name when searching with Western digits", async () => {
+    const patient = makePatient({ full_name: "مريض ١٢٣" });
+    await db.patients.add(patient);
+
+    const results = await searchPatients(db, "123");
+    expect(results.map((r) => r.patient.id)).toEqual([patient.id]);
+  });
+});
