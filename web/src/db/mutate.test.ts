@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { id } from "../domain/id";
 import { VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "./database";
-import { mutate, undoMostRecentVisitMutation } from "./mutate";
+import { mutate, undoMostRecentPatientMutation, undoMostRecentVisitMutation } from "./mutate";
 import { seedDatabase } from "./seed";
-import { AuditAction } from "./types";
+import { AuditAction, type Patient } from "./types";
 import { markVisitArrived } from "./visitAttendance";
 
 let db: ClintraDatabase;
@@ -174,5 +175,39 @@ describe("undoMostRecentVisitMutation", () => {
 
     expect(await db.audit_log.count()).toBe(0);
     expect(await db.sync_ops.count()).toBe(0);
+  });
+
+  it("deletes the row when undoing a create, rather than updating it back to a non-existent 'before'", async () => {
+    await seedDatabase(db);
+    const [membership] = await db.memberships.toArray();
+    const patientId = id();
+
+    const auditLogId = await mutate(db, {
+      table: db.patients,
+      entity: "patients",
+      entityId: patientId,
+      action: AuditAction.Create,
+      before: null,
+      after: {
+        id: patientId,
+        org_id: membership.org_id,
+        full_name: "مريض جديد",
+        phone: null,
+        gender: null,
+        birth_year: null,
+        note: null,
+        created_at: new Date().toISOString(),
+      } satisfies Patient,
+      actorMembershipId: membership.id,
+      orgId: membership.org_id,
+    });
+
+    const outcome = await undoMostRecentPatientMutation(db, auditLogId);
+    expect(outcome).toEqual({ ok: true });
+
+    expect(await db.patients.get(patientId)).toBeUndefined();
+    const auditRows = await db.audit_log.toArray();
+    const undoRow = auditRows.find((row) => row.action === AuditAction.Delete && row.entity_id === patientId);
+    expect(undoRow).toBeTruthy();
   });
 });

@@ -54,4 +54,19 @@ export const dayScreenStrings = {
   // Shown in the toast when the tapped slot was taken by another booking a
   // moment earlier; nothing is written and there is no undo to offer.
   bookingSlotTakenError: "الميعاد ده اتحجز لسه من ثانية",
+  // Shown under the "no results" line on the search step, to create a new
+  // patient from the typed text.
+  newPatientButtonLabel: "إضافة مريض جديد",
+  newPatientNamePlaceholder: "اسم المريض",
+  newPatientPhonePlaceholder: "رقم التليفون (اختياري)",
+  // Toggle that disables and clears the phone field.
+  newPatientNoPhoneToggle: "من غير رقم",
+  newPatientOnlyNameRequiredHint: "الاسم هو المطلوب الوحيد",
+  newPatientNameRequiredError: "لازم تكتب اسم المريض",
+  newPatientPhoneInvalidError: "الرقم ده مش صحيح",
+  newPatientSubmitButton: "إضافة",
+  // Shown when undoing a new-patient booking reverses the visit but then the
+  // patient reversal itself fails: the assistant must know the patient
+  // record is still there, not assume the whole booking was cleanly undone.
+  newPatientUndoPartialFailure: "اتلغى الحجز، لكن بيانات المريض لسه محفوظة",
 } as const;

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Ltr from "../../components/Ltr";
 import { db } from "../../db/database";
-import { undoMostRecentVisitMutation } from "../../db/mutate";
+import { undoMostRecentPatientMutation, undoMostRecentVisitMutation } from "../../db/mutate";
 import { seedDatabase, seededVisitsDate } from "../../db/seed";
 import type { ClinicDay, Location, Patient, Practitioner, Schedule, Service, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
@@ -14,6 +14,7 @@ import { computeDayCounters } from "./dayCounters";
 import PractitionerColumn from "./PractitionerColumn";
 import { resolveDayScheduleState } from "./scheduleState";
 import { dayScreenStrings } from "./strings";
+import type { UndoAction } from "./undoAction";
 import UndoToast from "./UndoToast";
 
 // Development-only: appending ?seedDay=1 to the URL pins the screen to the
@@ -49,8 +50,8 @@ const MESSAGE_TOAST_MS = 4 * 1000;
 
 interface ToastState {
   message: string;
-  /** Present only when this message's mutation can still be undone. */
-  auditLogId: string | null;
+  /** Present only when this message's mutation(s) can still be undone. */
+  undo: UndoAction | null;
 }
 
 function toggleButtonClass(isSelected: boolean): string {
@@ -174,7 +175,7 @@ export default function DayScreen() {
     if (!toastState) {
       return;
     }
-    const timeoutMs = toastState.auditLogId ? UNDO_WINDOW_MS : MESSAGE_TOAST_MS;
+    const timeoutMs = toastState.undo ? UNDO_WINDOW_MS : MESSAGE_TOAST_MS;
     const timeout = setTimeout(() => setToastState(null), timeoutMs);
     return () => clearTimeout(timeout);
   }, [toastState]);
@@ -182,30 +183,53 @@ export default function DayScreen() {
   async function handleMarkArrived(visit: Visit) {
     try {
       const auditLogId = await markVisitArrived(db, visit.id);
-      setToastState({ message: dayScreenStrings.attendanceMarked, auditLogId });
+      setToastState({ message: dayScreenStrings.attendanceMarked, undo: { kind: "visit", auditLogId } });
     } catch (error) {
       console.error(error);
     }
   }
 
   async function handleUndo() {
-    if (!toastState?.auditLogId) {
+    if (!toastState?.undo) {
       return;
     }
     try {
-      const outcome = await undoMostRecentVisitMutation(db, toastState.auditLogId);
-      setToastState(outcome.ok ? null : { message: dayScreenStrings.undoRefused, auditLogId: null });
+      if (toastState.undo.kind === "visit") {
+        const outcome = await undoMostRecentVisitMutation(db, toastState.undo.auditLogId);
+        setToastState(outcome.ok ? null : { message: dayScreenStrings.undoRefused, undo: null });
+        return;
+      }
+
+      // A new-patient booking is two writes; undo reverses them in reverse
+      // order. The visit references the patient, so removing the visit
+      // first avoids ever leaving a dangling reference mid-undo.
+      const { visitAuditLogId, patientAuditLogId } = toastState.undo;
+      const visitOutcome = await undoMostRecentVisitMutation(db, visitAuditLogId);
+      if (!visitOutcome.ok) {
+        setToastState({ message: dayScreenStrings.undoRefused, undo: null });
+        return;
+      }
+
+      const patientOutcome = await undoMostRecentPatientMutation(db, patientAuditLogId);
+      if (!patientOutcome.ok) {
+        // The visit is gone but the patient reversal failed: report this
+        // plainly rather than silently leaving one of the two in place.
+        setToastState({ message: dayScreenStrings.newPatientUndoPartialFailure, undo: null });
+        return;
+      }
+
+      setToastState(null);
     } catch (error) {
       console.error(error);
     }
   }
 
-  function handleBooked(auditLogId: string) {
-    setToastState({ message: dayScreenStrings.visitBooked, auditLogId });
+  function handleBooked(undo: UndoAction) {
+    setToastState({ message: dayScreenStrings.visitBooked, undo });
   }
 
   function handleBookingCollision() {
-    setToastState({ message: dayScreenStrings.bookingSlotTakenError, auditLogId: null });
+    setToastState({ message: dayScreenStrings.bookingSlotTakenError, undo: null });
   }
 
   if (!staticData) {
@@ -364,7 +388,7 @@ export default function DayScreen() {
       )}
 
       {toastState && (
-        <UndoToast message={toastState.message} onUndo={toastState.auditLogId ? handleUndo : undefined} />
+        <UndoToast message={toastState.message} onUndo={toastState.undo ? handleUndo : undefined} />
       )}
     </main>
   );

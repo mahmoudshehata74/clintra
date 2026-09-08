@@ -3,7 +3,7 @@ import { id } from "../domain/id";
 import { resolveActingMembership } from "./actingMembership";
 import { getDeviceId } from "./deviceId";
 import type { ClintraDatabase } from "./database";
-import { AuditAction, type Visit } from "./types";
+import { AuditAction } from "./types";
 
 export interface MutationInput<T> {
   table: Table<T, string>;
@@ -85,32 +85,40 @@ export type UndoOutcome = { ok: true } | { ok: false; reason: UndoRefusalReason 
 const UNDO_WINDOW_MS = 5 * 60 * 1000;
 
 /**
- * Reverses the exact visits mutation recorded under auditLogId, and only
- * that mutation — the constrained undo mechanism shared by every write flow
- * that offers one (one-tap attendance, the booking sheet, and any future
- * one), so there is exactly one place that decides whether an undo is
- * legitimate rather than each flow inventing its own rule.
+ * Reverses the exact mutation recorded under auditLogId, and only that
+ * mutation — the constrained undo mechanism shared by every write flow that
+ * offers one (one-tap attendance, the booking sheet, and any future one), so
+ * there is exactly one place that decides whether an undo is legitimate
+ * rather than each flow inventing its own rule. Works against any entity
+ * table (visits, patients, ...); see undoMostRecentVisitMutation and
+ * undoMostRecentPatientMutation for the concrete wrappers call sites use.
  *
  * This is not a general status setter: it takes no target status and no
- * caller-supplied snapshot, and it never calls canTransitionVisitStatus,
- * since an undo moves backward against the workflow direction that machine
- * governs. Every forward change must go through a validated path such as
- * markVisitArrived or bookExistingPatientVisit instead.
+ * caller-supplied snapshot, and for visits it never calls
+ * canTransitionVisitStatus, since an undo moves backward against the
+ * workflow direction that machine governs. Every forward change must go
+ * through a validated path such as markVisitArrived or
+ * bookExistingPatientVisit instead.
  *
  * Everything this function needs to decide whether the undo is legitimate is
  * re-read from the audit_log row itself, not from anything the caller
- * remembers about the visit. It refuses, and writes nothing, when:
- * - auditLogId does not identify a visits mutation still on record;
+ * remembers about the record. It refuses, and writes nothing, when:
+ * - auditLogId does not identify a mutation of the given entity still on record;
  * - the undo window (five minutes) has elapsed since that mutation;
- * - that mutation is no longer the most recent one recorded for this visit,
- *   meaning something else changed the visit afterward and this undo is stale.
+ * - that mutation is no longer the most recent one recorded for this record,
+ *   meaning something else changed it afterward and this undo is stale.
+ *
+ * Reversing a create deletes the row entirely rather than "updating" it back
+ * to the null it had before — there is no prior record to restore.
  */
-export async function undoMostRecentVisitMutation(
+export async function undoMostRecentMutation<T extends { org_id: string }>(
   db: ClintraDatabase,
   auditLogId: string,
+  entity: string,
+  table: Table<T, string>,
 ): Promise<UndoOutcome> {
   const auditRow = await db.audit_log.get(auditLogId);
-  if (!auditRow || auditRow.entity !== "visits") {
+  if (!auditRow || auditRow.entity !== entity) {
     return { ok: false, reason: "not_found" };
   }
 
@@ -119,32 +127,55 @@ export async function undoMostRecentVisitMutation(
     return { ok: false, reason: "expired" };
   }
 
-  const rowsForVisit = (await db.audit_log.toArray()).filter(
-    (row) => row.entity === "visits" && row.entity_id === auditRow.entity_id,
+  const rowsForEntity = (await db.audit_log.toArray()).filter(
+    (row) => row.entity === entity && row.entity_id === auditRow.entity_id,
   );
-  const mostRecent = rowsForVisit.reduce((latest, row) => (row.at > latest.at ? row : latest));
+  const mostRecent = rowsForEntity.reduce((latest, row) => (row.at > latest.at ? row : latest));
   if (mostRecent.id !== auditRow.id) {
     return { ok: false, reason: "stale" };
   }
 
-  const currentVisit = await db.visits.get(auditRow.entity_id);
-  if (!currentVisit) {
+  const currentRecord = await table.get(auditRow.entity_id);
+  if (!currentRecord) {
     return { ok: false, reason: "not_found" };
   }
 
   const actor = await resolveActingMembership(db);
 
-  await mutate(db, {
-    table: db.visits,
-    entity: "visits",
-    entityId: auditRow.entity_id,
-    action: AuditAction.Update,
-    before: currentVisit,
-    // Written by mutate() itself under this same audit row; trusted as a Visit.
-    after: auditRow.before as Visit,
-    actorMembershipId: actor.id,
-    orgId: currentVisit.org_id,
-  });
+  if (auditRow.action === AuditAction.Create) {
+    await mutate(db, {
+      table,
+      entity,
+      entityId: auditRow.entity_id,
+      action: AuditAction.Delete,
+      before: currentRecord,
+      after: null,
+      actorMembershipId: actor.id,
+      orgId: currentRecord.org_id,
+    });
+  } else {
+    await mutate(db, {
+      table,
+      entity,
+      entityId: auditRow.entity_id,
+      action: AuditAction.Update,
+      before: currentRecord,
+      // Written by mutate() itself under this same audit row; trusted as a T.
+      after: auditRow.before as T,
+      actorMembershipId: actor.id,
+      orgId: currentRecord.org_id,
+    });
+  }
 
   return { ok: true };
+}
+
+/** The constrained undo mechanism, scoped to the visits table. */
+export function undoMostRecentVisitMutation(db: ClintraDatabase, auditLogId: string): Promise<UndoOutcome> {
+  return undoMostRecentMutation(db, auditLogId, "visits", db.visits);
+}
+
+/** The constrained undo mechanism, scoped to the patients table. */
+export function undoMostRecentPatientMutation(db: ClintraDatabase, auditLogId: string): Promise<UndoOutcome> {
+  return undoMostRecentMutation(db, auditLogId, "patients", db.patients);
 }
