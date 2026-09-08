@@ -1,4 +1,5 @@
 import type { Visit } from "../../db/types";
+import type { ClockTime } from "../../domain/time";
 import { computeEmptySlots, type EmptySlot } from "./emptySlots";
 import type { DayScheduleState } from "./scheduleState";
 import { dayScreenStrings } from "./strings";
@@ -32,4 +33,17 @@ export function computeBookableSlots(
   return scheduleState.kind === "scheduled"
     ? computeEmptySlots(scheduleState.schedule, visitsForPractitioner)
     : [];
+}
+
+/**
+ * The default slot for a walk-in: the earliest empty slot at or after the
+ * given time (ClockTime strings sort lexicographically the same as
+ * chronologically within one day). Null when every empty slot has already
+ * passed, so the caller falls back to the manual slot picker.
+ */
+export function findNextSlotAtOrAfter(
+  slots: readonly EmptySlot[],
+  time: ClockTime,
+): ClockTime | null {
+  return slots.find((slot) => slot.time >= time)?.time ?? null;
 }

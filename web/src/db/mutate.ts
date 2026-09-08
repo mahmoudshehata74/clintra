@@ -111,7 +111,7 @@ const UNDO_WINDOW_MS = 5 * 60 * 1000;
  * Reversing a create deletes the row entirely rather than "updating" it back
  * to the null it had before — there is no prior record to restore.
  */
-export async function undoMostRecentMutation<T extends { org_id: string }>(
+export async function undoMostRecentMutation<T>(
   db: ClintraDatabase,
   auditLogId: string,
   entity: string,
@@ -141,6 +141,11 @@ export async function undoMostRecentMutation<T extends { org_id: string }>(
   }
 
   const actor = await resolveActingMembership(db);
+  // Reuse the org the original mutation was scoped to, from the audit row
+  // itself, rather than requiring every possible entity (e.g. day_state,
+  // which has no org_id of its own) to carry an org_id field just so undo
+  // can stamp its own audit_log row.
+  const orgId = auditRow.org_id;
 
   if (auditRow.action === AuditAction.Create) {
     await mutate(db, {
@@ -151,7 +156,7 @@ export async function undoMostRecentMutation<T extends { org_id: string }>(
       before: currentRecord,
       after: null,
       actorMembershipId: actor.id,
-      orgId: currentRecord.org_id,
+      orgId,
     });
   } else {
     await mutate(db, {
@@ -163,7 +168,7 @@ export async function undoMostRecentMutation<T extends { org_id: string }>(
       // Written by mutate() itself under this same audit row; trusted as a T.
       after: auditRow.before as T,
       actorMembershipId: actor.id,
-      orgId: currentRecord.org_id,
+      orgId,
     });
   }
 
@@ -178,4 +183,9 @@ export function undoMostRecentVisitMutation(db: ClintraDatabase, auditLogId: str
 /** The constrained undo mechanism, scoped to the patients table. */
 export function undoMostRecentPatientMutation(db: ClintraDatabase, auditLogId: string): Promise<UndoOutcome> {
   return undoMostRecentMutation(db, auditLogId, "patients", db.patients);
+}
+
+/** The constrained undo mechanism, scoped to the day_state table. */
+export function undoMostRecentDayStateMutation(db: ClintraDatabase, auditLogId: string): Promise<UndoOutcome> {
+  return undoMostRecentMutation(db, auditLogId, "day_state", db.day_state);
 }

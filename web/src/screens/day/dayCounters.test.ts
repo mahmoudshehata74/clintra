@@ -4,7 +4,7 @@ import { VisitSource } from "../../domain/visitSource";
 import type { Visit } from "../../db/types";
 import { computeDayCounters } from "./dayCounters";
 
-function makeVisit(status: Visit["status"], position: number): Visit {
+function makeVisit(status: Visit["status"], position: number, overrides: Partial<Visit> = {}): Visit {
   return {
     id: `visit-${position}`,
     org_id: "org-1",
@@ -26,6 +26,7 @@ function makeVisit(status: Visit["status"], position: number): Visit {
     rescheduled_from: null,
     created_by: "membership-1",
     created_at: "2026-09-06T06:00:00.000Z",
+    ...overrides,
   };
 }
 
@@ -101,6 +102,19 @@ describe("computeDayCounters", () => {
 
     it("does not count a rescheduled visit as remaining", () => {
       expect(computeDayCounters([makeVisit(VisitStatus.Rescheduled, 1)]).remaining).toBe(0);
+    });
+  });
+
+  describe("total counts overbooked visits too", () => {
+    it("counts five visits including one overbooked as total 5, not 4", () => {
+      const visits = [
+        makeVisit(VisitStatus.Booked, 1),
+        makeVisit(VisitStatus.Arrived, 2),
+        makeVisit(VisitStatus.Completed, 3),
+        makeVisit(VisitStatus.NoShow, 4),
+        makeVisit(VisitStatus.Booked, 6, { is_overbooked: true }),
+      ];
+      expect(computeDayCounters(visits).total).toBe(5);
     });
   });
 

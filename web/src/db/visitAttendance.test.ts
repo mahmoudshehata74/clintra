@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "./database";
 import { seedDatabase } from "./seed";
-import { markVisitArrived } from "./visitAttendance";
+import { markVisitArrived, markVisitCompleted, markVisitInRoom } from "./visitAttendance";
 
 let db: ClintraDatabase;
 
@@ -59,5 +59,50 @@ describe("markVisitArrived", () => {
 
     const reread = await dbAfterReload.visits.get(bookedVisit.id);
     expect(reread?.status).toBe(VisitStatus.Arrived);
+  });
+});
+
+describe("markVisitInRoom", () => {
+  it("marks an arrived visit in_room and stamps started_at", async () => {
+    await seedDatabase(db);
+    const arrivedVisit = findByPosition(await db.visits.toArray(), 2);
+    expect(arrivedVisit.status).toBe(VisitStatus.Arrived);
+
+    await markVisitInRoom(db, arrivedVisit.id);
+
+    const updated = await db.visits.get(arrivedVisit.id);
+    expect(updated?.status).toBe(VisitStatus.InRoom);
+    expect(updated?.started_at).not.toBeNull();
+  });
+
+  it("writes nothing when the transition is invalid", async () => {
+    await seedDatabase(db);
+    const bookedVisit = findByPosition(await db.visits.toArray(), 1);
+
+    await expect(markVisitInRoom(db, bookedVisit.id)).rejects.toThrow(/invalid_transition/);
+
+    const unchanged = await db.visits.get(bookedVisit.id);
+    expect(unchanged).toEqual(bookedVisit);
+  });
+});
+
+describe("markVisitCompleted", () => {
+  it("marks an in_room visit completed and stamps ended_at", async () => {
+    await seedDatabase(db);
+    const arrivedVisit = findByPosition(await db.visits.toArray(), 2);
+    await markVisitInRoom(db, arrivedVisit.id);
+
+    await markVisitCompleted(db, arrivedVisit.id);
+
+    const updated = await db.visits.get(arrivedVisit.id);
+    expect(updated?.status).toBe(VisitStatus.Completed);
+    expect(updated?.ended_at).not.toBeNull();
+  });
+
+  it("writes nothing when the transition is invalid", async () => {
+    await seedDatabase(db);
+    const arrivedVisit = findByPosition(await db.visits.toArray(), 2);
+
+    await expect(markVisitCompleted(db, arrivedVisit.id)).rejects.toThrow(/invalid_transition/);
   });
 });

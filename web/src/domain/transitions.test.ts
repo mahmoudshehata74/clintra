@@ -10,9 +10,21 @@ const VALID_TRANSITIONS: readonly (readonly [VisitStatus, VisitStatus])[] = [
   [VisitStatus.Confirmed, VisitStatus.Arrived],
   [VisitStatus.Arrived, VisitStatus.InRoom],
   [VisitStatus.InRoom, VisitStatus.Completed],
+  // Cancel, no-show and move (rescheduled) are administrative overrides
+  // reachable from every occupied-but-not-yet-completed status, per the
+  // overflow menu's requirements — not only from booked.
   [VisitStatus.Booked, VisitStatus.Cancelled],
   [VisitStatus.Booked, VisitStatus.NoShow],
   [VisitStatus.Booked, VisitStatus.Rescheduled],
+  [VisitStatus.Confirmed, VisitStatus.Cancelled],
+  [VisitStatus.Confirmed, VisitStatus.NoShow],
+  [VisitStatus.Confirmed, VisitStatus.Rescheduled],
+  [VisitStatus.Arrived, VisitStatus.Cancelled],
+  [VisitStatus.Arrived, VisitStatus.NoShow],
+  [VisitStatus.Arrived, VisitStatus.Rescheduled],
+  [VisitStatus.InRoom, VisitStatus.Cancelled],
+  [VisitStatus.InRoom, VisitStatus.NoShow],
+  [VisitStatus.InRoom, VisitStatus.Rescheduled],
 ];
 
 describe("canTransitionVisitStatus", () => {
@@ -21,7 +33,6 @@ describe("canTransitionVisitStatus", () => {
   });
 
   it.each([
-    [VisitStatus.Confirmed, VisitStatus.Cancelled],
     [VisitStatus.Booked, VisitStatus.Completed],
     [VisitStatus.Arrived, VisitStatus.Completed],
     [VisitStatus.InRoom, VisitStatus.Arrived],

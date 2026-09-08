@@ -92,6 +92,16 @@ export function mostRecentWeekdayOnOrBefore(day: ClinicDay, targetWeekday: numbe
   return `${resultYear}-${resultMonth}-${resultDate}`;
 }
 
+/** The clinic day `days` calendar days after the given one (days may be negative). Calendar math only, no timezone conversion needed. */
+export function addDaysToClinicDay(day: ClinicDay, days: number): ClinicDay {
+  const [year, month, date] = day.split("-").map(Number);
+  const result = new Date(Date.UTC(year, month - 1, date + days));
+  const resultYear = result.getUTCFullYear();
+  const resultMonth = String(result.getUTCMonth() + 1).padStart(2, "0");
+  const resultDate = String(result.getUTCDate()).padStart(2, "0");
+  return `${resultYear}-${resultMonth}-${resultDate}`;
+}
+
 /** The Africa/Cairo clock time ("HH:MM") an instant falls on. */
 export function clockTimeInCairo(instant: Instant): ClockTime {
   const parts = CAIRO_TIME_FORMATTER.formatToParts(new Date(instant));

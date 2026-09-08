@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { VisitSource } from "../domain/visitSource";
 import { VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "./database";
+import { undoMostRecentVisitMutation } from "./mutate";
 import { seedDatabase } from "./seed";
 import { bookExistingPatientVisit } from "./visitBooking";
 
@@ -169,5 +170,115 @@ describe("bookExistingPatientVisit", () => {
     expect(stillFirstBooking?.patient_id).toBe(firstPatient.id);
     expect(await db.audit_log.count()).toBe(1);
     expect(await db.sync_ops.count()).toBe(1);
+  });
+
+  it("walk-in: books and marks arrived in the same write, not two separate calls", async () => {
+    const { schedule, practitioner, patients, services, visits } = await seededContext();
+    const patient = patients[0];
+    const visitDate = visits[0].visit_date;
+
+    const outcome = await bookExistingPatientVisit(db, {
+      practitionerId: practitioner.id,
+      locationId: schedule.location_id,
+      orgId: practitioner.org_id,
+      patientId: patient.id,
+      serviceId: services[0].id,
+      visitDate,
+      time: "11:30",
+      schedule,
+      status: VisitStatus.Arrived,
+      source: VisitSource.Walkin,
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) throw new Error("expected success");
+
+    // Exactly one audit_log row: the booking and the arrival are the same write.
+    expect(await db.audit_log.count()).toBe(1);
+    expect(await db.sync_ops.count()).toBe(1);
+
+    const created = (await db.visits.toArray()).find((v) => v.position === 6);
+    expect(created?.status).toBe(VisitStatus.Arrived);
+    expect(created?.source).toBe(VisitSource.Walkin);
+    expect(created?.arrived_at).not.toBeNull();
+
+    // Undoing the one write reverses both the booking and the arrival together.
+    const undoOutcome = await undoMostRecentVisitMutation(db, outcome.auditLogId);
+    expect(undoOutcome).toEqual({ ok: true });
+    expect(await db.visits.get(created!.id)).toBeUndefined();
+  });
+
+  it("overbook: succeeds where a normal booking at the same time would collide", async () => {
+    const { schedule, practitioner, patients, services, visits } = await seededContext();
+    const alreadyBooked = visits.find((v) => v.status === VisitStatus.Booked);
+    if (!alreadyBooked) throw new Error("seed did not produce a booked visit");
+    const otherPatient = patients.find((p) => p.id !== alreadyBooked.patient_id);
+    if (!otherPatient) throw new Error("no other patient to book");
+
+    const visitCountBefore = await db.visits.count();
+
+    const outcome = await bookExistingPatientVisit(db, {
+      practitionerId: practitioner.id,
+      locationId: schedule.location_id,
+      orgId: practitioner.org_id,
+      patientId: otherPatient.id,
+      serviceId: services[0].id,
+      visitDate: alreadyBooked.visit_date,
+      time: "09:00",
+      schedule,
+      isOverbooked: true,
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(await db.visits.count()).toBe(visitCountBefore + 1);
+
+    if (!outcome.ok) throw new Error("expected success");
+    const auditRow = await db.audit_log.get(outcome.auditLogId);
+    const overbooked = await db.visits.get((auditRow!.after as { id: string }).id);
+    expect(overbooked?.is_overbooked).toBe(true);
+    expect(overbooked?.scheduled_at).toBe(alreadyBooked.scheduled_at);
+    // Position stays unique even though the time collides.
+    expect(overbooked?.position).not.toBe(alreadyBooked.position);
+  });
+
+  it("overbook: two concurrent overbook writes at the same time both succeed with distinct positions", async () => {
+    const { schedule, practitioner, patients, services, visits } = await seededContext();
+    const visitDate = visits[0].visit_date;
+    const [patientA, patientB] = patients;
+
+    const [outcomeA, outcomeB] = await Promise.all([
+      bookExistingPatientVisit(db, {
+        practitionerId: practitioner.id,
+        locationId: schedule.location_id,
+        orgId: practitioner.org_id,
+        patientId: patientA.id,
+        serviceId: services[0].id,
+        visitDate,
+        time: "09:00",
+        schedule,
+        isOverbooked: true,
+      }),
+      bookExistingPatientVisit(db, {
+        practitionerId: practitioner.id,
+        locationId: schedule.location_id,
+        orgId: practitioner.org_id,
+        patientId: patientB.id,
+        serviceId: services[0].id,
+        visitDate,
+        time: "09:00",
+        schedule,
+        isOverbooked: true,
+      }),
+    ]);
+
+    expect(outcomeA.ok).toBe(true);
+    expect(outcomeB.ok).toBe(true);
+    if (!outcomeA.ok || !outcomeB.ok) throw new Error("expected both to succeed");
+
+    const allVisits = await db.visits.toArray();
+    const positions = allVisits.map((v) => v.position);
+    // No two visits collide on position, even though both overbook writes
+    // targeted the same time concurrently.
+    expect(new Set(positions).size).toBe(positions.length);
   });
 });

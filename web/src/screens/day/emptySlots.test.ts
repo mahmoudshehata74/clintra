@@ -21,7 +21,7 @@ const SCHEDULE: Schedule = {
   resource_count: 1,
 };
 
-function visitAt(time: string, status: Visit["status"]): Visit {
+function visitAt(time: string, status: Visit["status"], overrides: Partial<Visit> = {}): Visit {
   return {
     id: `visit-${time}`,
     org_id: "org-1",
@@ -43,6 +43,7 @@ function visitAt(time: string, status: Visit["status"]): Visit {
     rescheduled_from: null,
     created_by: "membership-1",
     created_at: new Date().toISOString(),
+    ...overrides,
   };
 }
 
@@ -79,5 +80,18 @@ describe("computeEmptySlots", () => {
     const visit = visitAt("09:00", VisitStatus.Rescheduled);
     const slots = computeEmptySlots(SCHEDULE, [visit]);
     expect(slots.map((s) => s.time)).toEqual(["09:00", "09:30"]);
+  });
+
+  it("treats a time as occupied if any visit there occupies it, even alongside a freed one (overbooking can put two visits at the same time)", () => {
+    const active = visitAt("09:00", VisitStatus.Booked, { id: "visit-active" });
+    const freed = visitAt("09:00", VisitStatus.Cancelled, { id: "visit-freed" });
+
+    // Order must not matter: the still-active visit must never be hidden by
+    // a freed one that happens to be processed after it.
+    const slotsActiveFirst = computeEmptySlots(SCHEDULE, [active, freed]);
+    expect(slotsActiveFirst.map((s) => s.time)).toEqual(["09:30"]);
+
+    const slotsFreedFirst = computeEmptySlots(SCHEDULE, [freed, active]);
+    expect(slotsFreedFirst.map((s) => s.time)).toEqual(["09:30"]);
   });
 });

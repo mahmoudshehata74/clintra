@@ -1,16 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import Ltr from "../../components/Ltr";
 import { db } from "../../db/database";
-import { undoMostRecentPatientMutation, undoMostRecentVisitMutation } from "../../db/mutate";
+import { setDayDelay } from "../../db/dayState";
+import {
+  undoMostRecentDayStateMutation,
+  undoMostRecentPatientMutation,
+  undoMostRecentVisitMutation,
+} from "../../db/mutate";
 import { seedDatabase, seededVisitsDate } from "../../db/seed";
 import type { ClinicDay, Location, Patient, Practitioner, Schedule, Service, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
-import { markVisitArrived } from "../../db/visitAttendance";
+import { markVisitArrived, markVisitCompleted, markVisitInRoom } from "../../db/visitAttendance";
+import { cancelVisit, markVisitNoShow, type VisitCancelReason } from "../../db/visitCancel";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import { formatCairoDisplayDateParts, todayInCairo, weekdayOf } from "../../domain/time";
-import BookingSheet from "./BookingSheet";
+import { VisitStatus } from "../../domain/visitStatus";
+import BookingSheet, { type BookingSheetMode } from "./BookingSheet";
+import CancelVisitSheet from "./CancelVisitSheet";
 import Counters from "./Counters";
 import { computeDayCounters } from "./dayCounters";
+import DelayControl from "./DelayControl";
+import MoveVisitSheet from "./MoveVisitSheet";
 import PractitionerColumn from "./PractitionerColumn";
 import { resolveDayScheduleState } from "./scheduleState";
 import { dayScreenStrings } from "./strings";
@@ -41,10 +51,10 @@ interface DynamicData {
 
 const EMPTY_DYNAMIC_DATA: DynamicData = { visits: [], patientsById: new Map(), servicesById: new Map() };
 
-// The undo action stays available for five minutes after marking a visit
-// arrived or booking one, per the specification. This is a UI-side mirror of
-// the real enforcement inside undoMostRecentVisitMutation; the toast
-// disappearing here is a convenience, not the guarantee.
+// The undo action stays available for five minutes after any of the writes
+// below, per the specification. This is a UI-side mirror of the real
+// enforcement inside the constrained undo mechanism; the toast disappearing
+// here is a convenience, not the guarantee.
 const UNDO_WINDOW_MS = 5 * 60 * 1000;
 const MESSAGE_TOAST_MS = 4 * 1000;
 
@@ -53,6 +63,8 @@ interface ToastState {
   /** Present only when this message's mutation(s) can still be undone. */
   undo: UndoAction | null;
 }
+
+type RowActionSheetState = { kind: "cancel"; visit: Visit } | { kind: "move"; visit: Visit } | null;
 
 function toggleButtonClass(isSelected: boolean): string {
   return isSelected
@@ -65,7 +77,9 @@ export default function DayScreen() {
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [selectedPractitionerId, setSelectedPractitionerId] = useState<string | null>(null);
   const [toastState, setToastState] = useState<ToastState | null>(null);
-  const [isBookingSheetOpen, setIsBookingSheetOpen] = useState(false);
+  const [bookingSheetMode, setBookingSheetMode] = useState<BookingSheetMode | null>(null);
+  const [openMenuVisitId, setOpenMenuVisitId] = useState<string | null>(null);
+  const [rowActionSheet, setRowActionSheet] = useState<RowActionSheetState>(null);
 
   const isSeedDayPinned = new URLSearchParams(window.location.search).get(SEED_DAY_QUERY_PARAM) === "1";
   const today = isSeedDayPinned && staticData?.seededDay ? staticData.seededDay : todayInCairo();
@@ -130,8 +144,8 @@ export default function DayScreen() {
   }, [staticData, selectedPractitionerId]);
 
   // Live query: re-emits automatically whenever any write touches the visits
-  // table (e.g. a one-tap attendance mark, a booking, or an undo of either),
-  // so the row and the counters update without a manual refetch.
+  // table (attendance, booking, cancel, no-show, move, or an undo of any of
+  // them), so the row and the counters update without a manual refetch.
   const dynamicData =
     useLiveQuery<DynamicData>(async () => {
       if (!staticData || practitionersToShow.length === 0) {
@@ -171,6 +185,21 @@ export default function DayScreen() {
       return { visits, patientsById, servicesById };
     }, [staticData, practitionersToShow, today, selectedLocationId]) ?? EMPTY_DYNAMIC_DATA;
 
+  // Resolved unconditionally (optional-chained) so it's stable for the
+  // day_state live query below, which must run before any early return.
+  const currentPractitionerId = selectedPractitionerId ?? staticData?.practitioners[0]?.id ?? null;
+
+  const dayStateRow = useLiveQuery(async () => {
+    if (!currentPractitionerId || !selectedLocationId) {
+      return undefined;
+    }
+    return db.day_state
+      .where("[practitioner_id+location_id+date]")
+      .equals([currentPractitionerId, selectedLocationId, today])
+      .first();
+  }, [currentPractitionerId, selectedLocationId, today]);
+  const delayMinutes = dayStateRow?.delay_minutes ?? 0;
+
   useEffect(() => {
     if (!toastState) {
       return;
@@ -180,44 +209,75 @@ export default function DayScreen() {
     return () => clearTimeout(timeout);
   }, [toastState]);
 
-  async function handleMarkArrived(visit: Visit) {
+  async function handleAdvance(visit: Visit, toStatus: VisitStatus) {
     try {
-      const auditLogId = await markVisitArrived(db, visit.id);
-      setToastState({ message: dayScreenStrings.attendanceMarked, undo: { kind: "visit", auditLogId } });
+      let auditLogId: string;
+      let message: string;
+      if (toStatus === VisitStatus.Arrived) {
+        auditLogId = await markVisitArrived(db, visit.id);
+        message = dayScreenStrings.attendanceMarked;
+      } else if (toStatus === VisitStatus.InRoom) {
+        auditLogId = await markVisitInRoom(db, visit.id);
+        message = dayScreenStrings.inRoomToastMessage;
+      } else {
+        auditLogId = await markVisitCompleted(db, visit.id);
+        message = dayScreenStrings.completedToastMessage;
+      }
+      setToastState({ message, undo: { kind: "visit", auditLogId } });
     } catch (error) {
       console.error(error);
     }
   }
 
   async function handleUndo() {
-    if (!toastState?.undo) {
+    const undo = toastState?.undo;
+    if (!undo) {
       return;
     }
     try {
-      if (toastState.undo.kind === "visit") {
-        const outcome = await undoMostRecentVisitMutation(db, toastState.undo.auditLogId);
+      if (undo.kind === "visit") {
+        const outcome = await undoMostRecentVisitMutation(db, undo.auditLogId);
         setToastState(outcome.ok ? null : { message: dayScreenStrings.undoRefused, undo: null });
         return;
       }
 
-      // A new-patient booking is two writes; undo reverses them in reverse
-      // order. The visit references the patient, so removing the visit
-      // first avoids ever leaving a dangling reference mid-undo.
-      const { visitAuditLogId, patientAuditLogId } = toastState.undo;
-      const visitOutcome = await undoMostRecentVisitMutation(db, visitAuditLogId);
-      if (!visitOutcome.ok) {
+      if (undo.kind === "day_state") {
+        const outcome = await undoMostRecentDayStateMutation(db, undo.auditLogId);
+        setToastState(outcome.ok ? null : { message: dayScreenStrings.undoRefused, undo: null });
+        return;
+      }
+
+      if (undo.kind === "new_patient_visit") {
+        // Two writes; undo reverses them in reverse order. The visit
+        // references the patient, so removing the visit first avoids ever
+        // leaving a dangling reference mid-undo.
+        const visitOutcome = await undoMostRecentVisitMutation(db, undo.visitAuditLogId);
+        if (!visitOutcome.ok) {
+          setToastState({ message: dayScreenStrings.undoRefused, undo: null });
+          return;
+        }
+        const patientOutcome = await undoMostRecentPatientMutation(db, undo.patientAuditLogId);
+        if (!patientOutcome.ok) {
+          // The visit is gone but the patient reversal failed: report this
+          // plainly rather than silently leaving one of the two in place.
+          setToastState({ message: dayScreenStrings.newPatientUndoPartialFailure, undo: null });
+          return;
+        }
+        setToastState(null);
+        return;
+      }
+
+      // visit_move: reverse the new slot first, then the original visit.
+      const newOutcome = await undoMostRecentVisitMutation(db, undo.newVisitAuditLogId);
+      if (!newOutcome.ok) {
         setToastState({ message: dayScreenStrings.undoRefused, undo: null });
         return;
       }
-
-      const patientOutcome = await undoMostRecentPatientMutation(db, patientAuditLogId);
-      if (!patientOutcome.ok) {
-        // The visit is gone but the patient reversal failed: report this
-        // plainly rather than silently leaving one of the two in place.
-        setToastState({ message: dayScreenStrings.newPatientUndoPartialFailure, undo: null });
+      const oldOutcome = await undoMostRecentVisitMutation(db, undo.oldVisitAuditLogId);
+      if (!oldOutcome.ok) {
+        setToastState({ message: dayScreenStrings.moveUndoPartialFailure, undo: null });
         return;
       }
-
       setToastState(null);
     } catch (error) {
       console.error(error);
@@ -230,6 +290,74 @@ export default function DayScreen() {
 
   function handleBookingCollision() {
     setToastState({ message: dayScreenStrings.bookingSlotTakenError, undo: null });
+  }
+
+  function handleRequestMove(visit: Visit) {
+    setOpenMenuVisitId(null);
+    setRowActionSheet({ kind: "move", visit });
+  }
+
+  function handleRequestCancel(visit: Visit) {
+    setOpenMenuVisitId(null);
+    setRowActionSheet({ kind: "cancel", visit });
+  }
+
+  async function handleMarkNoShow(visit: Visit) {
+    setOpenMenuVisitId(null);
+    try {
+      const auditLogId = await markVisitNoShow(db, visit.id);
+      setToastState({ message: dayScreenStrings.noShowToastMessage, undo: { kind: "visit", auditLogId } });
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  async function handleSelectCancelReason(reason: VisitCancelReason) {
+    if (rowActionSheet?.kind !== "cancel") {
+      return;
+    }
+    try {
+      const auditLogId = await cancelVisit(db, rowActionSheet.visit.id, reason);
+      setToastState({ message: dayScreenStrings.cancelToastMessage, undo: { kind: "visit", auditLogId } });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setRowActionSheet(null);
+    }
+  }
+
+  function handleMoved(undo: UndoAction) {
+    setRowActionSheet(null);
+    setToastState({ message: dayScreenStrings.moveToastMessage, undo });
+  }
+
+  function handleMoveCollision() {
+    setToastState({ message: dayScreenStrings.bookingSlotTakenError, undo: null });
+  }
+
+  async function handleSetDelay(minutes: number) {
+    if (!currentPractitionerId || !selectedLocationId || !staticData) {
+      return;
+    }
+    const practitioner = staticData.practitioners.find((p) => p.id === currentPractitionerId);
+    if (!practitioner) {
+      return;
+    }
+    try {
+      const auditLogId = await setDayDelay(db, {
+        practitionerId: currentPractitionerId,
+        locationId: selectedLocationId,
+        orgId: practitioner.org_id,
+        date: today,
+        delayMinutes: minutes,
+      });
+      setToastState({
+        message: dayScreenStrings.delayChangedToastMessage,
+        undo: { kind: "day_state", auditLogId },
+      });
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   if (!staticData) {
@@ -249,9 +377,9 @@ export default function DayScreen() {
     (schedule) => schedule.location_id === selectedLocationId,
   );
 
-  // The booking sheet always targets one practitioner: whichever the filter
-  // has selected, or the first one when "all" is active.
-  const currentPractitionerId = selectedPractitionerId ?? staticData.practitioners[0]?.id ?? null;
+  // The booking sheet, walk-in and delay control all target one
+  // practitioner: whichever the filter has selected, or the first one when
+  // "all" is active.
   const currentPractitioner =
     staticData.practitioners.find((practitioner) => practitioner.id === currentPractitionerId) ?? null;
   const currentPractitionerSchedule = schedulesForSelectedLocation.find(
@@ -272,9 +400,9 @@ export default function DayScreen() {
   );
   const defaultService = staticData.services[0] ?? null;
 
-  // The booking action does not require today's schedule to exist: it must
-  // stay reachable on a day off and even before any schedule is configured
-  // (BookingSheet itself explains that case and offers no slots).
+  // Booking (and walk-in) do not require today's schedule to exist: they
+  // must stay reachable on a day off and even before any schedule is
+  // configured (BookingSheet itself explains that case and offers no slots).
   const canBook = Boolean(currentPractitioner && selectedLocationId && defaultService);
 
   return (
@@ -289,6 +417,16 @@ export default function DayScreen() {
           ),
         )}
       </p>
+
+      {currentPractitioner && (
+        <div className="mt-3">
+          <DelayControl
+            delayMinutes={delayMinutes}
+            scheduleStartTime={currentPractitionerSchedule?.start_time ?? null}
+            onSetDelay={handleSetDelay}
+          />
+        </div>
+      )}
 
       {showLocationSwitcher && (
         <div className="mt-4 flex gap-2">
@@ -356,23 +494,38 @@ export default function DayScreen() {
               visits={visitsForPractitioner}
               patientsById={dynamicData.patientsById}
               servicesById={dynamicData.servicesById}
-              onMarkArrived={handleMarkArrived}
+              onAdvance={handleAdvance}
+              openMenuVisitId={openMenuVisitId}
+              onOpenMenu={setOpenMenuVisitId}
+              onCloseMenu={() => setOpenMenuVisitId(null)}
+              onRequestMove={handleRequestMove}
+              onRequestCancel={handleRequestCancel}
+              onMarkNoShow={handleMarkNoShow}
             />
           );
         })}
       </div>
 
-      {!isBookingSheetOpen && canBook && (
-        <button
-          type="button"
-          onClick={() => setIsBookingSheetOpen(true)}
-          className="fixed bottom-24 end-6 z-10 rounded-full bg-green px-6 py-3 font-semibold text-paper shadow-lg"
-        >
-          {dayScreenStrings.bookingButtonLabel}
-        </button>
+      {!bookingSheetMode && canBook && (
+        <div className="fixed inset-x-6 bottom-24 z-10 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setBookingSheetMode("walk_in")}
+            className="rounded-full border border-green bg-paper px-4 py-3 text-sm font-semibold text-green shadow-lg"
+          >
+            {dayScreenStrings.walkInButtonLabel}
+          </button>
+          <button
+            type="button"
+            onClick={() => setBookingSheetMode("booking")}
+            className="rounded-full bg-green px-6 py-3 font-semibold text-paper shadow-lg"
+          >
+            {dayScreenStrings.bookingButtonLabel}
+          </button>
+        </div>
       )}
 
-      {isBookingSheetOpen && currentPractitioner && selectedLocationId && defaultService && (
+      {bookingSheetMode && currentPractitioner && selectedLocationId && defaultService && (
         <BookingSheet
           practitioner={currentPractitioner}
           scheduleState={currentPractitionerScheduleState}
@@ -381,9 +534,31 @@ export default function DayScreen() {
           orgId={currentPractitioner.org_id}
           service={defaultService}
           visitDate={today}
-          onDismiss={() => setIsBookingSheetOpen(false)}
+          mode={bookingSheetMode}
+          onDismiss={() => setBookingSheetMode(null)}
           onBooked={handleBooked}
           onCollision={handleBookingCollision}
+        />
+      )}
+
+      {rowActionSheet?.kind === "cancel" && (
+        <CancelVisitSheet
+          patientName={dynamicData.patientsById.get(rowActionSheet.visit.patient_id)?.full_name ?? ""}
+          onDismiss={() => setRowActionSheet(null)}
+          onSelectReason={handleSelectCancelReason}
+        />
+      )}
+
+      {rowActionSheet?.kind === "move" && selectedLocationId && (
+        <MoveVisitSheet
+          visit={rowActionSheet.visit}
+          patientName={dynamicData.patientsById.get(rowActionSheet.visit.patient_id)?.full_name ?? ""}
+          locationId={selectedLocationId}
+          schedules={staticData.schedules}
+          startDate={today}
+          onDismiss={() => setRowActionSheet(null)}
+          onMoved={handleMoved}
+          onCollision={handleMoveCollision}
         />
       )}
 

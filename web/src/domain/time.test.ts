@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  addDaysToClinicDay,
   cairoInstant,
   clockTimeInCairo,
   formatCairoDisplayDate,
@@ -44,6 +45,24 @@ describe("mostRecentWeekdayOnOrBefore", () => {
   it("steps back across a month boundary", () => {
     // 2026-09-06 is a Sunday; the Monday before it is 2026-08-31.
     expect(mostRecentWeekdayOnOrBefore("2026-09-06", 1)).toBe("2026-08-31");
+  });
+});
+
+describe("addDaysToClinicDay", () => {
+  it("adds days within the same month", () => {
+    expect(addDaysToClinicDay("2026-09-06", 3)).toBe("2026-09-09");
+  });
+
+  it("adds days across a month boundary", () => {
+    expect(addDaysToClinicDay("2026-09-28", 5)).toBe("2026-10-03");
+  });
+
+  it("subtracts days with a negative offset", () => {
+    expect(addDaysToClinicDay("2026-09-06", -1)).toBe("2026-09-05");
+  });
+
+  it("returns the same day for an offset of zero", () => {
+    expect(addDaysToClinicDay("2026-09-06", 0)).toBe("2026-09-06");
   });
 });
 

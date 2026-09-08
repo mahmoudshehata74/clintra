@@ -69,4 +69,49 @@ export const dayScreenStrings = {
   // patient reversal itself fails: the assistant must know the patient
   // record is still there, not assume the whole booking was cleanly undone.
   newPatientUndoPartialFailure: "اتلغى الحجز، لكن بيانات المريض لسه محفوظة",
+
+  // The overflow (ellipsis) menu on an occupied row.
+  menuOpenAriaLabel: "خيارات تانية",
+  moveMenuLabel: "نقل لميعاد تاني",
+  cancelMenuLabel: "إلغاء",
+  noShowMenuLabel: "تسجيل غياب",
+
+  // The cancel-reason prompt: two buttons, no free-text.
+  cancelPromptTitle: "سبب الإلغاء",
+  cancelReasonPatient: "المريض",
+  cancelReasonClinic: "العيادة",
+  cancelToastMessage: "اتلغى الميعاد",
+  noShowToastMessage: "اتسجل غياب المريض",
+
+  // The move sheet: empty slots for today and the next 7 days.
+  moveSheetHeading: "اختار الميعاد الجديد",
+  moveToastMessage: "اتنقل الميعاد",
+  // Shown when undoing a move reverses the new slot but then reversing the
+  // original visit's row fails: the assistant must know the old appointment
+  // is still marked as moved, not assume the whole move was cleanly undone.
+  moveUndoPartialFailure: "اترجع الميعاد الجديد، لكن الميعاد القديم لسه متسجل إنه اتنقل",
+
+  // Doctor delay: the day header chip and its picker.
+  delayNone: "بدون تأخير",
+  delayMinutesSuffix: "دقيقة",
+  delayPickerTitle: "تأخير الطبيب",
+  delayClearOption: "شيل التأخير",
+  delayLinePrefix: "الطبيب متأخر",
+  delayLineActualStart: "البدء الفعلي",
+  delayChangedToastMessage: "اتسجل تأخير الطبيب",
+
+  // The remaining two one-tap advances (booked/confirmed -> arrived already
+  // reuses attendanceMarked above).
+  inRoomToastMessage: "دخل المريض الكشف",
+  completedToastMessage: "خلصت الزيارة",
+
+  // Walk-in: a patient who arrived without an appointment.
+  walkInButtonLabel: "مريض جه دلوقتي",
+
+  // Overbook: writing a visit outside the normal slot grid.
+  overbookButtonLabel: "احجز فوق السعة",
+  overbookPickerHeading: "اختار ميعاد فوق السعة",
+  // Shown on every row after the first at a clock time two or more visits
+  // share — only reachable through the overbook flow.
+  overbookedRowBadge: "فوق السعة",
 } as const;

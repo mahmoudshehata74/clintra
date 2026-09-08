@@ -18,6 +18,31 @@ function toClockTime(minutes: number): ClockTime {
 }
 
 /**
+ * Every time from start_time to end_time stepping by stepMinutes. A time is
+ * only included if it fully fits before end_time. Shared by generateSlotTimes
+ * (steps by the schedule's own slot_minutes) and the overbook time picker
+ * (steps by a fixed 15 minutes, independent of the schedule's slot length).
+ */
+export function generateTimeChoices(
+  window: { start_time: ClockTime; end_time: ClockTime },
+  stepMinutes: number,
+): ClockTime[] {
+  if (stepMinutes <= 0) {
+    return [];
+  }
+
+  const start = toMinutes(window.start_time);
+  const end = toMinutes(window.end_time);
+  const times: ClockTime[] = [];
+
+  for (let minutes = start; minutes + stepMinutes <= end; minutes += stepMinutes) {
+    times.push(toClockTime(minutes));
+  }
+
+  return times;
+}
+
+/**
  * Generates the slot start times for a slots-mode schedule, from start_time to
  * end_time stepping by slot_minutes. Slot length always comes from the
  * schedule, never a hardcoded value. A slot is only included if it fully fits
@@ -28,13 +53,5 @@ export function generateSlotTimes(schedule: SlotScheduleInput): ClockTime[] {
     return [];
   }
 
-  const start = toMinutes(schedule.start_time);
-  const end = toMinutes(schedule.end_time);
-  const times: ClockTime[] = [];
-
-  for (let minutes = start; minutes + schedule.slot_minutes <= end; minutes += schedule.slot_minutes) {
-    times.push(toClockTime(minutes));
-  }
-
-  return times;
+  return generateTimeChoices(schedule, schedule.slot_minutes);
 }

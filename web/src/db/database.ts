@@ -113,6 +113,13 @@ export class ClintraDatabase extends Dexie {
     this.version(4).stores({
       users: "id, &phone",
     });
+
+    // Enforces the natural key docs/schema.md already declared for day_state
+    // (practitioner_id + location_id + date) as a real unique index, now that
+    // the doctor-delay feature is the first thing to write to this table.
+    this.version(5).stores({
+      day_state: "id, &[practitioner_id+location_id+date]",
+    });
   }
 }
 

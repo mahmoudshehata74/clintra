@@ -1,12 +1,10 @@
-import { generateSlotTimes } from "../../domain/schedule";
-import { clockTimeInCairo } from "../../domain/time";
-import { VisitStatus } from "../../domain/visitStatus";
+import type { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Schedule, Service, Visit } from "../../db/types";
+import { computeGridRows } from "./dayGrid";
 import { resolveDayScheduleState } from "./scheduleState";
 import SlotRow from "./SlotRow";
 import { dayScreenStrings } from "./strings";
-
-const TAPPABLE_FOR_ARRIVAL = new Set<string>([VisitStatus.Booked, VisitStatus.Confirmed]);
+import { isMenuEligible, primaryAdvanceTarget } from "./visitActions";
 
 interface PractitionerColumnProps {
   practitionerName: string;
@@ -18,7 +16,13 @@ interface PractitionerColumnProps {
   visits: readonly Visit[];
   patientsById: ReadonlyMap<string, Patient>;
   servicesById: ReadonlyMap<string, Service>;
-  onMarkArrived: (visit: Visit) => void;
+  onAdvance: (visit: Visit, toStatus: VisitStatus) => void;
+  openMenuVisitId: string | null;
+  onOpenMenu: (visitId: string) => void;
+  onCloseMenu: () => void;
+  onRequestMove: (visit: Visit) => void;
+  onRequestCancel: (visit: Visit) => void;
+  onMarkNoShow: (visit: Visit) => void;
 }
 
 export default function PractitionerColumn({
@@ -29,7 +33,13 @@ export default function PractitionerColumn({
   visits,
   patientsById,
   servicesById,
-  onMarkArrived,
+  onAdvance,
+  openMenuVisitId,
+  onOpenMenu,
+  onCloseMenu,
+  onRequestMove,
+  onRequestCancel,
+  onMarkNoShow,
 }: PractitionerColumnProps) {
   const scheduleState = resolveDayScheduleState(todaysSchedule, hasAnySchedule);
 
@@ -50,32 +60,42 @@ export default function PractitionerColumn({
     );
   }
 
-  const slotTimes = generateSlotTimes(scheduleState.schedule);
-
-  const visitsByTime = new Map<string, Visit>();
-  for (const visit of visits) {
-    if (visit.scheduled_at) {
-      visitsByTime.set(clockTimeInCairo(visit.scheduled_at), visit);
-    }
-  }
+  const rows = computeGridRows(scheduleState.schedule, visits);
 
   return (
     <div>
       {showLabel && <h3 className="font-display mb-3 text-lg font-medium">{practitionerName}</h3>}
       <ul className="flex flex-col gap-2">
-        {slotTimes.map((time) => {
-          const visit = visitsByTime.get(time);
+        {rows.map((row, index) => {
+          const { time, visit, isExtraAtTime } = row;
+          const showTime = index === 0 || rows[index - 1].time !== time;
           const patient = visit ? patientsById.get(visit.patient_id) : undefined;
           const service = visit?.service_id ? servicesById.get(visit.service_id) : undefined;
-          const canMarkArrived = Boolean(visit && TAPPABLE_FOR_ARRIVAL.has(visit.status));
+          const advanceTarget = visit ? primaryAdvanceTarget(visit.status) : null;
+          const menuEligible = Boolean(visit && isMenuEligible(visit.status));
+
           return (
             <SlotRow
-              key={time}
+              key={visit ? visit.id : `${time}-empty`}
               time={time}
-              visit={visit}
+              showTime={showTime}
+              visit={visit ?? undefined}
               patient={patient}
               service={service}
-              onMarkArrived={canMarkArrived && visit ? () => onMarkArrived(visit) : undefined}
+              isExtraAtTime={isExtraAtTime}
+              onPrimaryAction={advanceTarget && visit ? () => onAdvance(visit, advanceTarget) : undefined}
+              menu={
+                menuEligible && visit
+                  ? {
+                      isOpen: openMenuVisitId === visit.id,
+                      onOpen: () => onOpenMenu(visit.id),
+                      onClose: onCloseMenu,
+                      onMove: () => onRequestMove(visit),
+                      onCancel: () => onRequestCancel(visit),
+                      onNoShow: () => onMarkNoShow(visit),
+                    }
+                  : undefined
+              }
             />
           );
         })}

@@ -98,6 +98,12 @@ arrived_at?, started_at?, ended_at?,
 cancel_reason? (patient|clinic|no_show|postpone), rescheduled_from?,
 created_by (membership id), created_at
 
+Moving a visit creates a new row at the target slot (`rescheduled_from`
+pointing back to the original) and marks the original row
+`rescheduled`/`postpone`, rather than updating one row's own date and time in
+place — this is what `rescheduled_from` and the `rescheduled` status
+describe, and the only one of the two models this codebase implements.
+
 ### day_state
 practitioner_id, location_id, date, delay_minutes, is_closed,
 avg_consult_minutes? (derived from started_at to ended_at)
@@ -195,6 +201,18 @@ its own `memberships` row referencing the same `user_id`. Letting two
 activity across two disconnected identities instead of one `user` with
 multiple memberships. Backs a unique index on `phone` in the local store.
 Added in local database version 4; versions 1-3 are unchanged.
+
+## v5 additions
+
+### day_state's natural key, enforced
+
+`day_state` was declared in v1 with its natural key noted as the composite
+`practitioner_id + location_id + date`, but the local store had no index
+enforcing it while the table stayed unused. The doctor-delay feature is the
+first writer, so that natural key is now a real unique index
+(`[practitioner_id+location_id+date]`), preventing two rows for the same
+practitioner's same day. Added in local database version 5; versions 1-4 are
+unchanged.
 
 ## Rules
 

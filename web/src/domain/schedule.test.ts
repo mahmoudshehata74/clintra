@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateSlotTimes } from "./schedule";
+import { generateSlotTimes, generateTimeChoices } from "./schedule";
 
 describe("generateSlotTimes", () => {
   it("generates slots from start_time to end_time stepping by slot_minutes", () => {
@@ -42,5 +42,20 @@ describe("generateSlotTimes", () => {
 
   it("returns no slots when start_time equals end_time", () => {
     expect(generateSlotTimes({ start_time: "09:00", end_time: "09:00", slot_minutes: 30 })).toEqual([]);
+  });
+});
+
+describe("generateTimeChoices", () => {
+  it("steps independently of any schedule's own slot length, for the overbook picker", () => {
+    expect(generateTimeChoices({ start_time: "09:00", end_time: "10:00" }, 15)).toEqual([
+      "09:00",
+      "09:15",
+      "09:30",
+      "09:45",
+    ]);
+  });
+
+  it("returns nothing for a non-positive step", () => {
+    expect(generateTimeChoices({ start_time: "09:00", end_time: "10:00" }, 0)).toEqual([]);
   });
 });

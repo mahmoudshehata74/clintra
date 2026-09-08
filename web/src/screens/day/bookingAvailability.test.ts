@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import type { Schedule } from "../../db/types";
-import { computeBookableSlots, resolveBookingScheduleNote } from "./bookingAvailability";
+import {
+  computeBookableSlots,
+  findNextSlotAtOrAfter,
+  resolveBookingScheduleNote,
+} from "./bookingAvailability";
 import { dayScreenStrings } from "./strings";
 
 const SCHEDULE: Schedule = {
@@ -45,5 +49,25 @@ describe("computeBookableSlots", () => {
   it("offers the schedule's empty slots once one exists", () => {
     const slots = computeBookableSlots({ kind: "scheduled", schedule: SCHEDULE }, []);
     expect(slots.map((s) => s.time)).toEqual(["09:00", "09:30"]);
+  });
+});
+
+describe("findNextSlotAtOrAfter", () => {
+  const slots = [
+    { time: "09:00", existingVisit: null },
+    { time: "09:30", existingVisit: null },
+    { time: "10:00", existingVisit: null },
+  ];
+
+  it("returns the earliest slot at or after the given time", () => {
+    expect(findNextSlotAtOrAfter(slots, "09:15")).toBe("09:30");
+  });
+
+  it("returns the exact slot when the given time matches one", () => {
+    expect(findNextSlotAtOrAfter(slots, "09:30")).toBe("09:30");
+  });
+
+  it("returns null once every slot has already passed", () => {
+    expect(findNextSlotAtOrAfter(slots, "10:30")).toBeNull();
   });
 });
