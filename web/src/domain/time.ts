@@ -75,6 +75,23 @@ export function weekdayOf(day: ClinicDay): number {
   return new Date(Date.UTC(year, month - 1, date)).getUTCDay();
 }
 
+/**
+ * The most recent clinic day on or before `day` that falls on `targetWeekday`
+ * (0 = Sunday .. 6 = Saturday). Deterministic given its inputs — used to pin
+ * seed data to a fixed weekday regardless of which day the seed happens to
+ * run on. Calendar math only, no timezone conversion needed.
+ */
+export function mostRecentWeekdayOnOrBefore(day: ClinicDay, targetWeekday: number): ClinicDay {
+  const [year, month, date] = day.split("-").map(Number);
+  const result = new Date(Date.UTC(year, month - 1, date));
+  const daysBack = (result.getUTCDay() - targetWeekday + 7) % 7;
+  result.setUTCDate(result.getUTCDate() - daysBack);
+  const resultYear = result.getUTCFullYear();
+  const resultMonth = String(result.getUTCMonth() + 1).padStart(2, "0");
+  const resultDate = String(result.getUTCDate()).padStart(2, "0");
+  return `${resultYear}-${resultMonth}-${resultDate}`;
+}
+
 /** The Africa/Cairo clock time ("HH:MM") an instant falls on. */
 export function clockTimeInCairo(instant: Instant): ClockTime {
   const parts = CAIRO_TIME_FORMATTER.formatToParts(new Date(instant));

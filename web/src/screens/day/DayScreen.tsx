@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import Ltr from "../../components/Ltr";
 import { db } from "../../db/database";
 import { undoMostRecentVisitMutation } from "../../db/mutate";
-import { seedDatabase } from "../../db/seed";
-import type { Location, Patient, Practitioner, Schedule, Service, Visit } from "../../db/types";
+import { seedDatabase, seededVisitsDate } from "../../db/seed";
+import type { ClinicDay, Location, Patient, Practitioner, Schedule, Service, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitArrived } from "../../db/visitAttendance";
 import { ScheduleMode } from "../../domain/scheduleMode";
@@ -12,14 +12,24 @@ import BookingSheet from "./BookingSheet";
 import Counters from "./Counters";
 import { computeDayCounters } from "./dayCounters";
 import PractitionerColumn from "./PractitionerColumn";
+import { resolveDayScheduleState } from "./scheduleState";
 import { dayScreenStrings } from "./strings";
 import UndoToast from "./UndoToast";
+
+// Development-only: appending ?seedDay=1 to the URL pins the screen to the
+// seed's fixed demo date instead of today, so the seeded visits (which no
+// longer sit on "today" — see seed.ts) are reachable without a real date
+// navigation screen. Remove this once one exists. No other query param, no
+// UI, no persisted state: absence of the param leaves behaviour unchanged.
+const SEED_DAY_QUERY_PARAM = "seedDay";
 
 interface StaticData {
   locations: Location[];
   practitioners: Practitioner[];
   schedules: Schedule[];
   services: Service[];
+  /** Only populated when ?seedDay=1 is present; see SEED_DAY_QUERY_PARAM. */
+  seededDay: ClinicDay | null;
 }
 
 interface DynamicData {
@@ -50,14 +60,15 @@ function toggleButtonClass(isSelected: boolean): string {
 }
 
 export default function DayScreen() {
-  const today = todayInCairo();
-  const weekday = weekdayOf(today);
-
   const [staticData, setStaticData] = useState<StaticData | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [selectedPractitionerId, setSelectedPractitionerId] = useState<string | null>(null);
   const [toastState, setToastState] = useState<ToastState | null>(null);
   const [isBookingSheetOpen, setIsBookingSheetOpen] = useState(false);
+
+  const isSeedDayPinned = new URLSearchParams(window.location.search).get(SEED_DAY_QUERY_PARAM) === "1";
+  const today = isSeedDayPinned && staticData?.seededDay ? staticData.seededDay : todayInCairo();
+  const weekday = weekdayOf(today);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,11 +90,23 @@ export default function DayScreen() {
       const activePractitioners = practitioners.filter((practitioner) => practitioner.is_active);
       const activeServices = services.filter((service) => service.is_active);
 
+      // Only read back the actual seeded date when the dev affordance is in
+      // use: reading it from a real seeded visit rather than recomputing it
+      // fresh, since recomputing "the most recent Monday" against a later
+      // today would drift away from the date the seed actually wrote once
+      // enough real time has passed.
+      let seededDay: ClinicDay | null = null;
+      if (isSeedDayPinned) {
+        const anyVisit = await db.visits.toArray();
+        seededDay = anyVisit[0]?.visit_date ?? seededVisitsDate();
+      }
+
       setStaticData({
         locations: activeLocations,
         practitioners: activePractitioners,
         schedules,
         services: activeServices,
+        seededDay,
       });
       setSelectedLocationId(activeLocations[0]?.id ?? null);
     }
@@ -93,7 +116,7 @@ export default function DayScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isSeedDayPinned]);
 
   const practitionersToShow = useMemo(() => {
     if (!staticData) {
@@ -213,14 +236,22 @@ export default function DayScreen() {
       schedule.weekday === weekday &&
       schedule.mode === ScheduleMode.Slots,
   );
+  const currentPractitionerHasAnySchedule = staticData.schedules.some(
+    (schedule) => schedule.practitioner_id === currentPractitionerId,
+  );
+  const currentPractitionerScheduleState = resolveDayScheduleState(
+    currentPractitionerSchedule,
+    currentPractitionerHasAnySchedule,
+  );
   const currentPractitionerVisits = dynamicData.visits.filter(
     (visit) => visit.practitioner_id === currentPractitionerId,
   );
   const defaultService = staticData.services[0] ?? null;
 
-  const canBook = Boolean(
-    currentPractitioner && selectedLocationId && currentPractitionerSchedule && defaultService,
-  );
+  // The booking action does not require today's schedule to exist: it must
+  // stay reachable on a day off and even before any schedule is configured
+  // (BookingSheet itself explains that case and offers no slots).
+  const canBook = Boolean(currentPractitioner && selectedLocationId && defaultService);
 
   return (
     <main className={`mx-auto max-w-3xl px-6 pt-16 ${toastState ? "pb-28" : "pb-16"}`}>
@@ -317,24 +348,20 @@ export default function DayScreen() {
         </button>
       )}
 
-      {isBookingSheetOpen &&
-        currentPractitioner &&
-        currentPractitionerSchedule &&
-        selectedLocationId &&
-        defaultService && (
-          <BookingSheet
-            practitioner={currentPractitioner}
-            schedule={currentPractitionerSchedule}
-            visitsForPractitioner={currentPractitionerVisits}
-            locationId={selectedLocationId}
-            orgId={currentPractitioner.org_id}
-            service={defaultService}
-            visitDate={today}
-            onDismiss={() => setIsBookingSheetOpen(false)}
-            onBooked={handleBooked}
-            onCollision={handleBookingCollision}
-          />
-        )}
+      {isBookingSheetOpen && currentPractitioner && selectedLocationId && defaultService && (
+        <BookingSheet
+          practitioner={currentPractitioner}
+          scheduleState={currentPractitionerScheduleState}
+          visitsForPractitioner={currentPractitionerVisits}
+          locationId={selectedLocationId}
+          orgId={currentPractitioner.org_id}
+          service={defaultService}
+          visitDate={today}
+          onDismiss={() => setIsBookingSheetOpen(false)}
+          onBooked={handleBooked}
+          onCollision={handleBookingCollision}
+        />
+      )}
 
       {toastState && (
         <UndoToast message={toastState.message} onUndo={toastState.auditLogId ? handleUndo : undefined} />

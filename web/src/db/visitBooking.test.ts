@@ -26,8 +26,8 @@ describe("bookExistingPatientVisit", () => {
     const { schedule, practitioner, patients, services, visits } = await seededContext();
     const patient = patients[patients.length - 1];
     const service = services[0];
-    // The seed's visit_date is derived from today in Africa/Cairo; read it
-    // back from a seeded visit rather than recomputing it here.
+    // The seed pins its visits to a fixed deterministic date, not today; read
+    // it back from a seeded visit rather than recomputing it here.
     const visitDate = visits[0].visit_date;
 
     const before = await db.visits.count();

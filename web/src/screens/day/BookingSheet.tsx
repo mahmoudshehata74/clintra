@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import Ltr from "../../components/Ltr";
 import { db } from "../../db/database";
 import { searchPatients } from "../../db/patientSearch";
-import type { Patient, Practitioner, Schedule, Service, Visit } from "../../db/types";
+import type { Patient, Practitioner, Service, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { bookExistingPatientVisit } from "../../db/visitBooking";
 import type { ClinicDay } from "../../domain/time";
 import { formatCairoDisplayDate } from "../../domain/time";
-import { computeEmptySlots, type EmptySlot } from "./emptySlots";
+import { computeBookableSlots, resolveBookingScheduleNote } from "./bookingAvailability";
+import type { EmptySlot } from "./emptySlots";
+import type { DayScheduleState } from "./scheduleState";
 import { dayScreenStrings } from "./strings";
 
 const SEARCH_DEBOUNCE_MS = 120;
@@ -20,7 +22,7 @@ type Step =
 
 interface BookingSheetProps {
   practitioner: Practitioner;
-  schedule: Schedule;
+  scheduleState: DayScheduleState;
   visitsForPractitioner: readonly Visit[];
   locationId: string;
   orgId: string;
@@ -33,7 +35,7 @@ interface BookingSheetProps {
 
 export default function BookingSheet({
   practitioner,
-  schedule,
+  scheduleState,
   visitsForPractitioner,
   locationId,
   orgId,
@@ -79,10 +81,13 @@ export default function BookingSheet({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onDismiss]);
 
+  const schedule = scheduleState.kind === "scheduled" ? scheduleState.schedule : null;
+  const noScheduleMessage = resolveBookingScheduleNote(scheduleState);
+
   const results = useLiveQuery(() => searchPatients(db, debouncedQuery), [debouncedQuery]) ?? [];
   const emptySlots = useMemo(
-    () => computeEmptySlots(schedule, visitsForPractitioner),
-    [schedule, visitsForPractitioner],
+    () => computeBookableSlots(scheduleState, visitsForPractitioner),
+    [scheduleState, visitsForPractitioner],
   );
 
   function handleHandlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
@@ -112,6 +117,11 @@ export default function BookingSheet({
   }
 
   async function handleConfirm(patient: Patient, slot: EmptySlot) {
+    // Unreachable in practice: emptySlots is only ever non-empty when
+    // schedule is set, and this is only called with a slot drawn from it.
+    if (!schedule) {
+      return;
+    }
     setIsConfirming(true);
     try {
       const result = await bookExistingPatientVisit(db, {
@@ -168,6 +178,7 @@ export default function BookingSheet({
               placeholder={dayScreenStrings.bookingSearchPlaceholder}
               className="w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start"
             />
+            {noScheduleMessage && <p className="mt-2 text-sm text-muted">{noScheduleMessage}</p>}
             <ul className="mt-3 flex flex-col gap-1 overflow-y-auto">
               {debouncedQuery.trim().length > 0 && results.length === 0 && (
                 <li className="p-3 text-center text-muted">{dayScreenStrings.bookingNoResults}</li>
@@ -206,7 +217,9 @@ export default function BookingSheet({
             <p className="mt-1 font-medium">{step.patient.full_name}</p>
             <ul className="mt-3 flex flex-col gap-1 overflow-y-auto">
               {emptySlots.length === 0 && (
-                <li className="p-3 text-center text-muted">{dayScreenStrings.bookingNoEmptySlots}</li>
+                <li className="p-3 text-center text-muted">
+                  {noScheduleMessage ?? dayScreenStrings.bookingNoEmptySlots}
+                </li>
               )}
               {emptySlots.map((slot) => (
                 <li key={slot.time}>

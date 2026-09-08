@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { weekdayOf } from "../domain/time";
 import { ClintraDatabase } from "./database";
-import { seedDatabase } from "./seed";
+import { seedDatabase, seededVisitsDate } from "./seed";
 
 let db: ClintraDatabase;
 
@@ -41,6 +42,34 @@ describe("seedDatabase", () => {
     const specialty = await db.specialty_templates.get(practitioner.specialty_id);
 
     expect(specialty?.key).toBe("general");
+  });
+
+  it("seeds a working schedule for every weekday, so today's grid always has one", async () => {
+    await seedDatabase(db);
+
+    const schedules = await db.schedules.toArray();
+    expect(schedules).toHaveLength(7);
+    expect(schedules.map((s) => s.weekday).sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+
+    for (const schedule of schedules) {
+      expect(schedule.start_time).toBe("09:00");
+      expect(schedule.end_time).toBe("14:00");
+      expect(schedule.slot_minutes).toBe(30);
+    }
+  });
+
+  it("places the demo visits on a deterministic date rather than on whichever day the seed runs", async () => {
+    await seedDatabase(db);
+
+    const visits = await db.visits.toArray();
+    expect(visits).toHaveLength(5);
+
+    const expectedDate = seededVisitsDate();
+    // Monday, matching the deterministic weekday the seed always targets.
+    expect(weekdayOf(expectedDate)).toBe(1);
+    for (const visit of visits) {
+      expect(visit.visit_date).toBe(expectedDate);
+    }
   });
 
   it("does not create duplicate data when two connections seed the same empty database concurrently", async () => {

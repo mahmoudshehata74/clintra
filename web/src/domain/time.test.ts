@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { cairoInstant, clockTimeInCairo, formatCairoDisplayDate, todayInCairo, weekdayOf } from "./time";
+import {
+  cairoInstant,
+  clockTimeInCairo,
+  formatCairoDisplayDate,
+  mostRecentWeekdayOnOrBefore,
+  todayInCairo,
+  weekdayOf,
+} from "./time";
 
 describe("todayInCairo", () => {
   it("formats an instant as YYYY-MM-DD in Africa/Cairo", () => {
@@ -20,6 +27,23 @@ describe("weekdayOf", () => {
     ["2026-09-12", 6], // Saturday
   ])("returns weekday %i for %s", (day, expected) => {
     expect(weekdayOf(day)).toBe(expected);
+  });
+});
+
+describe("mostRecentWeekdayOnOrBefore", () => {
+  it("returns the same day when it already falls on the target weekday", () => {
+    // 2026-09-07 is a Monday.
+    expect(mostRecentWeekdayOnOrBefore("2026-09-07", 1)).toBe("2026-09-07");
+  });
+
+  it("steps back within the same month", () => {
+    // 2026-09-12 is a Saturday; the Monday before it is 2026-09-07.
+    expect(mostRecentWeekdayOnOrBefore("2026-09-12", 1)).toBe("2026-09-07");
+  });
+
+  it("steps back across a month boundary", () => {
+    // 2026-09-06 is a Sunday; the Monday before it is 2026-08-31.
+    expect(mostRecentWeekdayOnOrBefore("2026-09-06", 1)).toBe("2026-08-31");
   });
 });
 
