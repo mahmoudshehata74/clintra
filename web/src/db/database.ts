@@ -95,6 +95,16 @@ export class ClintraDatabase extends Dexie {
     this.version(2).stores({
       sync_ops: "op_id, synced_at",
     });
+
+    // Adds a unique index enforcing that scheduled_at is unique per
+    // practitioner per day, except for overbooked visits — see
+    // unique_scheduled_at's doc comment in types.ts for how the exception
+    // works. Restates visits' full index list, as Dexie requires when
+    // changing an existing table's indexes.
+    this.version(3).stores({
+      visits:
+        "id, [org_id+location_id+visit_date+status], [practitioner_id+visit_date], &[practitioner_id+visit_date+position], &[practitioner_id+visit_date+unique_scheduled_at]",
+    });
   }
 }
 

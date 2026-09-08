@@ -21,3 +21,22 @@ export const CancelReason = {
 } as const;
 
 export type CancelReason = (typeof CancelReason)[keyof typeof CancelReason];
+
+// Any status other than these means the slot is free again: the original
+// booking was cancelled, the patient didn't show, or the visit moved
+// elsewhere. Shared by the day screen's slot rendering (statusStyle.ts,
+// which treats rescheduled as visually empty for the same reason), the
+// booking sheet's slot listing, and the booking write path's own check at
+// write time.
+const OCCUPYING_VISIT_STATUSES = new Set<VisitStatus>([
+  VisitStatus.Booked,
+  VisitStatus.Confirmed,
+  VisitStatus.Arrived,
+  VisitStatus.InRoom,
+  VisitStatus.Completed,
+]);
+
+/** True when a visit in this status still holds its slot; false once it's cancelled, a no-show, or rescheduled away. */
+export function occupiesSlot(status: VisitStatus): boolean {
+  return OCCUPYING_VISIT_STATUSES.has(status);
+}

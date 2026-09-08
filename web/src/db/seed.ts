@@ -225,6 +225,7 @@ async function writeSeedData(db: ClintraDatabase, now: string, today: string): P
       visit_date: today,
       position: index + 1,
       scheduled_at: scheduledAt,
+      unique_scheduled_at: scheduledAt,
       status: plan.status,
       is_overbooked: false,
       source: VisitSource.Phone,

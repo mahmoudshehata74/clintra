@@ -145,6 +145,19 @@ future sync transport. `op_id` is its own primary key, distinct from
 `entity_id`. Added in local database version 2; version 1's tables are
 unchanged.
 
+## v3 additions
+
+### visits.unique_scheduled_at
+
+Equal to `scheduled_at`, except entirely absent (not merely null) when
+`is_overbooked` is true. Backs a unique index on
+`[practitioner_id+visit_date+unique_scheduled_at]` in the local store, so
+IndexedDB itself enforces "a visit's `scheduled_at` is unique per
+practitioner per day, except when `is_overbooked` is true" (see Rules below)
+— a record missing a compound index's key path component is excluded from
+that index entirely, which is how the `is_overbooked` exception is expressed.
+Added in local database version 3; versions 1 and 2 are unchanged.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.

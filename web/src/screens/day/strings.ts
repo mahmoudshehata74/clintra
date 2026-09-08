@@ -34,4 +34,24 @@ export const dayScreenStrings = {
   countersRemaining: "متبقي",
   allLocations: "كل الفروع",
   allPractitioners: "الكل",
+  // The floating action that opens the booking sheet.
+  bookingButtonLabel: "حجز",
+  bookingSearchPlaceholder: "دور بالاسم أو الرقم",
+  // Shown only once the search query is non-empty and matches nothing. An
+  // empty query renders no results and no message at all.
+  bookingNoResults: "مفيش نتائج",
+  // Shown on a result row in place of a last-visit date, for a patient with
+  // no completed visit on record.
+  bookingFirstVisit: "أول زيارة",
+  bookingBackAction: "رجوع",
+  // Shown on the slots step when the practitioner's schedule has no empty
+  // slot left today.
+  bookingNoEmptySlots: "مفيش مواعيد فاضية النهاردة",
+  bookingConfirmButton: "احجز",
+  // Shown in the toast after a successful booking, with the same undo action
+  // and five-minute window as the attendance toast.
+  visitBooked: "اتحجز الميعاد",
+  // Shown in the toast when the tapped slot was taken by another booking a
+  // moment earlier; nothing is written and there is no undo to offer.
+  bookingSlotTakenError: "الميعاد ده اتحجز لسه من ثانية",
 } as const;

@@ -161,6 +161,14 @@ export interface Visit {
   position: number;
   /** Null in queue mode. */
   scheduled_at: Instant | null;
+  /**
+   * Equal to scheduled_at, except entirely absent (not merely null) when
+   * is_overbooked is true. Backs the unique index below: IndexedDB excludes
+   * a record from a compound index the moment any of its key path
+   * components is undefined, so overbooked visits are simply invisible to
+   * this index instead of colliding with each other. See docs/schema.md.
+   */
+  unique_scheduled_at?: Instant;
   status: VisitStatus;
   is_overbooked: boolean;
   source: VisitSource;

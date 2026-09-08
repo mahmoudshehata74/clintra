@@ -1,11 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "./database";
-import { mutate } from "./mutate";
+import { mutate, undoMostRecentVisitMutation } from "./mutate";
 import { seedDatabase } from "./seed";
 import { AuditAction } from "./types";
+import { markVisitArrived } from "./visitAttendance";
 
 let db: ClintraDatabase;
+
+function findByPosition<T extends { position: number }>(visits: readonly T[], position: number): T {
+  const visit = visits.find((v) => v.position === position);
+  if (!visit) throw new Error(`seed did not produce a visit at position ${position}`);
+  return visit;
+}
 
 beforeEach(() => {
   db = new ClintraDatabase(`clintra-mutate-test-${crypto.randomUUID()}`);
@@ -86,6 +93,85 @@ describe("mutate", () => {
 
     const stored = await db.visits.get(visit1.id);
     expect(stored).toEqual(visit1);
+    expect(await db.audit_log.count()).toBe(0);
+    expect(await db.sync_ops.count()).toBe(0);
+  });
+});
+
+describe("undoMostRecentVisitMutation", () => {
+  it("succeeds immediately after the operation, restoring status and arrived_at and appending new rows", async () => {
+    await seedDatabase(db);
+    const bookedVisit = findByPosition(await db.visits.toArray(), 1);
+
+    const auditLogId = await markVisitArrived(db, bookedVisit.id);
+    expect(await db.audit_log.count()).toBe(1);
+    expect(await db.sync_ops.count()).toBe(1);
+
+    const outcome = await undoMostRecentVisitMutation(db, auditLogId);
+    expect(outcome).toEqual({ ok: true });
+
+    const restored = await db.visits.get(bookedVisit.id);
+    expect(restored?.status).toBe(VisitStatus.Booked);
+    expect(restored?.arrived_at).toBeNull();
+
+    const auditRows = await db.audit_log.toArray();
+    expect(auditRows).toHaveLength(2);
+    expect(auditRows.find((row) => row.id === auditLogId)).toBeTruthy();
+    expect(await db.sync_ops.count()).toBe(2);
+  });
+
+  it("is refused once another mutation has touched the same visit since, and writes nothing", async () => {
+    await seedDatabase(db);
+    const bookedVisit = findByPosition(await db.visits.toArray(), 1);
+
+    const auditLogId = await markVisitArrived(db, bookedVisit.id);
+    const arrivedVisit = await db.visits.get(bookedVisit.id);
+    if (!arrivedVisit) throw new Error("visit disappeared");
+
+    // An unrelated later mutation touches the same visit before any undo.
+    await mutate(db, {
+      table: db.visits,
+      entity: "visits",
+      entityId: bookedVisit.id,
+      action: AuditAction.Update,
+      before: arrivedVisit,
+      after: { ...arrivedVisit, status: VisitStatus.InRoom },
+      actorMembershipId: "membership-1",
+      orgId: bookedVisit.org_id,
+    });
+
+    const outcome = await undoMostRecentVisitMutation(db, auditLogId);
+    expect(outcome).toEqual({ ok: false, reason: "stale" });
+
+    const unchanged = await db.visits.get(bookedVisit.id);
+    expect(unchanged?.status).toBe(VisitStatus.InRoom);
+    expect(await db.audit_log.count()).toBe(2);
+    expect(await db.sync_ops.count()).toBe(2);
+  });
+
+  it("is refused once the undo window has expired, and writes nothing", async () => {
+    await seedDatabase(db);
+    const bookedVisit = findByPosition(await db.visits.toArray(), 1);
+
+    const auditLogId = await markVisitArrived(db, bookedVisit.id);
+    const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000).toISOString();
+    await db.audit_log.update(auditLogId, { at: sixMinutesAgo });
+
+    const outcome = await undoMostRecentVisitMutation(db, auditLogId);
+    expect(outcome).toEqual({ ok: false, reason: "expired" });
+
+    const unchanged = await db.visits.get(bookedVisit.id);
+    expect(unchanged?.status).toBe(VisitStatus.Arrived);
+    expect(await db.audit_log.count()).toBe(1);
+    expect(await db.sync_ops.count()).toBe(1);
+  });
+
+  it("is refused when auditLogId does not identify a recorded visits mutation, and writes nothing", async () => {
+    await seedDatabase(db);
+
+    const outcome = await undoMostRecentVisitMutation(db, "not-a-real-audit-log-id");
+    expect(outcome).toEqual({ ok: false, reason: "not_found" });
+
     expect(await db.audit_log.count()).toBe(0);
     expect(await db.sync_ops.count()).toBe(0);
   });
