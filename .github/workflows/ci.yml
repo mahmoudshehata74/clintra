@@ -33,7 +33,7 @@ jobs:
 
       - name: Type check
         working-directory: web
-        run: pnpm exec tsc --noEmit
+        run: pnpm exec tsc -b --noEmit
 
       - name: Lint
         working-directory: web
