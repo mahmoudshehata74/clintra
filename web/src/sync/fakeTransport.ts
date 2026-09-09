@@ -6,35 +6,24 @@ import type { PullSinceResult, PushOpResult, SyncTransport } from "./transport";
 /** The default name two tabs on the same device share, so they see one coherent server. */
 export const FAKE_SERVER_DB_NAME = "clintra-fake-server";
 
-// Every entity this app currently writes through mutate() or
-// runAtomicMutations() (see db/mutate.ts call sites: visitAttendance.ts,
-// visitCancel.ts, visitBooking.ts, visitMove.ts, visitQueue.ts use "visits";
-// patientCreate.ts uses "patients"; dayState.ts and visitCompletion.ts use
-// "day_state"; visitCompletion.ts also uses "invoices" and "invoice_items"
-// alongside "visits"; payments.ts uses "payments" alongside "invoices";
-// invoiceVoid.ts uses "invoices"; cashClose.ts uses "cash_close";
-// scheduleModeSwitch.ts uses "schedules" alongside "visits"). Add an entity
-// here only once something writes it.
+/**
+ * Resolves a sync_ops "entity" string to its Dexie table by asking the
+ * database itself, via Dexie's own db.table(name) — the single source of
+ * truth this reads from is the schema declared in database.ts, not a second
+ * list maintained by hand here. Every entity string mutate()/write() call
+ * sites use is already exactly its table's name (see docs/schema.md), so
+ * there is nothing to keep in sync: three real bugs in a row happened
+ * because a hand-maintained switch statement here was forgotten when a new
+ * entity started being written elsewhere. db.table() throws its own
+ * DexieError for a name that matches no table in the schema at all —
+ * caught below only to attach the same fake_transport_unknown_entity
+ * context this module has always thrown, not to change the outcome.
+ */
 function tableForEntity(db: ClintraDatabase, entity: string): Table<unknown, string> {
-  switch (entity) {
-    case "visits":
-      return db.visits as unknown as Table<unknown, string>;
-    case "patients":
-      return db.patients as unknown as Table<unknown, string>;
-    case "day_state":
-      return db.day_state as unknown as Table<unknown, string>;
-    case "invoices":
-      return db.invoices as unknown as Table<unknown, string>;
-    case "invoice_items":
-      return db.invoice_items as unknown as Table<unknown, string>;
-    case "payments":
-      return db.payments as unknown as Table<unknown, string>;
-    case "cash_close":
-      return db.cash_close as unknown as Table<unknown, string>;
-    case "schedules":
-      return db.schedules as unknown as Table<unknown, string>;
-    default:
-      throw new Error(`fake_transport_unknown_entity:${entity}`);
+  try {
+    return db.table(entity) as Table<unknown, string>;
+  } catch {
+    throw new Error(`fake_transport_unknown_entity:${entity}`);
   }
 }
 

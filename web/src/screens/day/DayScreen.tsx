@@ -17,13 +17,15 @@ import { markVisitArrived, markVisitCompleted, markVisitInRoom } from "../../db/
 import { cancelVisit, markVisitNoShow, type VisitCancelReason } from "../../db/visitCancel";
 import { sendVisitToEndOfQueue, undoSendVisitToEndOfQueue } from "../../db/visitQueue";
 import { ScheduleMode } from "../../domain/scheduleMode";
-import { formatCairoDisplayDateParts, todayInCairo, weekdayOf } from "../../domain/time";
+import { addDaysToClinicDay, formatCairoDisplayDateParts, todayInCairo, weekdayOf } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
+import AuditSheet from "./AuditSheet";
 import BookingSheet, { type BookingSheetMode } from "./BookingSheet";
 import CancelVisitSheet from "./CancelVisitSheet";
 import CashCloseSheet from "./CashCloseSheet";
 import Counters from "./Counters";
 import { computeDayCounters } from "./dayCounters";
+import DaySheet from "./DaySheet";
 import DelayControl from "./DelayControl";
 import InvoiceSheet from "./InvoiceSheet";
 import MoveVisitSheet from "./MoveVisitSheet";
@@ -101,6 +103,8 @@ export default function DayScreen() {
   const [invoiceSheetInvoiceId, setInvoiceSheetInvoiceId] = useState<string | null>(null);
   const [paymentSheetInvoiceId, setPaymentSheetInvoiceId] = useState<string | null>(null);
   const [isCashCloseOpen, setIsCashCloseOpen] = useState(false);
+  const [isDaySheetOpen, setIsDaySheetOpen] = useState(false);
+  const [isAuditSheetOpen, setIsAuditSheetOpen] = useState(false);
 
   const isSeedDayPinned = new URLSearchParams(window.location.search).get(SEED_DAY_QUERY_PARAM) === "1";
   const today = isSeedDayPinned && staticData?.seededDay ? staticData.seededDay : todayInCairo();
@@ -575,13 +579,21 @@ export default function DayScreen() {
           )}
         </p>
         {selectedLocationId && currentPractitioner && (
-          <button
-            type="button"
-            onClick={() => setIsCashCloseOpen(true)}
-            className="shrink-0 text-sm text-muted underline"
-          >
-            {dayScreenStrings.cashCloseButtonLabel}
-          </button>
+          <div className="flex shrink-0 flex-wrap justify-end gap-3">
+            <button type="button" onClick={() => setIsDaySheetOpen(true)} className="text-sm text-muted underline">
+              {dayScreenStrings.daySheetButtonLabel}
+            </button>
+            <button type="button" onClick={() => setIsAuditSheetOpen(true)} className="text-sm text-muted underline">
+              {dayScreenStrings.auditButtonLabel}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCashCloseOpen(true)}
+              className="text-sm text-muted underline"
+            >
+              {dayScreenStrings.cashCloseButtonLabel}
+            </button>
+          </div>
         )}
       </div>
 
@@ -755,6 +767,24 @@ export default function DayScreen() {
           date={today}
           onDismiss={() => setIsCashCloseOpen(false)}
           onClosed={handleCashClosed}
+        />
+      )}
+
+      {isDaySheetOpen && selectedLocationId && currentPractitionerId && (
+        <DaySheet
+          practitionerId={currentPractitionerId}
+          locationId={selectedLocationId}
+          tomorrow={addDaysToClinicDay(today, 1)}
+          onDismiss={() => setIsDaySheetOpen(false)}
+        />
+      )}
+
+      {isAuditSheetOpen && selectedLocationId && currentPractitionerId && (
+        <AuditSheet
+          practitionerId={currentPractitionerId}
+          locationId={selectedLocationId}
+          today={today}
+          onDismiss={() => setIsAuditSheetOpen(false)}
         />
       )}
 

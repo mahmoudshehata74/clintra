@@ -228,4 +228,37 @@ export const dayScreenStrings = {
   // The overflow menu's send-to-end-of-queue entry, and its toast.
   sendToEndOfQueueMenuLabel: "أجّله لآخر الدور",
   sendToEndOfQueueToastMessage: "اتنقل لآخر الدور",
+
+  // The day header's day-sheet action ("ورقة الغد"): a printable list of
+  // tomorrow's booked visits for the current practitioner+location, prepared
+  // before staff leave for the day — never today's own list.
+  daySheetButtonLabel: "ورقة الغد",
+  daySheetTitle: "جدول زيارات الغد",
+  daySheetEmpty: "مفيش حجوزات للغد",
+  daySheetNoPhone: "بدون رقم",
+  printDaySheetAction: "طباعة ورقة الغد",
+
+  // The day header's audit-log action ("السجل") and its sheet: today's
+  // audit_log rows for the current practitioner+location, newest first, read
+  // as a timeline of what happened rather than staff surveillance — see
+  // domain/auditVerb.ts for how a row's verb is built from its before/after
+  // diff, not just its entity name.
+  auditButtonLabel: "السجل",
+  auditSheetTitle: "السجل",
+  auditSheetEmpty: "مفيش حركة النهاردة",
+  auditFilterAll: "الكل",
+  auditFilterEntityVisits: "الزيارات",
+  auditFilterEntityPatients: "المرضى",
+  auditFilterEntityInvoices: "الفواتير",
+  auditFilterEntityPayments: "الدفعات",
+  auditFilterEntityCashClose: "إغلاق الصندوق",
+  auditFilterActionCreate: "إنشاء",
+  auditFilterActionUpdate: "تعديل",
+  auditFilterActionDelete: "حذف",
+  // The actor label's role suffix, e.g. "سارة حسن (المساعد)" — see domain/role.ts's Role enum.
+  roleOwner: "المالك",
+  rolePractitioner: "الطبيب",
+  roleAssistant: "المساعد",
+  roleManager: "المدير",
+  auditUnknownActor: "غير معروف",
 } as const;

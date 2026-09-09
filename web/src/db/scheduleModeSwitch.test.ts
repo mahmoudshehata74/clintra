@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { generateSlotTimes } from "../domain/schedule";
 import { ScheduleMode } from "../domain/scheduleMode";
+import { cairoInstant } from "../domain/time";
 import { ClintraDatabase } from "./database";
 import { seedDatabase } from "./seed";
 import { switchScheduleMode } from "./scheduleModeSwitch";
@@ -53,7 +55,7 @@ describe("switchScheduleMode", () => {
     expect(schedule?.mode).toBe(ScheduleMode.Queue);
   });
 
-  it("queue -> slots: assigns scheduled_at from start_time + position * slot_minutes", async () => {
+  it("queue -> slots: assigns scheduled_at exactly matching generateSlotTimes, one visit per slot with no offset", async () => {
     await seedDatabase(db);
     const [practitioner] = await db.practitioners.toArray();
     await switchScheduleMode(db, practitioner.id, SEEDED_WEEKDAY, ScheduleMode.Queue);
@@ -61,14 +63,20 @@ describe("switchScheduleMode", () => {
     const result = await switchScheduleMode(db, practitioner.id, SEEDED_WEEKDAY, ScheduleMode.Slots);
     expect(result).toEqual({ ok: true });
 
+    const schedule = (await scheduleFor(practitioner.id, SEEDED_WEEKDAY))!;
+    const slotTimes = generateSlotTimes(schedule);
     const after = await visitsForPractitioner(practitioner.id);
+    expect(after.length).toBeGreaterThan(0);
     for (const visit of after) {
       expect(visit.scheduled_at).not.toBeNull();
       expect(visit.unique_scheduled_at).toBe(visit.scheduled_at);
+      // Position 1 is slot index 0 — the bug this test guards against
+      // placed every visit one slot later than this.
+      const expectedTime = slotTimes[visit.position - 1];
+      expect(visit.scheduled_at).toBe(cairoInstant(visit.visit_date, expectedTime));
     }
 
-    const schedule = await scheduleFor(practitioner.id, SEEDED_WEEKDAY);
-    expect(schedule?.mode).toBe(ScheduleMode.Slots);
+    expect(schedule.mode).toBe(ScheduleMode.Slots);
   });
 
   it("round trip (slots -> queue -> slots) preserves the exact set of visit ids and the total count", async () => {
@@ -86,6 +94,22 @@ describe("switchScheduleMode", () => {
     const afterBackToSlots = await visitsForPractitioner(practitioner.id);
     expect(afterBackToSlots).toHaveLength(before.length);
     expect(afterBackToSlots.map((v) => v.id).sort()).toEqual(idsBefore);
+  });
+
+  it("round trip (slots -> queue -> slots) reproduces the exact same scheduled_at value for every visit", async () => {
+    await seedDatabase(db);
+    const [practitioner] = await db.practitioners.toArray();
+    const before = await visitsForPractitioner(practitioner.id);
+    const scheduledAtBeforeById = new Map(before.map((v) => [v.id, v.scheduled_at]));
+
+    await switchScheduleMode(db, practitioner.id, SEEDED_WEEKDAY, ScheduleMode.Queue);
+    await switchScheduleMode(db, practitioner.id, SEEDED_WEEKDAY, ScheduleMode.Slots);
+
+    const after = await visitsForPractitioner(practitioner.id);
+    expect(after.length).toBeGreaterThan(0);
+    for (const visit of after) {
+      expect(visit.scheduled_at).toBe(scheduledAtBeforeById.get(visit.id));
+    }
   });
 
   it("refuses queue -> slots when the schedule has no slot_minutes, writing nothing", async () => {

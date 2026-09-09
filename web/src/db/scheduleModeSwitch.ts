@@ -31,9 +31,12 @@ const PARK_OFFSET = 1_000_000;
  *   literal null there for two visits would collide, since null is a real
  *   indexed value.
  * - queue -> slots: each visit's scheduled_at becomes
- *   start_time + position * slot_minutes. Refused with
- *   "slot_minutes_required" if the schedule has no slot_minutes set — there
- *   is no other way to derive a time from a bare position.
+ *   start_time + (position - 1) * slot_minutes — position 1 is slot index 0,
+ *   matching generateSlotTimes/computeGridRows' own indexing, so a
+ *   translated visit lands exactly on a real slot rather than one slot
+ *   late. Refused with "slot_minutes_required" if the schedule has no
+ *   slot_minutes set — there is no other way to derive a time from a bare
+ *   position.
  *
  * A practitioner is assumed to have at most one schedule row per weekday at
  * the location that row specifies (matching how schedules are seeded
@@ -122,7 +125,7 @@ export async function switchScheduleMode(
         }
       } else {
         for (const visit of visitsForDay) {
-          const time = addMinutesToClockTime(schedule.start_time, visit.position * schedule.slot_minutes!);
+          const time = addMinutesToClockTime(schedule.start_time, (visit.position - 1) * schedule.slot_minutes!);
           const scheduledAt = cairoInstant(visit.visit_date, time);
           const after: Visit = { ...visit, scheduled_at: scheduledAt, unique_scheduled_at: scheduledAt };
           if (visit.is_overbooked) {
