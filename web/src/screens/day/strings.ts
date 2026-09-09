@@ -142,6 +142,8 @@ export const dayScreenStrings = {
   invoicePatientLabel: "المريض",
   invoicePractitionerLabel: "الطبيب",
   invoiceDateLabel: "التاريخ",
+  // The items table's leading column header.
+  invoiceItemLabel: "البند",
   invoiceItemQtyLabel: "الكمية",
   invoiceItemUnitPriceLabel: "سعر الوحدة",
   invoiceItemTotalLabel: "الإجمالي",
@@ -169,6 +171,9 @@ export const dayScreenStrings = {
   paymentAmountInvalidError: "المبلغ ده مش صحيح",
   paymentAmountNotPositiveError: "لازم يكون المبلغ أكبر من صفر",
   paymentAmountExceedsRemainingError: "المبلغ أكبر من المتبقي",
+  // The .lb label above the method pill row — the pills themselves are
+  // still labelled by each method's own name below.
+  paymentMethodLabel: "طريقة الدفع",
   paymentMethodCash: "كاش",
   paymentMethodCard: "فيزا",
   paymentMethodWallet: "محفظة",

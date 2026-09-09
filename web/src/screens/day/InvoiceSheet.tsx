@@ -7,6 +7,7 @@ import { useLiveQuery } from "../../db/useLiveQuery";
 import { voidInvoice } from "../../db/invoiceVoid";
 import { InvoiceStatus, PaymentMethod, type Invoice, type InvoiceItem, type Patient, type Payment, type Practitioner } from "../../db/types";
 import Sheet from "./Sheet";
+import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
 
 interface InvoiceSheetProps {
@@ -31,11 +32,13 @@ const STATUS_LABEL: Record<string, string> = {
   [InvoiceStatus.Void]: dayScreenStrings.invoiceStatusVoid,
 };
 
-const STATUS_CLASS: Record<string, string> = {
-  [InvoiceStatus.Unpaid]: "border-line text-muted",
-  [InvoiceStatus.Partial]: "border-amber text-amber",
-  [InvoiceStatus.Paid]: "border-green text-green",
-  [InvoiceStatus.Void]: "border-red text-red line-through",
+// The reference's filled tag-pill language: paid = .tg.a (green), partial =
+// .tg.c (amber), unpaid = .tg.e (neutral), void = .tg.b (red).
+const STATUS_PILL_CLASS: Record<string, string> = {
+  [InvoiceStatus.Unpaid]: "bg-line-soft text-muted",
+  [InvoiceStatus.Partial]: "bg-amber-soft text-amber",
+  [InvoiceStatus.Paid]: "bg-green-soft text-green",
+  [InvoiceStatus.Void]: "bg-red-soft text-red line-through",
 };
 
 const METHOD_LABEL: Record<string, string> = {
@@ -96,6 +99,9 @@ export default function InvoiceSheet({ invoiceId, onDismiss, onRequestPayment, o
   const remaining = (invoice.total - invoice.paid) as typeof invoice.total;
   const canRecordPayment = invoice.status === InvoiceStatus.Unpaid || invoice.status === InvoiceStatus.Partial;
   const hasPayments = payments.length > 0;
+  const remainingRowClassName = `flex justify-between border-t border-line-soft px-3 py-2 font-medium ${
+    remaining > 0 ? "bg-amber-soft text-amber" : ""
+  }`;
 
   async function handleVoid() {
     setIsVoiding(true);
@@ -113,16 +119,32 @@ export default function InvoiceSheet({ invoiceId, onDismiss, onRequestPayment, o
     <>
       <div className="print:hidden">
         <Sheet onDismiss={onDismiss}>
-          <p className="text-xs text-muted">{dayScreenStrings.printHeaderPlaceholder}</p>
-          <div className="mt-2 flex items-center justify-between">
-            <p className="font-medium">
-              {dayScreenStrings.invoiceNumberLabel} <Ltr>{invoice.number}</Ltr>
-            </p>
-            <span className={`rounded-full border px-2 py-0.5 text-sm ${STATUS_CLASS[invoice.status]}`}>
-              {STATUS_LABEL[invoice.status]}
-            </span>
-          </div>
-          <p className="mt-1 text-sm text-muted">
+          <SheetHeader
+            title={
+              <>
+                {dayScreenStrings.invoiceNumberLabel} <Ltr>{invoice.number}</Ltr>
+              </>
+            }
+            onDismiss={onDismiss}
+            extra={
+              <>
+                <span className={`rounded-[5px] px-2 py-0.5 text-xs ${STATUS_PILL_CLASS[invoice.status]}`}>
+                  {STATUS_LABEL[invoice.status]}
+                </span>
+                {canRecordPayment && (
+                  <button
+                    type="button"
+                    onClick={() => onRequestPayment(invoiceId)}
+                    className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted hover:bg-green-soft hover:text-green"
+                  >
+                    {dayScreenStrings.recordPaymentAction}
+                  </button>
+                )}
+              </>
+            }
+          />
+          <p className="mt-2 text-xs text-muted">{dayScreenStrings.printHeaderPlaceholder}</p>
+          <p className="mt-2 text-sm text-muted">
             {dayScreenStrings.invoicePatientLabel}: {patient?.full_name ?? ""}
           </p>
           <p className="text-sm text-muted">
@@ -132,78 +154,89 @@ export default function InvoiceSheet({ invoiceId, onDismiss, onRequestPayment, o
             {dayScreenStrings.invoiceDateLabel}: {formatCairoDisplayDate(todayInCairo(new Date(invoice.issued_at)))}
           </p>
 
-          <div className="mt-4 flex flex-col gap-2 overflow-y-auto">
-            {items.map((item) => (
-              <div key={item.id} className="rounded-[--radius-el] border border-line p-3">
-                <p>{item.description}</p>
-                <p className="mt-1 flex justify-between text-sm text-muted">
-                  <span>
-                    {dayScreenStrings.invoiceItemQtyLabel}: <Ltr>{item.qty}</Ltr>
-                  </span>
-                  <span>
-                    {dayScreenStrings.invoiceItemUnitPriceLabel}: <Ltr>{formatPiastresForDisplay(item.unit_price)}</Ltr>
-                  </span>
-                  <span>
-                    {dayScreenStrings.invoiceItemTotalLabel}: <Ltr>{formatPiastresForDisplay(item.total)}</Ltr>
-                  </span>
-                </p>
-              </div>
-            ))}
+          <div className="mt-4 overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className="border-b border-line px-2 py-1.5 text-start text-xs font-medium text-muted">
+                    {dayScreenStrings.invoiceItemLabel}
+                  </th>
+                  <th className="border-b border-line px-2 py-1.5 text-start text-xs font-medium text-muted">
+                    {dayScreenStrings.invoiceItemQtyLabel}
+                  </th>
+                  <th className="border-b border-line px-2 py-1.5 text-start text-xs font-medium text-muted">
+                    {dayScreenStrings.invoiceItemUnitPriceLabel}
+                  </th>
+                  <th className="border-b border-line px-2 py-1.5 text-start text-xs font-medium text-muted">
+                    {dayScreenStrings.invoiceItemTotalLabel}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id}>
+                    <td className="border-b border-line-soft px-2 py-2">{item.description}</td>
+                    <td className="border-b border-line-soft px-2 py-2">
+                      <Ltr>{item.qty}</Ltr>
+                    </td>
+                    <td className="border-b border-line-soft px-2 py-2">
+                      <Ltr>{formatPiastresForDisplay(item.unit_price)}</Ltr>
+                    </td>
+                    <td className="border-b border-line-soft px-2 py-2">
+                      <Ltr>{formatPiastresForDisplay(item.total)}</Ltr>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
-          <div className="mt-4 flex flex-col gap-1 border-t border-line pt-3">
-            <p className="flex justify-between">
+          <div className="mt-4 flex flex-col overflow-hidden rounded-[--radius-el] border border-line">
+            <p className="flex justify-between bg-line-soft px-3 py-2 font-medium">
               <span>{dayScreenStrings.invoiceTotalLabel}</span>
               <Ltr>{formatPiastresForDisplay(invoice.total)}</Ltr>
             </p>
-            <p className="flex justify-between text-muted">
+            <p className="flex justify-between border-t border-line-soft px-3 py-2 text-muted">
               <span>{dayScreenStrings.invoicePaidLabel}</span>
               <Ltr>{formatPiastresForDisplay(invoice.paid)}</Ltr>
             </p>
-            <p className="flex justify-between font-medium">
+            <p className={remainingRowClassName}>
               <span>{dayScreenStrings.invoiceRemainingLabel}</span>
               <Ltr>{formatPiastresForDisplay(remaining)}</Ltr>
             </p>
           </div>
 
           {hasPayments && (
-            <div className="mt-4 flex flex-col gap-2 border-t border-line pt-3">
-              <p className="text-sm font-medium">{dayScreenStrings.paymentsListHeading}</p>
-              {payments.map((payment) => (
-                <div key={payment.id} className="flex items-center justify-between text-sm">
-                  <span className="text-muted">
-                    {dayScreenStrings.paymentReceiptNumberPrefix} <Ltr>{payment.receipt_number}</Ltr> —{" "}
-                    {METHOD_LABEL[payment.method]}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <Ltr>{formatPiastresForDisplay(payment.amount)}</Ltr>
-                    <button
-                      type="button"
-                      onClick={() => setPrintTarget({ kind: "receipt", payment })}
-                      className="text-green"
-                    >
-                      {dayScreenStrings.printReceiptAction}
-                    </button>
-                  </span>
-                </div>
-              ))}
+            <div className="mt-4 border-t border-line pt-3">
+              <p className="mb-1 text-sm font-medium">{dayScreenStrings.paymentsListHeading}</p>
+              <div className="flex flex-col divide-y divide-line-soft">
+                {payments.map((payment) => (
+                  <div key={payment.id} className="flex items-center justify-between py-2 text-sm">
+                    <span className="text-muted">
+                      {dayScreenStrings.paymentReceiptNumberPrefix} <Ltr>{payment.receipt_number}</Ltr> —{" "}
+                      {METHOD_LABEL[payment.method]}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <Ltr>{formatPiastresForDisplay(payment.amount)}</Ltr>
+                      <button
+                        type="button"
+                        onClick={() => setPrintTarget({ kind: "receipt", payment })}
+                        className="text-green"
+                      >
+                        {dayScreenStrings.printReceiptAction}
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          <div className="mt-4 flex flex-col gap-2">
-            {canRecordPayment && (
-              <button
-                type="button"
-                onClick={() => onRequestPayment(invoiceId)}
-                className="rounded-[--radius-el] bg-green px-4 py-3 text-center font-semibold text-paper"
-              >
-                {dayScreenStrings.recordPaymentAction}
-              </button>
-            )}
+          <div className="mt-4">
             <button
               type="button"
               onClick={() => setPrintTarget({ kind: "invoice" })}
-              className="rounded-[--radius-el] border border-line px-4 py-3 text-center text-muted"
+              className="w-full rounded-[--radius-el] border border-line px-4 py-3 text-center text-ink"
             >
               {dayScreenStrings.printInvoiceAction}
             </button>
@@ -214,7 +247,7 @@ export default function InvoiceSheet({ invoiceId, onDismiss, onRequestPayment, o
               type="button"
               disabled={hasPayments || isVoiding || invoice.status === InvoiceStatus.Void}
               onClick={handleVoid}
-              className="w-full rounded-[--radius-el] border border-red px-4 py-3 text-center text-red disabled:opacity-50"
+              className="w-full rounded-[--radius-el] border border-red bg-paper px-4 py-3 text-center text-red disabled:opacity-50"
             >
               {dayScreenStrings.voidInvoiceAction}
             </button>
@@ -268,20 +301,35 @@ export default function InvoiceSheet({ invoiceId, onDismiss, onRequestPayment, o
       {printTarget?.kind === "receipt" && (
         <div className="hidden print:block">
           <p className="text-center font-semibold">{dayScreenStrings.printHeaderWarning}</p>
-          <h2 className="mt-4 text-center text-lg font-semibold">{dayScreenStrings.printReceiptTitle}</h2>
-          <p className="mt-2">
-            {dayScreenStrings.paymentReceiptNumberPrefix} {printTarget.payment.receipt_number}
+          <p className="mt-4 text-center text-sm text-muted">{dayScreenStrings.paymentReceiptNumberPrefix}</p>
+          <h2 className="text-center text-2xl font-semibold">{printTarget.payment.receipt_number}</h2>
+          <p className="mt-6 text-center text-4xl font-semibold">
+            {formatPiastresForDisplay(printTarget.payment.amount)}
           </p>
-          <p>
-            {dayScreenStrings.invoiceNumberLabel}: {invoice.number}
-          </p>
-          <p>
-            {dayScreenStrings.invoicePatientLabel}: {patient?.full_name ?? ""}
-          </p>
-          <p>{formatPiastresForDisplay(printTarget.payment.amount)}</p>
-          <p>{METHOD_LABEL[printTarget.payment.method]}</p>
-          <p>{formatCairoDisplayDate(todayInCairo(new Date(printTarget.payment.created_at)))}</p>
-          {printTarget.payment.note && <p>{printTarget.payment.note}</p>}
+          <div className="mt-6 flex flex-col gap-1 text-sm">
+            <p className="flex justify-between">
+              <span className="text-muted">{dayScreenStrings.invoiceNumberLabel}</span>
+              <span>{invoice.number}</span>
+            </p>
+            <p className="flex justify-between">
+              <span className="text-muted">{dayScreenStrings.invoicePatientLabel}</span>
+              <span>{patient?.full_name ?? ""}</span>
+            </p>
+            <p className="flex justify-between">
+              <span className="text-muted">{dayScreenStrings.paymentMethodLabel}</span>
+              <span>{METHOD_LABEL[printTarget.payment.method]}</span>
+            </p>
+            <p className="flex justify-between">
+              <span className="text-muted">{dayScreenStrings.invoiceDateLabel}</span>
+              <span>{formatCairoDisplayDate(todayInCairo(new Date(printTarget.payment.created_at)))}</span>
+            </p>
+            {printTarget.payment.note && (
+              <p className="flex justify-between">
+                <span className="text-muted">{dayScreenStrings.paymentNotePlaceholder}</span>
+                <span>{printTarget.payment.note}</span>
+              </p>
+            )}
+          </div>
         </div>
       )}
     </>

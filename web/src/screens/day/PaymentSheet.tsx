@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Ltr from "../../components/Ltr";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { formatPiastresForDisplay, type Piastres } from "../../domain/money";
@@ -6,6 +7,7 @@ import { recordPayment } from "../../db/payments";
 import { PaymentMethod } from "../../db/types";
 import { validatePaymentForm } from "./paymentForm";
 import Sheet from "./Sheet";
+import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
 import type { UndoAction } from "./undoAction";
 
@@ -22,11 +24,15 @@ const METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
   { value: PaymentMethod.Transfer, label: dayScreenStrings.paymentMethodTransfer },
 ];
 
-function pillClassName(isSelected: boolean): string {
+// The reference's .bt.g pill: pine border and text when selected, plain otherwise.
+function methodPillClassName(isSelected: boolean): string {
   return isSelected
-    ? "rounded-full border border-green bg-green-soft px-3 py-1 text-sm"
-    : "rounded-full border border-line px-3 py-1 text-sm";
+    ? "rounded-[--radius-el] border border-green px-3 py-1.5 text-sm text-green"
+    : "rounded-[--radius-el] border border-line px-3 py-1.5 text-sm text-ink";
 }
+
+const FIELD_CLASS =
+  "w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start focus:border-green focus:outline-none focus:ring-[3px] focus:ring-green-soft";
 
 /**
  * The compact "تسجيل دفعة" prompt: amount, method, an optional note. Reads
@@ -84,12 +90,13 @@ export default function PaymentSheet({ invoiceId, onDismiss, onRecorded }: Payme
 
   return (
     <Sheet onDismiss={onDismiss}>
-      <p className="font-medium">{dayScreenStrings.paymentSheetTitle}</p>
-      <p className="mt-1 text-sm text-muted">
-        {dayScreenStrings.invoiceRemainingLabel}: {formatPiastresForDisplay(remaining)}
+      <SheetHeader title={dayScreenStrings.paymentSheetTitle} onDismiss={onDismiss} />
+      <p className="mt-3 text-sm text-muted">
+        {dayScreenStrings.invoiceRemainingLabel}: <Ltr>{formatPiastresForDisplay(remaining)}</Ltr>
       </p>
 
       <div className="mt-4">
+        <p className="mb-1 text-xs text-muted">{dayScreenStrings.paymentAmountPlaceholder}</p>
         <input
           type="text"
           inputMode="decimal"
@@ -98,32 +105,31 @@ export default function PaymentSheet({ invoiceId, onDismiss, onRecorded }: Payme
             setAmountInput(event.target.value);
             setAmountError(null);
           }}
-          placeholder={dayScreenStrings.paymentAmountPlaceholder}
-          className="w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start"
+          className={FIELD_CLASS}
         />
         {amountError && <p className="mt-1 text-sm text-red">{amountError}</p>}
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {METHOD_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setMethod(option.value)}
-            className={pillClassName(method === option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
+      <div className="mt-3">
+        <p className="mb-1 text-xs text-muted">{dayScreenStrings.paymentMethodLabel}</p>
+        <div className="flex flex-wrap gap-2">
+          {METHOD_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setMethod(option.value)}
+              className={methodPillClassName(method === option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <input
-        type="text"
-        value={note}
-        onChange={(event) => setNote(event.target.value)}
-        placeholder={dayScreenStrings.paymentNotePlaceholder}
-        className="mt-3 w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start"
-      />
+      <div className="mt-3">
+        <p className="mb-1 text-xs text-muted">{dayScreenStrings.paymentNotePlaceholder}</p>
+        <input type="text" value={note} onChange={(event) => setNote(event.target.value)} className={FIELD_CLASS} />
+      </div>
 
       <button
         type="button"
