@@ -99,14 +99,14 @@ export default function VisitMenu({ actions }: VisitMenuProps) {
             </button>
           )}
           {(actions.onCancel || actions.onNoShow) && (actions.onMove || actions.onSendToEnd || actions.onInvoice) && (
-            <div className="border-t border-line" />
+            <div className="border-t border-red/20" />
           )}
           {actions.onCancel && (
             <button
               type="button"
               role="menuitem"
               onClick={actions.onCancel}
-              className="p-3 text-start text-red hover:bg-line/30"
+              className="bg-red-soft p-3 text-start text-red hover:bg-red-soft/60"
             >
               {dayScreenStrings.cancelMenuLabel}
             </button>
@@ -116,7 +116,7 @@ export default function VisitMenu({ actions }: VisitMenuProps) {
               type="button"
               role="menuitem"
               onClick={actions.onNoShow}
-              className="p-3 text-start text-red hover:bg-line/30"
+              className="bg-red-soft p-3 text-start text-red hover:bg-red-soft/60"
             >
               {dayScreenStrings.noShowMenuLabel}
             </button>

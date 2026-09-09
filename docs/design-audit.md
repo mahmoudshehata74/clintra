@@ -362,16 +362,22 @@ Resolved by decision B (kept for the record of what was being decided):
    `docs/design-tokens.md`). Screen 16 (settings → services) is still the
    only phase-1 screen that would use them, and screen 16 itself remains
    unbuilt — the token existing doesn't change that.
-4. **Soft-fill amber token — SETTLED by decision C, applied.**
-   `--color-amber-soft` (`#f6efdd`) now exists alongside the existing
-   `--color-green-soft`, closing gap (a)6 at the token level. **Still
-   open**: a soft-fill red token (`--color-red-soft`) was not part of
-   decision C and does not exist yet — the reference's `.tg.b`/`.sl.mis`
-   red-soft treatment (no-show/missed states) has no token to move to
-   until one is decided on. Also still open: a `--color-card` distinct
-   from `--color-paper`, if the reference's card-on-page layering
-   (`.card`/`.paper` are two different values in the reference; the
-   current theme only has `paper`) is ever adopted.
+4. **Soft-fill amber/red tokens and the full palette reconciliation —
+   SETTLED and applied.** `--color-amber-soft` (`#f6efdd`) was added
+   alongside the existing `--color-green-soft`, closing gap (a)6 at the
+   token level. A follow-up full reconciliation against the reference's
+   entire `:root` block (prompted by the day-screen redesign task needing
+   an arrived-row meta colour) found zero hex disagreements and three more
+   real, multiply-used tokens worth adding: `--color-red-soft` (`#faecea`,
+   matching `--reds`), `--color-green-medium` (`#4c8571`, matching `--pm`),
+   and `--color-line-soft` (`#edeee8`, matching `--rs`) — see
+   `docs/design-tokens.md` for each one's confirmed usage count and intended
+   use. `--color-card` (`#fff`, matching the reference's `--card`) was
+   deliberately **not** added: it is used exactly once in the entire
+   reference file, and that one use is the reference tool's own outer
+   screen-picker sidebar background, not any actual per-screen mockup —
+   revisit only if a real screen design ever needs a card surface distinct
+   from `--color-paper`.
 5. **A doctor-facing mobile view (screen 18) and an auth/PIN flow (screens
    1–2)** are both prerequisite infrastructure for several other screens
    (17, and implicitly 18 itself) rather than isolated visual gaps.

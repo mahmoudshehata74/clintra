@@ -21,6 +21,10 @@ export const dayScreenStrings = {
   // Shown under the patient name on a cancelled or no_show row: the slot is
   // free again, but the screen stays read-only so this is text only.
   slotAvailableAgain: "الميعاد ده فاضي تاني",
+  // Prefixes the "recorded by" byline under every occupied slot row, e.g.
+  // "سجّله سارة حسن (المساعد)" — see screens/day/actorLabel.ts. Code points:
+  // U+0633 U+062C U+0651 U+0644 U+0647 (س ج ّ ل ه).
+  recordedByPrefix: "سجّله",
   // Shown in the light toast after a one-tap attendance mark, with an undo
   // action available for five minutes.
   attendanceMarked: "اتسجل حضور المريض",

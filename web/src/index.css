@@ -8,12 +8,15 @@
   --color-paper: #fbfaf7;
   --color-green: #1d5b4a;
   --color-green-soft: #e8f0ec;
+  --color-green-medium: #4c8571;
   --color-red: #b23a34;
+  --color-red-soft: #faecea;
   --color-amber: #8a6a22;
   --color-amber-soft: #f6efdd;
   --color-purple: #453fa0;
   --color-purple-soft: #edebfb;
   --color-line: #e2e3dc;
+  --color-line-soft: #edeee8;
   --color-muted: #6e7370;
 
   --radius-el: 8px;

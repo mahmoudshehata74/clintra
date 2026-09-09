@@ -1,13 +1,16 @@
 import { toArabicIndicDigits } from "../../domain/arabicNumerals";
 import { countCompletedConsultations } from "../../domain/consultStats";
 import { ScheduleMode } from "../../domain/scheduleMode";
+import type { ClockTime } from "../../domain/time";
 import type { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Schedule, Service, Visit } from "../../db/types";
 import { computeGridRows } from "./dayGrid";
+import { computeEmptySlots } from "./emptySlots";
 import { computeExpectedWaitMinutes, computeQueueSummary } from "./queueSummary";
 import QueueRow from "./QueueRow";
 import { resolveDayScheduleState } from "./scheduleState";
 import SlotRow from "./SlotRow";
+import { statusVisual } from "./statusStyle";
 import { dayScreenStrings } from "./strings";
 import { isMenuEligible, isQueueWaiting, primaryAdvanceTarget } from "./visitActions";
 
@@ -25,6 +28,10 @@ interface PractitionerColumnProps {
   invoiceIdByVisitId: ReadonlyMap<string, string>;
   /** day_state.avg_consult_minutes for this practitioner+location+date — queue mode only. */
   avgConsultMinutes: number | null;
+  /** Resolved "recorded by" label per visit id — slots mode only for now (queue mode is a separate task). */
+  actorLabelByVisitId: ReadonlyMap<string, string>;
+  /** Present only when booking is currently possible — slots mode only. Tapping an empty slot opens the booking sheet pre-filled with that time. */
+  onTapEmptySlot?: (time: ClockTime) => void;
   onAdvance: (visit: Visit, toStatus: VisitStatus) => void;
   openMenuVisitId: string | null;
   onOpenMenu: (visitId: string) => void;
@@ -46,6 +53,8 @@ export default function PractitionerColumn({
   servicesById,
   invoiceIdByVisitId,
   avgConsultMinutes,
+  actorLabelByVisitId,
+  onTapEmptySlot,
   onAdvance,
   openMenuVisitId,
   onOpenMenu,
@@ -98,6 +107,13 @@ export default function PractitionerColumn({
   }
 
   const rows = computeGridRows(scheduleState.schedule, visits);
+  // Only computed when booking is actually possible, since it's the one
+  // extra piece of work this component would otherwise do on every render
+  // for no reason — see emptySlots.ts, the exact same source of truth
+  // BookingSheet's own slot list reads from.
+  const emptySlotTimes = onTapEmptySlot
+    ? new Set(computeEmptySlots(scheduleState.schedule, visits).map((slot) => slot.time))
+    : null;
 
   return (
     <div>
@@ -112,6 +128,14 @@ export default function PractitionerColumn({
           const invoiceId = visit ? invoiceIdByVisitId.get(visit.id) : undefined;
           const administrable = Boolean(visit && isMenuEligible(visit.status));
           const menuEligible = Boolean(visit && (administrable || invoiceId));
+          // Visually empty covers both a genuinely bare slot and a
+          // rescheduled visit's old slot (statusVisual returns null only for
+          // rescheduled) — either way the row renders as the empty tile, so
+          // either way it gets the same tap-to-book shortcut. A
+          // cancelled/no-show visit keeps its own distinct red treatment
+          // (see statusStyle.ts) and is deliberately excluded, unchanged
+          // from before this task.
+          const isVisuallyEmpty = !visit || statusVisual(visit.status) === null;
 
           return (
             <SlotRow
@@ -122,7 +146,13 @@ export default function PractitionerColumn({
               patient={patient}
               service={service}
               isExtraAtTime={isExtraAtTime}
+              actorLabel={visit ? actorLabelByVisitId.get(visit.id) : undefined}
               onPrimaryAction={advanceTarget && visit ? () => onAdvance(visit, advanceTarget) : undefined}
+              onTapEmptySlot={
+                onTapEmptySlot && isVisuallyEmpty && emptySlotTimes?.has(time)
+                  ? () => onTapEmptySlot(time)
+                  : undefined
+              }
               menu={
                 menuEligible && visit
                   ? {

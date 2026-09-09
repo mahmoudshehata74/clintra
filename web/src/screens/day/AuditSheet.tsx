@@ -5,8 +5,8 @@ import { useLiveQuery } from "../../db/useLiveQuery";
 import type { AuditLog, ClinicDay, Membership, Patient, User } from "../../db/types";
 import { AuditAction } from "../../db/types";
 import { describeAuditVerb } from "../../domain/auditVerb";
-import { Role } from "../../domain/role";
 import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo } from "../../domain/time";
+import { formatActorLabel } from "./actorLabel";
 import {
   type AuditActionFilter,
   type AuditEntityFilter,
@@ -45,13 +45,6 @@ const ACTION_FILTER_OPTIONS: readonly { value: AuditActionFilter; label: string 
   { value: AuditAction.Update, label: dayScreenStrings.auditFilterActionUpdate },
   { value: AuditAction.Delete, label: dayScreenStrings.auditFilterActionDelete },
 ];
-
-const ROLE_LABELS: Record<string, string> = {
-  [Role.Owner]: dayScreenStrings.roleOwner,
-  [Role.Practitioner]: dayScreenStrings.rolePractitioner,
-  [Role.Assistant]: dayScreenStrings.roleAssistant,
-  [Role.Manager]: dayScreenStrings.roleManager,
-};
 
 const AUDITED_ENTITIES = new Set(["visits", "patients", "invoices", "payments", "cash_close"]);
 
@@ -110,10 +103,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
       function actorLabelFor(membershipId: string): string {
         const membership = membershipsById.get(membershipId);
         const user = membership ? usersById.get(membership.user_id) : undefined;
-        if (!membership || !user) {
-          return dayScreenStrings.auditUnknownActor;
-        }
-        return `${user.full_name} (${ROLE_LABELS[membership.role] ?? membership.role})`;
+        return formatActorLabel(membership, user);
       }
 
       function descriptionFor(row: AuditLog): string {

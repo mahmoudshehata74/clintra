@@ -11,14 +11,32 @@ import {
   undoMostRecentVisitMutation,
 } from "../../db/mutate";
 import { seedDatabase, seededVisitsDate } from "../../db/seed";
-import type { ClinicDay, DayState, Location, Patient, Practitioner, Schedule, Service, Visit } from "../../db/types";
+import type {
+  ClinicDay,
+  DayState,
+  Location,
+  Membership,
+  Patient,
+  Practitioner,
+  Schedule,
+  Service,
+  User,
+  Visit,
+} from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitArrived, markVisitCompleted, markVisitInRoom } from "../../db/visitAttendance";
 import { cancelVisit, markVisitNoShow, type VisitCancelReason } from "../../db/visitCancel";
 import { sendVisitToEndOfQueue, undoSendVisitToEndOfQueue } from "../../db/visitQueue";
 import { ScheduleMode } from "../../domain/scheduleMode";
-import { addDaysToClinicDay, formatCairoDisplayDateParts, todayInCairo, weekdayOf } from "../../domain/time";
+import {
+  addDaysToClinicDay,
+  formatCairoDisplayDateParts,
+  todayInCairo,
+  weekdayOf,
+  type ClockTime,
+} from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
+import { formatActorLabel } from "./actorLabel";
 import AuditSheet from "./AuditSheet";
 import BookingSheet, { type BookingSheetMode } from "./BookingSheet";
 import CancelVisitSheet from "./CancelVisitSheet";
@@ -61,6 +79,8 @@ interface DynamicData {
   invoiceIdByVisitId: Map<string, string>;
   /** Each shown practitioner's day_state row for today at the selected location — queue mode's average, mainly. */
   dayStateByPractitionerId: Map<string, DayState>;
+  /** Resolved "recorded by" label per visit id, from each visit's created_by — see actorLabel.ts. */
+  actorLabelByVisitId: Map<string, string>;
 }
 
 const EMPTY_DYNAMIC_DATA: DynamicData = {
@@ -69,6 +89,7 @@ const EMPTY_DYNAMIC_DATA: DynamicData = {
   servicesById: new Map(),
   invoiceIdByVisitId: new Map(),
   dayStateByPractitionerId: new Map(),
+  actorLabelByVisitId: new Map(),
 };
 
 // The undo action stays available for five minutes after any of the writes
@@ -98,6 +119,7 @@ export default function DayScreen() {
   const [selectedPractitionerId, setSelectedPractitionerId] = useState<string | null>(null);
   const [toastState, setToastState] = useState<ToastState | null>(null);
   const [bookingSheetMode, setBookingSheetMode] = useState<BookingSheetMode | null>(null);
+  const [presetBookingTime, setPresetBookingTime] = useState<ClockTime | null>(null);
   const [openMenuVisitId, setOpenMenuVisitId] = useState<string | null>(null);
   const [rowActionSheet, setRowActionSheet] = useState<RowActionSheetState>(null);
   const [invoiceSheetInvoiceId, setInvoiceSheetInvoiceId] = useState<string | null>(null);
@@ -196,7 +218,8 @@ export default function DayScreen() {
       ];
 
       const visitIds = visits.map((visit) => visit.id);
-      const [patients, services, invoicesForVisits, dayStateRows] = await Promise.all([
+      const membershipIds = [...new Set(visits.map((visit) => visit.created_by))];
+      const [patients, services, invoicesForVisits, dayStateRows, memberships] = await Promise.all([
         db.patients.bulkGet(patientIds),
         db.services.bulkGet(serviceIds),
         visitIds.length > 0 ? db.invoices.where("visit_id").anyOf(visitIds).toArray() : Promise.resolve([]),
@@ -208,6 +231,7 @@ export default function DayScreen() {
               .first(),
           ),
         ),
+        db.memberships.bulkGet(membershipIds),
       ]);
 
       const patientsById = new Map(
@@ -230,7 +254,20 @@ export default function DayScreen() {
         }
       });
 
-      return { visits, patientsById, servicesById, invoiceIdByVisitId, dayStateByPractitionerId };
+      const membershipsById = new Map(
+        memberships.filter((m): m is Membership => m != null).map((m) => [m.id, m]),
+      );
+      const userIds = [...new Set([...membershipsById.values()].map((m) => m.user_id))];
+      const users = await db.users.bulkGet(userIds);
+      const usersById = new Map(users.filter((u): u is User => u != null).map((u) => [u.id, u]));
+      const actorLabelByVisitId = new Map<string, string>();
+      for (const visit of visits) {
+        const membership = membershipsById.get(visit.created_by);
+        const user = membership ? usersById.get(membership.user_id) : undefined;
+        actorLabelByVisitId.set(visit.id, formatActorLabel(membership, user));
+      }
+
+      return { visits, patientsById, servicesById, invoiceIdByVisitId, dayStateByPractitionerId, actorLabelByVisitId };
     }, [staticData, practitionersToShow, today, selectedLocationId]) ?? EMPTY_DYNAMIC_DATA;
 
   // Resolved unconditionally (optional-chained) so it's stable for the
@@ -406,6 +443,11 @@ export default function DayScreen() {
     setToastState({ message: dayScreenStrings.bookingSlotTakenError, undo: null });
   }
 
+  function handleTapEmptySlot(time: ClockTime) {
+    setPresetBookingTime(time);
+    setBookingSheetMode("booking");
+  }
+
   function handleRequestMove(visit: Visit) {
     setOpenMenuVisitId(null);
     setRowActionSheet({ kind: "move", visit });
@@ -564,48 +606,63 @@ export default function DayScreen() {
 
   return (
     <main className={`mx-auto max-w-3xl px-6 pt-16 ${toastState ? "pb-28" : "pb-16"}`}>
+      {/* Row 1: brand + connection state — matching the design reference's
+          composition of brand and status chip sharing one row. */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="font-display text-4xl font-semibold text-green">Clintra</h1>
         <SyncStatusChip />
       </div>
-      <div className="mt-2 flex items-center justify-between gap-3">
-        <p className="text-muted">
-          {formatCairoDisplayDateParts(today).map((part, index) =>
-            part.type === "day" ? (
-              <Ltr key={index}>{part.value}</Ltr>
-            ) : (
-              <span key={index}>{part.value}</span>
-            ),
-          )}
-        </p>
-        {selectedLocationId && currentPractitioner && (
-          <div className="flex shrink-0 flex-wrap justify-end gap-3">
-            <button type="button" onClick={() => setIsDaySheetOpen(true)} className="text-sm text-muted underline">
-              {dayScreenStrings.daySheetButtonLabel}
-            </button>
-            <button type="button" onClick={() => setIsAuditSheetOpen(true)} className="text-sm text-muted underline">
-              {dayScreenStrings.auditButtonLabel}
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsCashCloseOpen(true)}
-              className="text-sm text-muted underline"
-            >
-              {dayScreenStrings.cashCloseButtonLabel}
-            </button>
-          </div>
-        )}
-      </div>
 
+      {/* Row 2: the date, as the screen's real heading — the reference gives
+          this position, not the brand, the primary heading treatment. */}
+      <p className="mt-2 font-display text-2xl font-semibold text-ink">
+        {formatCairoDisplayDateParts(today).map((part, index) =>
+          part.type === "day" ? <Ltr key={index}>{part.value}</Ltr> : <span key={index}>{part.value}</span>,
+        )}
+      </p>
+
+      {/* Row 3: a metadata row of tag-styled pills — delay state and the
+          day-header actions, matching the reference's .tg tag language
+          instead of underlined text links or a bordered chip. */}
       {currentPractitioner && (
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <DelayControl
             delayMinutes={delayMinutes}
             scheduleStartTime={currentPractitionerSchedule?.start_time ?? null}
             onSetDelay={handleSetDelay}
           />
+          {selectedLocationId && (
+            <>
+              <button
+                type="button"
+                onClick={() => setIsDaySheetOpen(true)}
+                className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
+              >
+                {dayScreenStrings.daySheetButtonLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAuditSheetOpen(true)}
+                className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
+              >
+                {dayScreenStrings.auditButtonLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCashCloseOpen(true)}
+                className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
+              >
+                {dayScreenStrings.cashCloseButtonLabel}
+              </button>
+            </>
+          )}
         </div>
       )}
+
+      {/* Row 4: counters. */}
+      <div className="mt-3">
+        <Counters counters={counters} />
+      </div>
 
       {showLocationSwitcher && (
         <div className="mt-4 flex gap-2">
@@ -644,10 +701,6 @@ export default function DayScreen() {
         </div>
       )}
 
-      <div className="mt-6">
-        <Counters counters={counters} />
-      </div>
-
       <div className="mt-8 flex flex-col gap-8">
         {practitionersToShow.map((practitioner) => {
           const practitionerSchedules = schedulesForSelectedLocation.filter(
@@ -673,6 +726,10 @@ export default function DayScreen() {
               servicesById={dynamicData.servicesById}
               invoiceIdByVisitId={dynamicData.invoiceIdByVisitId}
               avgConsultMinutes={dynamicData.dayStateByPractitionerId.get(practitioner.id)?.avg_consult_minutes ?? null}
+              actorLabelByVisitId={dynamicData.actorLabelByVisitId}
+              onTapEmptySlot={
+                canBook && practitioner.id === currentPractitionerId ? handleTapEmptySlot : undefined
+              }
               onAdvance={handleAdvance}
               openMenuVisitId={openMenuVisitId}
               onOpenMenu={setOpenMenuVisitId}
@@ -691,15 +748,21 @@ export default function DayScreen() {
         <div className="fixed inset-x-6 bottom-24 z-10 flex justify-end gap-2">
           <button
             type="button"
-            onClick={() => setBookingSheetMode("walk_in")}
-            className="rounded-full border border-green bg-paper px-4 py-3 text-sm font-semibold text-green shadow-lg"
+            onClick={() => {
+              setPresetBookingTime(null);
+              setBookingSheetMode("walk_in");
+            }}
+            className="rounded-full border border-line bg-paper px-4 py-3 font-display text-sm font-medium text-ink shadow-lg"
           >
             {dayScreenStrings.walkInButtonLabel}
           </button>
           <button
             type="button"
-            onClick={() => setBookingSheetMode("booking")}
-            className="rounded-full bg-green px-6 py-3 font-semibold text-paper shadow-lg"
+            onClick={() => {
+              setPresetBookingTime(null);
+              setBookingSheetMode("booking");
+            }}
+            className="rounded-full bg-green px-6 py-3 font-display font-medium text-paper shadow-lg"
           >
             {isQueueMode ? dayScreenStrings.addToQueueButtonLabel : dayScreenStrings.bookingButtonLabel}
           </button>
@@ -716,7 +779,11 @@ export default function DayScreen() {
           service={defaultService}
           visitDate={today}
           mode={bookingSheetMode}
-          onDismiss={() => setBookingSheetMode(null)}
+          presetTime={presetBookingTime ?? undefined}
+          onDismiss={() => {
+            setBookingSheetMode(null);
+            setPresetBookingTime(null);
+          }}
           onBooked={handleBooked}
           onCollision={handleBookingCollision}
         />

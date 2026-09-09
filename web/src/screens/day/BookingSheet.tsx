@@ -58,6 +58,17 @@ interface BookingSheetProps {
   visitDate: ClinicDay;
   /** "walk_in" books already-arrived, source walkin, and defaults to the next empty slot from now. */
   mode: BookingSheetMode;
+  /**
+   * Set when the sheet was opened by tapping a specific empty slot on the
+   * day grid: skips straight to the confirm step with this time once a
+   * patient is chosen, rather than showing the full slot list — a shortcut,
+   * not a different flow. Ignored in queue mode (no times to preset) and
+   * superseded by walk-in's own "next slot from now" logic if both were
+   * somehow set at once. Re-verified against the live empty-slot list at
+   * the moment of use, since it may have gone stale while the sheet was
+   * open searching for a patient.
+   */
+  presetTime?: ClockTime;
   onDismiss: () => void;
   onBooked: (undo: UndoAction) => void;
   onCollision: () => void;
@@ -74,6 +85,7 @@ export default function BookingSheet({
   service,
   visitDate,
   mode,
+  presetTime,
   onDismiss,
   onBooked,
   onCollision,
@@ -132,6 +144,13 @@ export default function BookingSheet({
         setStep({ kind: "confirm", patient, time: nextSlot, isOverbooked: false, newPatientAuditLogId });
         return;
       }
+    }
+    // The slot tapped to open this sheet, if it's still actually empty —
+    // re-checked against the live list rather than trusted blindly, since
+    // it may have been taken while the assistant was searching for a patient.
+    if (presetTime && emptySlots.some((slot) => slot.time === presetTime)) {
+      setStep({ kind: "confirm", patient, time: presetTime, isOverbooked: false, newPatientAuditLogId });
+      return;
     }
     setStep({ kind: "slots", patient, newPatientAuditLogId });
   }

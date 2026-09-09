@@ -17,48 +17,72 @@ export interface StatusVisual {
   containerClassName: string;
   /** Classes for the patient name text. */
   nameClassName: string;
+  /** Classes for everything else on the row: time, status word, service line, sub-lines, the "recorded by" byline. */
+  metaClassName: string;
 }
 
 const WAITING = new Set<string>([VisitStatus.Booked, VisitStatus.Confirmed]);
-const IN_PROGRESS_OR_DONE = new Set<string>([VisitStatus.InRoom, VisitStatus.Completed]);
 
 /**
- * Visual treatment for a visit status. Five states are distinguished, not
- * just three colours: a booked/confirmed visit is a thin amber border only —
- * arrived gets that same amber border PLUS a soft fill and a bolder name,
- * because a patient sitting in the waiting room right now is the single most
- * important fact on this screen and must not look like a plain booking.
- * Likewise cancelled and no_show both use red but are never rendered the
- * same: cancelled is dashed with a struck-through name (removed from the
- * schedule), no_show is solid (was expected, did not appear) — the
- * specification treats them as distinct statuses for missed-revenue
- * reporting, so they must be visually distinct too. Neither is dimmed: staff
- * still need to read these rows clearly to decide whether to offer the slot
- * to someone else. A rescheduled visit no longer occupies its original slot
- * (the booking moved to a new visit), so it has no treatment here — the
- * caller renders that slot as empty instead of booked.
+ * One authoritative full-row visual treatment per status, matching the
+ * design reference's filled-card model (clintra-screens.html screen 3's
+ * .sl/.now/.her/.mis/.pst classes) rather than a left-edge accent stripe:
+ * in_room is a solid green fill (.now) because it is the loudest signal on
+ * the screen and must not read as a plain booking; arrived gets a lighter
+ * green fill (.her) so it visibly stands out from a plain booking without
+ * competing with in_room; a finished visit fades into a muted grey fill
+ * (.pst) so it visibly settles into the past; a no-show fills red (.mis)
+ * since the slot was expected to be used and was not; booked/confirmed gets
+ * the reference's plain, unfilled card outline (.sl with no modifier) —
+ * colour is reserved for exceptions and highlights, not for "waiting as
+ * normal." Cancelled has no equivalent in the reference (its slots-grid
+ * sample never shows a cancelled slot): the pre-existing dashed-border,
+ * struck-through-name treatment is kept, generalised from a left-edge
+ * stripe to a full border so it still reads as "removed" without being the
+ * only state left using the old stripe language.
  */
 export function statusVisual(status: VisitStatusType): StatusVisual | null {
   if (WAITING.has(status)) {
-    return { containerClassName: "border-s-4 border-s-amber", nameClassName: "" };
+    return {
+      containerClassName: "border border-line bg-paper",
+      nameClassName: "",
+      metaClassName: "text-muted",
+    };
   }
   if (status === VisitStatus.Arrived) {
     return {
-      containerClassName: "border-s-4 border-s-amber bg-amber/10",
-      nameClassName: "font-semibold",
+      containerClassName: "border border-green/20 bg-green-soft",
+      nameClassName: "font-semibold text-green",
+      metaClassName: "text-green-medium",
     };
   }
-  if (IN_PROGRESS_OR_DONE.has(status)) {
-    return { containerClassName: "border-s-4 border-s-green", nameClassName: "" };
+  if (status === VisitStatus.InRoom) {
+    return {
+      containerClassName: "border border-green bg-green",
+      nameClassName: "font-semibold text-paper",
+      metaClassName: "text-paper/80",
+    };
+  }
+  if (status === VisitStatus.Completed) {
+    return {
+      containerClassName: "border border-line bg-line-soft",
+      nameClassName: "text-muted",
+      metaClassName: "text-muted",
+    };
   }
   if (status === VisitStatus.Cancelled) {
     return {
-      containerClassName: "border-s-4 border-dashed border-s-red",
+      containerClassName: "border border-dashed border-red bg-paper",
       nameClassName: "line-through",
+      metaClassName: "text-muted",
     };
   }
   if (status === VisitStatus.NoShow) {
-    return { containerClassName: "border-s-4 border-s-red", nameClassName: "" };
+    return {
+      containerClassName: "border border-red/20 bg-red-soft",
+      nameClassName: "text-red",
+      metaClassName: "text-red",
+    };
   }
   return null;
 }

@@ -54,7 +54,11 @@ export default function DelayControl({ delayMinutes, scheduleStartTime, onSetDel
           onClick={() => setIsPickerOpen((open) => !open)}
           aria-haspopup="menu"
           aria-expanded={isPickerOpen}
-          className="rounded-full border border-line px-3 py-1 text-sm"
+          className={
+            delayMinutes > 0
+              ? "rounded-[5px] bg-amber-soft px-2 py-0.5 text-xs text-amber"
+              : "rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
+          }
         >
           {delayMinutes > 0 ? (
             <>

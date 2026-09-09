@@ -9,11 +9,18 @@ import { dayScreenStrings } from "./strings";
 
 type ChipState = "online" | "local" | "needs_review";
 
+// Matches the design reference's .tg tag-pill language: a filled soft
+// background rather than an outline, one colour per meaning — green for
+// "everything is fine" (.tg.a), red for "needs attention" (.tg.b), neutral
+// grey otherwise (.tg.e).
 function chipClassName(state: ChipState): string {
   if (state === "needs_review") {
-    return "rounded-full border border-red/30 bg-red/10 px-3 py-1 text-sm text-red";
+    return "rounded-[5px] bg-red-soft px-2 py-0.5 text-xs text-red";
   }
-  return "rounded-full border border-line px-3 py-1 text-sm text-muted";
+  if (state === "online") {
+    return "rounded-[5px] bg-green-soft px-2 py-0.5 text-xs text-green";
+  }
+  return "rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted";
 }
 
 /**
