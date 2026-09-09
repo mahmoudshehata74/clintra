@@ -1,4 +1,5 @@
-import { toArabicIndicDigits } from "../../domain/arabicNumerals";
+import type { ReactNode } from "react";
+import Ltr from "../../components/Ltr";
 import { countCompletedConsultations } from "../../domain/consultStats";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import type { ClockTime } from "../../domain/time";
@@ -94,6 +95,7 @@ export default function PractitionerColumn({
         servicesById={servicesById}
         invoiceIdByVisitId={invoiceIdByVisitId}
         avgConsultMinutes={avgConsultMinutes}
+        actorLabelByVisitId={actorLabelByVisitId}
         onAdvance={onAdvance}
         openMenuVisitId={openMenuVisitId}
         onOpenMenu={onOpenMenu}
@@ -182,6 +184,7 @@ interface QueueColumnProps {
   servicesById: ReadonlyMap<string, Service>;
   invoiceIdByVisitId: ReadonlyMap<string, string>;
   avgConsultMinutes: number | null;
+  actorLabelByVisitId: ReadonlyMap<string, string>;
   onAdvance: (visit: Visit, toStatus: VisitStatus) => void;
   openMenuVisitId: string | null;
   onOpenMenu: (visitId: string) => void;
@@ -203,6 +206,7 @@ function QueueColumn({
   servicesById,
   invoiceIdByVisitId,
   avgConsultMinutes,
+  actorLabelByVisitId,
   onAdvance,
   openMenuVisitId,
   onOpenMenu,
@@ -222,14 +226,18 @@ function QueueColumn({
 
       <p className="mb-3 text-sm text-muted">
         {dayScreenStrings.queueSummaryCurrentTurnLabel}:{" "}
-        {summary.currentTurnPosition !== null ? toArabicIndicDigits(summary.currentTurnPosition) : "—"}
+        {summary.currentTurnPosition !== null ? <Ltr>{summary.currentTurnPosition}</Ltr> : "—"}
         {" · "}
-        {dayScreenStrings.queueSummaryWaitingLabel}: {toArabicIndicDigits(summary.waitingCount)}
+        {dayScreenStrings.queueSummaryWaitingLabel}: <Ltr>{summary.waitingCount}</Ltr>
         {" · "}
         {dayScreenStrings.queueSummaryAverageLabel}:{" "}
-        {avgConsultMinutes !== null
-          ? `${toArabicIndicDigits(avgConsultMinutes)} ${dayScreenStrings.delayMinutesSuffix}`
-          : "—"}
+        {avgConsultMinutes !== null ? (
+          <>
+            <Ltr>{avgConsultMinutes}</Ltr> {dayScreenStrings.delayMinutesSuffix}
+          </>
+        ) : (
+          "—"
+        )}
       </p>
 
       <ul className="flex flex-col gap-2">
@@ -242,13 +250,18 @@ function QueueColumn({
           const isNext = visit.id === summary.nextVisitId;
           const menuEligible = Boolean(isMenuEligible(visit.status) || invoiceId || isWaiting);
 
-          let expectedWaitLabel: string | null = null;
+          let expectedWaitLabel: ReactNode = null;
           if (isWaiting) {
             if (!hasEnoughDataForEstimate || avgConsultMinutes === null || summary.currentTurnPosition === null) {
               expectedWaitLabel = dayScreenStrings.queueExpectedWaitUnknown;
             } else {
               const minutes = computeExpectedWaitMinutes(visit.position, summary.currentTurnPosition, avgConsultMinutes);
-              expectedWaitLabel = `${dayScreenStrings.queueExpectedWaitPrefix}${toArabicIndicDigits(minutes)} ${dayScreenStrings.delayMinutesSuffix}`;
+              expectedWaitLabel = (
+                <>
+                  {dayScreenStrings.queueExpectedWaitPrefix}
+                  <Ltr>{minutes}</Ltr> {dayScreenStrings.delayMinutesSuffix}
+                </>
+              );
             }
           }
 
@@ -260,6 +273,7 @@ function QueueColumn({
               service={service}
               isNext={isNext}
               expectedWaitLabel={expectedWaitLabel}
+              actorLabel={actorLabelByVisitId.get(visit.id)}
               onPrimaryAction={advanceTarget ? () => onAdvance(visit, advanceTarget) : undefined}
               menu={
                 menuEligible

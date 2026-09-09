@@ -84,7 +84,7 @@ slots mode, mainly on the strength of a genuinely bold in-room treatment.
 | Counters block placement/definition | Inline stats bar: "الدور دلوقتي: ٢ · في الانتظار: ٤ · متوسط الكشف: ١١ دقيقة" | One muted text line above the list with the same three metrics, same wording pattern | Minor | Placement (inline text vs. a stats bar) is a cosmetic difference only; content matches closely. |
 | Primary action affordance | Dashed inline row at the list's end: "+ إضافة للدور — النمرة الجاية ٥" | Floating pill button "إضافة للدور" (replaces the booking button in queue mode) | Moderate | Reference's affordance also tells the assistant the next position number in advance; current's floating button does not. |
 | Secondary/destructive actions | Not shown on this screen | Same overflow menu as slots mode, plus a queue-only "أجّله لآخر الدور" (send to end) item | Not comparable | |
-| Digits: position, waiting count, average | Arabic-Indic throughout | Arabic-Indic throughout (`toArabicIndicDigits`) | Identical | The one place digit convention fully matches the reference. |
+| Digits: position, waiting count, average | Arabic-Indic throughout | **Fixed**: Western throughout, `Ltr`-wrapped, matching Decision B | Major (by design) | Was Arabic-Indic (via `toArabicIndicDigits`, now deleted — it had no other callers left once this screen was rewritten) — this was the internal inconsistency decision (a) item 4 already flagged; now resolved in the settled direction. |
 | "recorded by" line | Not shown on this screen | Not shown | Missing | Same gap as screen 3. |
 
 ## Screen 5 — تسجيل الحجز
@@ -310,13 +310,13 @@ Resolved by decision B (kept for the record of what was being decided):
    `CAIRO_DISPLAY_DATE_FORMATTER` comment states this is intentional, "to
    match the Western digits used elsewhere on screen." Decision B confirms
    that rationale rather than overturning it.
-4. **Digits for slots-mode day counters vs. queue-mode counters — an
-   internal inconsistency, not just a reference mismatch.** Queue-mode
-   counters (current position, waiting count, average) use Arabic-Indic
-   digits today (`toArabicIndicDigits`); slots-mode day counters
-   (total/arrived/completed/remaining, `Counters.tsx`) use Western digits
-   via `Ltr`. Decision B means queue-mode's counters are the one that needs
-   to change, once that screen is reworked — not the other way.
+4. **Digits for slots-mode day counters vs. queue-mode counters — RESOLVED,
+   applied.** Queue-mode counters (current position, waiting count, average,
+   per-row position, expected-wait minutes) used Arabic-Indic digits via
+   `toArabicIndicDigits`; slots-mode day counters already used Western via
+   `Ltr`. Now both use Western — `toArabicIndicDigits` and its module were
+   deleted entirely once the queue-mode redesign removed its last callers,
+   since Decision B leaves it permanently unusable anywhere in this app.
 6. **Status badges: outline vs. filled.** Reference fills every status/tag
    pill with a soft tinted background (`.tg.*` classes all set both
    `background` and `color`). Current's equivalents (`InvoiceSheet`'s

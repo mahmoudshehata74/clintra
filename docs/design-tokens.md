@@ -19,7 +19,7 @@ Used for body text, borders, and primary/destructive button fills.
 | `--color-red` | `#b23a34` | Destructive actions and negative/error state (cancel, void, validation errors). |
 | `--color-amber` | `#8a6a22` | Warning/attention state (delay, needs-review, pending difference). |
 | `--color-purple` | `#453fa0` | Secondary accent for tags unrelated to the green/red/amber status vocabulary (e.g. a price override, a specialty-form marker). |
-| `--color-green-medium` | `#4c8571` | Secondary green text — a softer weight than `--color-green`, used for meta/sub-text sitting on a `--color-green-soft` fill (e.g. an arrived row's time and status line, a queue position badge that's already been served). Never a fill itself, always text on top of one. |
+| `--color-green-medium` | `#4c8571` | Secondary green — a softer weight than `--color-green`. As text: meta/sub-text sitting on a `--color-green-soft` fill (e.g. an arrived row's time and status line). As a ring: the queue's "next in line" accent (`ring-green-medium`), a priority marker distinct from arrived's own fill. Never a background fill itself. |
 | `--color-line` | `#e2e3dc` | Borders and dividers. |
 | `--color-line-soft` | `#edeee8` | A lighter divider than `--color-line` for internal row separators (list rows, table cells, key-value rows), and the fill for a neutral/informational tag pill that isn't green/red/amber/purple-toned. |
 | `--color-muted` | `#6e7370` | Secondary/muted text. |

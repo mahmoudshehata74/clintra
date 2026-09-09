@@ -3,7 +3,6 @@ import Ltr from "../../components/Ltr";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import type { ClinicDay, Patient, Schedule, Service, Visit } from "../../db/types";
-import { toArabicIndicDigits } from "../../domain/arabicNumerals";
 import { formatEgyptianPhoneForDisplay } from "../../domain/phone";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import { clockTimeInCairo, formatCairoDisplayDate, weekdayOf } from "../../domain/time";
@@ -91,7 +90,7 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
   }
 
   function positionOrTime(visit: Visit): string {
-    return data.isQueueMode ? toArabicIndicDigits(visit.position) : clockTimeInCairo(visit.scheduled_at!);
+    return data.isQueueMode ? String(visit.position) : clockTimeInCairo(visit.scheduled_at!);
   }
 
   return (

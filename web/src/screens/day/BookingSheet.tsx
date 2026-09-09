@@ -6,7 +6,6 @@ import type { Patient, Practitioner, Service, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { addToQueue } from "../../db/visitQueue";
 import { bookExistingPatientVisit } from "../../db/visitBooking";
-import { toArabicIndicDigits } from "../../domain/arabicNumerals";
 import { generateTimeChoices } from "../../domain/schedule";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import type { ClinicDay, ClockTime } from "../../domain/time";
@@ -510,7 +509,7 @@ export default function BookingSheet({
             <span className="text-lg">{step.patient.full_name}</span>
             <span className="text-muted">{service.name}</span>
             <span className="text-muted">
-              {dayScreenStrings.addToQueueConfirmPrefix} {toArabicIndicDigits(step.position)}
+              {dayScreenStrings.addToQueueConfirmPrefix} <Ltr>{step.position}</Ltr>
             </span>
           </div>
           <button
