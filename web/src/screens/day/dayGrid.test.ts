@@ -5,6 +5,7 @@ import { VisitSource } from "../../domain/visitSource";
 import { VisitStatus } from "../../domain/visitStatus";
 import type { Schedule, Visit } from "../../db/types";
 import { computeGridRows } from "./dayGrid";
+import { statusVisual } from "./statusStyle";
 
 const TODAY = "2026-01-05";
 
@@ -87,5 +88,38 @@ describe("computeGridRows", () => {
       visit: null,
       isExtraAtTime: false,
     });
+  });
+
+  it("an overbooked-but-booked visit gets the plain waiting treatment, never the cancelled one", () => {
+    // Regression: overbooking and cancelling are unrelated concerns.
+    // statusVisual's own signature only takes a status, never is_overbooked,
+    // so this asserts the row-level contract an app screen actually renders
+    // from — an overbooked row must read exactly like a normal booked row,
+    // plus its own separate isExtraAtTime badge (rendered by SlotRow.tsx),
+    // never the cancelled row's dashed border.
+    const normal = visit({ id: "visit-normal", position: 1, time: "09:00", is_overbooked: false });
+    const overbook = visit({ id: "visit-overbook", position: 6, time: "09:00", is_overbooked: true });
+    const cancelled = visit({
+      id: "visit-cancelled",
+      position: 2,
+      time: "09:30",
+      status: VisitStatus.Cancelled,
+    });
+
+    const rows = computeGridRows(SCHEDULE, [normal, overbook, cancelled]);
+
+    const normalRow = rows.find((row) => row.visit?.id === "visit-normal")!;
+    const overbookRow = rows.find((row) => row.visit?.id === "visit-overbook")!;
+    const cancelledRow = rows.find((row) => row.visit?.id === "visit-cancelled")!;
+
+    const normalVisual = statusVisual(normalRow.visit!.status)!;
+    const overbookVisual = statusVisual(overbookRow.visit!.status)!;
+    const cancelledVisual = statusVisual(cancelledRow.visit!.status)!;
+
+    expect(overbookRow.isExtraAtTime).toBe(true);
+    expect(overbookVisual).toEqual(normalVisual);
+    expect(overbookVisual.containerClassName).not.toBe(cancelledVisual.containerClassName);
+    expect(overbookVisual.containerClassName).not.toContain("dashed");
+    expect(overbookVisual.containerClassName).not.toContain("red");
   });
 });

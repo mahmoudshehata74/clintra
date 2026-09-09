@@ -107,16 +107,38 @@ interface ToastState {
 
 type RowActionSheetState = { kind: "cancel"; visit: Visit } | { kind: "move"; visit: Visit } | null;
 
+// Persisted per device, not per org or user (there is no login yet): an
+// assistant who last opened Dr X yesterday should still see Dr X today on
+// the same device, not whichever practitioner happens to sort first.
+// localStorage over sessionStorage specifically for that reason — it must
+// survive the tab (and the browser) closing, not just the current session.
+const SELECTED_PRACTITIONER_STORAGE_KEY = "clintra-selected-practitioner-id";
+
+function readStoredPractitionerId(): string | null {
+  if (typeof localStorage === "undefined") {
+    return null;
+  }
+  return localStorage.getItem(SELECTED_PRACTITIONER_STORAGE_KEY);
+}
+
 function toggleButtonClass(isSelected: boolean): string {
   return isSelected
     ? "rounded-[--radius-el] border border-green bg-green-soft px-3 py-1 text-sm"
     : "rounded-[--radius-el] border border-line px-3 py-1 text-sm";
 }
 
+// Matches the reference's .tg.a (selected) / .tg.e (neutral) tag-pill
+// language, the same treatment already used for the other header pills.
+function practitionerPillClassName(isSelected: boolean): string {
+  return isSelected
+    ? "rounded-[5px] bg-green-soft px-2 py-0.5 text-xs text-green"
+    : "rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted";
+}
+
 export default function DayScreen() {
   const [staticData, setStaticData] = useState<StaticData | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
-  const [selectedPractitionerId, setSelectedPractitionerId] = useState<string | null>(null);
+  const [selectedPractitionerId, setSelectedPractitionerIdState] = useState<string | null>(readStoredPractitionerId);
   const [toastState, setToastState] = useState<ToastState | null>(null);
   const [bookingSheetMode, setBookingSheetMode] = useState<BookingSheetMode | null>(null);
   const [presetBookingTime, setPresetBookingTime] = useState<ClockTime | null>(null);
@@ -180,14 +202,30 @@ export default function DayScreen() {
     };
   }, [isSeedDayPinned]);
 
+  function handleSelectPractitioner(practitionerId: string) {
+    setSelectedPractitionerIdState(practitionerId);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(SELECTED_PRACTITIONER_STORAGE_KEY, practitionerId);
+    }
+  }
+
+  // Adaptive-UI rule: more than one practitioner means a switcher and
+  // exactly one practitioner's day rendered at a time — never more than one
+  // column stacked on the same viewport. Always resolves to at most one
+  // practitioner, never "every practitioner." A practitioner id persisted
+  // from a previous visit may no longer be active (or may belong to a
+  // different seed/org state entirely) — derived here, not synced back into
+  // state, so a stale id falls back to the default (first) practitioner on
+  // every render without ever needing a setState-in-effect.
   const practitionersToShow = useMemo(() => {
     if (!staticData) {
       return [];
     }
-    if (selectedPractitionerId) {
-      return staticData.practitioners.filter((practitioner) => practitioner.id === selectedPractitionerId);
-    }
-    return staticData.practitioners;
+    const isStoredSelectionValid =
+      selectedPractitionerId != null &&
+      staticData.practitioners.some((practitioner) => practitioner.id === selectedPractitionerId);
+    const targetId = isStoredSelectionValid ? selectedPractitionerId : (staticData.practitioners[0]?.id ?? null);
+    return staticData.practitioners.filter((practitioner) => practitioner.id === targetId);
   }, [staticData, selectedPractitionerId]);
 
   // Live query: re-emits automatically whenever any write touches the visits
@@ -270,9 +308,10 @@ export default function DayScreen() {
       return { visits, patientsById, servicesById, invoiceIdByVisitId, dayStateByPractitionerId, actorLabelByVisitId };
     }, [staticData, practitionersToShow, today, selectedLocationId]) ?? EMPTY_DYNAMIC_DATA;
 
-  // Resolved unconditionally (optional-chained) so it's stable for the
-  // day_state live query below, which must run before any early return.
-  const currentPractitionerId = selectedPractitionerId ?? staticData?.practitioners[0]?.id ?? null;
+  // The same resolution practitionersToShow already applied — kept as its
+  // own binding since it's read unconditionally below, before the early
+  // return, for the day_state live query.
+  const currentPractitionerId = practitionersToShow[0]?.id ?? null;
 
   const dayStateRow = useLiveQuery(async () => {
     if (!currentPractitionerId || !selectedLocationId) {
@@ -631,6 +670,17 @@ export default function DayScreen() {
             scheduleStartTime={currentPractitionerSchedule?.start_time ?? null}
             onSetDelay={handleSetDelay}
           />
+          {showPractitionerFilter &&
+            staticData.practitioners.map((practitioner) => (
+              <button
+                key={practitioner.id}
+                type="button"
+                onClick={() => handleSelectPractitioner(practitioner.id)}
+                className={practitionerPillClassName(practitioner.id === currentPractitionerId)}
+              >
+                {practitioner.full_name}
+              </button>
+            ))}
           {selectedLocationId && (
             <>
               <button
@@ -674,28 +724,6 @@ export default function DayScreen() {
               className={toggleButtonClass(location.id === selectedLocationId)}
             >
               {location.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {showPractitionerFilter && (
-        <div className="mt-3 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setSelectedPractitionerId(null)}
-            className={toggleButtonClass(selectedPractitionerId === null)}
-          >
-            {dayScreenStrings.allPractitioners}
-          </button>
-          {staticData.practitioners.map((practitioner) => (
-            <button
-              key={practitioner.id}
-              type="button"
-              onClick={() => setSelectedPractitionerId(practitioner.id)}
-              className={toggleButtonClass(practitioner.id === selectedPractitionerId)}
-            >
-              {practitioner.full_name}
             </button>
           ))}
         </div>

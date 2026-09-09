@@ -31,6 +31,19 @@ export default defineConfig({
         // Precache every built script, style, font and icon so a reload with
         // the network off renders the day screen exactly as online.
         globPatterns: ["**/*.{js,css,html,woff,woff2,png,ico}"],
+        // vite-plugin-pwa's generateSW strategy defaults navigateFallback to
+        // "index.html", which makes workbox-build auto-register its own
+        // NavigationRoute (bound straight to the precached index.html) ahead
+        // of any runtimeCaching rule below — confirmed by inspecting the
+        // built dist/sw.js, where that NavigationRoute was registered before
+        // our own app-shell rule and so always won, leaving the rule below
+        // dead code since this file was written. navigateFallback exists for
+        // single-page apps that need every unmatched route to fall back to
+        // one HTML shell; this app has no client-side router, so there is
+        // nothing for it to do here except shadow our own navigation
+        // handling. Set to undefined so our runtimeCaching rule is the only
+        // one registered for a navigation request.
+        navigateFallback: undefined,
         // The app shell (the navigation request for index.html) is the one
         // thing that can change without its filename changing, so it alone
         // gets a stale-while-revalidate runtime strategy: serve the cached

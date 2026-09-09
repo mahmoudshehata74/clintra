@@ -37,7 +37,6 @@ export const dayScreenStrings = {
   countersCompleted: "خلصوا",
   countersRemaining: "متبقي",
   allLocations: "كل الفروع",
-  allPractitioners: "الكل",
   // The floating action that opens the booking sheet.
   bookingButtonLabel: "حجز",
   bookingSearchPlaceholder: "دور بالاسم أو الرقم",
