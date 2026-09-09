@@ -23,6 +23,7 @@ import type {
   ServicePriceOverride,
   SpecialtyTemplate,
   SyncOp,
+  SyncReview,
   User,
   Visit,
   VisitFormData,
@@ -55,6 +56,7 @@ export class ClintraDatabase extends Dexie {
   care_plans!: EntityTable<CarePlan, "id">;
   care_plan_items!: EntityTable<CarePlanItem, "id">;
   sync_ops!: EntityTable<SyncOp, "op_id">;
+  sync_review!: EntityTable<SyncReview, "id">;
 
   constructor(name = "clintra") {
     super(name);
@@ -119,6 +121,15 @@ export class ClintraDatabase extends Dexie {
     // the doctor-delay feature is the first thing to write to this table.
     this.version(5).stores({
       day_state: "id, &[practitioner_id+location_id+date]",
+    });
+
+    // Adds the review queue the sync engine writes to when the transport
+    // rejects a pushed op (see db/mutate.ts's sibling module sync/engine.ts).
+    // op_id is not unique here: op_id already identifies its own row in
+    // sync_ops, but a rejected op can in principle be reviewed more than
+    // once (e.g. retried and rejected again), each as its own row.
+    this.version(6).stores({
+      sync_review: "id, op_id, needs_review",
     });
   }
 }

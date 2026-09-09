@@ -1,9 +1,17 @@
-import type { Table } from "dexie";
+import Dexie, { type Table } from "dexie";
 import { id } from "../domain/id";
 import { resolveActingMembership } from "./actingMembership";
 import { getDeviceId } from "./deviceId";
 import type { ClintraDatabase } from "./database";
 import { AuditAction } from "./types";
+
+/**
+ * Dispatched on `window` right after every successful mutate() commit, so
+ * the sync engine (sync/engine.ts) can trigger an immediate push without
+ * db/mutate.ts importing anything from sync/ — this module stays the
+ * foundation every other layer depends on, never the reverse.
+ */
+export const MUTATION_EVENT_NAME = "clintra:mutation";
 
 export interface MutationInput<T> {
   table: Table<T, string>;
@@ -67,6 +75,22 @@ export async function mutate<T>(db: ClintraDatabase, input: MutationInput<T>): P
       synced_at: null,
     });
   });
+
+  if (typeof window !== "undefined") {
+    // Dexie propagates its "current transaction" zone across the microtask
+    // chain that resumes after an awaited transaction, even though the
+    // transaction has already committed. Dispatching synchronously here
+    // would run the sync engine's listener (and its own Dexie queries, e.g.
+    // against sync_review, a table the transaction above never touched)
+    // inside that stale zone, and a real IndexedDB backend then throws
+    // NotFoundError for any table not in the original transaction's scope —
+    // fake-indexeddb (used in tests) is lax enough not to reproduce this,
+    // which is why only real-browser testing caught it. ignoreTransaction
+    // is Dexie's own escape hatch for exactly this.
+    Dexie.ignoreTransaction(() => {
+      window.dispatchEvent(new Event(MUTATION_EVENT_NAME));
+    });
+  }
 
   return auditLogId;
 }

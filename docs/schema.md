@@ -214,6 +214,21 @@ first writer, so that natural key is now a real unique index
 practitioner's same day. Added in local database version 5; versions 1-4 are
 unchanged.
 
+## v6 additions
+
+### sync_review
+
+id, op_id, entity, entity_id, reason, payload, needs_review, created_at
+
+Written by the sync engine (`web/src/sync/engine.ts`) when the transport
+rejects a pushed `sync_ops` row instead of accepting it or reporting it a
+duplicate. Nothing is deleted: the rejected `sync_ops` row is left exactly as
+it was (`synced_at` stays null), and this row preserves the op's payload and
+the rejection reason (e.g. `conflict_slot_taken`) for an assistant to review.
+`op_id` is not unique here — see the code comment in `web/src/db/database.ts`
+for why the same op could in principle be reviewed more than once. Added in
+local database version 6; versions 1-5 are unchanged.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.

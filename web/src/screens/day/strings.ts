@@ -114,4 +114,14 @@ export const dayScreenStrings = {
   // Shown on every row after the first at a clock time two or more visits
   // share — only reachable through the overbook flow.
   overbookedRowBadge: "فوق السعة",
+
+  // The sync status chip in the day header, and its needs-review list.
+  syncOnline: "متصل",
+  syncLocal: "شغّال محلي",
+  syncNeedsReview: "فيه حاجة محتاجة مراجعة",
+  syncReviewListTitle: "حاجات محتاجة مراجعة",
+  // Both actions dismiss the review row the same way for now — see
+  // sync/reviewActions.ts for why a real resolution flow is a later task.
+  syncReviewKeepAction: "خليها كده",
+  syncReviewRemoveAction: "شيلها",
 } as const;

@@ -24,6 +24,7 @@ import MoveVisitSheet from "./MoveVisitSheet";
 import PractitionerColumn from "./PractitionerColumn";
 import { resolveDayScheduleState } from "./scheduleState";
 import { dayScreenStrings } from "./strings";
+import SyncStatusChip from "./SyncStatusChip";
 import type { UndoAction } from "./undoAction";
 import UndoToast from "./UndoToast";
 
@@ -407,7 +408,10 @@ export default function DayScreen() {
 
   return (
     <main className={`mx-auto max-w-3xl px-6 pt-16 ${toastState ? "pb-28" : "pb-16"}`}>
-      <h1 className="font-display text-4xl font-semibold text-green">Clintra</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-display text-4xl font-semibold text-green">Clintra</h1>
+        <SyncStatusChip />
+      </div>
       <p className="mt-2 text-muted">
         {formatCairoDisplayDateParts(today).map((part, index) =>
           part.type === "day" ? (

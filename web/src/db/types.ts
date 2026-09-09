@@ -299,6 +299,22 @@ export interface SyncOp {
   synced_at: Instant | null;
 }
 
+/**
+ * Written by the sync engine when the transport rejects a pushed op — the
+ * op itself is never deleted or marked synced, so nothing about the write is
+ * lost; this is the record an assistant reviews. Added in database version 6.
+ */
+export interface SyncReview {
+  id: string;
+  op_id: string;
+  entity: string;
+  entity_id: string;
+  reason: string;
+  payload: unknown;
+  needs_review: boolean;
+  created_at: Instant;
+}
+
 // Declared now, unused in v1, no screens.
 
 export const SpecialtyTemplateGeneration = {
