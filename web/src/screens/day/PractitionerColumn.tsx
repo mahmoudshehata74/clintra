@@ -16,6 +16,8 @@ interface PractitionerColumnProps {
   visits: readonly Visit[];
   patientsById: ReadonlyMap<string, Patient>;
   servicesById: ReadonlyMap<string, Service>;
+  /** Which of these visits have an invoice, and which — see db/visitCompletion.ts. */
+  invoiceIdByVisitId: ReadonlyMap<string, string>;
   onAdvance: (visit: Visit, toStatus: VisitStatus) => void;
   openMenuVisitId: string | null;
   onOpenMenu: (visitId: string) => void;
@@ -23,6 +25,7 @@ interface PractitionerColumnProps {
   onRequestMove: (visit: Visit) => void;
   onRequestCancel: (visit: Visit) => void;
   onMarkNoShow: (visit: Visit) => void;
+  onOpenInvoice: (invoiceId: string) => void;
 }
 
 export default function PractitionerColumn({
@@ -33,6 +36,7 @@ export default function PractitionerColumn({
   visits,
   patientsById,
   servicesById,
+  invoiceIdByVisitId,
   onAdvance,
   openMenuVisitId,
   onOpenMenu,
@@ -40,6 +44,7 @@ export default function PractitionerColumn({
   onRequestMove,
   onRequestCancel,
   onMarkNoShow,
+  onOpenInvoice,
 }: PractitionerColumnProps) {
   const scheduleState = resolveDayScheduleState(todaysSchedule, hasAnySchedule);
 
@@ -72,7 +77,9 @@ export default function PractitionerColumn({
           const patient = visit ? patientsById.get(visit.patient_id) : undefined;
           const service = visit?.service_id ? servicesById.get(visit.service_id) : undefined;
           const advanceTarget = visit ? primaryAdvanceTarget(visit.status) : null;
-          const menuEligible = Boolean(visit && isMenuEligible(visit.status));
+          const invoiceId = visit ? invoiceIdByVisitId.get(visit.id) : undefined;
+          const administrable = Boolean(visit && isMenuEligible(visit.status));
+          const menuEligible = Boolean(visit && (administrable || invoiceId));
 
           return (
             <SlotRow
@@ -90,9 +97,10 @@ export default function PractitionerColumn({
                       isOpen: openMenuVisitId === visit.id,
                       onOpen: () => onOpenMenu(visit.id),
                       onClose: onCloseMenu,
-                      onMove: () => onRequestMove(visit),
-                      onCancel: () => onRequestCancel(visit),
-                      onNoShow: () => onMarkNoShow(visit),
+                      onMove: administrable ? () => onRequestMove(visit) : undefined,
+                      onCancel: administrable ? () => onRequestCancel(visit) : undefined,
+                      onNoShow: administrable ? () => onMarkNoShow(visit) : undefined,
+                      onInvoice: invoiceId ? () => onOpenInvoice(invoiceId) : undefined,
                     }
                   : undefined
               }

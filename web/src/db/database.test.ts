@@ -89,6 +89,7 @@ describe("invoices index", () => {
       org_id: ORG_ID,
       location_id: LOCATION_ID,
       number: 1,
+      issued_year: 2026,
       patient_id: PATIENT_ID,
       practitioner_id: PRACTITIONER_ID,
       visit_id: null,
@@ -100,10 +101,55 @@ describe("invoices index", () => {
     };
   }
 
-  it("rejects a second invoice with the same location and number", async () => {
-    await db.invoices.add(makeInvoice({ number: 1 }));
+  it("rejects a second invoice with the same location, year and number", async () => {
+    await db.invoices.add(makeInvoice({ number: 1, issued_year: 2026 }));
 
-    await expect(db.invoices.add(makeInvoice({ number: 1 }))).rejects.toThrow();
+    await expect(db.invoices.add(makeInvoice({ number: 1, issued_year: 2026 }))).rejects.toThrow();
+  });
+
+  it("allows the same location and number again in a different year — the sequence resets per calendar year", async () => {
+    await db.invoices.add(makeInvoice({ number: 1, issued_year: 2026 }));
+
+    await expect(db.invoices.add(makeInvoice({ number: 1, issued_year: 2027 }))).resolves.toBeTruthy();
+  });
+});
+
+describe("payments index", () => {
+  it("rejects a second payment with the same location and receipt_number", async () => {
+    const payment = {
+      id: id(),
+      invoice_id: "invoice-1",
+      location_id: LOCATION_ID,
+      amount: 100 as Piastres,
+      method: "cash" as const,
+      receipt_number: "1",
+      note: null,
+      after_close: false,
+      created_by: "membership-1",
+      created_at: new Date().toISOString(),
+    };
+
+    await db.payments.add(payment);
+    await expect(db.payments.add({ ...payment, id: id(), invoice_id: "invoice-2" })).rejects.toThrow();
+  });
+});
+
+describe("cash_close index", () => {
+  it("rejects a second close for the same location and date", async () => {
+    const close = {
+      id: id(),
+      location_id: LOCATION_ID,
+      date: "2026-09-06",
+      total_expected: 0 as Piastres,
+      total_collected: 0 as Piastres,
+      difference: 0 as Piastres,
+      difference_note: null,
+      closed_by: "membership-1",
+      closed_at: new Date().toISOString(),
+    };
+
+    await db.cash_close.add(close);
+    await expect(db.cash_close.add({ ...close, id: id() })).rejects.toThrow();
   });
 });
 

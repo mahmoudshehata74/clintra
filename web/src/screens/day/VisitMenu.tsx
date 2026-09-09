@@ -5,9 +5,12 @@ export interface VisitMenuActions {
   isOpen: boolean;
   onOpen: () => void;
   onClose: () => void;
-  onMove: () => void;
-  onCancel: () => void;
-  onNoShow: () => void;
+  /** Move/cancel/no-show are only offered on a still-administrable visit (see visitActions.ts). */
+  onMove?: () => void;
+  onCancel?: () => void;
+  onNoShow?: () => void;
+  /** Only present once the visit has an invoice (see db/visitCompletion.ts). */
+  onInvoice?: () => void;
 }
 
 interface VisitMenuProps {
@@ -68,31 +71,44 @@ export default function VisitMenu({ actions }: VisitMenuProps) {
           role="menu"
           className="absolute end-0 top-full z-10 mt-1 flex w-48 flex-col overflow-hidden rounded-[--radius-el] border border-line bg-paper shadow-lg"
         >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={actions.onMove}
-            className="p-3 text-start hover:bg-line/30"
-          >
-            {dayScreenStrings.moveMenuLabel}
-          </button>
-          <div className="border-t border-line" />
-          <button
-            type="button"
-            role="menuitem"
-            onClick={actions.onCancel}
-            className="p-3 text-start text-red hover:bg-line/30"
-          >
-            {dayScreenStrings.cancelMenuLabel}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={actions.onNoShow}
-            className="p-3 text-start text-red hover:bg-line/30"
-          >
-            {dayScreenStrings.noShowMenuLabel}
-          </button>
+          {actions.onMove && (
+            <button type="button" role="menuitem" onClick={actions.onMove} className="p-3 text-start hover:bg-line/30">
+              {dayScreenStrings.moveMenuLabel}
+            </button>
+          )}
+          {actions.onInvoice && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={actions.onInvoice}
+              className="p-3 text-start hover:bg-line/30"
+            >
+              {dayScreenStrings.invoiceMenuLabel}
+            </button>
+          )}
+          {(actions.onCancel || actions.onNoShow) && (actions.onMove || actions.onInvoice) && (
+            <div className="border-t border-line" />
+          )}
+          {actions.onCancel && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={actions.onCancel}
+              className="p-3 text-start text-red hover:bg-line/30"
+            >
+              {dayScreenStrings.cancelMenuLabel}
+            </button>
+          )}
+          {actions.onNoShow && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={actions.onNoShow}
+              className="p-3 text-start text-red hover:bg-line/30"
+            >
+              {dayScreenStrings.noShowMenuLabel}
+            </button>
+          )}
         </div>
       )}
     </div>

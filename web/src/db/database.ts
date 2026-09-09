@@ -131,6 +131,29 @@ export class ClintraDatabase extends Dexie {
     this.version(6).stores({
       sync_review: "id, op_id, needs_review",
     });
+
+    // Invoicing (see db/visitCompletion.ts, db/payments.ts, db/cashClose.ts):
+    // - invoices: replaces v1's &[location_id+number] with
+    //   &[location_id+issued_year+number], since invoice numbers reset per
+    //   calendar year, not just per location (docs/schema.md's v1 Rules
+    //   section said "per location" alone — corrected here, see the v7
+    //   additions note). visit_id is now indexed (plain, not unique) so a
+    //   screen can look up a visit's invoice; location_id is indexed
+    //   (plain) for the cash-close and number-reservation queries.
+    // - invoice_items: invoice_id is now indexed (plain) so a screen can
+    //   list one invoice's items without scanning the whole table.
+    // - payments: gains location_id (denormalised from its invoice) and
+    //   after_close; invoice_id and location_id are now indexed, and
+    //   &[location_id+receipt_number] enforces the per-location receipt
+    //   sequence as a real constraint, not just a convention.
+    // - cash_close: &[location_id+date] makes the natural key documented
+    //   since v1 an actual constraint — it was declared but never enforced.
+    this.version(7).stores({
+      invoices: "id, location_id, visit_id, &[location_id+issued_year+number]",
+      invoice_items: "id, invoice_id",
+      payments: "id, invoice_id, location_id, &[location_id+receipt_number]",
+      cash_close: "id, &[location_id+date]",
+    });
   }
 }
 

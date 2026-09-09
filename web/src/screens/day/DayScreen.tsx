@@ -4,7 +4,10 @@ import { db } from "../../db/database";
 import { setDayDelay } from "../../db/dayState";
 import {
   undoMostRecentDayStateMutation,
+  undoMostRecentInvoiceItemMutation,
+  undoMostRecentInvoiceMutation,
   undoMostRecentPatientMutation,
+  undoMostRecentPaymentMutation,
   undoMostRecentVisitMutation,
 } from "../../db/mutate";
 import { seedDatabase, seededVisitsDate } from "../../db/seed";
@@ -17,10 +20,13 @@ import { formatCairoDisplayDateParts, todayInCairo, weekdayOf } from "../../doma
 import { VisitStatus } from "../../domain/visitStatus";
 import BookingSheet, { type BookingSheetMode } from "./BookingSheet";
 import CancelVisitSheet from "./CancelVisitSheet";
+import CashCloseSheet from "./CashCloseSheet";
 import Counters from "./Counters";
 import { computeDayCounters } from "./dayCounters";
 import DelayControl from "./DelayControl";
+import InvoiceSheet from "./InvoiceSheet";
 import MoveVisitSheet from "./MoveVisitSheet";
+import PaymentSheet from "./PaymentSheet";
 import PractitionerColumn from "./PractitionerColumn";
 import { resolveDayScheduleState } from "./scheduleState";
 import { dayScreenStrings } from "./strings";
@@ -48,9 +54,16 @@ interface DynamicData {
   visits: Visit[];
   patientsById: Map<string, Patient>;
   servicesById: Map<string, Service>;
+  /** Which of today's visits have an invoice, and which — see db/visitCompletion.ts. */
+  invoiceIdByVisitId: Map<string, string>;
 }
 
-const EMPTY_DYNAMIC_DATA: DynamicData = { visits: [], patientsById: new Map(), servicesById: new Map() };
+const EMPTY_DYNAMIC_DATA: DynamicData = {
+  visits: [],
+  patientsById: new Map(),
+  servicesById: new Map(),
+  invoiceIdByVisitId: new Map(),
+};
 
 // The undo action stays available for five minutes after any of the writes
 // below, per the specification. This is a UI-side mirror of the real
@@ -81,6 +94,9 @@ export default function DayScreen() {
   const [bookingSheetMode, setBookingSheetMode] = useState<BookingSheetMode | null>(null);
   const [openMenuVisitId, setOpenMenuVisitId] = useState<string | null>(null);
   const [rowActionSheet, setRowActionSheet] = useState<RowActionSheetState>(null);
+  const [invoiceSheetInvoiceId, setInvoiceSheetInvoiceId] = useState<string | null>(null);
+  const [paymentSheetInvoiceId, setPaymentSheetInvoiceId] = useState<string | null>(null);
+  const [isCashCloseOpen, setIsCashCloseOpen] = useState(false);
 
   const isSeedDayPinned = new URLSearchParams(window.location.search).get(SEED_DAY_QUERY_PARAM) === "1";
   const today = isSeedDayPinned && staticData?.seededDay ? staticData.seededDay : todayInCairo();
@@ -171,9 +187,11 @@ export default function DayScreen() {
         ),
       ];
 
-      const [patients, services] = await Promise.all([
+      const visitIds = visits.map((visit) => visit.id);
+      const [patients, services, invoicesForVisits] = await Promise.all([
         db.patients.bulkGet(patientIds),
         db.services.bulkGet(serviceIds),
+        visitIds.length > 0 ? db.invoices.where("visit_id").anyOf(visitIds).toArray() : Promise.resolve([]),
       ]);
 
       const patientsById = new Map(
@@ -182,8 +200,14 @@ export default function DayScreen() {
       const servicesById = new Map(
         services.filter((service): service is Service => service != null).map((service) => [service.id, service]),
       );
+      const invoiceIdByVisitId = new Map<string, string>();
+      for (const invoice of invoicesForVisits) {
+        if (invoice.visit_id) {
+          invoiceIdByVisitId.set(invoice.visit_id, invoice.id);
+        }
+      }
 
-      return { visits, patientsById, servicesById };
+      return { visits, patientsById, servicesById, invoiceIdByVisitId };
     }, [staticData, practitionersToShow, today, selectedLocationId]) ?? EMPTY_DYNAMIC_DATA;
 
   // Resolved unconditionally (optional-chained) so it's stable for the
@@ -212,19 +236,28 @@ export default function DayScreen() {
 
   async function handleAdvance(visit: Visit, toStatus: VisitStatus) {
     try {
-      let auditLogId: string;
-      let message: string;
       if (toStatus === VisitStatus.Arrived) {
-        auditLogId = await markVisitArrived(db, visit.id);
-        message = dayScreenStrings.attendanceMarked;
-      } else if (toStatus === VisitStatus.InRoom) {
-        auditLogId = await markVisitInRoom(db, visit.id);
-        message = dayScreenStrings.inRoomToastMessage;
-      } else {
-        auditLogId = await markVisitCompleted(db, visit.id);
-        message = dayScreenStrings.completedToastMessage;
+        const auditLogId = await markVisitArrived(db, visit.id);
+        setToastState({ message: dayScreenStrings.attendanceMarked, undo: { kind: "visit", auditLogId } });
+        return;
       }
-      setToastState({ message, undo: { kind: "visit", auditLogId } });
+      if (toStatus === VisitStatus.InRoom) {
+        const auditLogId = await markVisitInRoom(db, visit.id);
+        setToastState({ message: dayScreenStrings.inRoomToastMessage, undo: { kind: "visit", auditLogId } });
+        return;
+      }
+      // Completing also creates the visit's invoice in the same write (see
+      // db/visitCompletion.ts) — the one-tap contract itself does not change.
+      const result = await markVisitCompleted(db, visit.id);
+      setToastState({
+        message: dayScreenStrings.completedToastMessage,
+        undo: {
+          kind: "visit_completed",
+          visitAuditLogId: result.visitAuditLogId,
+          invoiceAuditLogId: result.invoiceAuditLogId,
+          invoiceItemAuditLogId: result.invoiceItemAuditLogId,
+        },
+      });
     } catch (error) {
       console.error(error);
     }
@@ -268,15 +301,58 @@ export default function DayScreen() {
         return;
       }
 
-      // visit_move: reverse the new slot first, then the original visit.
-      const newOutcome = await undoMostRecentVisitMutation(db, undo.newVisitAuditLogId);
-      if (!newOutcome.ok) {
+      if (undo.kind === "visit_move") {
+        // Reverse the new slot first, then the original visit.
+        const newOutcome = await undoMostRecentVisitMutation(db, undo.newVisitAuditLogId);
+        if (!newOutcome.ok) {
+          setToastState({ message: dayScreenStrings.undoRefused, undo: null });
+          return;
+        }
+        const oldOutcome = await undoMostRecentVisitMutation(db, undo.oldVisitAuditLogId);
+        if (!oldOutcome.ok) {
+          setToastState({ message: dayScreenStrings.moveUndoPartialFailure, undo: null });
+          return;
+        }
+        setToastState(null);
+        return;
+      }
+
+      if (undo.kind === "visit_completed") {
+        // The invoice first: if it is stale (e.g. a payment has since been
+        // recorded against it), refuse the whole undo rather than reverse
+        // only part of it. Then the item, then the visit status itself.
+        const invoiceOutcome = await undoMostRecentInvoiceMutation(db, undo.invoiceAuditLogId);
+        if (!invoiceOutcome.ok) {
+          setToastState({ message: dayScreenStrings.undoRefused, undo: null });
+          return;
+        }
+        if (undo.invoiceItemAuditLogId) {
+          const itemOutcome = await undoMostRecentInvoiceItemMutation(db, undo.invoiceItemAuditLogId);
+          if (!itemOutcome.ok) {
+            setToastState({ message: dayScreenStrings.visitCompletionUndoPartialFailure, undo: null });
+            return;
+          }
+        }
+        const visitOutcome = await undoMostRecentVisitMutation(db, undo.visitAuditLogId);
+        if (!visitOutcome.ok) {
+          setToastState({ message: dayScreenStrings.visitCompletionUndoPartialFailure, undo: null });
+          return;
+        }
+        setToastState(null);
+        return;
+      }
+
+      // payment: the invoice's paid/status update first (refuses cleanly if
+      // a later payment has already changed it further), then the payment
+      // row itself.
+      const invoiceOutcome = await undoMostRecentInvoiceMutation(db, undo.invoiceAuditLogId);
+      if (!invoiceOutcome.ok) {
         setToastState({ message: dayScreenStrings.undoRefused, undo: null });
         return;
       }
-      const oldOutcome = await undoMostRecentVisitMutation(db, undo.oldVisitAuditLogId);
-      if (!oldOutcome.ok) {
-        setToastState({ message: dayScreenStrings.moveUndoPartialFailure, undo: null });
+      const paymentOutcome = await undoMostRecentPaymentMutation(db, undo.paymentAuditLogId);
+      if (!paymentOutcome.ok) {
+        setToastState({ message: dayScreenStrings.paymentUndoPartialFailure, undo: null });
         return;
       }
       setToastState(null);
@@ -334,6 +410,35 @@ export default function DayScreen() {
 
   function handleMoveCollision() {
     setToastState({ message: dayScreenStrings.bookingSlotTakenError, undo: null });
+  }
+
+  function handleOpenInvoice(invoiceId: string) {
+    setOpenMenuVisitId(null);
+    setInvoiceSheetInvoiceId(invoiceId);
+  }
+
+  function handleRequestPayment(invoiceId: string) {
+    setInvoiceSheetInvoiceId(null);
+    setPaymentSheetInvoiceId(invoiceId);
+  }
+
+  function handlePaymentRecorded(undo: UndoAction) {
+    const invoiceId = paymentSheetInvoiceId;
+    setPaymentSheetInvoiceId(null);
+    // Back to the invoice sheet so the assistant sees the updated totals,
+    // not just a toast claiming something changed.
+    setInvoiceSheetInvoiceId(invoiceId);
+    setToastState({ message: dayScreenStrings.paymentToastMessage, undo });
+  }
+
+  function handleInvoiceVoided() {
+    setInvoiceSheetInvoiceId(null);
+    setToastState({ message: dayScreenStrings.voidInvoiceToastMessage, undo: null });
+  }
+
+  function handleCashClosed() {
+    setIsCashCloseOpen(false);
+    setToastState({ message: dayScreenStrings.cashCloseToastMessage, undo: null });
   }
 
   async function handleSetDelay(minutes: number) {
@@ -412,15 +517,26 @@ export default function DayScreen() {
         <h1 className="font-display text-4xl font-semibold text-green">Clintra</h1>
         <SyncStatusChip />
       </div>
-      <p className="mt-2 text-muted">
-        {formatCairoDisplayDateParts(today).map((part, index) =>
-          part.type === "day" ? (
-            <Ltr key={index}>{part.value}</Ltr>
-          ) : (
-            <span key={index}>{part.value}</span>
-          ),
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <p className="text-muted">
+          {formatCairoDisplayDateParts(today).map((part, index) =>
+            part.type === "day" ? (
+              <Ltr key={index}>{part.value}</Ltr>
+            ) : (
+              <span key={index}>{part.value}</span>
+            ),
+          )}
+        </p>
+        {selectedLocationId && currentPractitioner && (
+          <button
+            type="button"
+            onClick={() => setIsCashCloseOpen(true)}
+            className="shrink-0 text-sm text-muted underline"
+          >
+            {dayScreenStrings.cashCloseButtonLabel}
+          </button>
         )}
-      </p>
+      </div>
 
       {currentPractitioner && (
         <div className="mt-3">
@@ -498,6 +614,7 @@ export default function DayScreen() {
               visits={visitsForPractitioner}
               patientsById={dynamicData.patientsById}
               servicesById={dynamicData.servicesById}
+              invoiceIdByVisitId={dynamicData.invoiceIdByVisitId}
               onAdvance={handleAdvance}
               openMenuVisitId={openMenuVisitId}
               onOpenMenu={setOpenMenuVisitId}
@@ -505,6 +622,7 @@ export default function DayScreen() {
               onRequestMove={handleRequestMove}
               onRequestCancel={handleRequestCancel}
               onMarkNoShow={handleMarkNoShow}
+              onOpenInvoice={handleOpenInvoice}
             />
           );
         })}
@@ -563,6 +681,33 @@ export default function DayScreen() {
           onDismiss={() => setRowActionSheet(null)}
           onMoved={handleMoved}
           onCollision={handleMoveCollision}
+        />
+      )}
+
+      {invoiceSheetInvoiceId && (
+        <InvoiceSheet
+          invoiceId={invoiceSheetInvoiceId}
+          onDismiss={() => setInvoiceSheetInvoiceId(null)}
+          onRequestPayment={handleRequestPayment}
+          onVoided={handleInvoiceVoided}
+        />
+      )}
+
+      {paymentSheetInvoiceId && (
+        <PaymentSheet
+          invoiceId={paymentSheetInvoiceId}
+          onDismiss={() => setPaymentSheetInvoiceId(null)}
+          onRecorded={handlePaymentRecorded}
+        />
+      )}
+
+      {isCashCloseOpen && selectedLocationId && currentPractitioner && (
+        <CashCloseSheet
+          locationId={selectedLocationId}
+          orgId={currentPractitioner.org_id}
+          date={today}
+          onDismiss={() => setIsCashCloseOpen(false)}
+          onClosed={handleCashClosed}
         />
       )}
 

@@ -28,6 +28,72 @@ export interface MutationInput<T> {
 }
 
 /**
+ * The actual write: applies the change to the entity table, writes an
+ * audit_log row, and appends a sync_ops row. Does not open its own
+ * transaction and does not notify the sync engine — see mutate() (one
+ * entity, its own transaction) and runAtomicMutations() (several entities,
+ * one shared transaction) for the two ways this gets called.
+ */
+async function applyEntityWrite<T>(db: ClintraDatabase, input: MutationInput<T>): Promise<string> {
+  const now = new Date().toISOString();
+  const auditLogId = id();
+
+  if (input.action === AuditAction.Delete) {
+    await input.table.delete(input.entityId);
+  } else {
+    if (input.after === null) {
+      throw new Error("mutate_requires_after_unless_deleting");
+    }
+    await input.table.put(input.after);
+  }
+
+  await db.audit_log.add({
+    id: auditLogId,
+    org_id: input.orgId,
+    actor_membership_id: input.actorMembershipId,
+    entity: input.entity,
+    entity_id: input.entityId,
+    action: input.action,
+    before: input.before,
+    after: input.after,
+    at: now,
+  });
+
+  await db.sync_ops.add({
+    op_id: id(),
+    entity: input.entity,
+    entity_id: input.entityId,
+    action: input.action,
+    payload: input.after,
+    device_id: getDeviceId(),
+    created_at: now,
+    synced_at: null,
+  });
+
+  return auditLogId;
+}
+
+/**
+ * Dexie propagates its "current transaction" zone across the microtask chain
+ * that resumes after an awaited transaction, even though the transaction has
+ * already committed. Dispatching synchronously here would run the sync
+ * engine's listener (and its own Dexie queries, e.g. against sync_review, a
+ * table the triggering transaction may never have touched) inside that stale
+ * zone, and a real IndexedDB backend then throws NotFoundError for any table
+ * not in the original transaction's scope — fake-indexeddb (used in tests)
+ * is lax enough not to reproduce this, which is why only real-browser
+ * testing caught it. ignoreTransaction is Dexie's own escape hatch for
+ * exactly this.
+ */
+function notifyMutationCommitted(): void {
+  if (typeof window !== "undefined") {
+    Dexie.ignoreTransaction(() => {
+      window.dispatchEvent(new Event(MUTATION_EVENT_NAME));
+    });
+  }
+}
+
+/**
  * The single entry point every write in this application must use. In one
  * Dexie transaction it (a) applies the change to the entity table, (b) writes
  * an audit_log row, and (c) appends a sync_ops row for the future sync
@@ -39,60 +105,42 @@ export interface MutationInput<T> {
  * by, rather than a snapshot that cannot be checked against later history.
  */
 export async function mutate<T>(db: ClintraDatabase, input: MutationInput<T>): Promise<string> {
-  const now = new Date().toISOString();
-  const auditLogId = id();
-
-  await db.transaction("rw", input.table, db.audit_log, db.sync_ops, async () => {
-    if (input.action === AuditAction.Delete) {
-      await input.table.delete(input.entityId);
-    } else {
-      if (input.after === null) {
-        throw new Error("mutate_requires_after_unless_deleting");
-      }
-      await input.table.put(input.after);
-    }
-
-    await db.audit_log.add({
-      id: auditLogId,
-      org_id: input.orgId,
-      actor_membership_id: input.actorMembershipId,
-      entity: input.entity,
-      entity_id: input.entityId,
-      action: input.action,
-      before: input.before,
-      after: input.after,
-      at: now,
-    });
-
-    await db.sync_ops.add({
-      op_id: id(),
-      entity: input.entity,
-      entity_id: input.entityId,
-      action: input.action,
-      payload: input.after,
-      device_id: getDeviceId(),
-      created_at: now,
-      synced_at: null,
-    });
-  });
-
-  if (typeof window !== "undefined") {
-    // Dexie propagates its "current transaction" zone across the microtask
-    // chain that resumes after an awaited transaction, even though the
-    // transaction has already committed. Dispatching synchronously here
-    // would run the sync engine's listener (and its own Dexie queries, e.g.
-    // against sync_review, a table the transaction above never touched)
-    // inside that stale zone, and a real IndexedDB backend then throws
-    // NotFoundError for any table not in the original transaction's scope —
-    // fake-indexeddb (used in tests) is lax enough not to reproduce this,
-    // which is why only real-browser testing caught it. ignoreTransaction
-    // is Dexie's own escape hatch for exactly this.
-    Dexie.ignoreTransaction(() => {
-      window.dispatchEvent(new Event(MUTATION_EVENT_NAME));
-    });
-  }
-
+  const auditLogId = await db.transaction("rw", input.table, db.audit_log, db.sync_ops, () =>
+    applyEntityWrite(db, input),
+  );
+  notifyMutationCommitted();
   return auditLogId;
+}
+
+/** A write function scoped to one already-open atomic transaction; see runAtomicMutations(). */
+export type AtomicWriter = <T>(input: MutationInput<T>) => Promise<string>;
+
+/**
+ * Runs several entity writes as one atomic unit — one shared Dexie
+ * transaction, so every write commits together or none do, and exactly one
+ * mutation event fires once it commits. Use this instead of calling mutate()
+ * more than once for a single logical operation: completing a visit also
+ * creates its invoice (db/visitCompletion.ts), and recording a payment also
+ * updates the invoice it pays (db/payments.ts) — both need "all writes
+ * together or none," which two separate mutate() calls cannot give, since
+ * each opens and commits its own transaction independently.
+ *
+ * `tables` must list every table any write the callback makes touches, plus
+ * any table the callback only reads from — exactly what a plain
+ * db.transaction() call requires; audit_log and sync_ops are included
+ * automatically. The callback receives a `write` function with the same
+ * shape as mutate()'s own input, minus the transaction and notification
+ * mutate() would otherwise add itself.
+ */
+export async function runAtomicMutations<R>(
+  db: ClintraDatabase,
+  tables: readonly Table<unknown, string>[],
+  callback: (write: AtomicWriter) => Promise<R>,
+): Promise<R> {
+  const write: AtomicWriter = (input) => applyEntityWrite(db, input);
+  const result = await db.transaction("rw", [...tables, db.audit_log, db.sync_ops], () => callback(write));
+  notifyMutationCommitted();
+  return result;
 }
 
 export type UndoRefusalReason =
@@ -212,4 +260,19 @@ export function undoMostRecentPatientMutation(db: ClintraDatabase, auditLogId: s
 /** The constrained undo mechanism, scoped to the day_state table. */
 export function undoMostRecentDayStateMutation(db: ClintraDatabase, auditLogId: string): Promise<UndoOutcome> {
   return undoMostRecentMutation(db, auditLogId, "day_state", db.day_state);
+}
+
+/** The constrained undo mechanism, scoped to the invoices table. */
+export function undoMostRecentInvoiceMutation(db: ClintraDatabase, auditLogId: string): Promise<UndoOutcome> {
+  return undoMostRecentMutation(db, auditLogId, "invoices", db.invoices);
+}
+
+/** The constrained undo mechanism, scoped to the invoice_items table. */
+export function undoMostRecentInvoiceItemMutation(db: ClintraDatabase, auditLogId: string): Promise<UndoOutcome> {
+  return undoMostRecentMutation(db, auditLogId, "invoice_items", db.invoice_items);
+}
+
+/** The constrained undo mechanism, scoped to the payments table. */
+export function undoMostRecentPaymentMutation(db: ClintraDatabase, auditLogId: string): Promise<UndoOutcome> {
+  return undoMostRecentMutation(db, auditLogId, "payments", db.payments);
 }

@@ -173,4 +173,28 @@ describe("FakeTransport", () => {
       expect(result.ops.map((op) => op.entity_id)).toEqual([visit2.id]);
     });
   });
+
+  // Regression coverage for every entity mutate()/runAtomicMutations()
+  // writes today (see fakeTransport.ts's tableForEntity) — invoicing added
+  // four new ones in one task and FakeTransport did not know about any of
+  // them until a real-browser smoke test caught it, since nothing else in
+  // the test suite ever pushed these entities through sync.
+  describe.each(["invoices", "invoice_items", "payments", "cash_close"])("entity coverage: %s", (entity) => {
+    it(`accepts a push for entity "${entity}" instead of throwing fake_transport_unknown_entity`, async () => {
+      const transport = new FakeTransport(serverDbName);
+      const op = {
+        op_id: id(),
+        entity,
+        entity_id: id(),
+        action: AuditAction.Create,
+        payload: { id: id() },
+        device_id: "device-1",
+        created_at: "2026-09-07T06:00:00.000Z",
+        synced_at: null,
+      };
+
+      const [result] = await transport.pushOps([op]);
+      expect(result.status).toBe("accepted");
+    });
+  });
 });

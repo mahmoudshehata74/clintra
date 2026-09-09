@@ -207,8 +207,16 @@ export interface Invoice {
   id: string;
   org_id: string;
   location_id: string;
-  /** Sequential per location per year. */
+  /** Sequential per location per calendar year (see issued_year). */
   number: number;
+  /**
+   * The Africa/Cairo calendar year `number` is scoped to (see
+   * domain/time.ts's cairoYear) — a real, indexed field rather than a value
+   * derived from issued_at on read, since the compound unique index backing
+   * `number`'s per-location-per-year uniqueness needs an actual key path.
+   * Added alongside that index in local database version 7.
+   */
+  issued_year: number;
   patient_id: string;
   practitioner_id: string;
   visit_id: string | null;
@@ -240,10 +248,25 @@ export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
 export interface Payment {
   id: string;
   invoice_id: string;
+  /**
+   * Denormalised from the invoice at write time (not just derivable by a
+   * join) so receipt_number's per-location sequence, and its backing unique
+   * index, can be queried and enforced directly on this table. Added in
+   * local database version 7.
+   */
+  location_id: string;
   amount: Piastres;
   method: PaymentMethod;
+  /** Sequential per location, across all time — never reused, never per-invoice or per-year. */
   receipt_number: string;
   note: string | null;
+  /**
+   * True when a cash_close already existed for this payment's location and
+   * day at the moment it was recorded — a late payment on an already-closed
+   * day, flagged so it stands out in the audit log rather than silently
+   * blending into the closed day's numbers. Added in local database version 7.
+   */
+  after_close: boolean;
   /** Membership id. */
   created_by: string;
   created_at: Instant;

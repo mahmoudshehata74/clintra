@@ -4,6 +4,7 @@ import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
 import { mutate } from "./mutate";
 import { AuditAction, type Visit } from "./types";
+import { completeVisitWithInvoice, type CompleteVisitResult } from "./visitCompletion";
 
 /**
  * Advances a visit to toStatus, validating the transition before writing
@@ -52,7 +53,13 @@ export function markVisitInRoom(db: ClintraDatabase, visitId: string): Promise<s
   return advanceVisit(db, visitId, VisitStatus.InRoom, { started_at: new Date().toISOString() });
 }
 
-/** The tap for an in-room row: the consultation is done. */
-export function markVisitCompleted(db: ClintraDatabase, visitId: string): Promise<string> {
-  return advanceVisit(db, visitId, VisitStatus.Completed, { ended_at: new Date().toISOString() });
+/**
+ * The tap for an in-room row: the consultation is done. Unlike the other two
+ * advances above, this does not go through the generic advanceVisit — it
+ * also creates the visit's invoice in the same transaction (see
+ * db/visitCompletion.ts), so the one-tap contract stays "tap once, the
+ * invoice appears as a consequence" rather than a separate step.
+ */
+export function markVisitCompleted(db: ClintraDatabase, visitId: string): Promise<CompleteVisitResult> {
+  return completeVisitWithInvoice(db, visitId);
 }

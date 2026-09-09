@@ -124,4 +124,82 @@ export const dayScreenStrings = {
   // sync/reviewActions.ts for why a real resolution flow is a later task.
   syncReviewKeepAction: "خليها كده",
   syncReviewRemoveAction: "شيلها",
+
+  // The overflow menu's invoice entry, only shown once a visit has one.
+  invoiceMenuLabel: "الفاتورة",
+
+  // The invoice sheet.
+  invoiceNumberLabel: "رقم الفاتورة",
+  invoicePatientLabel: "المريض",
+  invoicePractitionerLabel: "الطبيب",
+  invoiceDateLabel: "التاريخ",
+  invoiceItemQtyLabel: "الكمية",
+  invoiceItemUnitPriceLabel: "سعر الوحدة",
+  invoiceItemTotalLabel: "الإجمالي",
+  invoiceTotalLabel: "إجمالي الفاتورة",
+  invoicePaidLabel: "المدفوع",
+  invoiceRemainingLabel: "المتبقي",
+  invoiceStatusUnpaid: "غير مدفوعة",
+  invoiceStatusPartial: "مدفوعة جزئيًا",
+  invoiceStatusPaid: "مدفوعة بالكامل",
+  invoiceStatusVoid: "ملغاة",
+  recordPaymentAction: "تسجيل دفعة",
+  printInvoiceAction: "إيصال الفاتورة",
+  voidInvoiceAction: "إلغاء الفاتورة",
+  // Shown instead of an enabled voidInvoiceAction once any payment exists.
+  voidInvoiceDisabledReason: "مفيش إلغاء بعد تسجيل دفعة",
+  voidInvoiceToastMessage: "اتلغت الفاتورة",
+  paymentsListHeading: "الدفعات",
+  // Prefixes a payment row's receipt number, e.g. "إيصال رقم 3".
+  paymentReceiptNumberPrefix: "إيصال رقم",
+  printReceiptAction: "طباعة",
+
+  // The "تسجيل دفعة" prompt.
+  paymentSheetTitle: "تسجيل دفعة",
+  paymentAmountPlaceholder: "المبلغ (جنيه)",
+  paymentAmountInvalidError: "المبلغ ده مش صحيح",
+  paymentAmountNotPositiveError: "لازم يكون المبلغ أكبر من صفر",
+  paymentAmountExceedsRemainingError: "المبلغ أكبر من المتبقي",
+  paymentMethodCash: "كاش",
+  paymentMethodCard: "فيزا",
+  paymentMethodWallet: "محفظة",
+  paymentMethodTransfer: "تحويل",
+  paymentNotePlaceholder: "ملاحظة (اختياري)",
+  paymentConfirmButton: "تسجيل",
+  paymentToastMessage: "اتسجلت الدفعة",
+  // Shown when undoing a payment reverses the invoice's paid/status but then
+  // deleting the payment row itself fails — the assistant must know the
+  // invoice no longer reflects this payment, even though its row survives.
+  paymentUndoPartialFailure: "اترجعت الفاتورة، لكن الدفعة لسه متسجلة",
+
+  // Completing a visit now also creates its invoice in the same write; this
+  // is the partial-failure message for when undoing that reverses the
+  // invoice but the visit's status can no longer be reverted with it (e.g. a
+  // payment was recorded against the invoice since, or the undo window on
+  // the visit itself expired independently).
+  visitCompletionUndoPartialFailure: "اتلغت الفاتورة، لكن حالة الزيارة لسه \"خلصت\"",
+
+  // The day header's cash-close action and its sheet.
+  cashCloseButtonLabel: "إغلاق الصندوق",
+  cashCloseSheetTitle: "إغلاق الصندوق",
+  cashCloseExpectedLabel: "المتوقع",
+  cashCloseCollectedPlaceholder: "المبلغ المحصل (جنيه)",
+  cashCloseCollectedInvalidError: "المبلغ ده مش صحيح",
+  cashCloseDifferenceLabel: "الفرق",
+  cashCloseNotePlaceholder: "سبب الفرق",
+  // Shown only once the difference is non-zero and the note is still empty.
+  cashCloseNoteRequiredError: "لازم تكتب سبب الفرق",
+  cashCloseConfirmButton: "إغلاق",
+  cashCloseAlreadyClosedError: "الصندوق مقفول بالفعل عن اليوم ده",
+  cashCloseToastMessage: "اتقفل الصندوق",
+
+  // Print output: a plainly-labeled placeholder header shown in the app in
+  // place of clinic branding, since settings screens don't exist yet — the
+  // specification is explicit that this placeholder must never itself
+  // appear on a printed page (see printHeaderWarning, which replaces it
+  // there instead).
+  printHeaderPlaceholder: "ترويسة العيادة — تتضبط من الإعدادات",
+  printHeaderWarning: "برجاء ضبط ترويسة الطباعة قبل الطبع",
+  printInvoiceTitle: "فاتورة",
+  printReceiptTitle: "إيصال",
 } as const;

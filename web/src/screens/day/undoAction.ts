@@ -9,4 +9,12 @@ export type UndoAction =
   | { kind: "visit"; auditLogId: string }
   | { kind: "day_state"; auditLogId: string }
   | { kind: "new_patient_visit"; visitAuditLogId: string; patientAuditLogId: string }
-  | { kind: "visit_move"; newVisitAuditLogId: string; oldVisitAuditLogId: string };
+  | { kind: "visit_move"; newVisitAuditLogId: string; oldVisitAuditLogId: string }
+  | {
+      kind: "visit_completed";
+      visitAuditLogId: string;
+      invoiceAuditLogId: string;
+      /** Null only in the no-service_id fallback (see db/visitCompletion.ts), where no item row was written. */
+      invoiceItemAuditLogId: string | null;
+    }
+  | { kind: "payment"; paymentAuditLogId: string; invoiceAuditLogId: string };

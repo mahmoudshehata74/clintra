@@ -69,6 +69,16 @@ export function todayInCairo(now: Date = new Date()): ClinicDay {
   return `${partValue(parts, "year")}-${partValue(parts, "month")}-${partValue(parts, "day")}`;
 }
 
+/**
+ * The calendar year an instant falls on in Africa/Cairo — not UTC, so an
+ * instant shortly after midnight UTC on January 1st that is still December
+ * 31st in Cairo (or the reverse, near the other end of the day) lands in the
+ * correct local year. Used to bucket invoice numbering per calendar year.
+ */
+export function cairoYear(instant: Instant): number {
+  return Number(todayInCairo(new Date(instant)).slice(0, 4));
+}
+
 /** The weekday (0 = Sunday .. 6 = Saturday) of a clinic day. Calendar math only, no timezone conversion needed. */
 export function weekdayOf(day: ClinicDay): number {
   const [year, month, date] = day.split("-").map(Number);

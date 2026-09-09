@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addDaysToClinicDay,
   cairoInstant,
+  cairoYear,
   clockTimeInCairo,
   formatCairoDisplayDate,
   mostRecentWeekdayOnOrBefore,
@@ -18,6 +19,21 @@ describe("todayInCairo", () => {
   it("does not roll over before Cairo midnight", () => {
     // 2026-01-01T20:00:00Z is still 2026-01-01 22:00 in Africa/Cairo.
     expect(todayInCairo(new Date("2026-01-01T20:00:00Z"))).toBe("2026-01-01");
+  });
+});
+
+describe("cairoYear", () => {
+  it("reads the year from a plain mid-year instant", () => {
+    expect(cairoYear("2026-06-15T10:00:00.000Z")).toBe(2026);
+  });
+
+  it("rolls over to the next Cairo year before UTC midnight on Dec 31st", () => {
+    // 2026-12-31T22:30:00Z is 2027-01-01 00:30 in Africa/Cairo (winter, UTC+2).
+    expect(cairoYear("2026-12-31T22:30:00.000Z")).toBe(2027);
+  });
+
+  it("stays in the earlier Cairo year just before the UTC rollover", () => {
+    expect(cairoYear("2026-12-31T20:00:00.000Z")).toBe(2026);
   });
 });
 

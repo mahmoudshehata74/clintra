@@ -229,12 +229,63 @@ the rejection reason (e.g. `conflict_slot_taken`) for an assistant to review.
 for why the same op could in principle be reviewed more than once. Added in
 local database version 6; versions 1-5 are unchanged.
 
+## v7 additions
+
+### invoices.issued_year; invoices, payments and cash_close natural keys enforced
+
+`invoices.number` was always specified as "sequential per location per
+calendar year" in this table's own v1 description above, but the v1 Rules
+section below it said only "unique per location" and the local store's index
+matched that narrower, wrong statement (`&[location_id+number]`, no year) —
+an inconsistency in this document, not a deliberate change. Fixed now that
+invoicing is implemented: invoices gain `issued_year` (the Africa/Cairo
+calendar year of `issued_at`, via `domain/time.ts`'s `cairoYear` — a real
+stored field, since a compound unique index needs an actual key path, not a
+value derived from another field on read), and the local store's index is
+`&[location_id+issued_year+number]`. The number itself is reserved inside the
+same transaction that writes the invoice (see `db/visitCompletion.ts`), so
+concurrent completions at the same location never collide or leave a gap:
+IndexedDB serializes overlapping readwrite transactions on the same store, so
+the second transaction's read of the current max number never runs until the
+first has already committed its own row.
+
+`invoices.visit_id` and `invoices.location_id` are now indexed (plain, not
+unique) — the former so a screen can look up a visit's invoice, the latter for
+the cash-close and number-reservation queries. `invoice_items.invoice_id` is
+likewise now indexed (plain), so a screen can list one invoice's items.
+
+`payments` gains `location_id` (denormalised from its invoice at write time,
+not just derivable by a join, so it can be indexed directly) and
+`after_close` (see below). `receipt_number`'s "sequential per location,
+across all time" rule — always documented, in the v1 table description above
+— was likewise never an enforced index; it now backs a real
+`&[location_id+receipt_number]` unique index, reserved inside the same
+transaction as the payment write for the same reason as invoice numbers.
+
+`cash_close`'s natural key (`location_id + date`, documented since v1) was
+also never enforced; it now backs a real `&[location_id+date]` unique index,
+so a second close for the same location and day is rejected by the database
+itself, not just discouraged by the UI.
+
+`payments.after_close` is a boolean, true when a `cash_close` row already
+existed for that payment's location and day at the moment it was recorded — a
+late payment against an already-closed day, flagged so it is visible in the
+audit log rather than blending silently into a day whose numbers were already
+reconciled. Set by the write path (`db/payments.ts`), not user-editable.
+
+Added in local database version 7; versions 1-6 are unchanged.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.
 - A visit's `scheduled_at` is unique per practitioner per day, except when
   `is_overbooked` is true.
-- An invoice `number` is unique per location.
+- An invoice `number` is unique per location per calendar year (Africa/Cairo;
+  see v7 additions — this line previously said "per location" only, which was
+  an error in this document, not the implementation it now matches).
+- A payment's `receipt_number` is unique per location, across all time (never
+  reused, never scoped to a year or a single invoice).
+- A `cash_close` is unique per location per day.
 - Practitioner availability is computed across all locations: a practitioner
   booked at a time in one location is busy in every other location.
 - `no_show` is a status in its own right and is never merged with `cancelled`.
