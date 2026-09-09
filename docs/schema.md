@@ -129,13 +129,18 @@ difference_note? (required when difference is not zero), closed_by, closed_at
 id, org_id, actor_membership_id, entity, entity_id,
 action (create|update|delete), before?, after?, at
 
-## Declared now, unused in v1, no screens
-
 ### specialty_templates
 id, org_id? (null means a system-wide template), key, name,
 generation (none|repeat|sequence|interval), default_count?, gap_days?,
 resource_type?, pricing_mode (per_item|package), stall_days?, unit_label,
 provider_label
+
+**In v1 scope** — see `docs/design-audit.md`'s decision A. This table and
+the two below were previously filed under "declared now, unused in v1, no
+screens"; that scoping was wrong, not the schema itself. The design
+reference's screen 10 ("الزيارة — النموذج العام," the general visit form)
+is a real v1 screen and is the first screen to read these three tables.
+No field on any of the three changed.
 
 ### form_definitions
 id, template_id, version, schema, is_current
@@ -144,6 +149,8 @@ id, template_id, version, schema, is_current
 visit_id, form_definition_id, data
 
 *`id` added: the natural key is the composite `visit_id + form_definition_id`.*
+
+## Declared now, unused in v1, no screens
 
 ### care_plans
 id, org_id, location_id, template_id, patient_id, practitioner_id, goal,

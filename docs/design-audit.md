@@ -150,19 +150,14 @@ inside the booking flow. **Overall: major.**
 
 ## Screen 10 — الزيارة — النموذج العام
 
-**Not implemented — and its v1/later classification directly conflicts
-between the two source documents.** The reference places this screen in
-Phase 1. `docs/schema.md` explicitly lists `form_definitions` and
-`visit_form_data` — the two tables this screen's own `t:` field names —
-under a section literally titled **"Declared now, unused in v1, no
-screens."** This is exactly the kind of reference-vs-spec disagreement
-flagged for a stop-and-ask, except it's a scope/phase disagreement rather
-than a token disagreement, so it's recorded here instead of blocking the
-rest of the audit. **This needs an explicit decision before any
-implementation**: is the general visit form (chief complaint + diagnosis +
-service tag + save) actually in scope for the current phase, or does
-`docs/schema.md`'s "no screens" note stand and the reference is simply
-wrong to place it in Phase 1?
+**Not yet implemented. Scope conflict SETTLED by decision A** (see decision
+category (a) below): this screen is in v1 scope, and `docs/schema.md` has
+been updated so `form_definitions`, `visit_form_data` and
+`specialty_templates` are listed under v1 tables rather than under
+"declared now, unused in v1, no screens." The screen itself (chief
+complaint + diagnosis + service tag + save) still has no implementation —
+that remains a future task, now unambiguously in scope rather than
+disputed.
 
 ## Screen 11 — الفاتورة
 
@@ -255,9 +250,53 @@ depends on screens 1–2.
 
 ### (a) Places the current implementation deliberately (or by inertia) differs from the reference
 
-These are not bugs — several are already justified in code comments — but
-the reference disagrees with every one of them, so each needs a keep/revert/
-reconcile decision:
+**SETTLED**, recorded verbatim as given:
+
+> **Decision A.** The visit form (screen 10) IS in v1 scope. The design
+> reference is right, and the earlier "declared now, unused" scoping in
+> `docs/schema.md` needed to be updated for that table. This does not
+> change the schema — `visit_form_data`, `form_definitions` and
+> `specialty_templates` already exist and are correct — it only changes
+> their status from "no screens" to "in v1". *(Applied: `docs/schema.md`
+> now lists these three tables under v1 tables, not under "declared now,
+> unused in v1, no screens.")*
+>
+> **Decision B.** All numbers in the app remain Western digits (0-9). This
+> is deliberate and diverges from the design reference on purpose. Reason:
+> the app already uses Western digits for times, invoice numbers, hex
+> values, and identifiers; mixing digit systems inside a single screen
+> (e.g. Arabic-Indic money next to Western clock times on the invoice
+> screen) is harder to read than committing consistently to one. The
+> reference is not enforceable as-is because it is itself inconsistent
+> (queue counts already use Western digits in the current implementation
+> and Arabic-Indic in some reference screens). *(This resolves items 1–4
+> below as: keep Western digits everywhere, including reconciling
+> slots-mode counters — item 4's internal inconsistency — to Western, the
+> same direction as queue-mode's `Ltr`-wrapped counters, not the other way.
+> Each screen's actual digit rendering is unchanged until that screen's own
+> rework task; this decision only settles which direction to reconcile
+> toward.)*
+>
+> **Decision C.** Three colour tokens named in the design reference are
+> missing from our theme and must be added: a light green fill, a light
+> amber fill, and a purple accent. They are used by the reference for soft
+> status backgrounds and secondary tags respectively. *(Applied: the light
+> green fill already existed as `--color-green-soft`; `--color-amber-soft`,
+> `--color-purple` and `--color-purple-soft` were added to
+> `web/src/index.css`'s `@theme` block — see `docs/design-tokens.md`. This
+> resolves item 6 below at the token level only; no component has been
+> switched to use the new tokens yet, which remains a separate,
+> screen-by-screen task.)*
+
+Still open — not addressed by decisions A–C:
+
+5. **Clock-time format.** Reference: 12-hour with ص/م. Current: 24-hour
+   (`clockTimeInCairo` always returns `"HH:MM"` in 24-hour form). This is
+   used pervasively (schedule grids, audit log, queue) — a reconciliation
+   here is an app-wide change, not a per-screen one, and still needs a
+   decision.
+
+Resolved by decision B (kept for the record of what was being decided):
 
 1. **Digits for money.** Reference: Arabic-Indic, whole pounds, "ج" suffix
    (e.g. "٤٠٠ ج"). Current: Western digits, two decimal places, "ج.م"
@@ -269,30 +308,23 @@ reconcile decision:
 3. **Digits for the calendar day number.** Reference: Arabic-Indic
    ("٢٤ أغسطس"). Current: Western, deliberately — `domain/time.ts`'s
    `CAIRO_DISPLAY_DATE_FORMATTER` comment states this is intentional, "to
-   match the Western digits used elsewhere on screen." That stated
-   rationale is itself now in question, since (1) and (4) below show the
-   "elsewhere" isn't actually consistent.
+   match the Western digits used elsewhere on screen." Decision B confirms
+   that rationale rather than overturning it.
 4. **Digits for slots-mode day counters vs. queue-mode counters — an
    internal inconsistency, not just a reference mismatch.** Queue-mode
-   counters (current position, waiting count, average) already use
-   Arabic-Indic digits (`toArabicIndicDigits`) and already match the
-   reference. Slots-mode day counters (total/arrived/completed/remaining,
-   `Counters.tsx`) use Western digits via `Ltr`. Both are "a plain count of
-   visits" conceptually — there's no principled reason for them to differ
-   from each other, let alone from the reference.
-5. **Clock-time format.** Reference: 12-hour with ص/م. Current: 24-hour
-   (`clockTimeInCairo` always returns `"HH:MM"` in 24-hour form). This is
-   used pervasively (schedule grids, audit log, queue) — a reconciliation
-   here is an app-wide change, not a per-screen one.
+   counters (current position, waiting count, average) use Arabic-Indic
+   digits today (`toArabicIndicDigits`); slots-mode day counters
+   (total/arrived/completed/remaining, `Counters.tsx`) use Western digits
+   via `Ltr`. Decision B means queue-mode's counters are the one that needs
+   to change, once that screen is reworked — not the other way.
 6. **Status badges: outline vs. filled.** Reference fills every status/tag
    pill with a soft tinted background (`.tg.*` classes all set both
    `background` and `color`). Current's equivalents (`InvoiceSheet`'s
    `STATUS_CLASS`, `CashCloseSheet`'s difference row, `SlotRow`'s
-   `statusVisual`) mostly use a border/left-accent-stripe with no fill, and
-   the current Tailwind theme (`web/src/index.css`) has no soft-fill tokens
-   for red or amber at all (`--color-red`/`--color-amber` exist; no
-   `--color-red-soft`/`--color-amber-soft` do, unlike `--color-green-soft`
-   which does exist and is already used).
+   `statusVisual`) mostly use a border/left-accent-stripe with no fill.
+   Decision C adds the missing tokens (`--color-amber-soft`,
+   `--color-purple`, `--color-purple-soft`); switching these components to
+   use filled soft backgrounds is still a separate, unstarted task.
 
 ### (b) Places the reference is internally inconsistent between its own screens
 
@@ -324,17 +356,22 @@ reconcile decision:
    `"{full_name} ({role_label})"` from it — but nothing on the day screen
    itself (screens 3, 4, 6) reads this yet. Wiring it in is small once the
    nav/label question is settled, but it touches every visit row.
-3. **A purple design token.** Screen 16 (settings → services) is the only
-   phase-1 screen that uses the reference's `--pur`/`--purs` tokens (for a
-   price-override tag). Since screen 16 isn't built, this has no effect
-   today, but adding it means extending `web/src/index.css`'s `@theme`
-   block with a new colour pair, not reusing an existing one.
-4. **Soft-fill red/amber tokens.** Needed to close gap (a)6 above —
-   `--color-red-soft` and `--color-amber-soft` alongside the existing
-   `--color-green-soft`, plus a `--color-card` distinct from `--color-paper`
-   if the reference's card-on-page layering (`.card`/`.paper` are two
-   different values in the reference; the current theme only has `paper`)
-   is adopted.
+3. **A purple design token — SETTLED by decision C, applied.**
+   `--color-purple` (`#453fa0`) and `--color-purple-soft` (`#edebfb`) now
+   exist in `web/src/index.css`'s `@theme` block (see
+   `docs/design-tokens.md`). Screen 16 (settings → services) is still the
+   only phase-1 screen that would use them, and screen 16 itself remains
+   unbuilt — the token existing doesn't change that.
+4. **Soft-fill amber token — SETTLED by decision C, applied.**
+   `--color-amber-soft` (`#f6efdd`) now exists alongside the existing
+   `--color-green-soft`, closing gap (a)6 at the token level. **Still
+   open**: a soft-fill red token (`--color-red-soft`) was not part of
+   decision C and does not exist yet — the reference's `.tg.b`/`.sl.mis`
+   red-soft treatment (no-show/missed states) has no token to move to
+   until one is decided on. Also still open: a `--color-card` distinct
+   from `--color-paper`, if the reference's card-on-page layering
+   (`.card`/`.paper` are two different values in the reference; the
+   current theme only has `paper`) is ever adopted.
 5. **A doctor-facing mobile view (screen 18) and an auth/PIN flow (screens
    1–2)** are both prerequisite infrastructure for several other screens
    (17, and implicitly 18 itself) rather than isolated visual gaps.
