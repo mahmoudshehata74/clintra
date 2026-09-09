@@ -55,3 +55,14 @@ export function generateSlotTimes(schedule: SlotScheduleInput): ClockTime[] {
 
   return generateTimeChoices(schedule, schedule.slot_minutes);
 }
+
+/**
+ * A clock time some number of minutes after another — used to translate a
+ * queue position into a slot time when switching a schedule from queue to
+ * slots mode (see db/scheduleModeSwitch.ts). Not clamped to end_time: a
+ * position past the schedule's normal capacity still gets a real, if
+ * late, time rather than silently losing the visit.
+ */
+export function addMinutesToClockTime(time: ClockTime, minutes: number): ClockTime {
+  return toClockTime(toMinutes(time) + minutes);
+}

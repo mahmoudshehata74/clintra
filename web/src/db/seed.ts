@@ -12,6 +12,7 @@ import {
   PlanTier,
   SpecialtyTemplateGeneration,
   SpecialtyTemplatePricingMode,
+  type DayState,
   type Membership,
   type Organization,
   type Patient,
@@ -45,17 +46,68 @@ export function seededVisitsDate(referenceDay: ClinicDay = todayInCairo()): Clin
 }
 
 /**
- * Seeds one organization, one location, one practitioner, one assistant
- * membership, three services with Arabic names, a slots-mode schedule for
- * every weekday, five patients and five visits spread across
- * seededVisitsDate() in different statuses. Only runs when the database is
- * empty, and is safe to call more than once — including when two calls run
- * concurrently (e.g. two open tabs), since the emptiness check and every
- * write happen inside one transaction: IndexedDB serializes overlapping
- * readwrite transactions on the same stores, so a second concurrent call
- * always sees the first call's committed rows before deciding anything.
+ * The seed's original slots-mode practitioner — found by schedule mode, not
+ * by array position: db.practitioners.toArray() has no defined order beyond
+ * IndexedDB's own key (UUID) ordering, which is arbitrary and does not
+ * track insertion order. Now that the seed writes two practitioners (see
+ * writeSeedData's doc comment), "the first one" is no longer a safe way for
+ * a test to mean "the slots-mode one" — this is.
  */
-export async function seedDatabase(db: ClintraDatabase): Promise<void> {
+export async function findSeededSlotsPractitioner(db: ClintraDatabase): Promise<Practitioner> {
+  const schedules = await db.schedules.toArray();
+  const slotsPractitionerId = schedules.find((schedule) => schedule.mode === ScheduleMode.Slots)?.practitioner_id;
+  const practitioner = slotsPractitionerId ? await db.practitioners.get(slotsPractitionerId) : undefined;
+  if (!practitioner) {
+    throw new Error("seed did not produce a slots-mode practitioner");
+  }
+  return practitioner;
+}
+
+/** The seed's second practitioner, scheduled in queue mode every weekday — see writeSeedData's doc comment. */
+export async function findSeededQueuePractitioner(db: ClintraDatabase): Promise<Practitioner> {
+  const schedules = await db.schedules.toArray();
+  const queuePractitionerId = schedules.find((schedule) => schedule.mode === ScheduleMode.Queue)?.practitioner_id;
+  const practitioner = queuePractitionerId ? await db.practitioners.get(queuePractitionerId) : undefined;
+  if (!practitioner) {
+    throw new Error("seed did not produce a queue-mode practitioner");
+  }
+  return practitioner;
+}
+
+export interface SeedOptions {
+  /**
+   * Adds a second, queue-mode practitioner and its demo day (see
+   * writeSeedData's doc comment). Off by default: every existing caller of
+   * seedDatabase(db) — the whole rest of the test suite, written before
+   * queue mode existed — assumes exactly one seeded practitioner, and nothing
+   * about their behavior should have to change just because this feature
+   * exists. Only the day screen itself (so ?seedDay=1 can reach a queue-mode
+   * day) and queue-mode-specific tests that actually want the demo data pass
+   * this.
+   */
+  includeQueueDemo?: boolean;
+}
+
+/**
+ * Seeds one organization, one location, one assistant membership, three
+ * services with Arabic names, five patients, one slots-mode practitioner (a
+ * schedule for every weekday, five visits spread across seededVisitsDate()
+ * in different statuses), and — only with { includeQueueDemo: true } — a
+ * second, queue-mode practitioner scheduled every weekday the same way, with
+ * six queue visits on the same seededVisitsDate(): two completed (10 and 12
+ * minutes, so avg_consult_minutes has a real two-point median to show — see
+ * docs/schema.md), one in_room, one arrived and one booked (both waiting,
+ * exercising the "next" marker and the expected-wait line), and one no_show
+ * (muted, doesn't count as waiting).
+ *
+ * Only runs when the database is empty, and is safe to call more than once
+ * — including when two calls run concurrently (e.g. two open tabs), since
+ * the emptiness check and every write happen inside one transaction:
+ * IndexedDB serializes overlapping readwrite transactions on the same
+ * stores, so a second concurrent call always sees the first call's
+ * committed rows before deciding anything.
+ */
+export async function seedDatabase(db: ClintraDatabase, options: SeedOptions = {}): Promise<void> {
   const now = new Date().toISOString();
   const visitsDate = seededVisitsDate();
 
@@ -73,6 +125,7 @@ export async function seedDatabase(db: ClintraDatabase): Promise<void> {
       db.schedules,
       db.patients,
       db.visits,
+      db.day_state,
     ],
     async () => {
       // The emptiness check and every write below share this one transaction,
@@ -83,12 +136,17 @@ export async function seedDatabase(db: ClintraDatabase): Promise<void> {
         return;
       }
 
-      await writeSeedData(db, now, visitsDate);
+      await writeSeedData(db, now, visitsDate, options);
     },
   );
 }
 
-async function writeSeedData(db: ClintraDatabase, now: string, visitsDate: ClinicDay): Promise<void> {
+async function writeSeedData(
+  db: ClintraDatabase,
+  now: string,
+  visitsDate: ClinicDay,
+  options: SeedOptions,
+): Promise<void> {
   const organization: Organization = {
     id: id(),
     name: "عيادة النور",
@@ -133,6 +191,23 @@ async function writeSeedData(db: ClintraDatabase, now: string, visitsDate: Clini
   const practitionerLocation: PractitionerLocation = {
     id: id(),
     practitioner_id: practitioner.id,
+    location_id: location.id,
+    is_active: true,
+  };
+
+  const queuePractitioner: Practitioner = {
+    id: id(),
+    org_id: organization.id,
+    user_id: null,
+    full_name: "سلمى إبراهيم",
+    specialty_id: specialtyTemplate.id,
+    title: "طبيبة عامة",
+    is_active: true,
+  };
+
+  const queuePractitionerLocation: PractitionerLocation = {
+    id: id(),
+    practitioner_id: queuePractitioner.id,
     location_id: location.id,
     is_active: true,
   };
@@ -205,6 +280,25 @@ async function writeSeedData(db: ClintraDatabase, now: string, visitsDate: Clini
     ...SCHEDULE_TEMPLATE,
   }));
 
+  // Every weekday in queue mode too, for the same reason — today's queue
+  // renders regardless of which real day this runs on.
+  const QUEUE_SCHEDULE_TEMPLATE = {
+    start_time: "10:00",
+    end_time: "16:00",
+    mode: ScheduleMode.Queue,
+    slot_minutes: null,
+    max_capacity: 20,
+    resource_count: 1,
+  } as const;
+
+  const queueSchedules: Schedule[] = Array.from({ length: 7 }, (_, weekday) => ({
+    id: id(),
+    practitioner_id: queuePractitioner.id,
+    location_id: location.id,
+    weekday,
+    ...QUEUE_SCHEDULE_TEMPLATE,
+  }));
+
   const patients: Patient[] = [
     "منى عبد الله",
     "كريم فتحي",
@@ -263,15 +357,74 @@ async function writeSeedData(db: ClintraDatabase, now: string, visitsDate: Clini
     };
   });
 
+  // Queue demo: two completed (10 and 12 minutes — median 11, matching this
+  // feature's own specification example), one in_room (the prominent row),
+  // one arrived and one booked (both waiting — the second becomes "التالي"),
+  // and one no_show (muted, does not count as waiting). Reuses the same
+  // five patients as the slots practitioner; the sixth visit reuses the
+  // first patient again rather than inventing a sixth demo identity.
+  const queueVisitPlan: { status: Visit["status"]; startTime: string | null; endTime: string | null }[] = [
+    { status: VisitStatus.Completed, startTime: "10:00", endTime: "10:10" },
+    { status: VisitStatus.Completed, startTime: "10:10", endTime: "10:22" },
+    { status: VisitStatus.InRoom, startTime: "10:22", endTime: null },
+    { status: VisitStatus.Arrived, startTime: null, endTime: null },
+    { status: VisitStatus.Booked, startTime: null, endTime: null },
+    { status: VisitStatus.NoShow, startTime: null, endTime: null },
+  ];
+
+  const queueVisits: Visit[] = queueVisitPlan.map((plan, index) => {
+    const patient = patients[index % patients.length];
+    const isArrivedOrLater = plan.status === VisitStatus.Arrived || plan.status === VisitStatus.InRoom || plan.status === VisitStatus.Completed;
+
+    return {
+      id: id(),
+      org_id: organization.id,
+      location_id: location.id,
+      practitioner_id: queuePractitioner.id,
+      patient_id: patient.id,
+      service_id: services[index % services.length].id,
+      care_plan_item_id: null,
+      visit_date: visitsDate,
+      position: index + 1,
+      scheduled_at: null,
+      status: plan.status,
+      is_overbooked: false,
+      source: VisitSource.Phone,
+      arrived_at: isArrivedOrLater ? cairoInstant(visitsDate, plan.startTime ?? "10:00") : null,
+      started_at: plan.startTime ? cairoInstant(visitsDate, plan.startTime) : null,
+      ended_at: plan.endTime ? cairoInstant(visitsDate, plan.endTime) : null,
+      cancel_reason: plan.status === VisitStatus.NoShow ? CancelReason.NoShow : null,
+      rescheduled_from: null,
+      created_by: assistantMembership.id,
+      created_at: now,
+    };
+  });
+
+  const queueDayState: DayState = {
+    id: id(),
+    practitioner_id: queuePractitioner.id,
+    location_id: location.id,
+    date: visitsDate,
+    delay_minutes: 0,
+    is_closed: false,
+    // The median of the two completed visits' durations above (10, 12).
+    avg_consult_minutes: 11,
+  };
+
   await db.organizations.add(organization);
   await db.locations.add(location);
   await db.specialty_templates.add(specialtyTemplate);
-  await db.practitioners.add(practitioner);
-  await db.practitioner_locations.add(practitionerLocation);
+  await db.practitioners.bulkAdd(options.includeQueueDemo ? [practitioner, queuePractitioner] : [practitioner]);
+  await db.practitioner_locations.bulkAdd(
+    options.includeQueueDemo ? [practitionerLocation, queuePractitionerLocation] : [practitionerLocation],
+  );
   await db.users.add(assistantUser);
   await db.memberships.add(assistantMembership);
   await db.services.bulkAdd(services);
-  await db.schedules.bulkAdd(schedules);
+  await db.schedules.bulkAdd(options.includeQueueDemo ? [...schedules, ...queueSchedules] : schedules);
   await db.patients.bulkAdd(patients);
-  await db.visits.bulkAdd(visits);
+  await db.visits.bulkAdd(options.includeQueueDemo ? [...visits, ...queueVisits] : visits);
+  if (options.includeQueueDemo) {
+    await db.day_state.add(queueDayState);
+  }
 }

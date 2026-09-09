@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { generateSlotTimes, generateTimeChoices } from "./schedule";
+import { addMinutesToClockTime, generateSlotTimes, generateTimeChoices } from "./schedule";
+
+describe("addMinutesToClockTime", () => {
+  it("adds minutes within the same hour", () => {
+    expect(addMinutesToClockTime("09:00", 15)).toBe("09:15");
+  });
+
+  it("rolls over into the next hour", () => {
+    expect(addMinutesToClockTime("09:45", 30)).toBe("10:15");
+  });
+
+  it("does not clamp to any particular end time — a late position still gets a real time", () => {
+    expect(addMinutesToClockTime("09:00", 600)).toBe("19:00");
+  });
+});
 
 describe("generateSlotTimes", () => {
   it("generates slots from start_time to end_time stepping by slot_minutes", () => {

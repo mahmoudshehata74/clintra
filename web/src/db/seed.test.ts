@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { ScheduleMode } from "../domain/scheduleMode";
 import { weekdayOf } from "../domain/time";
+import { VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "./database";
-import { seedDatabase, seededVisitsDate } from "./seed";
+import { findSeededQueuePractitioner, findSeededSlotsPractitioner, seedDatabase, seededVisitsDate } from "./seed";
 
 let db: ClintraDatabase;
 
@@ -87,5 +89,58 @@ describe("seedDatabase", () => {
     expect(await dbA.organizations.count()).toBe(1);
     expect(await dbA.practitioners.count()).toBe(1);
     expect(await dbA.visits.count()).toBe(5);
+  });
+
+  describe("{ includeQueueDemo: true }", () => {
+    it("adds a second, queue-mode practitioner without touching the first one's data", async () => {
+      await seedDatabase(db, { includeQueueDemo: true });
+
+      expect(await db.practitioners.count()).toBe(2);
+      expect(await db.organizations.count()).toBe(1);
+      expect(await db.locations.count()).toBe(1);
+
+      const slotsPractitioner = await findSeededSlotsPractitioner(db);
+      const queuePractitioner = await findSeededQueuePractitioner(db);
+      expect(slotsPractitioner.id).not.toBe(queuePractitioner.id);
+
+      // The original slots-mode data is exactly as it is without the option.
+      const slotsVisits = (await db.visits.toArray()).filter((v) => v.practitioner_id === slotsPractitioner.id);
+      expect(slotsVisits).toHaveLength(5);
+    });
+
+    it("gives the queue practitioner a queue-mode schedule every weekday and six demo visits", async () => {
+      await seedDatabase(db, { includeQueueDemo: true });
+      const queuePractitioner = await findSeededQueuePractitioner(db);
+
+      const schedules = (await db.schedules.toArray()).filter((s) => s.practitioner_id === queuePractitioner.id);
+      expect(schedules).toHaveLength(7);
+      for (const schedule of schedules) {
+        expect(schedule.mode).toBe(ScheduleMode.Queue);
+      }
+
+      const visits = (await db.visits.toArray()).filter((v) => v.practitioner_id === queuePractitioner.id);
+      expect(visits).toHaveLength(6);
+      for (const visit of visits) {
+        expect(visit.scheduled_at).toBeNull();
+      }
+      expect(visits.filter((v) => v.status === VisitStatus.Completed)).toHaveLength(2);
+    });
+
+    it("seeds a day_state row with the median of the two completed demo visits' durations", async () => {
+      await seedDatabase(db, { includeQueueDemo: true });
+      const queuePractitioner = await findSeededQueuePractitioner(db);
+      const [location] = await db.locations.toArray();
+
+      const dayState = await db.day_state
+        .where("[practitioner_id+location_id+date]")
+        .equals([queuePractitioner.id, location.id, seededVisitsDate()])
+        .first();
+      expect(dayState?.avg_consult_minutes).toBe(11);
+    });
+  });
+
+  it("does not add a second practitioner without includeQueueDemo — every existing caller's assumption of one practitioner is unaffected", async () => {
+    await seedDatabase(db);
+    expect(await db.practitioners.count()).toBe(1);
   });
 });

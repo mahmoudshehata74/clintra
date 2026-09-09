@@ -29,3 +29,13 @@ const MENU_ELIGIBLE_STATUSES = new Set<VisitStatus>([
 export function isMenuEligible(status: VisitStatus): boolean {
   return MENU_ELIGIBLE_STATUSES.has(status);
 }
+
+// Queue mode's "send to the end" is narrower than the general menu-eligible
+// set above: only a visit genuinely still waiting its turn (not yet called
+// in) can be pushed back — an in_room visit is already being seen.
+const QUEUE_WAITING_STATUSES = new Set<VisitStatus>([VisitStatus.Booked, VisitStatus.Arrived]);
+
+/** True when a queue row's visit can be sent to the end of the line (see db/visitQueue.ts). */
+export function isQueueWaiting(status: VisitStatus): boolean {
+  return QUEUE_WAITING_STATUSES.has(status);
+}

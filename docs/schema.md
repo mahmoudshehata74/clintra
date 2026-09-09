@@ -155,11 +155,23 @@ depends_on_item_id, price, status
 
 ## Decisions
 
-Two fields the specification left open:
+Fields the specification left open:
 
 - `payments.method`: `cash | card | wallet | transfer`
 - `practitioners.specialty_id`: in v1 it always references the single
   `specialty_templates` row with key `"general"`.
+- `day_state.avg_consult_minutes`: the specification's own note next to this
+  field said only "derived from started_at to ended_at," without saying
+  which statistic. Wired as the **median**, not the mean, across every
+  completed visit for that practitioner+location+date so far (see
+  `web/src/domain/consultStats.ts`) — one unusually long consultation (an
+  emergency, a difficult case) would drag a mean far from what most patients
+  actually experience, which is exactly the number this field exists to show
+  staff and waiting patients. Recomputed and written in the same transaction
+  as every visit's completion (`web/src/db/visitCompletion.ts`), never
+  incrementally, so it is always an exact recomputation from the full set of
+  completed visits that day rather than a running approximation that could
+  drift.
 
 ## v2 additions
 

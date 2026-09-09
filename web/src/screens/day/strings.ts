@@ -202,4 +202,30 @@ export const dayScreenStrings = {
   printHeaderWarning: "برجاء ضبط ترويسة الطباعة قبل الطبع",
   printInvoiceTitle: "فاتورة",
   printReceiptTitle: "إيصال",
+
+  // Queue mode: the numbered-list rendering, its summary line, and the
+  // waiting-row expected-time hint. Position numbers and the summary's
+  // counts use Eastern Arabic-Indic digits (see domain/arabicNumerals.ts) —
+  // unlike clock times or money, these read as plain counting numbers
+  // inside natural Arabic text, not foreign Latin-script data, so they are
+  // never wrapped in components/Ltr.tsx.
+  queueSummaryCurrentTurnLabel: "الدور دلوقتي",
+  queueSummaryWaitingLabel: "مستنيين",
+  queueSummaryAverageLabel: "متوسط الكشف",
+  // Marks the single waiting row that is next in line, distinct from the
+  // in_room row's own (stronger) treatment.
+  queueNextBadge: "التالي",
+  // Prefixes the expected-wait minutes on a waiting row, e.g. "متوقع دورك بعد ~٢٢ دقيقة".
+  queueExpectedWaitPrefix: "متوقع دورك بعد ~",
+  // Shown instead, on every waiting row, until at least two visits have
+  // completed today — never extrapolated from a single data point.
+  queueExpectedWaitUnknown: "لسه بدري نحسب المتوقع",
+  // The floating action, replacing "حجز" while the current schedule is in queue mode.
+  addToQueueButtonLabel: "إضافة للدور",
+  // Prefixes the assigned queue position in the booking sheet's confirm step, e.g. "هيتحط في الدور برقم ٣".
+  addToQueueConfirmPrefix: "هيتحط في الدور برقم",
+  addToQueueConfirmButton: "تأكيد",
+  // The overflow menu's send-to-end-of-queue entry, and its toast.
+  sendToEndOfQueueMenuLabel: "أجّله لآخر الدور",
+  sendToEndOfQueueToastMessage: "اتنقل لآخر الدور",
 } as const;

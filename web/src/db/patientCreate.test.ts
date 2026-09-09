@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { ClintraDatabase } from "./database";
 import { undoMostRecentPatientMutation, undoMostRecentVisitMutation } from "./mutate";
 import { createPatient } from "./patientCreate";
-import { seedDatabase } from "./seed";
+import { findSeededSlotsPractitioner, seedDatabase, seededVisitsDate } from "./seed";
 import { bookExistingPatientVisit } from "./visitBooking";
+import { weekdayOf } from "../domain/time";
 
 let db: ClintraDatabase;
 
@@ -78,11 +79,12 @@ describe("createPatient", () => {
 describe("undoing a new-patient booking (patient create + visit create)", () => {
   it("reverses both the visit and the patient, in reverse order, leaving neither behind", async () => {
     await seedDatabase(db);
-    const [schedule] = await db.schedules.toArray();
-    const [practitioner] = await db.practitioners.toArray();
+    const practitioner = await findSeededSlotsPractitioner(db);
+    const visitDate = seededVisitsDate();
+    const schedule = (await db.schedules.toArray()).find(
+      (candidate) => candidate.practitioner_id === practitioner.id && candidate.weekday === weekdayOf(visitDate),
+    )!;
     const services = await db.services.toArray();
-    const visits = await db.visits.toArray();
-    const visitDate = visits[0].visit_date;
 
     const patientsBefore = await db.patients.count();
     const visitsBefore = await db.visits.count();

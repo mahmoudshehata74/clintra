@@ -11,10 +11,11 @@ import {
   undoMostRecentVisitMutation,
 } from "../../db/mutate";
 import { seedDatabase, seededVisitsDate } from "../../db/seed";
-import type { ClinicDay, Location, Patient, Practitioner, Schedule, Service, Visit } from "../../db/types";
+import type { ClinicDay, DayState, Location, Patient, Practitioner, Schedule, Service, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitArrived, markVisitCompleted, markVisitInRoom } from "../../db/visitAttendance";
 import { cancelVisit, markVisitNoShow, type VisitCancelReason } from "../../db/visitCancel";
+import { sendVisitToEndOfQueue, undoSendVisitToEndOfQueue } from "../../db/visitQueue";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import { formatCairoDisplayDateParts, todayInCairo, weekdayOf } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
@@ -56,6 +57,8 @@ interface DynamicData {
   servicesById: Map<string, Service>;
   /** Which of today's visits have an invoice, and which — see db/visitCompletion.ts. */
   invoiceIdByVisitId: Map<string, string>;
+  /** Each shown practitioner's day_state row for today at the selected location — queue mode's average, mainly. */
+  dayStateByPractitionerId: Map<string, DayState>;
 }
 
 const EMPTY_DYNAMIC_DATA: DynamicData = {
@@ -63,6 +66,7 @@ const EMPTY_DYNAMIC_DATA: DynamicData = {
   patientsById: new Map(),
   servicesById: new Map(),
   invoiceIdByVisitId: new Map(),
+  dayStateByPractitionerId: new Map(),
 };
 
 // The undo action stays available for five minutes after any of the writes
@@ -106,7 +110,7 @@ export default function DayScreen() {
     let cancelled = false;
 
     async function load() {
-      await seedDatabase(db);
+      await seedDatabase(db, { includeQueueDemo: true });
       const [locations, practitioners, schedules, services] = await Promise.all([
         db.locations.toArray(),
         db.practitioners.toArray(),
@@ -188,10 +192,18 @@ export default function DayScreen() {
       ];
 
       const visitIds = visits.map((visit) => visit.id);
-      const [patients, services, invoicesForVisits] = await Promise.all([
+      const [patients, services, invoicesForVisits, dayStateRows] = await Promise.all([
         db.patients.bulkGet(patientIds),
         db.services.bulkGet(serviceIds),
         visitIds.length > 0 ? db.invoices.where("visit_id").anyOf(visitIds).toArray() : Promise.resolve([]),
+        Promise.all(
+          practitionersToShow.map((practitioner) =>
+            db.day_state
+              .where("[practitioner_id+location_id+date]")
+              .equals([practitioner.id, selectedLocationId ?? "", today])
+              .first(),
+          ),
+        ),
       ]);
 
       const patientsById = new Map(
@@ -207,7 +219,14 @@ export default function DayScreen() {
         }
       }
 
-      return { visits, patientsById, servicesById, invoiceIdByVisitId };
+      const dayStateByPractitionerId = new Map<string, DayState>();
+      dayStateRows.forEach((dayStateRow, index) => {
+        if (dayStateRow) {
+          dayStateByPractitionerId.set(practitionersToShow[index].id, dayStateRow);
+        }
+      });
+
+      return { visits, patientsById, servicesById, invoiceIdByVisitId, dayStateByPractitionerId };
     }, [staticData, practitionersToShow, today, selectedLocationId]) ?? EMPTY_DYNAMIC_DATA;
 
   // Resolved unconditionally (optional-chained) so it's stable for the
@@ -256,6 +275,7 @@ export default function DayScreen() {
           visitAuditLogId: result.visitAuditLogId,
           invoiceAuditLogId: result.invoiceAuditLogId,
           invoiceItemAuditLogId: result.invoiceItemAuditLogId,
+          dayStateAuditLogId: result.dayStateAuditLogId,
         },
       });
     } catch (error) {
@@ -338,7 +358,20 @@ export default function DayScreen() {
           setToastState({ message: dayScreenStrings.visitCompletionUndoPartialFailure, undo: null });
           return;
         }
+        // The average last: it is derived from every completed visit, so
+        // reverting it after the visit itself is already gone is safe even
+        // if this specific step is refused (stale — e.g. another completion
+        // has already recomputed it since) — the visit and invoice are
+        // still cleanly reversed either way, just the stat is left to
+        // recompute on the next real completion.
+        await undoMostRecentDayStateMutation(db, undo.dayStateAuditLogId);
         setToastState(null);
+        return;
+      }
+
+      if (undo.kind === "queue_reorder") {
+        const outcome = await undoSendVisitToEndOfQueue(db, undo.moves);
+        setToastState(outcome.ok ? null : { message: dayScreenStrings.undoRefused, undo: null });
         return;
       }
 
@@ -384,6 +417,22 @@ export default function DayScreen() {
     try {
       const auditLogId = await markVisitNoShow(db, visit.id);
       setToastState({ message: dayScreenStrings.noShowToastMessage, undo: { kind: "visit", auditLogId } });
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  async function handleSendToEnd(visit: Visit) {
+    setOpenMenuVisitId(null);
+    try {
+      const result = await sendVisitToEndOfQueue(db, visit.id);
+      if (!result.ok) {
+        return;
+      }
+      setToastState({
+        message: dayScreenStrings.sendToEndOfQueueToastMessage,
+        undo: { kind: "queue_reorder", moves: result.moves },
+      });
     } catch (error) {
       console.error(error);
     }
@@ -489,10 +538,7 @@ export default function DayScreen() {
   const currentPractitioner =
     staticData.practitioners.find((practitioner) => practitioner.id === currentPractitionerId) ?? null;
   const currentPractitionerSchedule = schedulesForSelectedLocation.find(
-    (schedule) =>
-      schedule.practitioner_id === currentPractitionerId &&
-      schedule.weekday === weekday &&
-      schedule.mode === ScheduleMode.Slots,
+    (schedule) => schedule.practitioner_id === currentPractitionerId && schedule.weekday === weekday,
   );
   const currentPractitionerHasAnySchedule = staticData.schedules.some(
     (schedule) => schedule.practitioner_id === currentPractitionerId,
@@ -510,6 +556,7 @@ export default function DayScreen() {
   // must stay reachable on a day off and even before any schedule is
   // configured (BookingSheet itself explains that case and offers no slots).
   const canBook = Boolean(currentPractitioner && selectedLocationId && defaultService);
+  const isQueueMode = currentPractitionerScheduleState.kind === "scheduled" && currentPractitionerScheduleState.schedule.mode === ScheduleMode.Queue;
 
   return (
     <main className={`mx-auto max-w-3xl px-6 pt-16 ${toastState ? "pb-28" : "pb-16"}`}>
@@ -597,9 +644,7 @@ export default function DayScreen() {
           const hasAnySchedule = staticData.schedules.some(
             (schedule) => schedule.practitioner_id === practitioner.id,
           );
-          const todaysSchedule = practitionerSchedules.find(
-            (schedule) => schedule.weekday === weekday && schedule.mode === ScheduleMode.Slots,
-          );
+          const todaysSchedule = practitionerSchedules.find((schedule) => schedule.weekday === weekday);
           const visitsForPractitioner = dynamicData.visits.filter(
             (visit) => visit.practitioner_id === practitioner.id,
           );
@@ -615,6 +660,7 @@ export default function DayScreen() {
               patientsById={dynamicData.patientsById}
               servicesById={dynamicData.servicesById}
               invoiceIdByVisitId={dynamicData.invoiceIdByVisitId}
+              avgConsultMinutes={dynamicData.dayStateByPractitionerId.get(practitioner.id)?.avg_consult_minutes ?? null}
               onAdvance={handleAdvance}
               openMenuVisitId={openMenuVisitId}
               onOpenMenu={setOpenMenuVisitId}
@@ -623,6 +669,7 @@ export default function DayScreen() {
               onRequestCancel={handleRequestCancel}
               onMarkNoShow={handleMarkNoShow}
               onOpenInvoice={handleOpenInvoice}
+              onSendToEnd={handleSendToEnd}
             />
           );
         })}
@@ -642,7 +689,7 @@ export default function DayScreen() {
             onClick={() => setBookingSheetMode("booking")}
             className="rounded-full bg-green px-6 py-3 font-semibold text-paper shadow-lg"
           >
-            {dayScreenStrings.bookingButtonLabel}
+            {isQueueMode ? dayScreenStrings.addToQueueButtonLabel : dayScreenStrings.bookingButtonLabel}
           </button>
         </div>
       )}

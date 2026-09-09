@@ -1,3 +1,4 @@
+import { computeMedianConsultMinutes } from "../domain/consultStats";
 import { id } from "../domain/id";
 import type { Piastres } from "../domain/money";
 import { resolveServicePrice } from "../domain/pricing";
@@ -7,7 +8,7 @@ import { VisitStatus } from "../domain/visitStatus";
 import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
 import { runAtomicMutations } from "./mutate";
-import { AuditAction, InvoiceStatus, type Invoice, type InvoiceItem, type Visit } from "./types";
+import { AuditAction, InvoiceStatus, type DayState, type Invoice, type InvoiceItem, type Visit } from "./types";
 
 export interface CompleteVisitResult {
   visitAuditLogId: string;
@@ -15,15 +16,19 @@ export interface CompleteVisitResult {
   /** Null only in the no-service_id fallback below, where no item row is written. */
   invoiceItemAuditLogId: string | null;
   invoice: Invoice;
+  dayStateAuditLogId: string;
 }
 
 /**
- * The one-tap "complete" action: advances the visit to completed AND creates
- * its invoice, atomically — one shared transaction, so a visit is never left
- * completed without an invoice, or an invoice ever created without its visit
- * actually completing. The invoice's price comes from
- * resolveServicePrice (domain/pricing.ts), which already respects
- * service_price_overrides for this practitioner and location.
+ * The one-tap "complete" action: advances the visit to completed, creates
+ * its invoice, and recomputes day_state.avg_consult_minutes for this
+ * practitioner+location+date — all in one shared transaction, so a visit is
+ * never left completed without an invoice or a stale average, and neither
+ * is ever written without the visit actually completing. The invoice's
+ * price comes from resolveServicePrice (domain/pricing.ts), which already
+ * respects service_price_overrides for this practitioner and location. The
+ * average is the median, not the mean, across every completed visit that
+ * day (see domain/consultStats.ts and docs/schema.md for why).
  *
  * If the visit has no service_id — not expected with current data, since
  * every booking flow requires a service, but not something this function
@@ -49,7 +54,7 @@ export async function completeVisitWithInvoice(
 
   return runAtomicMutations(
     db,
-    [db.visits, db.invoices, db.invoice_items, db.services, db.service_price_overrides],
+    [db.visits, db.invoices, db.invoice_items, db.services, db.service_price_overrides, db.day_state],
     async (write) => {
       const before = await db.visits.get(visitId);
       if (!before) {
@@ -139,7 +144,47 @@ export async function completeVisitWithInvoice(
         });
       }
 
-      return { visitAuditLogId, invoiceAuditLogId, invoiceItemAuditLogId, invoice };
+      // The median is recomputed from every completed visit for this
+      // practitioner+location+date, including the one just completed above
+      // (the write already landed in this same transaction, and reads
+      // within a transaction see its own prior writes), rather than updated
+      // incrementally — simplest to reason about correctly, and this table
+      // is small enough per day that a full recompute costs nothing real.
+      const visitsForDay = await db.visits
+        .where("[practitioner_id+visit_date]")
+        .equals([before.practitioner_id, before.visit_date])
+        .toArray();
+      const avgConsultMinutes = computeMedianConsultMinutes(
+        visitsForDay.filter((visit) => visit.location_id === before.location_id),
+      );
+
+      const existingDayState = await db.day_state
+        .where("[practitioner_id+location_id+date]")
+        .equals([before.practitioner_id, before.location_id, before.visit_date])
+        .first();
+      const dayStateAfter: DayState = existingDayState
+        ? { ...existingDayState, avg_consult_minutes: avgConsultMinutes }
+        : {
+            id: id(),
+            practitioner_id: before.practitioner_id,
+            location_id: before.location_id,
+            date: before.visit_date,
+            delay_minutes: 0,
+            is_closed: false,
+            avg_consult_minutes: avgConsultMinutes,
+          };
+      const dayStateAuditLogId = await write({
+        table: db.day_state,
+        entity: "day_state",
+        entityId: dayStateAfter.id,
+        action: existingDayState ? AuditAction.Update : AuditAction.Create,
+        before: existingDayState ?? null,
+        after: dayStateAfter,
+        actorMembershipId: actor.id,
+        orgId: before.org_id,
+      });
+
+      return { visitAuditLogId, invoiceAuditLogId, invoiceItemAuditLogId, invoice, dayStateAuditLogId };
     },
   );
 }

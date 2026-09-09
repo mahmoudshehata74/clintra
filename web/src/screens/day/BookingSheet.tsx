@@ -4,8 +4,11 @@ import { db } from "../../db/database";
 import { searchPatients } from "../../db/patientSearch";
 import type { Patient, Practitioner, Service, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
+import { addToQueue } from "../../db/visitQueue";
 import { bookExistingPatientVisit } from "../../db/visitBooking";
+import { toArabicIndicDigits } from "../../domain/arabicNumerals";
 import { generateTimeChoices } from "../../domain/schedule";
+import { ScheduleMode } from "../../domain/scheduleMode";
 import type { ClinicDay, ClockTime } from "../../domain/time";
 import { clockTimeInCairo, formatCairoDisplayDate } from "../../domain/time";
 import { VisitSource } from "../../domain/visitSource";
@@ -40,7 +43,8 @@ type Step =
       time: ClockTime;
       isOverbooked: boolean;
       newPatientAuditLogId?: string;
-    };
+    }
+  | { kind: "confirm_queue"; patient: Patient; position: number; newPatientAuditLogId?: string };
 
 export type BookingSheetMode = "booking" | "walk_in";
 
@@ -116,6 +120,11 @@ export default function BookingSheet({
   const phoneError = !newPatientValidation.ok ? newPatientValidation.phoneError : null;
 
   function goToSlotsOrAutoConfirm(patient: Patient, newPatientAuditLogId?: string) {
+    if (schedule?.mode === ScheduleMode.Queue) {
+      const position = visitsForPractitioner.reduce((max, visit) => Math.max(max, visit.position), 0) + 1;
+      setStep({ kind: "confirm_queue", patient, position, newPatientAuditLogId });
+      return;
+    }
     if (mode === "walk_in") {
       const nowTime = clockTimeInCairo(new Date().toISOString());
       const nextSlot = findNextSlotAtOrAfter(emptySlots, nowTime);
@@ -197,6 +206,31 @@ export default function BookingSheet({
           ? { kind: "overbook_time", patient, newPatientAuditLogId }
           : { kind: "slots", patient, newPatientAuditLogId },
       );
+    } finally {
+      setIsConfirming(false);
+    }
+  }
+
+  async function handleConfirmQueue(patient: Patient, newPatientAuditLogId: string | undefined) {
+    setIsConfirming(true);
+    try {
+      const result = await addToQueue(db, {
+        practitionerId: practitioner.id,
+        locationId,
+        orgId,
+        patientId: patient.id,
+        serviceId: service.id,
+        visitDate,
+        status: mode === "walk_in" ? VisitStatus.Arrived : undefined,
+        source: mode === "walk_in" ? VisitSource.Walkin : undefined,
+      });
+
+      onBooked(
+        newPatientAuditLogId
+          ? { kind: "new_patient_visit", visitAuditLogId: result.auditLogId, patientAuditLogId: newPatientAuditLogId }
+          : { kind: "visit", auditLogId: result.auditLogId },
+      );
+      onDismiss();
     } finally {
       setIsConfirming(false);
     }
@@ -440,6 +474,33 @@ export default function BookingSheet({
             className="mt-4 rounded-[--radius-el] bg-green px-4 py-3 text-center font-semibold text-paper disabled:opacity-60"
           >
             {dayScreenStrings.bookingConfirmButton}
+          </button>
+        </>
+      )}
+
+      {step.kind === "confirm_queue" && (
+        <>
+          <button
+            type="button"
+            onClick={() => setStep({ kind: "search" })}
+            className="self-start text-sm text-muted"
+          >
+            {dayScreenStrings.bookingBackAction}
+          </button>
+          <div className="mt-2 flex flex-col gap-1">
+            <span className="text-lg">{step.patient.full_name}</span>
+            <span className="text-muted">{service.name}</span>
+            <span className="text-muted">
+              {dayScreenStrings.addToQueueConfirmPrefix} {toArabicIndicDigits(step.position)}
+            </span>
+          </div>
+          <button
+            type="button"
+            disabled={isConfirming}
+            onClick={() => handleConfirmQueue(step.patient, step.newPatientAuditLogId)}
+            className="mt-4 rounded-[--radius-el] bg-green px-4 py-3 text-center font-semibold text-paper disabled:opacity-60"
+          >
+            {dayScreenStrings.addToQueueConfirmButton}
           </button>
         </>
       )}

@@ -11,6 +11,8 @@ export interface VisitMenuActions {
   onNoShow?: () => void;
   /** Only present once the visit has an invoice (see db/visitCompletion.ts). */
   onInvoice?: () => void;
+  /** Queue mode only, on a still-waiting row — see db/visitQueue.ts's sendVisitToEndOfQueue. */
+  onSendToEnd?: () => void;
 }
 
 interface VisitMenuProps {
@@ -76,6 +78,16 @@ export default function VisitMenu({ actions }: VisitMenuProps) {
               {dayScreenStrings.moveMenuLabel}
             </button>
           )}
+          {actions.onSendToEnd && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={actions.onSendToEnd}
+              className="p-3 text-start hover:bg-line/30"
+            >
+              {dayScreenStrings.sendToEndOfQueueMenuLabel}
+            </button>
+          )}
           {actions.onInvoice && (
             <button
               type="button"
@@ -86,7 +98,7 @@ export default function VisitMenu({ actions }: VisitMenuProps) {
               {dayScreenStrings.invoiceMenuLabel}
             </button>
           )}
-          {(actions.onCancel || actions.onNoShow) && (actions.onMove || actions.onInvoice) && (
+          {(actions.onCancel || actions.onNoShow) && (actions.onMove || actions.onSendToEnd || actions.onInvoice) && (
             <div className="border-t border-line" />
           )}
           {actions.onCancel && (

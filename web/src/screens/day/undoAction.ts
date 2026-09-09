@@ -1,3 +1,5 @@
+import type { QueueReorderMove } from "../../db/visitQueue";
+
 /**
  * What a toast's undo button should reverse. Most writes are a single
  * mutation; booking a brand-new patient is two writes (the patient row, then
@@ -16,5 +18,8 @@ export type UndoAction =
       invoiceAuditLogId: string;
       /** Null only in the no-service_id fallback (see db/visitCompletion.ts), where no item row was written. */
       invoiceItemAuditLogId: string | null;
+      dayStateAuditLogId: string;
     }
-  | { kind: "payment"; paymentAuditLogId: string; invoiceAuditLogId: string };
+  | { kind: "payment"; paymentAuditLogId: string; invoiceAuditLogId: string }
+  /** Reversed atomically as a whole — see db/visitQueue.ts's undoSendVisitToEndOfQueue. */
+  | { kind: "queue_reorder"; moves: QueueReorderMove[] };

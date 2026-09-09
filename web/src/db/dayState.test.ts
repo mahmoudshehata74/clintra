@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { ClintraDatabase } from "./database";
 import { setDayDelay } from "./dayState";
 import { undoMostRecentDayStateMutation } from "./mutate";
-import { seedDatabase } from "./seed";
+import { findSeededSlotsPractitioner, seedDatabase, seededVisitsDate } from "./seed";
 
 let db: ClintraDatabase;
 
@@ -12,10 +12,9 @@ beforeEach(() => {
 
 async function seededContext() {
   await seedDatabase(db);
-  const [practitioner] = await db.practitioners.toArray();
+  const practitioner = await findSeededSlotsPractitioner(db);
   const [location] = await db.locations.toArray();
-  const [visit] = await db.visits.toArray();
-  return { practitioner, location, date: visit.visit_date };
+  return { practitioner, location, date: seededVisitsDate() };
 }
 
 describe("setDayDelay", () => {

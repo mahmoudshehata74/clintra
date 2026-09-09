@@ -202,4 +202,52 @@ describe("completeVisitWithInvoice", () => {
     expect(resultFirst.invoice.number).toBe(1);
     expect(resultSecond.invoice.number).toBe(1);
   });
+
+  // started_at is set to a controlled offset in the past, then completed
+  // immediately, so ended_at - started_at lands within rounding distance of
+  // the intended duration without depending on real elapsed test time.
+  async function completeWithDurationMinutes(minutes: number) {
+    const visit = await makeInRoomVisit({ started_at: new Date(Date.now() - minutes * 60_000).toISOString() });
+    return completeVisitWithInvoice(db, visit.id);
+  }
+
+  it("updates day_state.avg_consult_minutes atomically with the visit that completes it", async () => {
+    await seedDatabase(db);
+    const [practitioner] = await db.practitioners.toArray();
+    const [location] = await db.locations.toArray();
+    // The seed already includes one completed visit for this exact
+    // practitioner+location+date; removed so this test's own controlled
+    // duration is the only one the median sees.
+    const seededCompleted = findByPosition(await db.visits.toArray(), 3);
+    await db.visits.delete(seededCompleted.id);
+
+    const result = await completeWithDurationMinutes(10);
+
+    const dayState = await db.day_state
+      .where("[practitioner_id+location_id+date]")
+      .equals([practitioner.id, location.id, "2026-09-07"])
+      .first();
+    expect(dayState?.avg_consult_minutes).toBe(10);
+    expect(result.dayStateAuditLogId).toBeTruthy();
+  });
+
+  it("computes the median across multiple completed visits, not the mean", async () => {
+    await seedDatabase(db);
+    const [practitioner] = await db.practitioners.toArray();
+    const [location] = await db.locations.toArray();
+    const seededCompleted = findByPosition(await db.visits.toArray(), 3);
+    await db.visits.delete(seededCompleted.id);
+
+    // Durations 10, 12 and a 200-minute outlier: median is 12; a mean would
+    // be dragged far higher by the outlier.
+    await completeWithDurationMinutes(10);
+    await completeWithDurationMinutes(12);
+    await completeWithDurationMinutes(200);
+
+    const dayState = await db.day_state
+      .where("[practitioner_id+location_id+date]")
+      .equals([practitioner.id, location.id, "2026-09-07"])
+      .first();
+    expect(dayState?.avg_consult_minutes).toBe(12);
+  });
 });

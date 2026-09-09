@@ -8,12 +8,13 @@ export const FAKE_SERVER_DB_NAME = "clintra-fake-server";
 
 // Every entity this app currently writes through mutate() or
 // runAtomicMutations() (see db/mutate.ts call sites: visitAttendance.ts,
-// visitCancel.ts, visitBooking.ts, visitMove.ts use "visits"; patientCreate.ts
-// uses "patients"; dayState.ts uses "day_state"; visitCompletion.ts uses
-// "invoices" and "invoice_items" alongside "visits"; payments.ts uses
-// "payments" alongside "invoices"; invoiceVoid.ts uses "invoices";
-// cashClose.ts uses "cash_close"). Add an entity here only once something
-// writes it.
+// visitCancel.ts, visitBooking.ts, visitMove.ts, visitQueue.ts use "visits";
+// patientCreate.ts uses "patients"; dayState.ts and visitCompletion.ts use
+// "day_state"; visitCompletion.ts also uses "invoices" and "invoice_items"
+// alongside "visits"; payments.ts uses "payments" alongside "invoices";
+// invoiceVoid.ts uses "invoices"; cashClose.ts uses "cash_close";
+// scheduleModeSwitch.ts uses "schedules" alongside "visits"). Add an entity
+// here only once something writes it.
 function tableForEntity(db: ClintraDatabase, entity: string): Table<unknown, string> {
   switch (entity) {
     case "visits":
@@ -30,6 +31,8 @@ function tableForEntity(db: ClintraDatabase, entity: string): Table<unknown, str
       return db.payments as unknown as Table<unknown, string>;
     case "cash_close":
       return db.cash_close as unknown as Table<unknown, string>;
+    case "schedules":
+      return db.schedules as unknown as Table<unknown, string>;
     default:
       throw new Error(`fake_transport_unknown_entity:${entity}`);
   }

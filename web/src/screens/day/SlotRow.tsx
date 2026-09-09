@@ -2,7 +2,7 @@ import Ltr from "../../components/Ltr";
 import { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Service, Visit } from "../../db/types";
 import { dayScreenStrings } from "./strings";
-import { statusVisual } from "./statusStyle";
+import { STATUS_LABEL, statusVisual } from "./statusStyle";
 import VisitMenu, { type VisitMenuActions } from "./VisitMenu";
 
 interface SlotRowProps {
@@ -19,16 +19,6 @@ interface SlotRowProps {
   /** Present only when this row's visit is eligible for the overflow menu. */
   menu?: VisitMenuActions;
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  [VisitStatus.Booked]: dayScreenStrings.statusBooked,
-  [VisitStatus.Confirmed]: dayScreenStrings.statusConfirmed,
-  [VisitStatus.Arrived]: dayScreenStrings.statusArrived,
-  [VisitStatus.InRoom]: dayScreenStrings.statusInRoom,
-  [VisitStatus.Completed]: dayScreenStrings.statusCompleted,
-  [VisitStatus.Cancelled]: dayScreenStrings.statusCancelled,
-  [VisitStatus.NoShow]: dayScreenStrings.statusNoShow,
-};
 
 const REOPENED_STATUSES = new Set<string>([VisitStatus.Cancelled, VisitStatus.NoShow]);
 

@@ -1,4 +1,16 @@
 import { VisitStatus, type VisitStatus as VisitStatusType } from "../../domain/visitStatus";
+import { dayScreenStrings } from "./strings";
+
+/** Shared by SlotRow (slots mode) and QueueRow (queue mode) — the same seven statuses read the same way regardless of how a day is scheduled. */
+export const STATUS_LABEL: Record<string, string> = {
+  [VisitStatus.Booked]: dayScreenStrings.statusBooked,
+  [VisitStatus.Confirmed]: dayScreenStrings.statusConfirmed,
+  [VisitStatus.Arrived]: dayScreenStrings.statusArrived,
+  [VisitStatus.InRoom]: dayScreenStrings.statusInRoom,
+  [VisitStatus.Completed]: dayScreenStrings.statusCompleted,
+  [VisitStatus.Cancelled]: dayScreenStrings.statusCancelled,
+  [VisitStatus.NoShow]: dayScreenStrings.statusNoShow,
+};
 
 export interface StatusVisual {
   /** Border/fill classes for the slot row container. */
