@@ -17,6 +17,7 @@ import {
   findNextSlotAtOrAfter,
   resolveBookingScheduleNote,
 } from "./bookingAvailability";
+import { resolveSelectedService } from "./bookingServiceSelection";
 import {
   seedNewPatientFormFromQuery,
   validateNewPatientForm,
@@ -25,11 +26,19 @@ import {
 import { submitNewPatientForm } from "./newPatientSubmission";
 import type { DayScheduleState } from "./scheduleState";
 import Sheet from "./Sheet";
+import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
 import type { UndoAction } from "./undoAction";
 
 const SEARCH_DEBOUNCE_MS = 120;
 const OVERBOOK_STEP_MINUTES = 15;
+
+// The reference's .fld.on focus treatment: a pine border plus a soft
+// green-tinted glow, applied to every text input in this sheet.
+const FIELD_CLASS = "w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start focus:border-green focus:outline-none focus:ring-[3px] focus:ring-green-soft";
+// The reference's disabled-field appearance: a filled, muted-looking field
+// that reads as "intentionally skipped," not merely empty.
+const FIELD_DISABLED_CLASS = "disabled:border-line disabled:bg-line-soft disabled:text-muted";
 
 type Step =
   | { kind: "search" }
@@ -53,7 +62,8 @@ interface BookingSheetProps {
   visitsForPractitioner: readonly Visit[];
   locationId: string;
   orgId: string;
-  service: Service;
+  /** Every active service on offer; the first is pre-selected, and any can be tapped before confirming. */
+  services: readonly Service[];
   visitDate: ClinicDay;
   /** "walk_in" books already-arrived, source walkin, and defaults to the next empty slot from now. */
   mode: BookingSheetMode;
@@ -75,13 +85,66 @@ interface BookingSheetProps {
 
 const EMPTY_NEW_PATIENT_FORM: NewPatientFormState = { fullName: "", phone: "", phoneOmitted: false };
 
+/** A compact tile matching the day grid's own empty-slot tile: time at the leading edge, a plus glyph, dashed border. */
+function SlotTile({ time, onClick }: { time: ClockTime; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-[--radius-el] border border-dashed border-line bg-paper p-3 text-start"
+    >
+      <span className="w-16 shrink-0 text-muted">
+        <Ltr>{time}</Ltr>
+      </span>
+      <span className="flex flex-1 items-center justify-center text-xl text-muted" aria-hidden="true">
+        +
+      </span>
+    </button>
+  );
+}
+
+/** The reference's .bt.g pill: pine border and text when selected, plain otherwise. */
+function servicePillClassName(isSelected: boolean): string {
+  return isSelected
+    ? "flex-1 rounded-[--radius-el] border border-green px-3 py-2 text-center text-sm text-green"
+    : "flex-1 rounded-[--radius-el] border border-line px-3 py-2 text-center text-sm text-ink";
+}
+
+function ServicePicker({
+  services,
+  selectedServiceId,
+  onSelect,
+}: {
+  services: readonly Service[];
+  selectedServiceId: string;
+  onSelect: (serviceId: string) => void;
+}) {
+  if (services.length < 2) {
+    return null;
+  }
+  return (
+    <div className="mt-3 flex gap-2">
+      {services.map((service) => (
+        <button
+          key={service.id}
+          type="button"
+          onClick={() => onSelect(service.id)}
+          className={servicePillClassName(service.id === selectedServiceId)}
+        >
+          {service.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function BookingSheet({
   practitioner,
   scheduleState,
   visitsForPractitioner,
   locationId,
   orgId,
-  service,
+  services,
   visitDate,
   mode,
   presetTime,
@@ -96,6 +159,7 @@ export default function BookingSheet({
   const [newPatientForm, setNewPatientForm] = useState<NewPatientFormState>(EMPTY_NEW_PATIENT_FORM);
   const [newPatientSubmitted, setNewPatientSubmitted] = useState(false);
   const [isCreatingPatient, setIsCreatingPatient] = useState(false);
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -115,7 +179,16 @@ export default function BookingSheet({
   }, [query]);
 
   const schedule = scheduleState.kind === "scheduled" ? scheduleState.schedule : null;
+  const isQueueMode = schedule?.mode === ScheduleMode.Queue;
   const noScheduleMessage = resolveBookingScheduleNote(scheduleState);
+  const service = resolveSelectedService(services, selectedServiceId);
+
+  const sheetTitle =
+    mode === "walk_in"
+      ? dayScreenStrings.walkInButtonLabel
+      : isQueueMode
+        ? dayScreenStrings.addToQueueButtonLabel
+        : dayScreenStrings.bookingButtonLabel;
 
   const results = useLiveQuery(() => searchPatients(db, debouncedQuery), [debouncedQuery]) ?? [];
   const emptySlots = useMemo(
@@ -131,7 +204,7 @@ export default function BookingSheet({
   const phoneError = !newPatientValidation.ok ? newPatientValidation.phoneError : null;
 
   function goToSlotsOrAutoConfirm(patient: Patient, newPatientAuditLogId?: string) {
-    if (schedule?.mode === ScheduleMode.Queue) {
+    if (isQueueMode) {
       const position = visitsForPractitioner.reduce((max, visit) => Math.max(max, visit.position), 0) + 1;
       setStep({ kind: "confirm_queue", patient, position, newPatientAuditLogId });
       return;
@@ -188,8 +261,9 @@ export default function BookingSheet({
     newPatientAuditLogId: string | undefined,
   ) {
     // Unreachable in practice: both the slots list and the overbook time
-    // choices are only ever non-empty when schedule is set.
-    if (!schedule) {
+    // choices, and the service picker itself, are only ever shown when
+    // schedule and service are both set.
+    if (!schedule || !service) {
       return;
     }
     setIsConfirming(true);
@@ -230,6 +304,9 @@ export default function BookingSheet({
   }
 
   async function handleConfirmQueue(patient: Patient, newPatientAuditLogId: string | undefined) {
+    if (!service) {
+      return;
+    }
     setIsConfirming(true);
     try {
       const result = await addToQueue(db, {
@@ -256,6 +333,8 @@ export default function BookingSheet({
 
   return (
     <Sheet onDismiss={onDismiss}>
+      <SheetHeader title={sheetTitle} onDismiss={onDismiss} />
+
       {step.kind === "search" && (
         <>
           <input
@@ -264,28 +343,19 @@ export default function BookingSheet({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={dayScreenStrings.bookingSearchPlaceholder}
-            className="w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start"
+            className={`mt-3 ${FIELD_CLASS}`}
           />
           {noScheduleMessage && <p className="mt-2 text-sm text-muted">{noScheduleMessage}</p>}
-          <ul className="mt-3 flex flex-col gap-1 overflow-y-auto">
+          <ul className="mt-3 flex flex-col divide-y divide-line-soft overflow-hidden overflow-y-auto rounded-[--radius-el] border border-line">
             {debouncedQuery.trim().length > 0 && results.length === 0 && (
-              <li className="flex flex-col gap-3 p-3">
-                <span className="text-center text-muted">{dayScreenStrings.bookingNoResults}</span>
-                <button
-                  type="button"
-                  onClick={handleOpenNewPatientForm}
-                  className="rounded-[--radius-el] bg-green px-4 py-3 text-center font-semibold text-paper"
-                >
-                  {dayScreenStrings.newPatientButtonLabel}
-                </button>
-              </li>
+              <li className="p-3 text-center text-sm text-muted">{dayScreenStrings.bookingNoResults}</li>
             )}
             {results.map(({ patient, lastVisitDate }) => (
               <li key={patient.id}>
                 <button
                   type="button"
                   onClick={() => goToSlotsOrAutoConfirm(patient)}
-                  className="flex w-full flex-col items-start rounded-[--radius-el] border border-line p-3 text-start"
+                  className="flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-start hover:bg-green-soft"
                 >
                   <span>{patient.full_name}</span>
                   <span className="text-sm text-muted">
@@ -298,6 +368,17 @@ export default function BookingSheet({
                 </button>
               </li>
             ))}
+            {debouncedQuery.trim().length > 0 && (
+              <li>
+                <button
+                  type="button"
+                  onClick={handleOpenNewPatientForm}
+                  className="flex w-full items-center px-3 py-2.5 text-start text-green hover:bg-green-soft"
+                >
+                  {dayScreenStrings.newPatientButtonPrefix} «{query}»
+                </button>
+              </li>
+            )}
           </ul>
         </>
       )}
@@ -307,7 +388,7 @@ export default function BookingSheet({
           <button
             type="button"
             onClick={() => setStep({ kind: "search" })}
-            className="self-start text-sm text-muted"
+            className="mt-3 self-start text-sm text-muted"
           >
             {dayScreenStrings.bookingBackAction}
           </button>
@@ -321,51 +402,51 @@ export default function BookingSheet({
                   setNewPatientForm((prev) => ({ ...prev, fullName: event.target.value }))
                 }
                 placeholder={dayScreenStrings.newPatientNamePlaceholder}
-                className="w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start"
+                className={FIELD_CLASS}
               />
               {newPatientSubmitted && nameError && <p className="mt-1 text-sm text-red">{nameError}</p>}
             </div>
 
             <div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="tel"
-                  inputMode="tel"
-                  value={newPatientForm.phone}
-                  disabled={newPatientForm.phoneOmitted}
-                  onChange={(event) =>
-                    setNewPatientForm((prev) => ({ ...prev, phone: event.target.value }))
-                  }
-                  placeholder={dayScreenStrings.newPatientPhonePlaceholder}
-                  className="flex-1 rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start disabled:bg-line disabled:text-muted"
-                />
-                <button
-                  type="button"
-                  onClick={handleTogglePhoneOmitted}
-                  aria-pressed={newPatientForm.phoneOmitted}
-                  className={
-                    newPatientForm.phoneOmitted
-                      ? "shrink-0 rounded-[--radius-el] border border-green bg-green-soft px-3 py-2 text-sm font-semibold text-green"
-                      : "shrink-0 rounded-[--radius-el] border border-line px-3 py-2 text-sm text-muted"
-                  }
-                >
-                  {dayScreenStrings.newPatientNoPhoneToggle}
-                </button>
-              </div>
+              <input
+                type="tel"
+                inputMode="tel"
+                value={newPatientForm.phone}
+                disabled={newPatientForm.phoneOmitted}
+                onChange={(event) =>
+                  setNewPatientForm((prev) => ({ ...prev, phone: event.target.value }))
+                }
+                placeholder={dayScreenStrings.newPatientPhonePlaceholder}
+                className={`${FIELD_CLASS} ${FIELD_DISABLED_CLASS}`}
+              />
               {newPatientSubmitted && phoneError && <p className="mt-1 text-sm text-red">{phoneError}</p>}
             </div>
 
             <p className="text-sm text-muted">{dayScreenStrings.newPatientOnlyNameRequiredHint}</p>
           </div>
 
-          <button
-            type="button"
-            disabled={isCreatingPatient}
-            onClick={handleCreatePatient}
-            className="mt-4 rounded-[--radius-el] bg-green px-4 py-3 text-center font-semibold text-paper disabled:opacity-60"
-          >
-            {dayScreenStrings.newPatientSubmitButton}
-          </button>
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              disabled={isCreatingPatient}
+              onClick={handleCreatePatient}
+              className="flex-1 rounded-[--radius-el] bg-green px-4 py-3 text-center font-semibold text-paper disabled:opacity-60"
+            >
+              {dayScreenStrings.newPatientSubmitButton}
+            </button>
+            <button
+              type="button"
+              onClick={handleTogglePhoneOmitted}
+              aria-pressed={newPatientForm.phoneOmitted}
+              className={
+                newPatientForm.phoneOmitted
+                  ? "shrink-0 rounded-[--radius-el] border border-green bg-green-soft px-3 py-2 text-sm font-semibold text-green"
+                  : "shrink-0 rounded-[--radius-el] border border-line px-3 py-2 text-sm text-ink"
+              }
+            >
+              {dayScreenStrings.newPatientNoPhoneToggle}
+            </button>
+          </div>
         </>
       )}
 
@@ -374,12 +455,12 @@ export default function BookingSheet({
           <button
             type="button"
             onClick={() => setStep({ kind: "search" })}
-            className="self-start text-sm text-muted"
+            className="mt-3 self-start text-sm text-muted"
           >
             {dayScreenStrings.bookingBackAction}
           </button>
           <p className="mt-1 font-medium">{step.patient.full_name}</p>
-          <ul className="mt-3 flex flex-col gap-1 overflow-y-auto">
+          <ul className="mt-3 flex flex-col gap-2 overflow-y-auto">
             {emptySlots.length === 0 && (
               <li className="p-3 text-center text-muted">
                 {noScheduleMessage ?? dayScreenStrings.bookingNoEmptySlots}
@@ -387,8 +468,8 @@ export default function BookingSheet({
             )}
             {emptySlots.map((slot) => (
               <li key={slot.time}>
-                <button
-                  type="button"
+                <SlotTile
+                  time={slot.time}
                   onClick={() =>
                     setStep({
                       kind: "confirm",
@@ -398,12 +479,7 @@ export default function BookingSheet({
                       newPatientAuditLogId: step.newPatientAuditLogId,
                     })
                   }
-                  className="flex w-full items-center gap-3 rounded-[--radius-el] border border-line p-3 text-start"
-                >
-                  <span className="text-muted">
-                    <Ltr>{slot.time}</Ltr>
-                  </span>
-                </button>
+                />
               </li>
             ))}
           </ul>
@@ -417,7 +493,7 @@ export default function BookingSheet({
                   newPatientAuditLogId: step.newPatientAuditLogId,
                 })
               }
-              className="mt-2 rounded-[--radius-el] border border-dashed border-line px-4 py-3 text-center text-muted"
+              className="mt-2 rounded-[--radius-el] border border-line bg-paper px-4 py-3 text-center text-ink"
             >
               {dayScreenStrings.overbookButtonLabel}
             </button>
@@ -432,7 +508,7 @@ export default function BookingSheet({
             onClick={() =>
               setStep({ kind: "slots", patient: step.patient, newPatientAuditLogId: step.newPatientAuditLogId })
             }
-            className="self-start text-sm text-muted"
+            className="mt-3 self-start text-sm text-muted"
           >
             {dayScreenStrings.bookingBackAction}
           </button>
@@ -463,7 +539,7 @@ export default function BookingSheet({
         </>
       )}
 
-      {step.kind === "confirm" && (
+      {step.kind === "confirm" && service && (
         <>
           <button
             type="button"
@@ -474,7 +550,7 @@ export default function BookingSheet({
                   : { kind: "slots", patient: step.patient, newPatientAuditLogId: step.newPatientAuditLogId },
               )
             }
-            className="self-start text-sm text-muted"
+            className="mt-3 self-start text-sm text-muted"
           >
             {dayScreenStrings.bookingBackAction}
           </button>
@@ -485,6 +561,7 @@ export default function BookingSheet({
               <Ltr>{step.time}</Ltr>
             </span>
           </div>
+          <ServicePicker services={services} selectedServiceId={service.id} onSelect={setSelectedServiceId} />
           <button
             type="button"
             disabled={isConfirming}
@@ -496,12 +573,12 @@ export default function BookingSheet({
         </>
       )}
 
-      {step.kind === "confirm_queue" && (
+      {step.kind === "confirm_queue" && service && (
         <>
           <button
             type="button"
             onClick={() => setStep({ kind: "search" })}
-            className="self-start text-sm text-muted"
+            className="mt-3 self-start text-sm text-muted"
           >
             {dayScreenStrings.bookingBackAction}
           </button>
@@ -512,6 +589,7 @@ export default function BookingSheet({
               {dayScreenStrings.addToQueueConfirmPrefix} <Ltr>{step.position}</Ltr>
             </span>
           </div>
+          <ServicePicker services={services} selectedServiceId={service.id} onSelect={setSelectedServiceId} />
           <button
             type="button"
             disabled={isConfirming}

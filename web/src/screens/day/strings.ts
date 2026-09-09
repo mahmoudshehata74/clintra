@@ -1,6 +1,11 @@
 // All user-facing Arabic strings for the day screen live in this module so
 // they can be reviewed in one place.
 export const dayScreenStrings = {
+  // SheetHeader.tsx's explicit close button — an additional, discoverable
+  // dismissal alongside the sheet's existing backdrop-tap/Escape/drag-down,
+  // shared by every sheet built with that header.
+  sheetCloseAriaLabel: "إغلاق",
+
   // Case A: the practitioner has schedule rows, but none for today's weekday.
   // A normal day off — counters are hidden entirely, not shown as zero.
   noScheduleToday: "مفيش مواعيد النهاردة",
@@ -57,9 +62,10 @@ export const dayScreenStrings = {
   // Shown in the toast when the tapped slot was taken by another booking a
   // moment earlier; nothing is written and there is no undo to offer.
   bookingSlotTakenError: "الميعاد ده اتحجز لسه من ثانية",
-  // Shown under the "no results" line on the search step, to create a new
-  // patient from the typed text.
-  newPatientButtonLabel: "إضافة مريض جديد",
+  // Prefixes the typed search text on the always-present "create new
+  // patient" row, e.g. "+ مريض جديد باسم «أحم»" — shown as the list's last
+  // row whether or not any real match was found, not only on zero results.
+  newPatientButtonPrefix: "+ مريض جديد باسم",
   newPatientNamePlaceholder: "اسم المريض",
   newPatientPhonePlaceholder: "رقم التليفون (اختياري)",
   // Toggle that disables and clears the phone field.

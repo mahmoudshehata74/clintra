@@ -804,7 +804,7 @@ export default function DayScreen() {
           visitsForPractitioner={currentPractitionerVisits}
           locationId={selectedLocationId}
           orgId={currentPractitioner.org_id}
-          service={defaultService}
+          services={staticData.services}
           visitDate={today}
           mode={bookingSheetMode}
           presetTime={presetBookingTime ?? undefined}
