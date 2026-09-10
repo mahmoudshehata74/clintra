@@ -47,8 +47,18 @@ async function applyEntityWrite<T>(db: ClintraDatabase, input: MutationInput<T>)
     await input.table.put(input.after);
   }
 
+  // Reserved inside this same transaction by reading the current max — the
+  // exact pattern invoices.number already uses (see db/visitCompletion.ts).
+  // IndexedDB serializes overlapping readwrite transactions on the same
+  // store, so a second transaction's read of the current max never runs
+  // until the first has already committed its own row, which is what makes
+  // this safe across two tabs writing at once, not just within one process.
+  const lastBySeq = await db.audit_log.orderBy("seq").last();
+  const seq = (lastBySeq?.seq ?? 0) + 1;
+
   await db.audit_log.add({
     id: auditLogId,
+    seq,
     org_id: input.orgId,
     actor_membership_id: input.actorMembershipId,
     entity: input.entity,
@@ -202,7 +212,12 @@ export async function undoMostRecentMutation<T>(
   const rowsForEntity = (await db.audit_log.toArray()).filter(
     (row) => row.entity === entity && row.entity_id === auditRow.entity_id,
   );
-  const mostRecent = rowsForEntity.reduce((latest, row) => (row.at > latest.at ? row : latest));
+  // Compared by seq, never by `at`: two mutations of the same entity written
+  // back to back can land in the same millisecond, at which point `at`
+  // strings tie and can no longer tell which one actually happened last —
+  // seq is a strictly monotonic counter that never ties (see its own doc
+  // comment on AuditLog and applyEntityWrite's assignment of it above).
+  const mostRecent = rowsForEntity.reduce((latest, row) => (row.seq > latest.seq ? row : latest));
   if (mostRecent.id !== auditRow.id) {
     return { ok: false, reason: "stale" };
   }

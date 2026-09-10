@@ -311,6 +311,17 @@ export interface AuditLog {
   before: unknown | null;
   after: unknown | null;
   at: Instant;
+  /**
+   * A strictly monotonic, globally-unique write counter — never two writes
+   * ever share a value, unlike `at`, which is millisecond-resolution and can
+   * collide between two mutations of the same entity written back to back.
+   * Reserved inside the same transaction as the row itself (see db/mutate.ts,
+   * the same pattern invoices.number already uses), so it survives a reload
+   * and two tabs writing at once, not just same-process ordering. This is
+   * what `undoMostRecentMutation` compares to decide "most recent" — never
+   * `at` directly.
+   */
+  seq: number;
 }
 
 /**

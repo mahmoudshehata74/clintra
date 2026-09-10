@@ -189,6 +189,30 @@ export class ClintraDatabase extends Dexie {
     this.version(10).stores({
       visit_form_data: "id, visit_id, &[visit_id+form_definition_id]",
     });
+
+    // audit_log.seq: undoMostRecentMutation (db/mutate.ts) used to decide
+    // "is this still the most recent mutation of this entity" by comparing
+    // `at` timestamps — millisecond resolution, so two mutations of the same
+    // entity written back to back (easy to trigger; observed as a genuine,
+    // if rare, CI flake) could tie, and the tie broke on IndexedDB's
+    // primary-key (UUID) iteration order, not anything meaningful. `seq` is
+    // a strictly monotonic counter reserved inside the same transaction as
+    // the row itself, the same way invoices.number is reserved — see
+    // db/mutate.ts's applyEntityWrite. The upgrade callback backfills every
+    // existing row once, ordered by `at` (falling back to `id` only to make
+    // the one-time backfill order fully deterministic for rows that already
+    // tied on `at` before this fix existed) — good enough for historic rows,
+    // since ties among them were already unspecified behaviour; every row
+    // written from this version on gets a real, collision-proof seq.
+    this.version(11)
+      .stores({
+        audit_log: "id, &seq",
+      })
+      .upgrade(async (tx) => {
+        const rows = await tx.table("audit_log").toArray();
+        rows.sort((a, b) => (a.at === b.at ? (a.id < b.id ? -1 : 1) : a.at < b.at ? -1 : 1));
+        await Promise.all(rows.map((row, index) => tx.table("audit_log").update(row.id, { seq: index + 1 })));
+      });
   }
 }
 

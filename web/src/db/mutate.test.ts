@@ -69,6 +69,37 @@ describe("mutate", () => {
     expect(syncRows[0].device_id).toBeTruthy();
   });
 
+  it("assigns a strictly increasing seq to consecutive audit_log rows, even if they land in the same millisecond", async () => {
+    await seedDatabase(db);
+    const [membership] = await db.memberships.toArray();
+    const visit = findByPosition(await db.visits.toArray(), 1);
+
+    const write = (status: VisitStatus) =>
+      mutate(db, {
+        table: db.visits,
+        entity: "visits",
+        entityId: visit.id,
+        action: AuditAction.Update,
+        before: visit,
+        after: { ...visit, status },
+        actorMembershipId: membership.id,
+        orgId: visit.org_id,
+      });
+
+    const firstId = await write(VisitStatus.Confirmed);
+    const secondId = await write(VisitStatus.Arrived);
+
+    const [first, second] = await Promise.all([db.audit_log.get(firstId), db.audit_log.get(secondId)]);
+    expect(first?.seq).toBeGreaterThan(0);
+    expect(second?.seq).toBeGreaterThan(first!.seq);
+
+    // Force the exact tie a same-millisecond write produces — seq must still
+    // distinguish them even when `at` cannot.
+    await db.audit_log.update(secondId, { at: first!.at });
+    const reread = await db.audit_log.get(secondId);
+    expect(reread?.seq).toBeGreaterThan(first!.seq);
+  });
+
   it("rolls back all three writes together when one part of the transaction fails", async () => {
     await seedDatabase(db);
     const visits = (await db.visits.toArray()).sort((a, b) => a.position - b.position);
@@ -130,7 +161,7 @@ describe("undoMostRecentVisitMutation", () => {
     if (!arrivedVisit) throw new Error("visit disappeared");
 
     // An unrelated later mutation touches the same visit before any undo.
-    await mutate(db, {
+    const laterAuditLogId = await mutate(db, {
       table: db.visits,
       entity: "visits",
       entityId: bookedVisit.id,
@@ -140,6 +171,15 @@ describe("undoMostRecentVisitMutation", () => {
       actorMembershipId: "membership-1",
       orgId: bookedVisit.org_id,
     });
+
+    // Force the exact race this test exists to guard against, deterministically
+    // rather than hoping the two writes above happen to land in different
+    // milliseconds: both audit_log rows now carry the identical timestamp a
+    // same-millisecond write would produce. Staleness must still be decided
+    // by seq (see mutate.ts's undoMostRecentMutation), not by `at`, which can
+    // no longer distinguish them once they tie.
+    const firstAt = (await db.audit_log.get(auditLogId))!.at;
+    await db.audit_log.update(laterAuditLogId, { at: firstAt });
 
     const outcome = await undoMostRecentVisitMutation(db, auditLogId);
     expect(outcome).toEqual({ ok: false, reason: "stale" });
