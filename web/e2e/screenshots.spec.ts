@@ -6,6 +6,8 @@ import {
   lockOverlay,
   login,
   openBookingSheet,
+  OWNER_NAME,
+  OWNER_PIN,
   PATIENTS,
   rowFor,
   S,
@@ -59,6 +61,25 @@ test("@screenshot lock-screen-pad", async ({ page }) => {
 test("@screenshot day-slots-default", async ({ page }) => {
   await selectPractitioner(page, SLOTS_DR);
   await shoot(page, "day-slots-default", true);
+});
+
+test("@screenshot settings-hours", async ({ page }) => {
+  // Re-navigate as the owner (beforeEach logged in as the assistant).
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
+  await expect(page.getByRole("dialog").getByText(S.settingsHoursTab)).toBeVisible();
+  await shoot(page, "settings-hours", false);
+});
+
+test("@screenshot settings-staff", async ({ page }) => {
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
+  await shoot(page, "settings-staff", false);
 });
 
 test("@screenshot day-slots-with-in-room", async ({ page }) => {

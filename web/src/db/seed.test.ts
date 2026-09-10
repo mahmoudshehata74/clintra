@@ -12,7 +12,7 @@ beforeEach(() => {
 });
 
 describe("seedDatabase", () => {
-  it("populates one organization, location, practitioner, assistant and practitioner memberships and three services", async () => {
+  it("populates one organization, location, practitioner, assistant and owner memberships and three services", async () => {
     await seedDatabase(db);
 
     expect(await db.organizations.count()).toBe(1);
@@ -22,7 +22,7 @@ describe("seedDatabase", () => {
 
     const memberships = await db.memberships.toArray();
     expect(memberships).toHaveLength(2);
-    expect([...memberships].map((membership) => membership.role).sort()).toEqual(["assistant", "practitioner"]);
+    expect([...memberships].map((membership) => membership.role).sort()).toEqual(["assistant", "owner"]);
   });
 
   it("does not duplicate data when run more than once", async () => {

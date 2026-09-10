@@ -28,12 +28,12 @@ afterEach(() => {
 describe("resolveActingMembership", () => {
   it("returns the session's membership when a session is active", async () => {
     await seedDatabase(db);
-    const practitioner = (await db.memberships.toArray()).find((m) => m.role === Role.Practitioner);
-    setActiveMembershipId(practitioner!.id);
+    const owner = (await db.memberships.toArray()).find((m) => m.role === Role.Owner);
+    setActiveMembershipId(owner!.id);
 
     const actor = await resolveActingMembership(db);
-    expect(actor.id).toBe(practitioner!.id);
-    expect(actor.role).toBe(Role.Practitioner);
+    expect(actor.id).toBe(owner!.id);
+    expect(actor.role).toBe(Role.Owner);
   });
 
   it("throws when there is no session and no fallback (the production contract)", async () => {

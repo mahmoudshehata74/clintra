@@ -275,4 +275,69 @@ export const dayScreenStrings = {
   roleAssistant: "المساعد",
   roleManager: "المدير",
   auditUnknownActor: "غير معروف",
+
+  // Settings (owner only). The entry pill and the three-panel sheet
+  // (reference screens 15-17).
+  settingsButtonLabel: "الإعدادات",
+  settingsHoursTab: "مواعيد العمل",
+  settingsServicesTab: "الخدمات",
+  settingsStaffTab: "الموظفون",
+  // Indexed by weekdayOf() (0 = Sunday .. 6 = Saturday).
+  weekdayNames: ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"],
+
+  // Panel A — working hours.
+  hoursStartLabel: "من",
+  hoursEndLabel: "لـ",
+  hoursSlotMinutesLabel: "مدة الكشف (دقيقة)",
+  hoursCapacityLabel: "السعة",
+  hoursEditAction: "غيّر",
+  hoursModeSlots: "مواعيد",
+  hoursModeQueue: "طابور",
+  hoursEndBeforeStartError: "وقت النهاية لازم يكون بعد البداية",
+  hoursInvalidSlotError: "مدة الكشف لازم تكون أكبر من صفر",
+  hoursInvalidCapacityError: "السعة لازم تكون أكبر من صفر",
+  hoursVisitsOnOldGridError: "فيه مواعيد محجوزة على المدة القديمة، امسحها أو انقلها الأول",
+
+  // Panel B — services.
+  serviceDurationSuffix: "دقيقة",
+  serviceActiveLabel: "مفعّلة",
+  serviceNewAction: "خدمة جديدة",
+  serviceNameLabel: "الاسم",
+  serviceDurationLabel: "المدة (دقيقة)",
+  servicePriceLabel: "السعر (جنيه)",
+  serviceOverridesLink: "أسعار خاصة",
+  serviceOverrideAddAction: "أضف سعر خاص",
+  serviceOverrideTargetPractitioner: "طبيب",
+  serviceOverrideTargetLocation: "فرع",
+  serviceOverrideTargetError: "اختار طبيب أو فرع (واحد بس)",
+  serviceOverrideDeleteAction: "حذف",
+  servicePriceInvalidError: "السعر ده مش صحيح",
+  serviceNameRequiredError: "لازم تكتب اسم الخدمة",
+
+  // Panel C — staff and permissions.
+  staffNewAction: "موظف جديد",
+  staffNameLabel: "الاسم",
+  staffPhoneLabel: "رقم الموبايل",
+  staffRoleLabel: "الصلاحية",
+  staffLocationScopeLabel: "نطاق الفروع",
+  staffPractitionerScopeLabel: "نطاق الأطباء",
+  staffPinLabel: "الرقم السري (٤ أرقام)",
+  staffNewPinLabel: "رقم سري جديد",
+  scopeAll: "الكل",
+  scopeListed: "محدد",
+  scopeSelf: "نفسه",
+  staffActiveLabel: "مفعّل",
+  staffLastOwnerError: "لازم يفضل مالك واحد نشط على الأقل",
+  staffNameRequiredError: "لازم تكتب اسم الموظف",
+  staffPinLengthError: "الرقم السري لازم يكون ٤ أرقام",
+  staffPhoneInvalidError: "الرقم ده مش صحيح",
+  staffPhoneTakenError: "الرقم ده مستخدم قبل كده",
+  staffPractitionerRequiredError: "لازم تختار طبيب واحد",
+  // Confirmation after a PIN change: prefix + name + suffix.
+  staffPinChangedPrefix: "اتغيّر الرقم السري لـ",
+  staffPinChangedSuffix: "— لازم تدخل بيه المرة الجاية",
+
+  // Shared settings actions.
+  settingsSaveAction: "حفظ",
+  settingsCancelAction: "إلغاء",
 } as const;

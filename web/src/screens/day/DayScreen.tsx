@@ -3,6 +3,8 @@ import Ltr from "../../components/Ltr";
 import { db } from "../../db/database";
 import { authStrings } from "../../auth/authStrings";
 import { clearActiveSession } from "../../auth/session";
+import { useActingMembership } from "../../auth/useActingMembership";
+import { Role } from "../../domain/role";
 import { setDayDelay } from "../../db/dayState";
 import { ensureDeviceRegistration } from "../../db/deviceRegistration";
 import {
@@ -52,6 +54,7 @@ import InvoiceSheet from "./InvoiceSheet";
 import MoveVisitSheet from "./MoveVisitSheet";
 import PaymentSheet from "./PaymentSheet";
 import PractitionerColumn from "./PractitionerColumn";
+import SettingsSheet from "./SettingsSheet";
 import { resolveDayScheduleState } from "./scheduleState";
 import { dayScreenStrings } from "./strings";
 import SyncStatusChip from "./SyncStatusChip";
@@ -152,6 +155,9 @@ export default function DayScreen() {
   const [isCashCloseOpen, setIsCashCloseOpen] = useState(false);
   const [isDaySheetOpen, setIsDaySheetOpen] = useState(false);
   const [isAuditSheetOpen, setIsAuditSheetOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const actingMembership = useActingMembership();
+  const isOwner = actingMembership?.role === Role.Owner;
 
   const isSeedDayPinned = new URLSearchParams(window.location.search).get(SEED_DAY_QUERY_PARAM) === "1";
   const today = isSeedDayPinned && staticData?.seededDay ? staticData.seededDay : todayInCairo();
@@ -319,6 +325,13 @@ export default function DayScreen() {
 
       return { visits, patientsById, servicesById, invoiceIdByVisitId, dayStateByPractitionerId, actorLabelByVisitId };
     }, [staticData, practitionersToShow, today, selectedLocationId]) ?? EMPTY_DYNAMIC_DATA;
+
+  // Services, live: the booking sheet's service picker must reflect a service
+  // the owner deactivates in settings on the next render, so this is a live
+  // query rather than part of the one-time staticData load. Kept as the plain
+  // toArray querier (the active filter is applied below in render) so Dexie's
+  // dependency tracking reliably re-runs it on any services write.
+  const allServices = useLiveQuery(() => db.services.toArray(), []) ?? [];
 
   // The same resolution practitionersToShow already applied — kept as its
   // own binding since it's read unconditionally below, before the early
@@ -647,7 +660,8 @@ export default function DayScreen() {
   const currentPractitionerVisits = dynamicData.visits.filter(
     (visit) => visit.practitioner_id === currentPractitionerId,
   );
-  const defaultService = staticData.services[0] ?? null;
+  const activeServices = allServices.filter((service) => service.is_active);
+  const defaultService = activeServices[0] ?? null;
 
   // Booking (and walk-in) do not require today's schedule to exist: they
   // must stay reachable on a day off and even before any schedule is
@@ -716,6 +730,16 @@ export default function DayScreen() {
               >
                 {dayScreenStrings.cashCloseButtonLabel}
               </button>
+              {/* Owner-only: no disabled state, no route reachable otherwise. */}
+              {isOwner && (
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
+                >
+                  {dayScreenStrings.settingsButtonLabel}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => clearActiveSession()}
@@ -823,7 +847,7 @@ export default function DayScreen() {
           visitsForPractitioner={currentPractitionerVisits}
           locationId={selectedLocationId}
           orgId={currentPractitioner.org_id}
-          services={staticData.services}
+          services={activeServices}
           visitDate={today}
           mode={bookingSheetMode}
           presetTime={presetBookingTime ?? undefined}
@@ -899,6 +923,15 @@ export default function DayScreen() {
           locationId={selectedLocationId}
           today={today}
           onDismiss={() => setIsAuditSheetOpen(false)}
+        />
+      )}
+
+      {isSettingsOpen && isOwner && currentPractitionerId && selectedLocationId && currentPractitioner && (
+        <SettingsSheet
+          practitionerId={currentPractitionerId}
+          locationId={selectedLocationId}
+          orgId={currentPractitioner.org_id}
+          onDismiss={() => setIsSettingsOpen(false)}
         />
       )}
 

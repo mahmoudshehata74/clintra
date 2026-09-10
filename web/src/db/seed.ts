@@ -241,7 +241,9 @@ async function writeSeedData(
   };
 
   // A second staff member so the lock screen has more than one membership to
-  // pick between — the practitioner, tied to the slots-mode practitioner above.
+  // pick between — the practitioner, who in v1 is also the clinic owner (the
+  // decided model: the practitioner IS the owner), so the settings surfaces are
+  // reachable. Tied to the slots-mode practitioner above.
   const practitionerUser: User = {
     id: id(),
     full_name: "أحمد المصري",
@@ -255,7 +257,7 @@ async function writeSeedData(
     id: id(),
     user_id: practitionerUser.id,
     org_id: organization.id,
-    role: Role.Practitioner,
+    role: Role.Owner,
     location_scope: LocationScope.All,
     practitioner_scope: PractitionerScope.Self,
     practitioner_id: practitioner.id,

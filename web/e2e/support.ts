@@ -15,6 +15,9 @@ export { DEV_SEED_PINS };
 // Display labels the lock-screen picker shows (formatActorLabel = "name (role)").
 export const ASSISTANT_NAME = "سارة حسن";
 export const PRACTITIONER_NAME = "أحمد المصري";
+// The seeded practitioner is also the clinic owner in v1.
+export const OWNER_NAME = PRACTITIONER_NAME;
+export const OWNER_PIN = DEV_SEED_PINS.practitioner;
 
 // Seed-derived fixtures (see web/src/db/seed.ts). The slots-mode practitioner,
 // the queue-mode one, and the five demo patients.
@@ -37,13 +40,16 @@ export const PATIENTS = {
  * which is why each day-screen test then pins its practitioner by name rather
  * than trusting the (UUID-ordered, non-deterministic) default.
  */
-export async function gotoSeededDay(page: Page): Promise<void> {
+export async function gotoSeededDay(
+  page: Page,
+  loginOptions?: { pin?: string; name?: string },
+): Promise<void> {
   await page.goto("/?seedDay=1");
   await page.evaluate(() => localStorage.clear());
-  // The app now boots locked; log in as the assistant so the day screen is
-  // interactive, then wait for the practitioner switcher (proves the seed
+  // The app now boots locked; log in (assistant by default) so the day screen
+  // is interactive, then wait for the practitioner switcher (proves the seed
   // finished and static data loaded).
-  await login(page);
+  await login(page, loginOptions);
   await expect(page.getByRole("button", { name: SLOTS_DR })).toBeVisible();
 }
 

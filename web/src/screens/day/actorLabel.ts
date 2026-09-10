@@ -2,7 +2,7 @@ import type { Membership, User } from "../../db/types";
 import { Role } from "../../domain/role";
 import { dayScreenStrings } from "./strings";
 
-const ROLE_LABELS: Record<string, string> = {
+export const ROLE_LABELS: Record<string, string> = {
   [Role.Owner]: dayScreenStrings.roleOwner,
   [Role.Practitioner]: dayScreenStrings.rolePractitioner,
   [Role.Assistant]: dayScreenStrings.roleAssistant,
