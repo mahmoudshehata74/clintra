@@ -51,6 +51,13 @@ export default defineConfig({
       // named device so the viewport stays the documented layout target even
       // if Playwright's bundled descriptor changes.
       use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 }, isMobile: false },
+      // hardening.spec.ts measures wall-clock time against the
+      // specification's own numeric limits. Running it a second time here
+      // would not exercise a different code path (same Chromium engine, same
+      // app) — it would only double CPU contention between parallel workers,
+      // which is exactly what skews a timing measurement. It runs once, on
+      // "desktop", below.
+      testIgnore: /hardening\.spec\.ts/,
     },
   ],
   webServer: {
