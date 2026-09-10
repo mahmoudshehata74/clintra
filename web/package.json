@@ -9,7 +9,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "pnpm run build && playwright test --grep-invert @screenshot",
+    "test:e2e:screenshots": "pnpm run build && playwright test --grep @screenshot"
   },
   "dependencies": {
     "@fontsource-variable/readex-pro": "^5.3.0",
@@ -22,6 +24,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

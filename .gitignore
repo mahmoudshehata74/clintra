@@ -28,6 +28,8 @@ Thumbs.db
 coverage/
 playwright-report/
 test-results/
+# Visual-review screenshots regenerate on demand (pnpm test:e2e:screenshots); never committed.
+web/e2e/screenshots/
 
 # local working files
 /local/
