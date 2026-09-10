@@ -176,15 +176,15 @@ secrets and the eventual server side), not the primary control.
 
 ### 1. Idle timeout — how long?
 
-- **Recommendation:** 5 minutes of inactivity.
-- **Rationale:** Long enough that two bookings ~90 seconds apart never trigger a
-  re-prompt; short enough that a tablet abandoned at the front desk re-locks
-  before someone has wandered off for a few minutes.
+- **Decision:** 10 minutes of inactivity.
+- **Rationale (owner):** A 5-minute lock fires during a normal phone call where
+  the assistant is coordinating a reschedule with a patient, forcing a PIN
+  re-entry in the middle of the call. 10 minutes covers that case without giving
+  the tablet away. (The earlier 5-minute proposal traded that call scenario for
+  a marginally faster re-lock; the call scenario is the common one and wins.)
 - **Constraint:** Spec names the trigger ("on idle or at shift start") but
-  **not the duration** — the number is my default. If you'd rather I not pick a
-  number without your sign-off, treat this one as open; I've defaulted it per
-  the brief's instruction to recommend a specific value.
-- **Status:** decided.
+  **not the duration** — the number is an owner decision, not spec-derived.
+- **Status:** decided (owner).
 
 ### 2. What counts as "idle"?
 
@@ -195,7 +195,7 @@ secrets and the eventual server side), not the primary control.
   (who scrolls or occasionally taps) stays unlocked, honouring "a screen being
   read shouldn't lock"; a "no writes" definition would treat all reading as idle
   and lock almost immediately, which is exactly the failure to avoid. A screen
-  left completely untouched for the full window still locks by design — after 5
+  left completely untouched for the full window still locks by design — after 10
   minutes of zero interaction, "reading" and "walked away" are indistinguishable
   and locking is the safe call.
 - **Constraint:** Spec says "on idle"; the definition is otherwise unspecified.
@@ -214,18 +214,25 @@ secrets and the eventual server side), not the primary control.
 
 ### 4. A half-written form when the lock activates — restore or dismiss?
 
-- **Recommendation:** On lock, close any open sheet and discard its in-progress
-  input; do not restore it behind the lock.
-- **Rationale / trade-off:** Restoring risks showing one patient's partial data
-  to whoever unlocks next — who may be a different staff member — which is a
-  privacy leak across a session boundary. Discarding risks losing a few typed
-  fields. Given v1's sheets are short (booking, payment) and the app is built
-  for fast re-entry (3-tap booking), privacy clearly outweighs the minor
-  convenience of restoring a half-typed form. Revisit only if the long general
-  visit form (reference screen 10) becomes a common lock-interruption point.
-- **Constraint:** Follows the spec's actor/privacy intent; sheets are ephemeral
-  in the reference.
-- **Status:** decided.
+- **Decision:** Keep it open **under** the lock; do not discard. The lock
+  overlay covers the entire viewport — nothing behind it is visible or
+  interactable — and the underlying UI state, including an open sheet with typed
+  values, is preserved and restored on successful PIN entry.
+- **Rationale (owner):** Discarding trains staff to keep the session
+  artificially alive, or to screenshot before walking away — both worse for
+  privacy than the leak we were trying to prevent. With a full-viewport overlay,
+  the correct model needs no discard: because the overlay hides everything,
+  nothing leaks even on a wrong PIN, so data-loss risk goes to zero while
+  privacy stays intact. (This overturns the earlier "discard on lock" proposal,
+  whose privacy concern is fully answered by the overlay covering the viewport
+  rather than by throwing typed data away.)
+- **Implementation constraints this sets:** the overlay must be a true
+  full-viewport cover (nothing behind it focusable or hittable, including open
+  sheets and the toast), and unlock must restore — not remount-from-scratch —
+  the prior UI state so typed sheet values survive.
+- **Constraint:** Owner decision; consistent with the spec's actor/privacy
+  intent.
+- **Status:** decided (owner).
 
 ### 5. Which one function replaces `resolveActingMembership()`?
 
