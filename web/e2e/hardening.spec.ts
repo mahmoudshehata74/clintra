@@ -224,7 +224,11 @@ test("search by name returns a result under 0.5 second with 5000 patients", asyn
 
   const start = Date.now();
   await searchInput.fill(targetName);
-  await expect(dialog.getByText(targetName)).toBeVisible();
+  // exact: true — the "+ مريض جديد باسم «...»" row always renders alongside
+  // any results once the query is non-empty, and it contains the exact
+  // typed query (hence the exact patient name here) as a substring of its
+  // own longer text, which would otherwise make this locator ambiguous.
+  await expect(dialog.getByText(targetName, { exact: true })).toBeVisible();
   const elapsedMs = Date.now() - start;
 
   console.log(`[hardening] search among 5000 patients: ${elapsedMs}ms`);

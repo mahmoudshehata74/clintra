@@ -12,17 +12,23 @@ Of 9 criteria: **6 pass** by automated measurement, **1 fails** by automated
 measurement (app-open latency, environment-sensitive — see below), and **2
 cannot be fully automated** (the 8-hour offline drill and the 30-scenario
 simulated day), for which this document specifies the exact manual drill
-instead. No correctness bug was found while writing the measurement specs —
-one apparent data-loss failure during authoring turned out to be a flawed
-test assumption (see the "offline / sync" section), not an application
-defect, and was fixed before this document was written.
+instead. No correctness bug was found in the application while writing the
+measurement specs — two apparent failures during authoring both turned out
+to be flawed test assumptions, not application defects: an offline/sync test
+that assumed a booking always inserts a new row (see section 8 — the
+booking flow correctly reuses a freed cancelled/no-show visit's row instead)
+caught locally, and a search test with an ambiguous locator (the exact
+search query also appeared, as a substring, in the unrelated "+ new
+patient" prompt row) that only surfaced on CI, since the race between the
+two matching elements happened to resolve the same way on every local run.
+Both were fixed before this document's numbers were finalized.
 
 | # | Criterion | Method | Result | Verdict |
 |---|---|---|---|---|
 | 1 | Existing patient booking: 3 taps, ≤3s | Auto | 3 taps, ~0.4–0.7s | ✅ Pass |
 | 2 | New patient booking: ≤6s | Auto | ~0.5–0.7s | ✅ Pass |
 | 3 | App opens on today: ≤1s | Auto | 0.75s–2.3s (host-dependent) | ❌ Fail (see caveat) |
-| 4 | Search by name, 5000 patients: <0.5s | Auto | ~0.16–0.22s | ✅ Pass |
+| 4 | Search by name, 5000 patients: <0.5s | Auto | ~0.16–0.43s | ✅ Pass |
 | 5 | Marking arrival: 1 tap | Auto (regression) | 1 tap | ✅ Pass |
 | 6 | Moving to tomorrow: ≤3 taps | Auto | 3 taps | ✅ Pass |
 | 7 | Offline: 8 hours, zero data loss | Manual drill (documented below) | Not yet run | ⏳ Pending manual run |
@@ -134,9 +140,11 @@ function. Nothing is cleaned up afterward: the browser context (and its
 IndexedDB) is torn down by Playwright the moment the test ends, the same as
 every other spec's isolation.
 
-**Result**: **~160–220ms**, including the 120ms debounce — more than 2×
-under budget even in this worst case (a match effectively at the end of an
-unindexed linear scan).
+**Result**: **~160–430ms** across runs (higher under parallel-worker CPU
+contention, same as the app-open number in section 3, but always comfortably
+inside budget here), including the 120ms debounce — at least 15% headroom
+even in the slowest observed run, in this worst case (a match effectively at
+the end of an unindexed linear scan).
 
 **Verdict**: ✅ Pass. Comfortable now, but worth flagging: this scales
 linearly with patient count and is not indexed. It is not a problem at 5,000
