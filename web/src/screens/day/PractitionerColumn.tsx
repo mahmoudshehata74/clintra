@@ -3,7 +3,7 @@ import Ltr from "../../components/Ltr";
 import { countCompletedConsultations } from "../../domain/consultStats";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import type { ClockTime } from "../../domain/time";
-import type { VisitStatus } from "../../domain/visitStatus";
+import { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Schedule, Service, Visit } from "../../db/types";
 import { computeGridRows } from "./dayGrid";
 import { computeEmptySlots } from "./emptySlots";
@@ -31,6 +31,8 @@ interface PractitionerColumnProps {
   avgConsultMinutes: number | null;
   /** Resolved "recorded by" label per visit id — slots mode only for now (queue mode is a separate task). */
   actorLabelByVisitId: ReadonlyMap<string, string>;
+  /** Which visits already have a visit_form_data row — see db/visitForm.ts. Drives the completed-row empty-form hint. */
+  formDataVisitIds: ReadonlySet<string>;
   /** Present only when booking is currently possible — slots mode only. Tapping an empty slot opens the booking sheet pre-filled with that time. */
   onTapEmptySlot?: (time: ClockTime) => void;
   onAdvance: (visit: Visit, toStatus: VisitStatus) => void;
@@ -42,6 +44,7 @@ interface PractitionerColumnProps {
   onMarkNoShow: (visit: Visit) => void;
   onOpenInvoice: (invoiceId: string) => void;
   onSendToEnd: (visit: Visit) => void;
+  onOpenVisitForm: (visit: Visit) => void;
 }
 
 export default function PractitionerColumn({
@@ -55,6 +58,7 @@ export default function PractitionerColumn({
   invoiceIdByVisitId,
   avgConsultMinutes,
   actorLabelByVisitId,
+  formDataVisitIds,
   onTapEmptySlot,
   onAdvance,
   openMenuVisitId,
@@ -65,6 +69,7 @@ export default function PractitionerColumn({
   onMarkNoShow,
   onOpenInvoice,
   onSendToEnd,
+  onOpenVisitForm,
 }: PractitionerColumnProps) {
   const scheduleState = resolveDayScheduleState(todaysSchedule, hasAnySchedule);
 
@@ -96,6 +101,7 @@ export default function PractitionerColumn({
         invoiceIdByVisitId={invoiceIdByVisitId}
         avgConsultMinutes={avgConsultMinutes}
         actorLabelByVisitId={actorLabelByVisitId}
+        formDataVisitIds={formDataVisitIds}
         onAdvance={onAdvance}
         openMenuVisitId={openMenuVisitId}
         onOpenMenu={onOpenMenu}
@@ -104,6 +110,7 @@ export default function PractitionerColumn({
         onMarkNoShow={onMarkNoShow}
         onOpenInvoice={onOpenInvoice}
         onSendToEnd={onSendToEnd}
+        onOpenVisitForm={onOpenVisitForm}
       />
     );
   }
@@ -130,6 +137,15 @@ export default function PractitionerColumn({
           const invoiceId = visit ? invoiceIdByVisitId.get(visit.id) : undefined;
           const administrable = Boolean(visit && isMenuEligible(visit.status));
           const menuEligible = Boolean(visit && (administrable || invoiceId));
+          // The pill shows for as long as the form is meaningfully writable
+          // by tapping it deliberately: from in_room on, including after
+          // completion (a late edit is fine and audited — see
+          // db/visitForm.ts). A completed row has no other primary action, so
+          // tapping the row itself also opens the form, same as the pill.
+          const showVisitFormPill =
+            visit != null && (visit.status === VisitStatus.InRoom || visit.status === VisitStatus.Completed);
+          const openVisitForm = visit ? () => onOpenVisitForm(visit) : undefined;
+          const isCompleted = visit != null && visit.status === VisitStatus.Completed;
           // Visually empty covers both a genuinely bare slot and a
           // rescheduled visit's old slot (statusVisual returns null only for
           // rescheduled) — either way the row renders as the empty tile, so
@@ -149,7 +165,11 @@ export default function PractitionerColumn({
               service={service}
               isExtraAtTime={isExtraAtTime}
               actorLabel={visit ? actorLabelByVisitId.get(visit.id) : undefined}
-              onPrimaryAction={advanceTarget && visit ? () => onAdvance(visit, advanceTarget) : undefined}
+              onPrimaryAction={
+                advanceTarget && visit ? () => onAdvance(visit, advanceTarget) : isCompleted ? openVisitForm : undefined
+              }
+              onOpenVisitForm={showVisitFormPill ? openVisitForm : undefined}
+              showEmptyFormHint={isCompleted && visit ? !formDataVisitIds.has(visit.id) : false}
               onTapEmptySlot={
                 onTapEmptySlot && isVisuallyEmpty && emptySlotTimes?.has(time)
                   ? () => onTapEmptySlot(time)
@@ -185,6 +205,7 @@ interface QueueColumnProps {
   invoiceIdByVisitId: ReadonlyMap<string, string>;
   avgConsultMinutes: number | null;
   actorLabelByVisitId: ReadonlyMap<string, string>;
+  formDataVisitIds: ReadonlySet<string>;
   onAdvance: (visit: Visit, toStatus: VisitStatus) => void;
   openMenuVisitId: string | null;
   onOpenMenu: (visitId: string) => void;
@@ -193,6 +214,7 @@ interface QueueColumnProps {
   onMarkNoShow: (visit: Visit) => void;
   onOpenInvoice: (invoiceId: string) => void;
   onSendToEnd: (visit: Visit) => void;
+  onOpenVisitForm: (visit: Visit) => void;
 }
 
 /** Never extrapolated from a single data point — see queueSummary.ts and docs/schema.md. */
@@ -207,6 +229,7 @@ function QueueColumn({
   invoiceIdByVisitId,
   avgConsultMinutes,
   actorLabelByVisitId,
+  formDataVisitIds,
   onAdvance,
   openMenuVisitId,
   onOpenMenu,
@@ -215,6 +238,7 @@ function QueueColumn({
   onMarkNoShow,
   onOpenInvoice,
   onSendToEnd,
+  onOpenVisitForm,
 }: QueueColumnProps) {
   const sortedVisits = [...visits].sort((a, b) => a.position - b.position);
   const summary = computeQueueSummary(sortedVisits);
@@ -249,6 +273,9 @@ function QueueColumn({
           const isWaiting = isQueueWaiting(visit.status);
           const isNext = visit.id === summary.nextVisitId;
           const menuEligible = Boolean(isMenuEligible(visit.status) || invoiceId || isWaiting);
+          const showVisitFormPill = visit.status === VisitStatus.InRoom || visit.status === VisitStatus.Completed;
+          const openVisitForm = () => onOpenVisitForm(visit);
+          const isCompleted = visit.status === VisitStatus.Completed;
 
           let expectedWaitLabel: ReactNode = null;
           if (isWaiting) {
@@ -274,7 +301,9 @@ function QueueColumn({
               isNext={isNext}
               expectedWaitLabel={expectedWaitLabel}
               actorLabel={actorLabelByVisitId.get(visit.id)}
-              onPrimaryAction={advanceTarget ? () => onAdvance(visit, advanceTarget) : undefined}
+              onPrimaryAction={advanceTarget ? () => onAdvance(visit, advanceTarget) : isCompleted ? openVisitForm : undefined}
+              onOpenVisitForm={showVisitFormPill ? openVisitForm : undefined}
+              showEmptyFormHint={isCompleted && !formDataVisitIds.has(visit.id)}
               menu={
                 menuEligible
                   ? {

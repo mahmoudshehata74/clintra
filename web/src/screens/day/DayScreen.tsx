@@ -55,6 +55,7 @@ import MoveVisitSheet from "./MoveVisitSheet";
 import PaymentSheet from "./PaymentSheet";
 import PractitionerColumn from "./PractitionerColumn";
 import SettingsSheet from "./SettingsSheet";
+import VisitFormSheet from "./VisitFormSheet";
 import { resolveDayScheduleState } from "./scheduleState";
 import { dayScreenStrings } from "./strings";
 import SyncStatusChip from "./SyncStatusChip";
@@ -87,6 +88,8 @@ interface DynamicData {
   dayStateByPractitionerId: Map<string, DayState>;
   /** Resolved "recorded by" label per visit id, from each visit's created_by — see actorLabel.ts. */
   actorLabelByVisitId: Map<string, string>;
+  /** Which of today's visits already have a visit_form_data row — see db/visitForm.ts. Drives the completed-row empty-form hint. */
+  formDataVisitIds: Set<string>;
 }
 
 const EMPTY_DYNAMIC_DATA: DynamicData = {
@@ -96,6 +99,7 @@ const EMPTY_DYNAMIC_DATA: DynamicData = {
   invoiceIdByVisitId: new Map(),
   dayStateByPractitionerId: new Map(),
   actorLabelByVisitId: new Map(),
+  formDataVisitIds: new Set(),
 };
 
 // The undo action stays available for five minutes after any of the writes
@@ -152,6 +156,7 @@ export default function DayScreen() {
   const [rowActionSheet, setRowActionSheet] = useState<RowActionSheetState>(null);
   const [invoiceSheetInvoiceId, setInvoiceSheetInvoiceId] = useState<string | null>(null);
   const [paymentSheetInvoiceId, setPaymentSheetInvoiceId] = useState<string | null>(null);
+  const [visitFormSheetVisitId, setVisitFormSheetVisitId] = useState<string | null>(null);
   const [isCashCloseOpen, setIsCashCloseOpen] = useState(false);
   const [isDaySheetOpen, setIsDaySheetOpen] = useState(false);
   const [isAuditSheetOpen, setIsAuditSheetOpen] = useState(false);
@@ -275,10 +280,11 @@ export default function DayScreen() {
 
       const visitIds = visits.map((visit) => visit.id);
       const membershipIds = [...new Set(visits.map((visit) => visit.created_by))];
-      const [patients, services, invoicesForVisits, dayStateRows, memberships] = await Promise.all([
+      const [patients, services, invoicesForVisits, formDataRows, dayStateRows, memberships] = await Promise.all([
         db.patients.bulkGet(patientIds),
         db.services.bulkGet(serviceIds),
         visitIds.length > 0 ? db.invoices.where("visit_id").anyOf(visitIds).toArray() : Promise.resolve([]),
+        visitIds.length > 0 ? db.visit_form_data.where("visit_id").anyOf(visitIds).toArray() : Promise.resolve([]),
         Promise.all(
           practitionersToShow.map((practitioner) =>
             db.day_state
@@ -302,6 +308,7 @@ export default function DayScreen() {
           invoiceIdByVisitId.set(invoice.visit_id, invoice.id);
         }
       }
+      const formDataVisitIds = new Set(formDataRows.map((row) => row.visit_id));
 
       const dayStateByPractitionerId = new Map<string, DayState>();
       dayStateRows.forEach((dayStateRow, index) => {
@@ -323,7 +330,15 @@ export default function DayScreen() {
         actorLabelByVisitId.set(visit.id, formatActorLabel(membership, user));
       }
 
-      return { visits, patientsById, servicesById, invoiceIdByVisitId, dayStateByPractitionerId, actorLabelByVisitId };
+      return {
+        visits,
+        patientsById,
+        servicesById,
+        invoiceIdByVisitId,
+        dayStateByPractitionerId,
+        actorLabelByVisitId,
+        formDataVisitIds,
+      };
     }, [staticData, practitionersToShow, today, selectedLocationId]) ?? EMPTY_DYNAMIC_DATA;
 
   // Services, live: the booking sheet's service picker must reflect a service
@@ -576,6 +591,11 @@ export default function DayScreen() {
     setInvoiceSheetInvoiceId(invoiceId);
   }
 
+  function handleOpenVisitForm(visit: Visit) {
+    setOpenMenuVisitId(null);
+    setVisitFormSheetVisitId(visit.id);
+  }
+
   function handleRequestPayment(invoiceId: string) {
     setInvoiceSheetInvoiceId(null);
     setPaymentSheetInvoiceId(invoiceId);
@@ -798,6 +818,7 @@ export default function DayScreen() {
               invoiceIdByVisitId={dynamicData.invoiceIdByVisitId}
               avgConsultMinutes={dynamicData.dayStateByPractitionerId.get(practitioner.id)?.avg_consult_minutes ?? null}
               actorLabelByVisitId={dynamicData.actorLabelByVisitId}
+              formDataVisitIds={dynamicData.formDataVisitIds}
               onTapEmptySlot={
                 canBook && practitioner.id === currentPractitionerId ? handleTapEmptySlot : undefined
               }
@@ -810,6 +831,7 @@ export default function DayScreen() {
               onMarkNoShow={handleMarkNoShow}
               onOpenInvoice={handleOpenInvoice}
               onSendToEnd={handleSendToEnd}
+              onOpenVisitForm={handleOpenVisitForm}
             />
           );
         })}
@@ -896,6 +918,10 @@ export default function DayScreen() {
           onDismiss={() => setPaymentSheetInvoiceId(null)}
           onRecorded={handlePaymentRecorded}
         />
+      )}
+
+      {visitFormSheetVisitId && (
+        <VisitFormSheet visitId={visitFormSheetVisitId} onDismiss={() => setVisitFormSheetVisitId(null)} />
       )}
 
       {isCashCloseOpen && selectedLocationId && currentPractitioner && (

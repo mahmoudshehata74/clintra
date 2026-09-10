@@ -180,6 +180,15 @@ export class ClintraDatabase extends Dexie {
     this.version(9).stores({
       memberships: "id, is_active",
     });
+
+    // The general visit form (db/visitForm.ts): visit_form_data is looked up
+    // both by visit_id alone (the day screen's per-row "has this visit been
+    // written up" check) and by the visit_id+form_definition_id natural key
+    // (the sheet's own read and the autosave's create-vs-update decision) —
+    // so both are real indexes now, not just documented intent.
+    this.version(10).stores({
+      visit_form_data: "id, visit_id, &[visit_id+form_definition_id]",
+    });
   }
 }
 

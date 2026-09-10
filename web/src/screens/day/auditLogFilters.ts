@@ -1,6 +1,6 @@
 import { AuditAction, type AuditLog } from "../../db/types";
 
-export type AuditEntityFilter = "all" | "visits" | "patients" | "invoices" | "payments" | "cash_close";
+export type AuditEntityFilter = "all" | "visits" | "patients" | "invoices" | "payments" | "cash_close" | "visit_form_data";
 export type AuditActionFilter = "all" | AuditAction;
 
 /** Applies the audit sheet's two independent filters: entity type and action. Either left at "all" matches every row. */

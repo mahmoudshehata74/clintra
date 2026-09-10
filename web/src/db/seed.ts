@@ -4,17 +4,20 @@ import { id } from "../domain/id";
 import { Role } from "../domain/role";
 import { LocationScope, PractitionerScope } from "../domain/scope";
 import { ScheduleMode } from "../domain/scheduleMode";
+import { GENERAL_SPECIALTY_KEY } from "../domain/specialtyTemplate";
 import { cairoInstant, mostRecentWeekdayOnOrBefore, todayInCairo, type ClinicDay } from "../domain/time";
 import { CancelReason, VisitStatus } from "../domain/visitStatus";
 import { VisitSource } from "../domain/visitSource";
 import { generateSlotTimes } from "../domain/schedule";
 import type { Piastres } from "../domain/money";
 import type { ClintraDatabase } from "./database";
+import type { VisitFormSchema } from "./visitForm";
 import {
   PlanTier,
   SpecialtyTemplateGeneration,
   SpecialtyTemplatePricingMode,
   type DayState,
+  type FormDefinition,
   type Membership,
   type Organization,
   type Patient,
@@ -27,8 +30,6 @@ import {
   type User,
   type Visit,
 } from "./types";
-
-const GENERAL_SPECIALTY_KEY = "general";
 
 // The seed always places its five demo visits on the most recent Monday, not
 // on whichever day the seed happens to run — otherwise a database seeded on,
@@ -119,6 +120,7 @@ export async function seedDatabase(db: ClintraDatabase, options: SeedOptions = {
       db.organizations,
       db.locations,
       db.specialty_templates,
+      db.form_definitions,
       db.practitioners,
       db.practitioner_locations,
       db.users,
@@ -178,6 +180,23 @@ async function writeSeedData(
     stall_days: null,
     unit_label: "زيارة",
     provider_label: "طبيب",
+  };
+
+  // The general form's one current version (see db/visitForm.ts), seeded
+  // alongside its template so the in-room visit form always has a definition
+  // to write against — never built lazily on first save, which would leave
+  // an app with a fresh but not-yet-seeded database unable to open the form.
+  const generalFormDefinition: FormDefinition = {
+    id: id(),
+    template_id: specialtyTemplate.id,
+    version: 1,
+    is_current: true,
+    schema: {
+      fields: [
+        { key: "complaint", label: "الشكوى الرئيسية" },
+        { key: "diagnosis", label: "التشخيص" },
+      ],
+    } satisfies VisitFormSchema,
   };
 
   const practitioner: Practitioner = {
@@ -447,6 +466,7 @@ async function writeSeedData(
   await db.organizations.add(organization);
   await db.locations.add(location);
   await db.specialty_templates.add(specialtyTemplate);
+  await db.form_definitions.add(generalFormDefinition);
   await db.practitioners.bulkAdd(options.includeQueueDemo ? [practitioner, queuePractitioner] : [practitioner]);
   await db.practitioner_locations.bulkAdd(
     options.includeQueueDemo ? [practitionerLocation, queuePractitionerLocation] : [practitionerLocation],

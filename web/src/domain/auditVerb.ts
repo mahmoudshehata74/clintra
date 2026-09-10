@@ -20,6 +20,64 @@ function positionOf(value: unknown): number | undefined {
   return typeof position === "number" ? position : undefined;
 }
 
+function dataFieldOf(value: unknown, field: string): string {
+  const data = fieldOf(value, "data");
+  const raw = fieldOf(data, field);
+  return typeof raw === "string" ? raw : "";
+}
+
+interface VisitFormFieldConfig {
+  key: "complaint" | "diagnosis";
+  createVerb: string;
+  updateVerb: string;
+}
+
+// Checked in this order so a save that touches both fields at once (not
+// something the autosave-on-blur UI produces, since it saves one field per
+// blur, but not excluded by the write path either) still reports something
+// specific rather than falling through to the generic verb.
+const VISIT_FORM_FIELDS: readonly VisitFormFieldConfig[] = [
+  { key: "complaint", createVerb: "سجّل شكوى", updateVerb: "عدّل شكوى" },
+  { key: "diagnosis", createVerb: "سجّل تشخيص", updateVerb: "عدّل تشخيص" },
+];
+
+const VISIT_FORM_EXCERPT_MAX_LENGTH = 40;
+
+function excerptOf(value: string): string {
+  return value.length > VISIT_FORM_EXCERPT_MAX_LENGTH
+    ? `${value.slice(0, VISIT_FORM_EXCERPT_MAX_LENGTH)}…`
+    : value;
+}
+
+export interface VisitFormChange {
+  verb: string;
+  /** The changed field's new value, truncated to 40 characters — never the full before/after diff (that stays in audit_log itself). */
+  excerpt: string;
+}
+
+/**
+ * Which of the general form's two fields a visit_form_data save changed, for
+ * both the audit verb (describeAuditVerb) and the audit sheet's excerpt — one
+ * source of truth so the two never disagree. "Registered" (سجّل) vs "edited"
+ * (عدّل) is decided by whether the field was empty before this save, not by
+ * the mutation's own create/update action: the row's first-ever save is
+ * always a create, but a field saved for the first time on an already-
+ * existing row (the other field having been saved earlier) still reads as
+ * "registered," not "edited," since nothing was there to edit.
+ */
+export function describeVisitFormChange(row: AuditVerbRow): VisitFormChange | undefined {
+  for (const field of VISIT_FORM_FIELDS) {
+    const before = dataFieldOf(row.before, field.key);
+    const after = dataFieldOf(row.after, field.key);
+    if (after !== before) {
+      return { verb: before === "" ? field.createVerb : field.updateVerb, excerpt: excerptOf(after) };
+    }
+  }
+  return undefined;
+}
+
+const VISIT_FORM_FALLBACK_VERB = "عدّل النموذج";
+
 // Reachable from more than one starting status (see domain/transitions.ts's
 // VISIT_TRANSITIONS) but always means the same thing regardless of where the
 // visit was: an assistant can cancel, mark no-show, or move a visit from
@@ -84,6 +142,13 @@ const FALLBACK_UPDATE_VERBS: Partial<Record<string, string>> = {
  * table has no specific verbs for at all.
  */
 export function describeAuditVerb(row: AuditVerbRow): string {
+  // Checked ahead of the action-based branches below: a visit_form_data
+  // save's verb depends on which of its two fields changed, not on whether
+  // the row itself was created or updated (see describeVisitFormChange).
+  if (row.entity === "visit_form_data") {
+    return describeVisitFormChange(row)?.verb ?? VISIT_FORM_FALLBACK_VERB;
+  }
+
   if (row.action === AuditAction.Delete) {
     return DELETE_VERBS[row.entity] ?? `حذف (${row.entity})`;
   }

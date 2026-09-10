@@ -22,6 +22,10 @@ interface SlotRowProps {
   onTapEmptySlot?: () => void;
   /** Resolved "recorded by" label for the visit's created_by membership — see actorLabel.ts. */
   actorLabel?: string;
+  /** Present only when this row's visit is in_room or completed — opens the visit form sheet (see VisitFormSheet.tsx). */
+  onOpenVisitForm?: () => void;
+  /** True for a completed visit with no visit_form_data row at all — a passive note, never a warning. */
+  showEmptyFormHint?: boolean;
 }
 
 const REOPENED_STATUSES = new Set<string>([VisitStatus.Cancelled, VisitStatus.NoShow]);
@@ -37,6 +41,8 @@ export default function SlotRow({
   menu,
   onTapEmptySlot,
   actorLabel,
+  onOpenVisitForm,
+  showEmptyFormHint = false,
 }: SlotRowProps) {
   // A visit with no visual treatment (only "rescheduled" today) no longer
   // occupies this slot, so it renders as empty rather than booked.
@@ -73,6 +79,7 @@ export default function SlotRow({
               {dayScreenStrings.recordedByPrefix} {actorLabel}
             </span>
           )}
+          {showEmptyFormHint && <span className="text-sm text-muted">{dayScreenStrings.visitFormEmptyHint}</span>}
         </span>
       ) : (
         <span className="flex flex-1 items-center justify-center text-xl text-muted" aria-hidden="true">
@@ -95,6 +102,15 @@ export default function SlotRow({
         </button>
       ) : (
         <div className="flex flex-1 items-center gap-3 text-start">{rowContent}</div>
+      )}
+      {onOpenVisitForm && (
+        <button
+          type="button"
+          onClick={onOpenVisitForm}
+          className="shrink-0 rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted hover:bg-green-soft hover:text-green"
+        >
+          {dayScreenStrings.visitFormPillLabel}
+        </button>
       )}
       {menu && <VisitMenu actions={menu} />}
     </li>

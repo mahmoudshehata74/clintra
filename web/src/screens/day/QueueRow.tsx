@@ -18,6 +18,10 @@ interface QueueRowProps {
   menu?: VisitMenuActions;
   /** Resolved "recorded by" label for the visit's created_by membership — see actorLabel.ts. */
   actorLabel?: string;
+  /** Present only when this row's visit is in_room or completed — opens the visit form sheet (see VisitFormSheet.tsx). */
+  onOpenVisitForm?: () => void;
+  /** True for a completed visit with no visit_form_data row at all — a passive note, never a warning. */
+  showEmptyFormHint?: boolean;
 }
 
 // Rescheduled is the one status statusVisual() has no treatment for (a
@@ -36,6 +40,8 @@ export default function QueueRow({
   onPrimaryAction,
   menu,
   actorLabel,
+  onOpenVisitForm,
+  showEmptyFormHint = false,
 }: QueueRowProps) {
   const isTappable = Boolean(onPrimaryAction);
   const isInRoom = visit.status === VisitStatus.InRoom;
@@ -70,6 +76,7 @@ export default function QueueRow({
             {dayScreenStrings.recordedByPrefix} {actorLabel}
           </span>
         )}
+        {showEmptyFormHint && <span className="text-sm text-muted">{dayScreenStrings.visitFormEmptyHint}</span>}
       </span>
     </>
   );
@@ -82,6 +89,15 @@ export default function QueueRow({
         </button>
       ) : (
         <div className="flex flex-1 items-center gap-3 text-start">{rowContent}</div>
+      )}
+      {onOpenVisitForm && (
+        <button
+          type="button"
+          onClick={onOpenVisitForm}
+          className="shrink-0 rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted hover:bg-green-soft hover:text-green"
+        >
+          {dayScreenStrings.visitFormPillLabel}
+        </button>
       )}
       {menu && <VisitMenu actions={menu} />}
     </li>

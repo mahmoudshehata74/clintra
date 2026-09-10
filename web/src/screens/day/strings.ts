@@ -266,6 +266,7 @@ export const dayScreenStrings = {
   auditFilterEntityInvoices: "الفواتير",
   auditFilterEntityPayments: "الدفعات",
   auditFilterEntityCashClose: "إغلاق الصندوق",
+  auditFilterEntityVisitFormData: "الزيارة (النموذج)",
   auditFilterActionCreate: "إنشاء",
   auditFilterActionUpdate: "تعديل",
   auditFilterActionDelete: "حذف",
@@ -340,4 +341,23 @@ export const dayScreenStrings = {
   // Shared settings actions.
   settingsSaveAction: "حفظ",
   settingsCancelAction: "إلغاء",
+
+  // The in-room general visit form (reference screen 10): a small pill on an
+  // in_room or completed row, next to the ellipsis, opening a sheet with the
+  // two v1 fields. The doctor opens it deliberately — it never opens itself
+  // when a visit becomes in_room (see screens/day/VisitFormSheet.tsx).
+  visitFormPillLabel: "التسجيل",
+  visitFormLoadingLabel: "جارٍ التحميل...",
+  visitFormComplaintLabel: "الشكوى الرئيسية",
+  visitFormComplaintPlaceholder: "مثال: ألم في الركبة اليمنى من أسبوعين",
+  visitFormDiagnosisLabel: "التشخيص",
+  visitFormDiagnosisPlaceholder: "مثال: التهاب أوتار",
+  // Shown next to a field for two seconds right after its autosave commits,
+  // then fades — never a permanent "saved" state occupying layout space.
+  visitFormSavedIndicator: "اتحفظ",
+  // Shown on a completed row with no visit_form_data row at all — a passive
+  // note, not a warning: completing a visit never requires the form to be
+  // filled (see db/visitForm.ts and db/visitCompletion.ts's deliberate
+  // decoupling).
+  visitFormEmptyHint: "الزيارة اتقفلت من غير تسجيل",
 } as const;

@@ -2,9 +2,9 @@ import { useState } from "react";
 import Ltr from "../../components/Ltr";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
-import type { AuditLog, ClinicDay, Membership, Patient, User } from "../../db/types";
+import type { AuditLog, ClinicDay, Membership, Patient, User, Visit } from "../../db/types";
 import { AuditAction } from "../../db/types";
-import { describeAuditVerb } from "../../domain/auditVerb";
+import { describeAuditVerb, describeVisitFormChange } from "../../domain/auditVerb";
 import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo } from "../../domain/time";
 import { formatActorLabel } from "./actorLabel";
 import {
@@ -38,6 +38,7 @@ const ENTITY_FILTER_OPTIONS: readonly { value: AuditEntityFilter; label: string 
   { value: "invoices", label: dayScreenStrings.auditFilterEntityInvoices },
   { value: "payments", label: dayScreenStrings.auditFilterEntityPayments },
   { value: "cash_close", label: dayScreenStrings.auditFilterEntityCashClose },
+  { value: "visit_form_data", label: dayScreenStrings.auditFilterEntityVisitFormData },
 ];
 
 const ACTION_FILTER_OPTIONS: readonly { value: AuditActionFilter; label: string }[] = [
@@ -47,7 +48,7 @@ const ACTION_FILTER_OPTIONS: readonly { value: AuditActionFilter; label: string 
   { value: AuditAction.Delete, label: dayScreenStrings.auditFilterActionDelete },
 ];
 
-const AUDITED_ENTITIES = new Set(["visits", "patients", "invoices", "payments", "cash_close"]);
+const AUDITED_ENTITIES = new Set(["visits", "patients", "invoices", "payments", "cash_close", "visit_form_data"]);
 
 function payloadOf(row: Pick<AuditLog, "before" | "after">): Record<string, unknown> | null {
   return (row.after ?? row.before) as Record<string, unknown> | null;
@@ -74,12 +75,42 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
   const rows =
     useLiveQuery<AuditRowView[]>(async () => {
       const allRows = await db.audit_log.toArray();
-      const scoped = allRows.filter(
-        (row) =>
-          AUDITED_ENTITIES.has(row.entity) &&
-          todayInCairo(new Date(row.at)) === today &&
-          isAuditRowInScope(row, practitionerId, locationId),
+      const candidateRows = allRows.filter(
+        (row) => AUDITED_ENTITIES.has(row.entity) && todayInCairo(new Date(row.at)) === today,
       );
+
+      // visit_form_data's own payload carries only visit_id and
+      // form_definition_id — no location_id or practitioner_id to scope by
+      // directly, unlike every other audited entity. Resolving the visit up
+      // front lets both the scope check below and descriptionFor() treat it
+      // the same way the reference entities are treated, rather than the
+      // field's mere absence silently admitting every organisation's rows
+      // (isAuditRowInScope's documented "absence means org-wide" rule is
+      // correct for entities with no location/practitioner concept at all —
+      // this is not that; the fields exist, one join away).
+      const formDataVisitIds = [
+        ...new Set(
+          candidateRows
+            .filter((row) => row.entity === "visit_form_data")
+            .map((row) => payloadOf(row)?.visit_id)
+            .filter((visitId): visitId is string => typeof visitId === "string"),
+        ),
+      ];
+      const formDataVisits = await db.visits.bulkGet(formDataVisitIds);
+      const formDataVisitsById = new Map(
+        formDataVisits.filter((v): v is Visit => v != null).map((v) => [v.id, v]),
+      );
+
+      function isInScope(row: AuditLog): boolean {
+        if (row.entity === "visit_form_data") {
+          const visitId = payloadOf(row)?.visit_id;
+          const visit = typeof visitId === "string" ? formDataVisitsById.get(visitId) : undefined;
+          return visit ? visit.location_id === locationId && visit.practitioner_id === practitionerId : false;
+        }
+        return isAuditRowInScope(row, practitionerId, locationId);
+      }
+
+      const scoped = candidateRows.filter(isInScope);
 
       const membershipIds = [...new Set(scoped.map((row) => row.actor_membership_id))];
       const memberships = await db.memberships.bulkGet(membershipIds);
@@ -129,6 +160,9 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         if (row.entity === "cash_close") {
           const date = payload.date;
           return typeof date === "string" ? formatCairoDisplayDate(date) : "";
+        }
+        if (row.entity === "visit_form_data") {
+          return describeVisitFormChange(row)?.excerpt ?? "";
         }
         return "";
       }
