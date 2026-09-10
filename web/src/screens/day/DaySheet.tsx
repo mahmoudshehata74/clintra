@@ -8,6 +8,7 @@ import { ScheduleMode } from "../../domain/scheduleMode";
 import { clockTimeInCairo, formatCairoDisplayDate, weekdayOf } from "../../domain/time";
 import { selectDaySheetVisits } from "./daySheetVisits";
 import Sheet from "./Sheet";
+import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
 
 interface DaySheetProps {
@@ -97,17 +98,23 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
     <>
       <div className="print:hidden">
         <Sheet onDismiss={onDismiss}>
-          <p className="text-xs text-muted">{dayScreenStrings.printHeaderPlaceholder}</p>
-          <p className="mt-2 font-medium">{dayScreenStrings.daySheetTitle}</p>
-          <p className="text-sm text-muted">{formatCairoDisplayDate(tomorrow)}</p>
+          <SheetHeader
+            title={
+              <>
+                {dayScreenStrings.daySheetTitle} — {formatCairoDisplayDate(tomorrow)}
+              </>
+            }
+            onDismiss={onDismiss}
+          />
+          <p className="mt-2 text-xs text-muted">{dayScreenStrings.printHeaderPlaceholder}</p>
 
-          <div className="mt-4 flex flex-col gap-2 overflow-y-auto">
-            {rows.length === 0 && <p className="text-muted">{dayScreenStrings.daySheetEmpty}</p>}
+          <div className="mt-4 flex flex-col divide-y divide-line-soft overflow-y-auto">
+            {rows.length === 0 && <p className="py-3 text-muted">{dayScreenStrings.daySheetEmpty}</p>}
             {rows.map((visit) => {
               const patient = data.patientsById.get(visit.patient_id);
               const service = visit.service_id ? data.servicesById.get(visit.service_id) : undefined;
               return (
-                <div key={visit.id} className="rounded-[--radius-el] border border-line p-3">
+                <div key={visit.id} className="py-2.5">
                   <div className="flex items-baseline justify-between gap-2">
                     <span>{patient?.full_name ?? ""}</span>
                     <Ltr>

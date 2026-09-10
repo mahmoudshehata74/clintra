@@ -43,3 +43,12 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
+
+/* Keeps a printed table row (the day sheet, the invoice) from being split
+   across a page boundary — every print view in the app uses plain <tr>
+   rows, so this one rule covers all of them without per-screen CSS. */
+@media print {
+  tr {
+    break-inside: avoid;
+  }
+}

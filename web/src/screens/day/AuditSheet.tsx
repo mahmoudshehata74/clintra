@@ -14,6 +14,7 @@ import {
   isAuditRowInScope,
 } from "./auditLogFilters";
 import Sheet from "./Sheet";
+import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
 
 interface AuditSheetProps {
@@ -52,10 +53,11 @@ function payloadOf(row: Pick<AuditLog, "before" | "after">): Record<string, unkn
   return (row.after ?? row.before) as Record<string, unknown> | null;
 }
 
-function toggleButtonClass(isSelected: boolean): string {
+// The reference's .tg.a (selected) / .tg.e (neutral) tag-pill language.
+function filterPillClassName(isSelected: boolean): string {
   return isSelected
-    ? "rounded-[--radius-el] border border-green bg-green-soft px-3 py-1 text-sm"
-    : "rounded-[--radius-el] border border-line px-3 py-1 text-sm";
+    ? "rounded-[5px] bg-green-soft px-2 py-0.5 text-xs text-green"
+    : "rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted";
 }
 
 /**
@@ -150,7 +152,14 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
 
   return (
     <Sheet onDismiss={onDismiss}>
-      <p className="font-medium">{dayScreenStrings.auditSheetTitle}</p>
+      <SheetHeader
+        title={
+          <>
+            {dayScreenStrings.auditSheetTitle} — {formatCairoDisplayDate(today)}
+          </>
+        }
+        onDismiss={onDismiss}
+      />
 
       <div className="mt-3 flex flex-wrap gap-2">
         {ENTITY_FILTER_OPTIONS.map((option) => (
@@ -158,7 +167,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
             key={option.value}
             type="button"
             onClick={() => setEntityFilter(option.value)}
-            className={toggleButtonClass(option.value === entityFilter)}
+            className={filterPillClassName(option.value === entityFilter)}
           >
             {option.label}
           </button>
@@ -170,21 +179,21 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
             key={option.value}
             type="button"
             onClick={() => setActionFilter(option.value)}
-            className={toggleButtonClass(option.value === actionFilter)}
+            className={filterPillClassName(option.value === actionFilter)}
           >
             {option.label}
           </button>
         ))}
       </div>
 
-      <div className="mt-4 flex flex-col gap-2 overflow-y-auto">
-        {filteredRows.length === 0 && <p className="text-muted">{dayScreenStrings.auditSheetEmpty}</p>}
+      <div className="mt-4 flex flex-col divide-y divide-line-soft overflow-y-auto">
+        {filteredRows.length === 0 && <p className="py-3 text-muted">{dayScreenStrings.auditSheetEmpty}</p>}
         {filteredRows.map(({ row, verb, description, actorLabel }) => (
-          <div key={row.id} className="rounded-[--radius-el] border border-line p-3">
+          <div key={row.id} className="py-2.5">
             <div className="flex items-baseline justify-between gap-2">
               <span>
-                {verb}
-                {description ? ` — ${description}` : ""}
+                <span className="text-ink">{verb}</span>
+                {description && <span className="text-muted"> — {description}</span>}
               </span>
               <Ltr>
                 <span className="text-sm text-muted">{clockTimeInCairo(row.at)}</span>
