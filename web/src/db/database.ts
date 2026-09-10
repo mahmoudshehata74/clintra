@@ -5,6 +5,7 @@ import type {
   CarePlanItem,
   CashClose,
   DayState,
+  DeviceRegistration,
   FormDefinition,
   Invoice,
   InvoiceItem,
@@ -57,6 +58,7 @@ export class ClintraDatabase extends Dexie {
   care_plan_items!: EntityTable<CarePlanItem, "id">;
   sync_ops!: EntityTable<SyncOp, "op_id">;
   sync_review!: EntityTable<SyncReview, "id">;
+  device!: EntityTable<DeviceRegistration, "id">;
 
   constructor(name = "clintra") {
     super(name);
@@ -153,6 +155,18 @@ export class ClintraDatabase extends Dexie {
       invoice_items: "id, invoice_id",
       payments: "id, invoice_id, location_id, &[location_id+receipt_number]",
       cash_close: "id, &[location_id+date]",
+    });
+
+    // Moves the device identity out of localStorage and into the database, so
+    // it shares fate with the data it stamps (sync_ops.device_id) and is
+    // covered by the persistent-storage grant. One row per browser, keyed by
+    // the device_id itself; it also records the org+location this device serves
+    // (see db/deviceRegistration.ts). The one-time migration of an existing
+    // localStorage id happens in application code, not here, because it needs
+    // the seeded org+location to bind to — an upgrade callback runs before the
+    // seed. See docs/schema.md's v8 additions.
+    this.version(8).stores({
+      device: "id",
     });
   }
 }

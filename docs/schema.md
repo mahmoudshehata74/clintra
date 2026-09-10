@@ -294,6 +294,32 @@ reconciled. Set by the write path (`db/payments.ts`), not user-editable.
 
 Added in local database version 7; versions 1-6 are unchanged.
 
+## v8 additions
+
+### device
+
+id (the device_id), org_id, location_id, registered_at
+
+This browser's device registration. Exactly one row per browser, keyed by the
+device_id itself. The device_id previously lived in `localStorage`
+(`clintra:device_id`); version 8 moves it into the database so it shares fate
+with the data it stamps (`sync_ops.device_id`) and is covered by the
+persistent-storage grant. On first launch after the upgrade, application code
+(`web/src/db/deviceRegistration.ts`) migrates an existing `localStorage`
+device_id into this row — keeping a deployed device's identity — then deletes
+the `localStorage` entry. Migration runs in application code rather than a Dexie
+upgrade callback because it needs the seeded org+location to bind to, and the
+seed runs after upgrades.
+
+`org_id` and `location_id` record which org and location this device serves.
+`getDeviceBinding()` (same module) is the single source of truth for these
+three ids, so replacing the seed-based binding with the future Laravel-backed
+registration is a one-file change. In v1 the binding comes from the seed (the
+first active location and its org); there is no device-login screen yet, so
+registration is transparent — see `docs/auth-plan.md` Layer 1.
+
+Added in local database version 8; versions 1-7 are unchanged.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.

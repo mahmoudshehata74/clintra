@@ -1,7 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import { id } from "../domain/id";
 import { resolveActingMembership } from "./actingMembership";
-import { getDeviceId } from "./deviceId";
+import { getDeviceId } from "./deviceRegistration";
 import type { ClintraDatabase } from "./database";
 import { AuditAction } from "./types";
 

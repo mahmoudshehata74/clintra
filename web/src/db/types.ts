@@ -338,6 +338,21 @@ export interface SyncReview {
   created_at: Instant;
 }
 
+/**
+ * This browser's device registration: its stable id and the org+location it
+ * serves. Exactly one row per browser — the row's `id` IS the device_id. The
+ * single source of truth for these three ids (see db/deviceRegistration.ts's
+ * getDeviceBinding), so the eventual Laravel-backed registration is a
+ * one-file change. Added in database version 8; the device id moved here from
+ * localStorage, which no longer holds device identity.
+ */
+export interface DeviceRegistration {
+  id: string;
+  org_id: string;
+  location_id: string;
+  registered_at: Instant;
+}
+
 // Declared now, unused in v1, no screens.
 
 export const SpecialtyTemplateGeneration = {

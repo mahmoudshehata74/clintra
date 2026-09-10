@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Ltr from "../../components/Ltr";
 import { db } from "../../db/database";
 import { setDayDelay } from "../../db/dayState";
+import { ensureDeviceRegistration } from "../../db/deviceRegistration";
 import {
   undoMostRecentDayStateMutation,
   undoMostRecentInvoiceItemMutation,
@@ -159,6 +160,11 @@ export default function DayScreen() {
 
     async function load() {
       await seedDatabase(db, { includeQueueDemo: true });
+      // Registration is transparent (Layer 1): right after the seed, this
+      // writes the device row (migrating any pre-v8 localStorage id) and primes
+      // the synchronous device-id cache the write path reads. It also yields
+      // the device's home location, used as the default selection below.
+      const deviceBinding = await ensureDeviceRegistration(db);
       const [locations, practitioners, schedules, services] = await Promise.all([
         db.locations.toArray(),
         db.practitioners.toArray(),
@@ -192,7 +198,11 @@ export default function DayScreen() {
         services: activeServices,
         seededDay,
       });
-      setSelectedLocationId(activeLocations[0]?.id ?? null);
+      // Default to the device's bound location (getDeviceBinding is the source
+      // of truth), falling back to the first active one if that binding's
+      // location is not among the currently active set.
+      const boundLocation = activeLocations.find((location) => location.id === deviceBinding.location_id);
+      setSelectedLocationId(boundLocation?.id ?? activeLocations[0]?.id ?? null);
     }
 
     void load();
