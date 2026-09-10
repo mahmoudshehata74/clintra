@@ -14,6 +14,7 @@ function membership(overrides: Partial<Membership>): Membership {
     practitioner_scope: "all",
     practitioner_id: null,
     pin_hash: "hash",
+    pin_salt: "salt",
     is_active: true,
     ...overrides,
   } as Membership;

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { Role } from "../domain/role";
 import { VisitSource } from "../domain/visitSource";
 import { VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "./database";
@@ -61,8 +62,12 @@ describe("bookExistingPatientVisit", () => {
     expect(booked?.source).toBe(VisitSource.Phone);
     expect(booked?.is_overbooked).toBe(false);
 
-    const [membership] = await db.memberships.toArray();
-    expect(booked?.created_by).toBe(membership.id);
+    // The acting membership is the seeded assistant (the test harness's actor,
+    // see src/test/setupIndexedDb.ts) — not simply the first row, now that the
+    // seed writes both an assistant and a practitioner membership.
+    const memberships = await db.memberships.toArray();
+    const assistant = memberships.find((membership) => membership.role === Role.Assistant);
+    expect(booked?.created_by).toBe(assistant?.id);
 
     expect(await db.audit_log.count()).toBe(1);
     expect(await db.sync_ops.count()).toBe(1);

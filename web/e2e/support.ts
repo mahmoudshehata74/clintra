@@ -1,10 +1,20 @@
 import { expect, type Page } from "@playwright/test";
 // The real UI strings, imported rather than duplicated so a wording change in
-// the app can never silently drift from the tests. strings.ts has no imports
-// of its own, so pulling it into the Playwright bundle is cheap and safe.
+// the app can never silently drift from the tests. These modules have no
+// imports of their own, so pulling them into the Playwright bundle is cheap.
+import { authStrings } from "../src/auth/authStrings";
+// Dev-only seed PINs — imported, never written as literals into the tests, and
+// never logged, per the task's rule. See src/auth/devPins.ts.
+import { DEV_SEED_PINS } from "../src/auth/devPins";
 import { dayScreenStrings } from "../src/screens/day/strings";
 
 export const S = dayScreenStrings;
+export const AUTH = authStrings;
+export { DEV_SEED_PINS };
+
+// Display labels the lock-screen picker shows (formatActorLabel = "name (role)").
+export const ASSISTANT_NAME = "سارة حسن";
+export const PRACTITIONER_NAME = "أحمد المصري";
 
 // Seed-derived fixtures (see web/src/db/seed.ts). The slots-mode practitioner,
 // the queue-mode one, and the five demo patients.
@@ -30,9 +40,48 @@ export const PATIENTS = {
 export async function gotoSeededDay(page: Page): Promise<void> {
   await page.goto("/?seedDay=1");
   await page.evaluate(() => localStorage.clear());
-  // Wait until the header's practitioner switcher is rendered — proves the
-  // seed finished and static data loaded.
+  // The app now boots locked; log in as the assistant so the day screen is
+  // interactive, then wait for the practitioner switcher (proves the seed
+  // finished and static data loaded).
+  await login(page);
   await expect(page.getByRole("button", { name: SLOTS_DR })).toBeVisible();
+}
+
+/** The lock overlay (role=dialog with the auth aria-label). */
+export function lockOverlay(page: Page) {
+  return page.getByRole("dialog", { name: AUTH.lockOverlayAria });
+}
+
+/** Enter a PIN on the on-screen pad, one digit button at a time. */
+export async function enterPin(page: Page, pin: string): Promise<void> {
+  const overlay = lockOverlay(page);
+  for (const digit of pin) {
+    await overlay.getByRole("button", { name: digit, exact: true }).click();
+  }
+}
+
+/**
+ * Complete the lock screen: pick a membership from the picker if it is showing,
+ * then key in its PIN. Defaults to the seeded assistant. The PIN comes from the
+ * shared dev-only constant, never a literal here.
+ */
+export async function login(
+  page: Page,
+  { pin = DEV_SEED_PINS.assistant, name = ASSISTANT_NAME }: { pin?: string; name?: string } = {},
+): Promise<void> {
+  const overlay = lockOverlay(page);
+  await expect(overlay).toBeVisible();
+  const pick = overlay.getByRole("button", { name: new RegExp(name) });
+  const firstPadKey = overlay.getByRole("button", { name: "1", exact: true });
+  // Wait for the overlay's controls to render (the picker list appears only
+  // once the seed has written memberships); then a fresh launch shows the
+  // picker, a re-lock shows the pad directly.
+  await expect(pick.or(firstPadKey).first()).toBeVisible();
+  if (await pick.count()) {
+    await pick.first().click();
+  }
+  await enterPin(page, pin);
+  await expect(overlay).toBeHidden();
 }
 
 /**
@@ -46,6 +95,7 @@ export async function gotoSeededDay(page: Page): Promise<void> {
 export async function gotoRealDay(page: Page): Promise<void> {
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
+  await login(page);
   await expect(page.getByRole("button", { name: SLOTS_DR })).toBeVisible();
 }
 

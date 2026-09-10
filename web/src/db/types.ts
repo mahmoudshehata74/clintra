@@ -50,6 +50,13 @@ export interface Membership {
   /** Required only when practitioner_scope is "self". */
   practitioner_id: string | null;
   pin_hash: string;
+  /**
+   * Per-membership salt for pin_hash (Argon2id). Nullable for rows written
+   * before database version 9, and for any membership whose PIN has not been
+   * set yet. See db/deviceRegistration.ts's sibling auth modules
+   * (auth/pinHash.ts) and docs/schema.md's v9 additions.
+   */
+  pin_salt: string | null;
   is_active: boolean;
 }
 

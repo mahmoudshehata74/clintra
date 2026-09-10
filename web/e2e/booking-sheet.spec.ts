@@ -5,6 +5,7 @@ import {
   openBookingSheet,
   PATIENTS,
   readClockTime,
+  rowFor,
   S,
   selectPractitioner,
   SLOTS_DR,
@@ -13,6 +14,10 @@ import {
 test.beforeEach(async ({ page }) => {
   await gotoSeededDay(page);
   await selectPractitioner(page, SLOTS_DR);
+  // Wait until visits have loaded (منى shows as booked) before any test reads
+  // empty-slot tiles: until then the grid briefly renders every slot as empty,
+  // which would make "the first empty slot" momentarily be an occupied time.
+  await expect(rowFor(page, PATIENTS.mona)).toContainText(S.statusBooked);
 });
 
 test("an existing patient is booked into a specific empty slot in exactly 3 taps", async ({ page }) => {
@@ -113,6 +118,9 @@ test("the overbook flow appears only once the day is full and writes an over-cap
     await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(cycle[i % cycle.length]);
     await dialog.getByRole("button").filter({ hasText: cycle[i % cycle.length] }).first().click();
     await expect(dialog.getByRole("button", { name: S.bookingBackAction, exact: true })).toBeVisible();
+    // Wait for the slots step to settle into EITHER a tile or the overbook
+    // button, so the loop never reads a transient (re-render lag) count.
+    await expect(slotTiles.first().or(overbookButton)).toBeVisible();
 
     if (i === 0) {
       // While empty slots remain, the overbook button is not offered.
@@ -120,7 +128,7 @@ test("the overbook flow appears only once the day is full and writes an over-cap
       await expect(overbookButton).toHaveCount(0);
     }
 
-    if ((await slotTiles.count()) === 0) {
+    if (await overbookButton.isVisible()) {
       break; // day is full — the overbook button is now showing
     }
     await slotTiles.first().click();

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Ltr from "../../components/Ltr";
 import { db } from "../../db/database";
+import { authStrings } from "../../auth/authStrings";
+import { clearActiveSession } from "../../auth/session";
 import { setDayDelay } from "../../db/dayState";
 import { ensureDeviceRegistration } from "../../db/deviceRegistration";
 import {
@@ -713,6 +715,13 @@ export default function DayScreen() {
                 className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
               >
                 {dayScreenStrings.cashCloseButtonLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => clearActiveSession()}
+                className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
+              >
+                {authStrings.lockButtonLabel}
               </button>
             </>
           )}

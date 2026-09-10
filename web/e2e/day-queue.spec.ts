@@ -32,8 +32,9 @@ test("average consult minutes render in Western digits, and the expected-wait li
   // avg_consult_minutes = 11, so the average shows immediately — in Western
   // digits per Decision B, never Arabic-Indic.
   const summary = page.locator("p.text-muted").filter({ hasText: S.queueSummaryAverageLabel }).first();
+  // Poll until the day_state average has loaded (it starts as "—"), then read.
+  await expect(summary).toContainText("11");
   const summaryText = await summary.innerText();
-  expect(summaryText).toContain("11");
   expect(summaryText).not.toMatch(/[٠-٩]/); // no Arabic-Indic digits
 
   // With two completions on record, waiting rows show a computed estimate, not

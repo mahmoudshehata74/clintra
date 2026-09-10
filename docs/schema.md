@@ -129,6 +129,12 @@ difference_note? (required when difference is not zero), closed_by, closed_at
 id, org_id, actor_membership_id, entity, entity_id,
 action (create|update|delete), before?, after?, at
 
+`actor_membership_id`: before v1 auth (Layer 2, the staff PIN) ships, this may
+be the seeded assistant — the dev-only stand-in `resolveActingMembership()`
+returned when there was no real session. After auth ships, it is the truly
+acting membership (the one whose PIN unlocked the current session). Earlier rows
+are never rewritten: history stays as it was recorded.
+
 ### specialty_templates
 id, org_id? (null means a system-wide template), key, name,
 generation (none|repeat|sequence|interval), default_count?, gap_days?,
@@ -319,6 +325,32 @@ first active location and its org); there is no device-login screen yet, so
 registration is transparent — see `docs/auth-plan.md` Layer 1.
 
 Added in local database version 8; versions 1-7 are unchanged.
+
+## v9 additions
+
+### memberships.pin_salt; memberships.is_active index
+
+Staff PIN authentication (Layer 2 — see docs/auth-plan.md). `memberships`
+gains `pin_salt`, the per-membership random salt for `pin_hash`. The PIN is
+hashed with Argon2id (`@noble/hashes`) under the parameters in
+`web/src/auth/pinHashParams.ts`; the salt is a value field, not an index — hash
+and salt are only ever read by primary key alongside the rest of the row — so
+this version's only real index change is a plain `is_active` index on
+`memberships`, used to list the pickable memberships on the lock screen.
+
+`pin_salt` is nullable: rows written before this version, and any membership
+whose PIN has not been set, carry none. There are no real PINs deployed yet
+(the seed's `pin_hash` was a placeholder), so no data upgrade runs — a fresh
+seed writes real salted hashes for the dev PINs (`web/src/auth/devPins.ts`,
+dev-only and to be removed with the real setup flow).
+
+PIN length is four digits in v1 but the column accepts any length, so a future
+6-digit clinic is a config change, not a schema change. Changing the Argon2id
+parameters later needs no migration either: the next successful PIN entry can
+re-hash transparently, since a stored hash is only ever compared against a
+fresh hash of the entered PIN.
+
+Added in local database version 9; versions 1-8 are unchanged.
 
 ## Rules
 

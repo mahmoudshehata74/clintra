@@ -168,6 +168,18 @@ export class ClintraDatabase extends Dexie {
     this.version(8).stores({
       device: "id",
     });
+
+    // Staff PIN (Layer 2 auth). pin_salt is a value field, not an index — the
+    // hash and salt are only ever read by primary key alongside the rest of the
+    // membership — so this version's real change is a plain `is_active` index on
+    // memberships, used to list the pickable memberships on the lock screen
+    // without scanning the table. The salt itself needs no index; it rides on
+    // the row. Existing rows carry no salt until re-seeded or a real PIN is set
+    // (there are no real PINs deployed yet — pin_hash was a placeholder), so no
+    // data upgrade is required. See docs/schema.md's v9 additions.
+    this.version(9).stores({
+      memberships: "id, is_active",
+    });
   }
 }
 

@@ -4,6 +4,9 @@ import { emptySlotTiles, gotoSeededDay, PATIENTS, readClockTime, rowFor, S, sele
 test.beforeEach(async ({ page }) => {
   await gotoSeededDay(page);
   await selectPractitioner(page, SLOTS_DR);
+  // Wait until visits have loaded before reading the grid: until then every
+  // slot renders as an empty tile, which would race the empty-tile assertions.
+  await expect(rowFor(page, PATIENTS.mona)).toContainText(S.statusBooked);
 });
 
 test("header renders connection chip, date, delay chip, and counters", async ({ page }) => {

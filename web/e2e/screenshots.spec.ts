@@ -1,7 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
+  ASSISTANT_NAME,
   emptySlotTiles,
   gotoSeededDay,
+  lockOverlay,
+  login,
   openBookingSheet,
   PATIENTS,
   rowFor,
@@ -38,6 +41,21 @@ async function shoot(page: Page, surface: string, fullPage: boolean): Promise<vo
   await page.screenshot({ path: `${OUT_DIR}/${surface}-${project}.png`, fullPage });
 }
 
+test("@screenshot lock-screen-picker", async ({ page }) => {
+  // Re-navigate to the fresh, still-locked state (beforeEach logged in).
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await expect(lockOverlay(page).getByText("دخول العيادة")).toBeVisible();
+  await shoot(page, "lock-screen-picker", false);
+});
+
+test("@screenshot lock-screen-pad", async ({ page }) => {
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await lockOverlay(page).getByRole("button", { name: new RegExp(ASSISTANT_NAME) }).click();
+  await shoot(page, "lock-screen-pad", false);
+});
+
 test("@screenshot day-slots-default", async ({ page }) => {
   await selectPractitioner(page, SLOTS_DR);
   await shoot(page, "day-slots-default", true);
@@ -65,6 +83,7 @@ test("@screenshot day-slots-with-overbook", async ({ page }) => {
   await selectPractitioner(page, SLOTS_DR);
   const dialog = page.getByRole("dialog");
   const slotTiles = dialog.getByRole("button", { name: /^\d{1,2}:\d{2}$/ });
+  const overbookButton = dialog.getByRole("button", { name: S.overbookButtonLabel, exact: true });
   const cycle = [PATIENTS.mona, PATIENTS.karim, PATIENTS.yasmin, PATIENTS.omar, PATIENTS.hoda];
 
   for (let i = 0; i < 12; i++) {
@@ -72,12 +91,13 @@ test("@screenshot day-slots-with-overbook", async ({ page }) => {
     await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(cycle[i % cycle.length]);
     await dialog.getByRole("button").filter({ hasText: cycle[i % cycle.length] }).first().click();
     await expect(dialog.getByRole("button", { name: S.bookingBackAction, exact: true })).toBeVisible();
-    if ((await slotTiles.count()) === 0) break;
+    await expect(slotTiles.first().or(overbookButton)).toBeVisible();
+    if (await overbookButton.isVisible()) break;
     await slotTiles.first().click();
     await dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
     await expect(dialog).toBeHidden();
   }
-  await dialog.getByRole("button", { name: S.overbookButtonLabel, exact: true }).click();
+  await overbookButton.click();
   await dialog.getByRole("button", { name: /^\d{1,2}:\d{2}$/ }).first().click();
   await dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
   await expect(page.getByText(S.overbookedRowBadge).first()).toBeVisible();
@@ -195,6 +215,7 @@ test("@screenshot receipt-print", async ({ page }) => {
     window.print = () => {};
   });
   await page.goto("/?seedDay=1"); // re-navigate so the init script applies
+  await login(page);
   const dialog = await openFreshInvoice(page);
   await recordHalfPayment(page, dialog);
   await page.getByRole("dialog").getByRole("button", { name: S.printReceiptAction, exact: true }).click();
@@ -218,6 +239,7 @@ test("@screenshot day-sheet-print", async ({ page }) => {
     window.print = () => {};
   });
   await page.goto("/?seedDay=1");
+  await login(page);
   await selectPractitioner(page, SLOTS_DR);
   await page.getByRole("button", { name: S.daySheetButtonLabel, exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: S.printDaySheetAction, exact: true }).click();

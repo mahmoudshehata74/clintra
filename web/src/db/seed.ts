@@ -1,3 +1,5 @@
+import { DEV_SEED_PINS } from "../auth/devPins";
+import { generatePinSalt, hashPin } from "../auth/pinHash";
 import { id } from "../domain/id";
 import { Role } from "../domain/role";
 import { LocationScope, PractitionerScope } from "../domain/scope";
@@ -220,6 +222,11 @@ async function writeSeedData(
     is_active: true,
   };
 
+  // Real Argon2id hashes of the dev-only seed PINs (see auth/devPins.ts). This
+  // synchronous hashing runs only when the database is empty (this function is
+  // only reached then), and only before the first `await` below, so the
+  // enclosing Dexie transaction stays open. Each membership gets its own salt.
+  const assistantPinSalt = generatePinSalt();
   const assistantMembership: Membership = {
     id: id(),
     user_id: assistantUser.id,
@@ -228,8 +235,32 @@ async function writeSeedData(
     location_scope: LocationScope.All,
     practitioner_scope: PractitionerScope.All,
     practitioner_id: null,
-    // Seed data only: not a real password/PIN hash.
-    pin_hash: "seed-placeholder-pin-hash",
+    pin_salt: assistantPinSalt,
+    pin_hash: hashPin(DEV_SEED_PINS.assistant, assistantPinSalt),
+    is_active: true,
+  };
+
+  // A second staff member so the lock screen has more than one membership to
+  // pick between — the practitioner, tied to the slots-mode practitioner above.
+  const practitionerUser: User = {
+    id: id(),
+    full_name: "أحمد المصري",
+    phone: "+201000000002",
+    email: null,
+    is_active: true,
+  };
+
+  const practitionerPinSalt = generatePinSalt();
+  const practitionerMembership: Membership = {
+    id: id(),
+    user_id: practitionerUser.id,
+    org_id: organization.id,
+    role: Role.Practitioner,
+    location_scope: LocationScope.All,
+    practitioner_scope: PractitionerScope.Self,
+    practitioner_id: practitioner.id,
+    pin_salt: practitionerPinSalt,
+    pin_hash: hashPin(DEV_SEED_PINS.practitioner, practitionerPinSalt),
     is_active: true,
   };
 
@@ -418,8 +449,8 @@ async function writeSeedData(
   await db.practitioner_locations.bulkAdd(
     options.includeQueueDemo ? [practitionerLocation, queuePractitionerLocation] : [practitionerLocation],
   );
-  await db.users.add(assistantUser);
-  await db.memberships.add(assistantMembership);
+  await db.users.bulkAdd([assistantUser, practitionerUser]);
+  await db.memberships.bulkAdd([assistantMembership, practitionerMembership]);
   await db.services.bulkAdd(services);
   await db.schedules.bulkAdd(options.includeQueueDemo ? [...schedules, ...queueSchedules] : schedules);
   await db.patients.bulkAdd(patients);
