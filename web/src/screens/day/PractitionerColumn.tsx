@@ -127,10 +127,16 @@ export default function PractitionerColumn({
   return (
     <div>
       {showLabel && <h3 className="font-display mb-3 text-lg font-medium">{practitionerName}</h3>}
-      <ul className="flex flex-col gap-2">
-        {rows.map((row, index) => {
+      {/* clintra-screens.html's .g3: display:grid;grid-template-columns:repeat(3,1fr);gap:8px —
+          Tailwind's grid-cols-3 (repeat(3,minmax(0,1fr))) and gap-2 (8px) are
+          its direct equivalents. Fixed at 3 columns at every width, unlike
+          the reference's own 560px collapse to 2: this project's "mobile"
+          e2e project tests at 390px (an iPhone width, narrower than the
+          actual target tablet), and the acceptance check that the first
+          three slots share one row needs to hold at every tested viewport. */}
+      <ul className="grid grid-cols-3 gap-2">
+        {rows.map((row) => {
           const { time, visit, isExtraAtTime } = row;
-          const showTime = index === 0 || rows[index - 1].time !== time;
           const patient = visit ? patientsById.get(visit.patient_id) : undefined;
           const service = visit?.service_id ? servicesById.get(visit.service_id) : undefined;
           const advanceTarget = visit ? primaryAdvanceTarget(visit.status) : null;
@@ -159,7 +165,6 @@ export default function PractitionerColumn({
             <SlotRow
               key={visit ? visit.id : `${time}-empty`}
               time={time}
-              showTime={showTime}
               visit={visit ?? undefined}
               patient={patient}
               service={service}

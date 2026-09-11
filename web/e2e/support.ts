@@ -6,10 +6,12 @@ import { authStrings } from "../src/auth/authStrings";
 // Dev-only seed PINs — imported, never written as literals into the tests, and
 // never logged, per the task's rule. See src/auth/devPins.ts.
 import { DEV_SEED_PINS } from "../src/auth/devPins";
+import { sidebarStrings } from "../src/components/strings";
 import { dayScreenStrings } from "../src/screens/day/strings";
 
 export const S = dayScreenStrings;
 export const AUTH = authStrings;
+export const SIDEBAR = sidebarStrings;
 export { DEV_SEED_PINS };
 
 // Display labels the lock-screen picker shows (formatActorLabel = "name (role)").

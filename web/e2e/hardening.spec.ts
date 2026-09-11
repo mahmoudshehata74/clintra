@@ -113,7 +113,10 @@ async function putIndexedDbRows<T>(page: Page, storeName: string, rows: readonly
 test("existing patient booking: 3 taps, under 3 seconds", async ({ page }) => {
   await setup(page);
   const firstTile = emptySlotTiles(page).first();
-  const time = await readClockTime(await firstTile.innerText());
+  // The tile itself shows no time text (clintra-screens.html's .sl.free is a
+  // bare centered "+"), so the time is read from the non-visual
+  // data-slot-time hook instead — see SlotRow.tsx.
+  const time = await readClockTime(await firstTile.getAttribute("data-slot-time"));
   const dialog = page.getByRole("dialog");
 
   const start = Date.now();

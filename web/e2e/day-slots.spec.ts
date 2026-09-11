@@ -66,7 +66,10 @@ test("single tap advances booked -> arrived -> in_room -> completed, and undo re
 
 test("empty-slot plus tile opens the booking sheet with the slot's time pre-filled", async ({ page }) => {
   const firstTile = emptySlotTiles(page).first();
-  const time = await readClockTime(await firstTile.innerText());
+  // The tile itself shows no time text (clintra-screens.html's .sl.free is a
+  // bare centered "+"), so the time is read from the non-visual
+  // data-slot-time hook instead — see SlotRow.tsx.
+  const time = await readClockTime(await firstTile.getAttribute("data-slot-time"));
   await firstTile.click();
 
   const dialog = page.getByRole("dialog");

@@ -26,7 +26,10 @@ test("an existing patient is booked into a specific empty slot in exactly 3 taps
   // itself: empty-slot tile, patient result, confirm.
   let taps = 0;
   const firstTile = emptySlotTiles(page).first();
-  const time = await readClockTime(await firstTile.innerText());
+  // The tile itself shows no time text (clintra-screens.html's .sl.free is a
+  // bare centered "+"), so the time is read from the non-visual
+  // data-slot-time hook instead — see SlotRow.tsx.
+  const time = await readClockTime(await firstTile.getAttribute("data-slot-time"));
 
   taps++;
   await firstTile.click(); // tap 1 — the empty slot pre-fills its time

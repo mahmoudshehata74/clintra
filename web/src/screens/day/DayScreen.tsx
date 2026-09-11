@@ -145,7 +145,13 @@ function practitionerPillClassName(isSelected: boolean): string {
     : "rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted";
 }
 
-export default function DayScreen() {
+interface DayScreenProps {
+  /** Lifted to App.tsx: AppShell's sidebar is what opens this now, and needs the same flag to know it's the active section. */
+  isSettingsOpen: boolean;
+  onCloseSettings: () => void;
+}
+
+export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreenProps) {
   const [staticData, setStaticData] = useState<StaticData | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [selectedPractitionerId, setSelectedPractitionerIdState] = useState<string | null>(readStoredPractitionerId);
@@ -160,7 +166,6 @@ export default function DayScreen() {
   const [isCashCloseOpen, setIsCashCloseOpen] = useState(false);
   const [isDaySheetOpen, setIsDaySheetOpen] = useState(false);
   const [isAuditSheetOpen, setIsAuditSheetOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const actingMembership = useActingMembership();
   const isOwner = actingMembership?.role === Role.Owner;
 
@@ -691,22 +696,20 @@ export default function DayScreen() {
 
   return (
     <main className={`mx-auto max-w-3xl px-6 pt-16 ${toastState ? "pb-28" : "pb-16"}`}>
-      {/* Row 1: brand + connection state — matching the design reference's
-          composition of brand and status chip sharing one row. */}
+      {/* Row 1: the reference's horizontal .fbar composition — the screen's
+          title (the date, its real heading) on the leading side, the
+          connectivity chip on the trailing side. The brand now lives in
+          AppShell's sidebar instead of repeating here. */}
       <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-4xl font-semibold text-green">Clintra</h1>
+        <p className="font-display text-2xl font-semibold text-ink">
+          {formatCairoDisplayDateParts(today).map((part, index) =>
+            part.type === "day" ? <Ltr key={index}>{part.value}</Ltr> : <span key={index}>{part.value}</span>,
+          )}
+        </p>
         <SyncStatusChip />
       </div>
 
-      {/* Row 2: the date, as the screen's real heading — the reference gives
-          this position, not the brand, the primary heading treatment. */}
-      <p className="mt-2 font-display text-2xl font-semibold text-ink">
-        {formatCairoDisplayDateParts(today).map((part, index) =>
-          part.type === "day" ? <Ltr key={index}>{part.value}</Ltr> : <span key={index}>{part.value}</span>,
-        )}
-      </p>
-
-      {/* Row 3: a metadata row of tag-styled pills — delay state and the
+      {/* Row 2: a metadata row of tag-styled pills — delay state and the
           day-header actions, matching the reference's .tg tag language
           instead of underlined text links or a bordered chip. */}
       {currentPractitioner && (
@@ -750,16 +753,8 @@ export default function DayScreen() {
               >
                 {dayScreenStrings.cashCloseButtonLabel}
               </button>
-              {/* Owner-only: no disabled state, no route reachable otherwise. */}
-              {isOwner && (
-                <button
-                  type="button"
-                  onClick={() => setIsSettingsOpen(true)}
-                  className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
-                >
-                  {dayScreenStrings.settingsButtonLabel}
-                </button>
-              )}
+              {/* Settings itself moved to AppShell's sidebar ("الإعدادات"),
+                  which enforces the same owner-only gate this button used to. */}
               <button
                 type="button"
                 onClick={() => clearActiveSession()}
@@ -772,7 +767,7 @@ export default function DayScreen() {
         </div>
       )}
 
-      {/* Row 4: counters. */}
+      {/* Row 3: counters. */}
       <div className="mt-3">
         <Counters counters={counters} />
       </div>
@@ -957,7 +952,7 @@ export default function DayScreen() {
           practitionerId={currentPractitionerId}
           locationId={selectedLocationId}
           orgId={currentPractitioner.org_id}
-          onDismiss={() => setIsSettingsOpen(false)}
+          onDismiss={onCloseSettings}
         />
       )}
 

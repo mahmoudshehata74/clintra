@@ -64,7 +64,11 @@ export default function Sheet({ onDismiss, children }: SheetProps) {
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 top-40 z-20">
+    // bottom-16 below sm: leaves room for AppShell's mobile bottom nav bar
+    // (see AppShell.tsx) so the two fixed layers never overlap — at sm: and
+    // above the sidebar is a side rail instead, so the sheet reclaims the
+    // full height exactly as before AppShell existed.
+    <div className="fixed inset-x-0 bottom-16 top-40 z-20 sm:bottom-0">
       <div className="absolute inset-0 bg-ink/40" onClick={onDismiss} aria-hidden="true" />
       <div
         className="absolute inset-x-0 bottom-0 mx-auto flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-t-[--radius-frame] border border-line bg-paper px-4 pb-6 pt-2 shadow-lg"

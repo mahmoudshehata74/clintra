@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import LockScreen from "./auth/LockScreen";
 import {
   clearActiveSession,
@@ -6,9 +6,12 @@ import {
   getLastActiveMembershipId,
   subscribeSession,
 } from "./auth/session";
+import { useActingMembership } from "./auth/useActingMembership";
 import { useIdleLock } from "./auth/useIdleLock";
+import AppShell from "./components/AppShell";
 import InstallBanner from "./components/InstallBanner";
 import { db } from "./db/database";
+import { Role } from "./domain/role";
 import DayScreen from "./screens/day/DayScreen";
 import { startSyncEngine } from "./sync/engine";
 import { FakeTransport } from "./sync/fakeTransport";
@@ -38,12 +41,28 @@ export default function App() {
 
   useIdleLock(!isLocked, IDLE_TIMEOUT_MS, clearActiveSession);
 
+  // Settings lives one level up from DayScreen now: AppShell's sidebar is
+  // what opens it (its "الإعدادات" item), and the sidebar needs to know
+  // whether it's the currently active section to apply the reference's
+  // .fn div.on treatment — both read this same flag, so it can't stay
+  // DayScreen's own local state the way it was before this task.
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const actingMembership = useActingMembership();
+  const isOwner = actingMembership?.role === Role.Owner;
+
   // The day screen stays mounted while locked so an open sheet with typed
   // values is preserved and restored on unlock; the overlay covers it fully.
   return (
     <>
       <InstallBanner />
-      <DayScreen />
+      <AppShell
+        activeItem={isSettingsOpen ? "settings" : "day"}
+        onSelectDay={() => setIsSettingsOpen(false)}
+        settingsEnabled={isOwner}
+        onSelectSettings={() => setIsSettingsOpen(true)}
+      >
+        <DayScreen isSettingsOpen={isSettingsOpen} onCloseSettings={() => setIsSettingsOpen(false)} />
+      </AppShell>
       {isLocked && <LockScreen defaultMembershipId={lastMembershipId} />}
     </>
   );
