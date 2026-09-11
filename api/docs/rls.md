@@ -308,6 +308,155 @@ of its own to attribute an audit row to (it's a bare CLI invocation, not a
 request from a logged-in owner), so it looks up the org's own active owner
 membership and attributes the code-creation audit row to that.
 
+## Hardening pass: register_device as the outer boundary
+
+`register_device(jsonb)` is reachable from an unauthenticated public
+endpoint (`POST /api/devices/register`) — nothing gates it, because it *is*
+how a device gets its first credential. It runs `SECURITY DEFINER` as
+`clintra_provision`, a `BYPASSRLS` role, so it deserves the same scrutiny as
+`provision_organization`.
+
+**Grants audit.** Queried directly (`information_schema.role_table_grants`,
+not `\dp`, since no `psql` client was available in this environment —
+identical information): `clintra_provision` holds `INSERT`/`SELECT` on
+`activation_codes`, `audit_log`, `locations`, `memberships`,
+`organizations`, `practitioners`, `users`; `INSERT`-only on `device` and
+`practitioner_locations`; and `SELECT`-only on `specialty_templates`. It
+holds **zero privileges on `patients`, `visits`, `invoices`, or
+`payments`** — the specific hole this audit was checking for does not
+exist.
+
+The footprint is wider than `register_device` itself needs (it only ever
+touches `activation_codes`, `device`, `memberships`, `users`, `audit_log`)
+because `clintra_provision` is the shared owner of three functions —
+`register_device`, `provision_organization`, and `mint_activation_code` —
+and Postgres grants are per-role, not per-function. `provision_organization`
+is what actually needs `organizations`/`locations`/`practitioners`/
+`practitioner_locations`/`specialty_templates`. Splitting this into
+per-function roles would shrink `register_device`'s blast radius further
+but is a structural change beyond this pass's scope — noted here for a
+future hardening step, not applied. `personal_access_tokens` was expected
+in this list but isn't: the Sanctum token row is written in PHP, on the
+`clintra_app` connection, *after* `register_device` returns (see
+`DeviceRegistrationController`) — `register_device` itself never touches
+that table.
+
+**Its own input validation** (`2026_09_12_000007_validate_register_device_payload.php`)
+mirrors `provision_organization`'s: required keys present, no unknown keys,
+`device_id` a well-formed UUID, `phone` matching E.164, `code_hash` exactly
+64 lowercase hex characters — each with its own `RAISE EXCEPTION ...
+USING ERRCODE = '22023'`, checked before any table read. One Pest test per
+rule, in `tests/Feature/Rls/RegisterDeviceValidationTest.php`.
+
+**Credential failures stay indistinguishable inside the function, not just
+over HTTP.** A bad code, an expired code, an already-used code, and a
+phone that doesn't match the code's org all fall through to the same
+generic `RAISE EXCEPTION 'register_device: registration failed'` with the
+default SQLSTATE (`P0001`) — verified by a test that asserts a bad-code
+attempt and a bad-phone attempt raise byte-identical SQLSTATE and message.
+
+**Single-use is atomic under real concurrency**, not just sequentially.
+The code's `used_at` claim and the `device` insert happen in one
+transaction; a Pest test spawns two genuinely separate OS processes
+(`proc_open()` against a standalone PHP/PDO script with no Laravel
+bootstrap — `pcntl_fork()` isn't available on Windows) that race the same
+activation code, and asserts exactly one commits and one fails.
+
+**`device_exists()`** (`2026_09_12_000008_add_device_exists_helper.php`)
+closes a gap `ApplyMembership` had: a token survives in
+`personal_access_tokens` (no RLS) even after its `device` row is deleted,
+since nothing there depends on the device still existing. It's the same
+`SECURITY DEFINER`-owned-by-`clintra_rls` pattern as `current_org()` —
+`ApplyMembership` calls it on every token-authenticated request and treats
+a `false` result as unauthenticated. `device` has no `is_active` column, so
+only "deleted" is representable, not "inactive"; a future `is_active`
+column would need this function (and this note) updated together.
+
+## Hardening pass: hand-rolled token verification in ApplyMembership
+
+`ApplyMembership` carries the entire isolation guarantee for every
+membership-gated route, so its manual token check (see above: it can't use
+Sanctum's own guard, which would try to load the RLS-protected `device`
+table before any membership is known) was audited line by line against a
+checklist, each backed by a test in
+`tests/Feature/Rls/ApplyMembershipHardeningTest.php`:
+
+- Token comparison uses `hash_equals`, not `===` — checked structurally
+  (asserts the source contains `hash_equals(` and never a loose comparison
+  against a `hash()` call) as well as behaviorally.
+- An expired token (`expires_at` in the past) is rejected.
+- A deleted token row is rejected (nothing to find `hash_equals` against).
+- A token whose `device` row was deleted is rejected, via `device_exists()`
+  above.
+- A token whose membership has `is_active = false` is rejected — caught by
+  `current_org()`'s own `is_active = true` scoping, not by
+  `ApplyMembership` reading `memberships` directly.
+- A token whose membership moved to a different org reads the *new* org's
+  data on the very next request, never the old one — by construction,
+  since `current_org()` re-resolves live from `memberships` on every call
+  and nothing about org scope is ever cached at token-issuance time.
+- A malformed `Authorization` header — no `Bearer` prefix, empty, no `|`
+  separator, or a non-numeric/oversized id segment — returns 401, never
+  500. This was a real bug, not a hypothetical: before validating the id
+  segment with `ctype_digit()`, a header like `Bearer abc|xyz` reached
+  `DB::table('personal_access_tokens')->where('id', 'abc')`, and Postgres
+  raising `SQLSTATE[22P02]: invalid input syntax for type bigint` bubbled
+  up as an uncaught `QueryException` — a 500, with the raw query text
+  visible in the response under `APP_DEBUG=true`. Fixed by rejecting any
+  id segment that isn't all-digits and at most 18 characters *before* it
+  reaches a query.
+
+Every rejection path returns the exact same generic 401 body
+(`{"error": "unauthenticated", "message": "..."}"`) — none of the above are
+distinguished from each other in the response.
+
+## Hardening pass: the timezone bug class
+
+A naive `DateTimeInterface` passed straight into `insert()`/`update()`/a
+raw binding gets formatted by Laravel's query grammar as `Y-m-d H:i:s` with
+no UTC offset; Postgres then interprets it under its own session timezone,
+which silently corrupts the value whenever that differs from
+`config('app.timezone')` (`Africa/Cairo`) — see
+`tests/Support/RlsFixtures.php`'s `normalizeTimestamps()` doc comment for
+the exact failure this caused (an "expired one minute ago" fixture landed
+hours in the future against a UTC-default CI Postgres, silently passing
+locally where Postgres happened to default to Cairo too).
+
+A full grep of the API for every `now()`/`Carbon`/`DateTime` instance
+reaching `insert()`, `update()`, or a raw query binding turned up, and
+fixed the same way (`->toIso8601String()`, which encodes an explicit
+offset Postgres can't misinterpret): `ApplyMembership`'s `last_used_at`
+update, `CrossOrgInsertRejectedTest`'s raw `created_at` insert, and
+`RlsFixtures`'s `makeOrganization`/`makePatient`/`makeVisit`/
+`makeAuditLog`/`makeActivationCode`/`makeDevice` fixture helpers (the
+latter now all route through the shared `normalizeTimestamps()` helper
+instead of each guarding this individually). No other call site in
+`app/` passes a raw `DateTimeInterface` to a write.
+
+Because this bug class only surfaces when the app's timezone and
+Postgres's session timezone genuinely disagree, and `Africa/Cairo` (the
+app) happened to match this developer's local Postgres default, CI's
+Postgres service now sets `TZ: America/Los_Angeles` — deliberately neither
+UTC (Postgres's own default, which is what actually caught this bug the
+first time) nor Cairo, so this whole class of bug fails loudly in CI by
+default instead of depending on which timezone a fresh container happens
+to pick.
+
+## Hardening pass: log hygiene
+
+Verified that a clean, fully-passing test run writes **zero lines** to
+`storage/logs/laravel.log` — Laravel only logs uncaught exceptions or
+explicit `Log::` calls, and every credential-failure path here (bad code,
+expired code, malformed header, validation failure) is caught and
+converted to a JSON response before it would ever reach the exception
+handler's `report()` path. `tests/Feature/Rls/DeviceRegistrationTest.php`
+now asserts this directly for both directions: a **failed** registration
+attempt (wrong code) never writes the attempted code or its hash to the
+log, and a **successful** registration — the one request that legitimately
+carries a plaintext token, a token hash, and a membership's
+`pin_hash`/`pin_salt` all at once, in its response body — never writes any
+of those, or the three DB connection passwords, to the log either.
+
 ## clintra_fixtures — test-only, never production
 
 A fourth role exists purely for the RLS test suite (`tests/Feature/Rls`) to

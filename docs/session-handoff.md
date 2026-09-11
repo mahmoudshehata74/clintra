@@ -14,7 +14,11 @@ working policies. No real entity endpoints exist yet; the web app still
 ships against `FakeTransport`, untouched.
 
 ## Last commit
-`288c7b9` — feat(api): postgres schema and row-level isolation.
+`fix(api): harden registration and token verification` (this commit) —
+audited the two surfaces the previous session's registration feature
+opened: `register_device`'s own privileges and input validation, and
+`ApplyMembership`'s hand-rolled token verification. See "Known gaps" below
+for the full writeup.
 
 ## The three-role model
 `clintra_owner` owns every table and is the only role migrations run as
@@ -283,6 +287,52 @@ checklist: `api/docs/rls.md`.
     IndexedDB table has no `membership_id` column to match the API's v10
     addition — that's the next task's problem, not a bug in what shipped
     here.
+- **Registration and token verification, hardened.** The previous bullet's
+  two new surfaces — `register_device` and `ApplyMembership`'s hand-rolled
+  token check — got a dedicated audit pass. Full writeup in
+  `api/docs/rls.md`'s three new "Hardening pass" sections; short version:
+  - `clintra_provision`'s actual grants were queried directly
+    (`information_schema.role_table_grants`) and confirmed **zero access to
+    `patients`/`visits`/`invoices`/`payments`** — the specific hole this
+    check was for doesn't exist. Its footprint is still wider than
+    `register_device` alone needs, because the role is shared with
+    `provision_organization`/`mint_activation_code`; splitting it into
+    per-function roles would shrink `register_device`'s blast radius
+    further but is a structural change, deferred.
+  - `register_device` now validates its own payload before any read/write
+    (same shape as `provision_organization`'s validation, one test per
+    rule), and single-use was proven atomic under genuine OS-level
+    concurrency (`proc_open()` racing two real processes against the same
+    activation code — not just a sequential test).
+  - Found and fixed a real bug while auditing `ApplyMembership`: a
+    malformed bearer token id segment (e.g. `Bearer abc|xyz`) reached a raw
+    `WHERE id = 'abc'` query against a bigint column and threw an uncaught
+    `QueryException` — a 500, not a 401, leaking the query text under
+    `APP_DEBUG=true`. Fixed by validating the id segment is all-digits
+    before it reaches a query.
+  - Added `device_exists()` (same `SECURITY DEFINER`/`clintra_rls` pattern
+    as `current_org()`) so a token whose `device` row was deleted is
+    rejected — previously it stayed valid forever, since
+    `personal_access_tokens` carries no RLS and nothing else checked the
+    device still existed.
+  - **The Carbon-into-`insert()`/`update()` timezone bug (below) turned out
+    not to be unique** — a full grep found and fixed three more instances
+    (`ApplyMembership`'s `last_used_at` update, a test's raw `created_at`
+    insert, and several `RlsFixtures` helpers). CI's Postgres service now
+    runs under `TZ: America/Los_Angeles` — deliberately neither UTC nor
+    Cairo — so this bug class fails loudly by default instead of depending
+    on which timezone a fresh container happens to pick.
+  - Confirmed a clean, fully-passing test run writes zero lines to the
+    Laravel log, and added a test asserting neither a failed nor a
+    successful registration ever writes its activation code, token,
+    token hash, `pin_hash`/`pin_salt`, or any DB connection password to
+    the log.
+  - Also fixed, while chasing an unrelated CI-only failure during this
+    pass: Laravel boots a fresh `Application` per test method with no
+    `RefreshDatabase`, so old PDO connections became GC-pending garbage
+    that accumulated across a long test run until Postgres's
+    `max_connections` was exhausted. `tests/Pest.php` now calls
+    `DB::disconnect()` on all three named connections after every test.
 
 ## Verify
 Web: `pnpm --dir web test` · `pnpm exec tsc -b --noEmit` · `pnpm --dir web

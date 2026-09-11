@@ -22,7 +22,7 @@ test('an insert naming another org is rejected by the RLS policy, not silently d
                 'id' => (string) Str::uuid(),
                 'org_id' => $orgB,
                 'full_name' => 'cross-org patient',
-                'created_at' => now(),
+                'created_at' => now()->toIso8601String(),
             ]);
         });
     } catch (QueryException $e) {

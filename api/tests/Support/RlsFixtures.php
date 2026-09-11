@@ -26,6 +26,7 @@ trait RlsFixtures
         'membership_locations',
         'membership_practitioners',
         'activation_codes',
+        'device',
         'memberships',
         'practitioners',
         'patients',
@@ -89,16 +90,43 @@ trait RlsFixtures
         return $id;
     }
 
+    /**
+     * A bare DateTimeInterface passed to insert()/update() gets formatted
+     * by Laravel's query grammar as a naive "Y-m-d H:i:s" string with no
+     * offset — fine when the app's timezone (config('app.timezone'),
+     * Africa/Cairo) happens to match Postgres's session timezone, wrong
+     * whenever it doesn't (confirmed in CI: a fresh postgres:16 container
+     * defaults to UTC, so an "expired 1 minute ago" fixture landed hours
+     * in the future and the expiry test passed locally but failed in CI —
+     * see api/docs/rls.md). Every make*() below that writes a
+     * timestamptz column runs its attributes through this first.
+     * `visit_date` (a plain date, not a timestamp) is deliberately exempt
+     * — see makeVisit()'s own comment.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    private function normalizeTimestamps(array $attributes): array
+    {
+        foreach ($attributes as $key => $value) {
+            if ($value instanceof \DateTimeInterface) {
+                $attributes[$key] = $value->toIso8601String();
+            }
+        }
+
+        return $attributes;
+    }
+
     protected function makeOrganization(string $name = 'org', string $planTier = 'small'): string
     {
         $id = (string) Str::uuid();
 
-        $this->fx()->table('organizations')->insert([
+        $this->fx()->table('organizations')->insert($this->normalizeTimestamps([
             'id' => $id,
             'name' => $name,
             'plan_tier' => $planTier,
             'created_at' => now(),
-        ]);
+        ]));
 
         return $this->track('organizations', $id);
     }
@@ -221,7 +249,7 @@ trait RlsFixtures
     {
         $id = (string) Str::uuid();
 
-        $attributes = array_merge([
+        $attributes = $this->normalizeTimestamps(array_merge([
             'id' => $id,
             'org_id' => $orgId,
             'location_id' => $locationId,
@@ -230,27 +258,26 @@ trait RlsFixtures
             'used_at' => null,
             'used_by_device_id' => null,
             'created_at' => now(),
-        ], $overrides);
-
-        // A bare DateTimeInterface passed to insert() gets formatted by
-        // Laravel's query grammar as a naive "Y-m-d H:i:s" string with no
-        // offset — fine when the app's timezone (config('app.timezone'),
-        // Africa/Cairo) happens to match Postgres's session timezone, wrong
-        // whenever it doesn't (confirmed in CI: a fresh postgres:16
-        // container defaults to UTC, so an "expired 1 minute ago" fixture
-        // landed hours in the future and the expiry test passed locally but
-        // failed in CI). toIso8601String() encodes the offset explicitly,
-        // so every session parses the same absolute instant regardless of
-        // its own timezone setting.
-        foreach (['expires_at', 'used_at', 'created_at'] as $key) {
-            if ($attributes[$key] instanceof \DateTimeInterface) {
-                $attributes[$key] = $attributes[$key]->toIso8601String();
-            }
-        }
+        ], $overrides));
 
         $this->fx()->table('activation_codes')->insert($attributes);
 
         return $this->track('activation_codes', $id);
+    }
+
+    protected function makeDevice(string $orgId, string $locationId, string $membershipId, ?string $id = null): string
+    {
+        $id ??= (string) Str::uuid();
+
+        $this->fx()->table('device')->insert($this->normalizeTimestamps([
+            'id' => $id,
+            'org_id' => $orgId,
+            'location_id' => $locationId,
+            'membership_id' => $membershipId,
+            'registered_at' => now(),
+        ]));
+
+        return $this->track('device', $id);
     }
 
     protected function makeMembershipLocation(string $membershipId, string $locationId): string
@@ -270,12 +297,12 @@ trait RlsFixtures
     {
         $id = (string) Str::uuid();
 
-        $this->fx()->table('patients')->insert([
+        $this->fx()->table('patients')->insert($this->normalizeTimestamps([
             'id' => $id,
             'org_id' => $orgId,
             'full_name' => $fullName,
             'created_at' => now(),
-        ]);
+        ]));
 
         return $this->track('patients', $id);
     }
@@ -287,12 +314,17 @@ trait RlsFixtures
     {
         $id = (string) Str::uuid();
 
-        $this->fx()->table('visits')->insert(array_merge([
+        $this->fx()->table('visits')->insert($this->normalizeTimestamps(array_merge([
             'id' => $id,
             'org_id' => $orgId,
             'location_id' => $locationId,
             'practitioner_id' => $practitionerId,
             'patient_id' => $patientId,
+            // A plain date string already, not a DateTimeInterface — exempt
+            // from normalizeTimestamps() by construction, and correctly so:
+            // "today" here means the Cairo calendar date (docs/schema.md's
+            // "day is a YYYY-MM-DD string in Africa/Cairo" convention), which
+            // is exactly what the app-timezone-based now() already gives.
             'visit_date' => now()->toDateString(),
             'position' => 1,
             'status' => 'booked',
@@ -300,7 +332,7 @@ trait RlsFixtures
             'source' => 'walkin',
             'created_by' => $createdBy,
             'created_at' => now(),
-        ], $overrides));
+        ], $overrides)));
 
         return $this->track('visits', $id);
     }
@@ -312,7 +344,7 @@ trait RlsFixtures
     {
         $id = (string) Str::uuid();
 
-        $this->fx()->table('audit_log')->insert(array_merge([
+        $this->fx()->table('audit_log')->insert($this->normalizeTimestamps(array_merge([
             'id' => $id,
             'org_id' => $orgId,
             'actor_membership_id' => $actorMembershipId,
@@ -321,7 +353,7 @@ trait RlsFixtures
             'action' => 'create',
             'at' => now(),
             'seq' => random_int(1, PHP_INT_MAX),
-        ], $overrides));
+        ], $overrides)));
 
         return $this->track('audit_log', $id);
     }

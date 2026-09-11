@@ -101,6 +101,16 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: ci_postgres_superuser
           POSTGRES_DB: postgres
+          # Deliberately neither UTC nor Africa/Cairo (config('app.timezone'))
+          # — a naive Carbon-into-insert()/update() (no explicit offset)
+          # gets misinterpreted under whichever session timezone Postgres
+          # defaults to, and UTC/Cairo are exactly the two timezones that
+          # let such a bug pass silently here (UTC is Postgres's own
+          # default; Cairo matches the app, and matched this developer's
+          # local Postgres too — see tests/Support/RlsFixtures.php's
+          # normalizeTimestamps()). A third, unrelated timezone makes this
+          # whole bug class fail loudly in CI instead of hiding.
+          TZ: America/Los_Angeles
         ports:
           - 5432:5432
         options: >-

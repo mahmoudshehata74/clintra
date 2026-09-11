@@ -203,7 +203,7 @@ test('the rate limit trips after repeated failed attempts from the same IP', fun
     $response->assertJson(['error' => 'too_many_attempts']);
 });
 
-test('the plaintext activation code is never written to the log', function () {
+test('a failed registration writes no code fragment to the log', function () {
     $fixture = makeRegistrationFixture();
     $logPath = storage_path('logs/laravel.log');
     $before = file_exists($logPath) ? filesize($logPath) : 0;
@@ -224,4 +224,62 @@ test('the plaintext activation code is never written to the log', function () {
     expect($appended)->not->toContain($fixture['plainCode']);
     expect($appended)->not->toContain('CLT-ZZZZ-ZZZZ-ZZZZ-ZZZZ');
     expect($appended)->not->toContain(ActivationCode::hash($fixture['plainCode']));
+});
+
+/**
+ * The full list the user asked to confirm never reaches the log: activation
+ * codes (covered above, in isolation), plaintext tokens, token hashes,
+ * pin_hash, pin_salt, and DB passwords. A *successful* registration is the
+ * one request that actually carries all of these at once — the response
+ * body legitimately contains the token and the membership's pin_hash/
+ * pin_salt (docs/auth-plan.md), which is exactly why it's the request most
+ * likely to leak one of them into a log line if something upstream ever
+ * starts logging request/response bodies.
+ */
+test('a successful registration writes none of its secret material to the log', function () {
+    $fixture = makeRegistrationFixture();
+    $deviceId = (string) Str::uuid();
+    $logPath = storage_path('logs/laravel.log');
+    $before = file_exists($logPath) ? filesize($logPath) : 0;
+
+    $response = $this->postJson('/api/devices/register', [
+        'phone' => $fixture['phone'],
+        'activation_code' => $fixture['plainCode'],
+        'device_id' => $deviceId,
+    ]);
+
+    $response->assertOk();
+
+    $token = $response->json('token');
+    [$tokenId, $plainTextToken] = explode('|', $token, 2);
+    $membership = collect($response->json('memberships'))->firstWhere('id', $fixture['membershipId']);
+
+    // Cleanup mirrors the happy-path test above — this test's own insert
+    // must not leak into other tests' fixture expectations.
+    $this->fx()->table('activation_codes')->where('id', $fixture['codeId'])->update(['used_by_device_id' => null]);
+    $this->fx()->table('device')->where('id', $deviceId)->delete();
+    $this->fx()->table('audit_log')->where('org_id', $fixture['orgId'])->delete();
+
+    if (! file_exists($logPath)) {
+        expect(true)->toBeTrue();
+
+        return;
+    }
+
+    $appended = file_get_contents($logPath, offset: $before);
+
+    expect($appended)->not->toContain($fixture['plainCode']);
+    expect($appended)->not->toContain(ActivationCode::hash($fixture['plainCode']));
+    expect($appended)->not->toContain($plainTextToken);
+    expect($appended)->not->toContain(hash('sha256', $plainTextToken));
+    expect($appended)->not->toContain($membership['pin_hash']);
+    expect($appended)->not->toContain($membership['pin_salt']);
+
+    foreach (['pgsql', 'pgsql_owner', 'pgsql_fixtures'] as $connection) {
+        $password = config("database.connections.$connection.password");
+
+        if ($password !== null && $password !== '') {
+            expect($appended)->not->toContain($password);
+        }
+    }
 });
