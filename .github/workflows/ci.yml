@@ -86,3 +86,32 @@ jobs:
       - name: Run e2e interaction tests
         working-directory: web
         run: pnpm exec playwright test --grep-invert @screenshot
+
+  # Proves the Laravel backend builds and boots in CI. No database, no
+  # entity endpoints yet — that lands with the schema and RLS task.
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+
+      - name: Install composer dependencies
+        working-directory: api
+        run: composer install --prefer-dist --no-progress
+
+      - name: Copy environment file
+        working-directory: api
+        run: cp .env.example .env
+
+      - name: Generate application key
+        working-directory: api
+        run: php artisan key:generate
+
+      - name: Run tests
+        working-directory: api
+        run: php artisan test
