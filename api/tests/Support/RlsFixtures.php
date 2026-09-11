@@ -221,7 +221,7 @@ trait RlsFixtures
     {
         $id = (string) Str::uuid();
 
-        $this->fx()->table('activation_codes')->insert(array_merge([
+        $attributes = array_merge([
             'id' => $id,
             'org_id' => $orgId,
             'location_id' => $locationId,
@@ -230,7 +230,25 @@ trait RlsFixtures
             'used_at' => null,
             'used_by_device_id' => null,
             'created_at' => now(),
-        ], $overrides));
+        ], $overrides);
+
+        // A bare DateTimeInterface passed to insert() gets formatted by
+        // Laravel's query grammar as a naive "Y-m-d H:i:s" string with no
+        // offset — fine when the app's timezone (config('app.timezone'),
+        // Africa/Cairo) happens to match Postgres's session timezone, wrong
+        // whenever it doesn't (confirmed in CI: a fresh postgres:16
+        // container defaults to UTC, so an "expired 1 minute ago" fixture
+        // landed hours in the future and the expiry test passed locally but
+        // failed in CI). toIso8601String() encodes the offset explicitly,
+        // so every session parses the same absolute instant regardless of
+        // its own timezone setting.
+        foreach (['expires_at', 'used_at', 'created_at'] as $key) {
+            if ($attributes[$key] instanceof \DateTimeInterface) {
+                $attributes[$key] = $attributes[$key]->toIso8601String();
+            }
+        }
+
+        $this->fx()->table('activation_codes')->insert($attributes);
 
         return $this->track('activation_codes', $id);
     }
