@@ -131,17 +131,44 @@ checklist: `api/docs/rls.md`.
   could read AND write (`INSERT`/`UPDATE`/`DELETE`) system-wide rows, not
   just its own org's. Fixed by
   `2026_09_11_170030_split_specialty_template_write_policies.php` (see
-  `api/docs/rls.md`'s "A worked failure" section) — but the fix means
-  `clintra_app` now has **no path at all** to write an `org_id IS NULL` row.
-  Seeding system-wide reference data (e.g. the "general" specialty
-  template every v1 practitioner points at, per `docs/schema.md`) needs a
-  separate, owner-run bootstrap step that does not exist yet. Nothing seeds
-  it today, so this hasn't bitten anything yet — but the first real
-  `practitioners` endpoint will need that bootstrap in place first.
-- `contract/` (OpenAPI + shared enums, per the CLI brief's repo layout)
-  does not exist. The visit state machine is defined once, in
-  `web/src/domain/transitions.ts`, and nowhere else — the API has no
-  independent copy to enforce or drift against yet.
+  `api/docs/rls.md`'s "A worked failure" section) — but the fix meant
+  `clintra_app` had no path at all left to write an `org_id IS NULL` row,
+  which needed its own bootstrap. **That bootstrap now exists**: `contract/`
+  (new, see below) plus two more migrations
+  (`2026_09_11_170031_add_owner_reference_data_policies.php`,
+  `2026_09_11_170032_seed_reference_data.php`) — a narrow, `clintra_owner`-
+  only policy restricted to `org_id IS NULL` rows, and an idempotent upsert
+  from `contract/reference-data.json`. See `api/docs/rls.md`'s "Owner-only
+  policies for system-wide reference data".
+- `contract/` now exists, but only `reference-data.json` (the fixed ids for
+  v1's one system-wide reference row set) + `README.md` — not the OpenAPI
+  spec or shared enums the CLI brief's repo layout also describes for this
+  directory. The visit state machine is still defined once, in
+  `web/src/domain/transitions.ts`, with no independent API copy to enforce
+  or drift against — unchanged, still open.
+- `web/src/db/seed.ts` used to generate a random UUID for the "general"
+  `specialty_templates`/`form_definitions` rows on every device — two
+  devices' "general" rows had different ids, so `practitioners.specialty_id`
+  and `visit_form_data.form_definition_id` pointed at ids that would never
+  match a row on the server; sync would have failed on those FKs the moment
+  it tried to push either table. Fixed: `seed.ts` now imports the fixed ids
+  from `contract/reference-data.json` (via `web/src/domain/referenceData.ts`,
+  a thin re-export — `web/tsconfig.app.json` gained `resolveJsonModule` for
+  this). The Vercel build (Root Directory `web/`) does read a file outside
+  `web/` here — verify this is still true after any future change to
+  Vercel's project settings, since `web/`'s own build has no way to assert
+  it. No migration exists (or is needed) for a device that already seeded
+  the old random-id
+  row: no clinic is live on this app yet, so there is no real data to
+  reconcile — but the first sync implementation must not assume every
+  device's local "general" row already has the contract id.
+- **New gap, next step's problem**: creating the very first organization +
+  owner membership is impossible through `clintra_app` — the
+  `organizations` policy is `id = current_org()`, and `current_org()` can
+  never resolve without a membership that itself requires an org to already
+  exist. Nothing in this session built an org-bootstrap path (deliberately
+  out of scope — see the RLS migration's own comment on `organizations`'
+  policy). This blocks the very first real signup/onboarding endpoint.
 
 ## Verify
 Web: `pnpm --dir web test` · `pnpm exec tsc -b --noEmit` · `pnpm --dir web

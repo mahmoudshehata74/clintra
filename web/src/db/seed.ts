@@ -1,6 +1,7 @@
 import { DEV_SEED_PINS } from "../auth/devPins";
 import { generatePinSalt, hashPin } from "../auth/pinHash";
 import { id } from "../domain/id";
+import { GENERAL_FORM_DEFINITION_ID, GENERAL_SPECIALTY_TEMPLATE_ID } from "../domain/referenceData";
 import { Role } from "../domain/role";
 import { LocationScope, PractitionerScope } from "../domain/scope";
 import { ScheduleMode } from "../domain/scheduleMode";
@@ -168,7 +169,7 @@ async function writeSeedData(
   };
 
   const specialtyTemplate: SpecialtyTemplate = {
-    id: id(),
+    id: GENERAL_SPECIALTY_TEMPLATE_ID,
     org_id: null,
     key: GENERAL_SPECIALTY_KEY,
     name: "عام",
@@ -187,7 +188,7 @@ async function writeSeedData(
   // to write against — never built lazily on first save, which would leave
   // an app with a fresh but not-yet-seeded database unable to open the form.
   const generalFormDefinition: FormDefinition = {
-    id: id(),
+    id: GENERAL_FORM_DEFINITION_ID,
     template_id: specialtyTemplate.id,
     version: 1,
     is_current: true,

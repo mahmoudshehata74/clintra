@@ -1,0 +1,32 @@
+{
+  "specialty_templates": [
+    {
+      "id": "04695d92-c09d-4d01-aa36-4cb9adb101a7",
+      "org_id": null,
+      "key": "general",
+      "name": "عام",
+      "generation": "none",
+      "default_count": null,
+      "gap_days": null,
+      "resource_type": null,
+      "pricing_mode": "per_item",
+      "stall_days": null,
+      "unit_label": "زيارة",
+      "provider_label": "طبيب"
+    }
+  ],
+  "form_definitions": [
+    {
+      "id": "a5babae2-7a55-45e5-a165-493c56ccb936",
+      "template_id": "04695d92-c09d-4d01-aa36-4cb9adb101a7",
+      "version": 1,
+      "is_current": true,
+      "schema": {
+        "fields": [
+          { "key": "complaint", "label": "الشكوى الرئيسية" },
+          { "key": "diagnosis", "label": "التشخيص" }
+        ]
+      }
+    }
+  ]
+}

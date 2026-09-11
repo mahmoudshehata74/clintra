@@ -108,13 +108,47 @@ membership must actually resolve); `INSERT`/`UPDATE`/`DELETE` drop the `OR`
 entirely — a membership can only ever write its own org's rows. There is
 deliberately no path left for `clintra_app` to write an `org_id IS NULL` row
 — seeding system-wide reference data needs a separate, owner-run bootstrap
-step, not this connection (open, see `docs/session-handoff.md`).
+step, not this connection. That step is `clintra_owner`'s own narrow
+policies, below.
 
 The lesson for any future table: **a single combined `USING`/`WITH CHECK`
 expression is only safe if every `OR` branch in it still bottoms out at
 `current_org()`/`current_membership()`.** An `OR` branch that doesn't is a
 read hole if it's reachable with no membership at all, and a write hole
 too, silently, the moment that same expression is reused for `WITH CHECK`.
+
+## Owner-only policies for system-wide reference data
+
+`clintra_owner` has no membership, ever — `current_org()` always resolves to
+`NULL` for it, same as any other RLS-bound session with nothing declared —
+so the base policies above never let it write anything, including a
+system-wide reference row. `2026_09_11_170031_add_owner_reference_data_policies.php`
+opens one narrow, additional path: three policies on `specialty_templates`
+and `form_definitions`, `FOR ... TO clintra_owner` only, each restricted to
+`org_id IS NULL` (or, for `form_definitions`, a template whose `org_id IS
+NULL`). This doesn't weaken isolation — `clintra_app`'s policies are
+completely untouched, so this grants nothing to any tenant-facing
+connection. It only lets `clintra_owner` write the one category of row that
+was always meant to be server-owned in the first place: the rows every org
+shares, seeded once by `2026_09_11_170032_seed_reference_data.php` from
+`contract/reference-data.json` (see `contract/README.md`).
+
+Postgres RLS policies for different roles on the same command are
+`OR`-combined (both are `PERMISSIVE`, the default), so a role that matches
+more than one applicable policy needs only one of them to pass — adding
+`clintra_owner`'s own INSERT/UPDATE policies here doesn't interact with or
+loosen `clintra_app`'s at all; they're evaluated independently per role.
+
+The migration also needed a `SELECT` policy, not just `INSERT`/`UPDATE`:
+`INSERT ... ON CONFLICT DO UPDATE` (used for the idempotent upsert) requires
+the target row to be visible under a `SELECT` policy to detect the conflict
+at all — verified empirically before adding it (a plain `INSERT` succeeded
+without it; the same statement with `ON CONFLICT DO UPDATE` failed with
+"new row violates row-level security policy" until the `SELECT` policy
+existed). It's scoped identically to `org_id IS NULL`, so it grants no
+broader read access than the write policies already do. There is
+deliberately no `DELETE` policy — reference rows are upserted, never
+removed by a migration.
 
 ## clintra_fixtures — test-only, never production
 
