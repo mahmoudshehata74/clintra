@@ -87,10 +87,28 @@ jobs:
         working-directory: web
         run: pnpm exec playwright test --grep-invert @screenshot
 
-  # Proves the Laravel backend builds and boots in CI. No database, no
-  # entity endpoints yet — that lands with the schema and RLS task.
+  # Proves the Laravel backend builds, migrates cleanly against a real
+  # Postgres (roles, schema, RLS policies included), and boots. This is
+  # NOT where isolation itself gets verified — the two-role/FORCE RLS/RLS
+  # policy checks are a local, manual exercise (see api/docs/rls.md);
+  # CI's job here is only to prove every migration runs without error
+  # against a fresh database, then that the existing test suite passes.
   api:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_postgres_superuser
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -99,6 +117,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.3"
+          extensions: pdo_pgsql, pgsql
 
       - name: Install composer dependencies
         working-directory: api
@@ -111,6 +130,42 @@ jobs:
       - name: Generate application key
         working-directory: api
         run: php artisan key:generate
+
+      # Same two-role model as local dev (see api/docs/rls.md): clintra_owner
+      # owns every table and runs migrations; clintra_app is what the app
+      # connects as; clintra_rls is the NOLOGIN BYPASSRLS role the RLS
+      # migration's SECURITY DEFINER helper functions run as. These
+      # passwords are throwaway, scoped to this one job's ephemeral
+      # container — not real secrets.
+      - name: Provision Postgres roles and database
+        env:
+          PGPASSWORD: ci_postgres_superuser
+        run: |
+          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_owner LOGIN PASSWORD 'ci_owner_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE;"
+          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_app LOGIN PASSWORD 'ci_app_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE;"
+          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_rls NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
+          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_rls TO clintra_owner;"
+          psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE clintra OWNER clintra_owner;"
+          psql -h 127.0.0.1 -U postgres -d clintra -c "ALTER SCHEMA public OWNER TO clintra_owner;"
+          psql -h 127.0.0.1 -U postgres -d clintra -c "GRANT USAGE ON SCHEMA public TO clintra_app;"
+          psql -h 127.0.0.1 -U postgres -d clintra -c "GRANT CREATE ON SCHEMA public TO clintra_rls;"
+          psql -h 127.0.0.1 -U postgres -d clintra -c "GRANT CONNECT ON DATABASE clintra TO clintra_app;"
+
+      - name: Point .env at the CI database
+        working-directory: api
+        run: |
+          php -r '
+            $env = file_get_contents(".env");
+            $env = preg_replace("/^DB_USERNAME=.*/m", "DB_USERNAME=clintra_app", $env);
+            $env = preg_replace("/^DB_APP_PASSWORD=.*/m", "DB_APP_PASSWORD=ci_app_pw", $env);
+            $env = preg_replace("/^DB_OWNER_USERNAME=.*/m", "DB_OWNER_USERNAME=clintra_owner", $env);
+            $env = preg_replace("/^DB_OWNER_PASSWORD=.*/m", "DB_OWNER_PASSWORD=ci_owner_pw", $env);
+            file_put_contents(".env", $env);
+          '
+
+      - name: Run migrations
+        working-directory: api
+        run: php artisan migrate --database=pgsql_owner --force
 
       - name: Run tests
         working-directory: api

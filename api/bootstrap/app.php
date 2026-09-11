@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\ApplyMembership;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -14,7 +15,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Not global — see ApplyMembership's own doc comment. Attached
+        // per-route-group as 'membership' until real auth replaces the
+        // X-Membership-Id bridge.
+        $middleware->alias(['membership' => ApplyMembership::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // This is an API-only backend: every response is JSON, never an HTML error page.

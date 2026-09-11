@@ -1,11 +1,15 @@
 <?php
 
+use App\Support\Migrations\EnablesRowLevelSecurity;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    use EnablesRowLevelSecurity;
+
     /**
      * Run the migrations.
      */
@@ -45,6 +49,15 @@ return new class extends Migration
 
             $table->index(['connection', 'queue', 'failed_at']);
         });
+
+        $this->grantAppAccessWithoutRls('jobs');
+        $this->grantAppAccessWithoutRls('job_batches');
+        $this->grantAppAccessWithoutRls('failed_jobs');
+
+        // jobs.id and failed_jobs.id are bigserial — inserting needs sequence
+        // privileges too, not just table privileges.
+        DB::statement('GRANT USAGE, SELECT ON SEQUENCE jobs_id_seq TO clintra_app');
+        DB::statement('GRANT USAGE, SELECT ON SEQUENCE failed_jobs_id_seq TO clintra_app');
     }
 
     /**

@@ -1,11 +1,14 @@
 <?php
 
+use App\Support\Migrations\EnablesRowLevelSecurity;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    use EnablesRowLevelSecurity;
+
     /**
      * Run the migrations.
      */
@@ -22,6 +25,9 @@ return new class extends Migration
             $table->string('owner');
             $table->bigInteger('expiration')->index();
         });
+
+        $this->grantAppAccessWithoutRls('cache');
+        $this->grantAppAccessWithoutRls('cache_locks');
     }
 
     /**
