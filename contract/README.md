@@ -61,3 +61,18 @@ ever silently changes behavior, that test vector is what catches it.
 (hash the same PIN/salt with the new parameters, in either implementation,
 and update the expected digest) — a stale test vector would make the tests
 lie about which parameters are actually in effect.
+
+## phone-cases.json
+
+Egyptian phone number normalization rules exist twice — `web/src/domain/phone.ts`'s
+`normalizeEgyptianPhone` and the API's `App\Support\EgyptianPhone` — because
+one runs in the browser and one runs in a console command, so the *code*
+isn't shared. The *test cases* are, here: `valid` (an input, its expected
+E.164 output, and whether it classifies as `mobile` or `landline`) and
+`invalid` (inputs that must be rejected). `web/src/domain/phone.test.ts`
+and `api/tests/Feature/EgyptianPhoneTest.php` both iterate this file rather
+than keeping their own hardcoded case lists, so a case added to one
+implementation's test suite is a case both are proven against.
+
+Adding a new accepted or rejected phone shape: add it here once, not to
+either test file directly.

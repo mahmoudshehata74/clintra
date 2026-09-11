@@ -1,0 +1,26 @@
+{
+  "valid": [
+    { "input": "01001234567", "expected": "+201001234567", "kind": "mobile" },
+    { "input": "+201001234567", "expected": "+201001234567", "kind": "mobile" },
+    { "input": "00201001234567", "expected": "+201001234567", "kind": "mobile" },
+    { "input": "201001234567", "expected": "+201001234567", "kind": "mobile" },
+    { "input": "1001234567", "expected": "+201001234567", "kind": "mobile" },
+    { "input": "010 0123 4567", "expected": "+201001234567", "kind": "mobile" },
+    { "input": "+20 100 123 4567", "expected": "+201001234567", "kind": "mobile" },
+    { "input": "(010) 0123-4567", "expected": "+201001234567", "kind": "mobile" },
+    { "input": "٠١٠٠١٢٣٤٥٦٧", "expected": "+201001234567", "kind": "mobile" },
+    { "input": "01512345678", "expected": "+201512345678", "kind": "mobile" },
+    { "input": "0225551234", "expected": "+20225551234", "kind": "landline" },
+    { "input": "+20225551234", "expected": "+20225551234", "kind": "landline" },
+    { "input": "0020225551234", "expected": "+20225551234", "kind": "landline" },
+    { "input": "20225551234", "expected": "+20225551234", "kind": "landline" },
+    { "input": "225551234", "expected": "+20225551234", "kind": "landline" },
+    { "input": "02 2555 1234", "expected": "+20225551234", "kind": "landline" },
+    { "input": "٠٢٢٥٥٥١٢٣٤", "expected": "+20225551234", "kind": "landline" },
+    { "input": "031234567", "expected": "+2031234567", "kind": "landline" },
+    { "input": "+2031234567", "expected": "+2031234567", "kind": "landline" },
+    { "input": "0501234567", "expected": "+20501234567", "kind": "landline" },
+    { "input": "+20501234567", "expected": "+20501234567", "kind": "landline" }
+  ],
+  "invalid": ["", "notaphone", "123", "01334567890", "010012345", "020012345678"]
+}

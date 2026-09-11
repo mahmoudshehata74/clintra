@@ -200,10 +200,28 @@ checklist: `api/docs/rls.md`.
   `contract/pin-hash.json`'s `testVector`, asserted by both
   `web/src/auth/pinHash.test.ts` and `api/tests/Feature/PinHashTest.php`.
 - `App\Support\EgyptianPhone` ports `web/src/domain/phone.ts`'s
-  `normalizeEgyptianPhone` classification rules to PHP (not shared via
-  `contract/` — pure validation logic, no stored value either side needs to
-  agree on byte-for-byte). `api/tests/Feature/EgyptianPhoneTest.php` runs
-  the same cases as the web's own phone test.
+  `normalizeEgyptianPhone` classification rules to PHP — the *code* isn't
+  shared (one runs in a browser, one in a console command), but the *test
+  cases* now are: `contract/phone-cases.json`, iterated by both
+  `web/src/domain/phone.test.ts` and `api/tests/Feature/EgyptianPhoneTest.php`.
+- `provision_organization(jsonb)` — the schema's one `BYPASSRLS` function —
+  now validates its own payload before any write, rather than trusting
+  `clintra:provision` (PHP) to have gotten it right:
+  `2026_09_12_000001_validate_provision_organization_payload.php`. Checks
+  every required key, rejects unknown ones, enforces the `pin_hash`/
+  `pin_salt` shape, E.164 phones, a real system-wide `specialty_id`, and no
+  cross-org `org_id` smuggling across the sub-entities it creates — all via
+  SQLSTATE `22023`, distinct from RLS's `42501`. Two invariants that used
+  to be hardcoded literals (`role`/`location_scope`/`practitioner_scope`;
+  every sub-entity's `org_id`) are now payload fields the function checks
+  rather than assumes — not a new capability, a trap for a future caller
+  that assumes otherwise. One real bug found while writing this: the jsonb
+  `?` (key-exists) operator is textually indistinguishable from a PDO
+  positional placeholder to Laravel's pgsql driver, which silently rewrote
+  it to a bare `$1` with nothing bound — fixed by using `jsonb_exists()`
+  instead, which contains no `?` at all. `api/tests/Feature/Rls/ProvisionOrganizationValidationTest.php`
+  has one test per rule, each calling the function directly with a
+  malformed payload.
 - **Windows/Git-Bash gotcha, not a code bug**: piping answers into
   `clintra:provision` via stdin (e.g. `printf '...' | php artisan
   clintra:provision`) hangs forever at the first `secret()` (hidden PIN)

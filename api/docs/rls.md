@@ -211,6 +211,30 @@ every other id in this schema). The one exception by design: a
 system-wide reference id like `specialty_id` (the "general" template) is
 read from `contract/reference-data.json`, never invented.
 
+**The function validates its own input; it does not trust PHP.**
+`2026_09_12_000001_validate_provision_organization_payload.php` added
+exhaustive validation before any write: every required key present and
+non-null, no unknown keys (rejected, not ignored), `pin_hash`/`pin_salt`
+shaped exactly like `contract/pin-hash.json`'s Argon2id output, phones
+that are non-empty E.164, `specialty_id` resolving to a real system-wide
+template, and every sub-entity's own `org_id` matching the organization
+being created (no cross-org smuggling). Every check raises SQLSTATE
+`22023` (`invalid_parameter_value`), distinct from `42501` (RLS) or a real
+constraint violation, so a test — or a future caller — can tell "this
+input was wrong" apart from "this wasn't allowed" or "this collided."
+
+The reasoning: `provision_organization` is the one `BYPASSRLS` function in
+this schema. Every other table's safety net is RLS itself — a bad `WHERE`
+clause just returns the wrong rows or zero, it can't corrupt another org's
+data. This function has no such net; whatever it's told to do, it does,
+across seven tables. `role`/`location_scope`/`practitioner_scope` and each
+sub-entity's `org_id` were fixed literals inside the function before this
+migration — genuinely unreachable as input at the time. They're validated
+here anyway, promoted into the payload as fields the function checks
+rather than assumes, because "unreachable today" and "unreachable forever"
+are different claims, and this function doesn't get to be wrong about
+which one it's making.
+
 ## clintra_fixtures — test-only, never production
 
 A fourth role exists purely for the RLS test suite (`tests/Feature/Rls`) to

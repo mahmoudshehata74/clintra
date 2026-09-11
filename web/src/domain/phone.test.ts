@@ -1,56 +1,18 @@
 import { describe, expect, it } from "vitest";
+import phoneCases from "../../../contract/phone-cases.json";
 import { formatEgyptianPhoneForDisplay, normalizeEgyptianPhone } from "./phone";
 
+// Shared with the API's App\Support\EgyptianPhone (api/tests/Feature/EgyptianPhoneTest.php) —
+// see contract/README.md. Both implementations must accept and reject the exact same inputs.
 describe("normalizeEgyptianPhone", () => {
-  describe("mobile numbers", () => {
-    it.each([
-      ["01001234567", "+201001234567"],
-      ["+201001234567", "+201001234567"],
-      ["00201001234567", "+201001234567"],
-      ["201001234567", "+201001234567"],
-      ["1001234567", "+201001234567"],
-      ["010 0123 4567", "+201001234567"],
-      ["+20 100 123 4567", "+201001234567"],
-      ["(010) 0123-4567", "+201001234567"],
-      ["٠١٠٠١٢٣٤٥٦٧", "+201001234567"],
-      ["01512345678", "+201512345678"],
-    ])("normalises %s to %s with kind mobile", (input, expected) => {
-      expect(normalizeEgyptianPhone(input)).toEqual({ ok: true, value: expected, kind: "mobile" });
-    });
+  it.each(phoneCases.valid)("normalises $input to $expected with kind $kind", ({ input, expected, kind }) => {
+    expect(normalizeEgyptianPhone(input)).toEqual({ ok: true, value: expected, kind });
   });
 
-  describe("landline numbers", () => {
-    it.each([
-      // Cairo/Giza/Qalyubia: single-digit area code "2", 8-digit subscriber number.
-      ["0225551234", "+20225551234"],
-      ["+20225551234", "+20225551234"],
-      ["0020225551234", "+20225551234"],
-      ["20225551234", "+20225551234"],
-      ["225551234", "+20225551234"],
-      ["02 2555 1234", "+20225551234"],
-      ["٠٢٢٥٥٥١٢٣٤", "+20225551234"],
-      // Alexandria: single-digit area code "3", 7-digit subscriber number.
-      ["031234567", "+2031234567"],
-      ["+2031234567", "+2031234567"],
-      // Mansoura: two-digit area code "50", 7-digit subscriber number.
-      ["0501234567", "+20501234567"],
-      ["+20501234567", "+20501234567"],
-    ])("normalises %s to %s with kind landline", (input, expected) => {
-      expect(normalizeEgyptianPhone(input)).toEqual({
-        ok: true,
-        value: expected,
-        kind: "landline",
-      });
-    });
+  it.each(phoneCases.invalid)("rejects malformed phone input %s", (input) => {
+    const result = normalizeEgyptianPhone(input);
+    expect(result.ok).toBe(false);
   });
-
-  it.each(["", "notaphone", "123", "01334567890", "010012345", "020012345678"])(
-    "rejects malformed phone input %s",
-    (input) => {
-      const result = normalizeEgyptianPhone(input);
-      expect(result.ok).toBe(false);
-    },
-  );
 });
 
 describe("formatEgyptianPhoneForDisplay", () => {

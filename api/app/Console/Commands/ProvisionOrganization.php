@@ -42,22 +42,30 @@ class ProvisionOrganization extends Command
         $pinHash = PinHash::hash($pin, $pinSalt);
         unset($pin);
 
+        $orgId = (string) Str::uuid();
+
         $payload = [
-            'org_id' => (string) Str::uuid(),
+            'org_id' => $orgId,
             'org_name' => $orgName,
             'plan_tier' => 'small',
             'location_id' => (string) Str::uuid(),
             'location_name' => $locationName,
             'location_address' => $locationAddress,
             'location_phone' => $locationPhone,
+            'location_org_id' => $orgId,
             'user_id' => (string) Str::uuid(),
             'user_full_name' => $doctorFullName,
             'user_phone' => $doctorPhone,
             'practitioner_id' => (string) Str::uuid(),
             'practitioner_title' => 'طبيب عام',
+            'practitioner_org_id' => $orgId,
             'specialty_id' => $specialtyId,
             'practitioner_location_id' => (string) Str::uuid(),
             'membership_id' => (string) Str::uuid(),
+            'membership_org_id' => $orgId,
+            'role' => 'owner',
+            'location_scope' => 'all',
+            'practitioner_scope' => 'all',
             'pin_hash' => $pinHash,
             'pin_salt' => $pinSalt,
             'audit_organization_id' => (string) Str::uuid(),

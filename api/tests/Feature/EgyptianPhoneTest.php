@@ -2,39 +2,30 @@
 
 use App\Support\EgyptianPhone;
 
-// Same cases as web/src/domain/phone.test.ts's normalizeEgyptianPhone suite —
-// this port must accept and reject the exact same inputs the web client does.
-test('normalizes mobile numbers to E.164', function (string $input, string $expected) {
-    expect(EgyptianPhone::normalize($input))->toBe($expected);
-})->with([
-    ['01001234567', '+201001234567'],
-    ['+201001234567', '+201001234567'],
-    ['00201001234567', '+201001234567'],
-    ['201001234567', '+201001234567'],
-    ['1001234567', '+201001234567'],
-    ['010 0123 4567', '+201001234567'],
-    ['+20 100 123 4567', '+201001234567'],
-    ['(010) 0123-4567', '+201001234567'],
-    ['٠١٠٠١٢٣٤٥٦٧', '+201001234567'],
-    ['01512345678', '+201512345678'],
-]);
+/**
+ * Read via __DIR__, not base_path(): this feeds a Pest ->with() dataset,
+ * evaluated while Pest collects tests — before the Laravel app container a
+ * test's setUp() would normally boot, so base_path() isn't reliably
+ * available here yet.
+ *
+ * @return array{valid: list<array{input: string, expected: string, kind: string}>, invalid: list<string>}
+ */
+function phoneCases(): array
+{
+    return json_decode(
+        file_get_contents(__DIR__.'/../../../contract/phone-cases.json'),
+        associative: true,
+        flags: JSON_THROW_ON_ERROR,
+    );
+}
 
-test('normalizes landline numbers to E.164', function (string $input, string $expected) {
+// Shared with the web's normalizeEgyptianPhone (web/src/domain/phone.test.ts) —
+// see contract/README.md. Both implementations must accept and reject the
+// exact same inputs.
+test('normalizes to E.164', function (string $input, string $expected) {
     expect(EgyptianPhone::normalize($input))->toBe($expected);
-})->with([
-    ['0225551234', '+20225551234'],
-    ['+20225551234', '+20225551234'],
-    ['0020225551234', '+20225551234'],
-    ['20225551234', '+20225551234'],
-    ['225551234', '+20225551234'],
-    ['02 2555 1234', '+20225551234'],
-    ['٠٢٢٥٥٥١٢٣٤', '+20225551234'],
-    ['031234567', '+2031234567'],
-    ['+2031234567', '+2031234567'],
-    ['0501234567', '+20501234567'],
-    ['+20501234567', '+20501234567'],
-]);
+})->with(array_map(fn (array $case) => [$case['input'], $case['expected']], phoneCases()['valid']));
 
 test('rejects malformed phone input', function (string $input) {
     expect(fn () => EgyptianPhone::normalize($input))->toThrow(InvalidArgumentException::class);
-})->with(['', 'notaphone', '123', '01334567890', '010012345', '020012345678']);
+})->with(phoneCases()['invalid']);
