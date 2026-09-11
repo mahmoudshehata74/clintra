@@ -83,6 +83,53 @@ evaluate to zero rows, which is what "fails safe" means here: the absence
 of a valid membership locks everything out rather than raising an
 exception a caller might catch and route around.
 
+## A worked failure: specialty_templates' OR clause
+
+`specialty_templates`/`form_definitions` originally used one policy
+expression for both `USING` and `WITH CHECK`:
+`org_id = current_org() OR org_id IS NULL` (system-wide templates, per
+`docs/schema.md`, are meant to be readable by every org). The automated RLS
+suite (`tests/Feature/Rls`) caught two real holes this created, both because
+`org_id IS NULL` doesn't depend on `current_org()`/`current_membership()` at
+all:
+
+1. **Read**: a session with *no membership declared at all* — not just the
+   wrong org — could still `SELECT` every system-wide row, breaking the
+   fail-safe invariant above.
+2. **Write**: because the same expression backed `WITH CHECK`, any org's
+   membership could `INSERT` a new `org_id IS NULL` row, or `UPDATE`/`DELETE`
+   an existing system-wide one — corrupting shared reference data for every
+   other org, not just reading it.
+
+Fixed in `2026_09_11_170030_split_specialty_template_write_policies.php` by
+splitting each table's single policy into one per command: `SELECT` keeps
+"or it's system-wide," but gates that on `current_org() IS NOT NULL` (a
+membership must actually resolve); `INSERT`/`UPDATE`/`DELETE` drop the `OR`
+entirely — a membership can only ever write its own org's rows. There is
+deliberately no path left for `clintra_app` to write an `org_id IS NULL` row
+— seeding system-wide reference data needs a separate, owner-run bootstrap
+step, not this connection (open, see `docs/session-handoff.md`).
+
+The lesson for any future table: **a single combined `USING`/`WITH CHECK`
+expression is only safe if every `OR` branch in it still bottoms out at
+`current_org()`/`current_membership()`.** An `OR` branch that doesn't is a
+read hole if it's reachable with no membership at all, and a write hole
+too, silently, the moment that same expression is reused for `WITH CHECK`.
+
+## clintra_fixtures — test-only, never production
+
+A fourth role exists purely for the RLS test suite (`tests/Feature/Rls`) to
+insert fixture data without a membership already in place to grant it RLS
+scope — something neither `clintra_app` nor `clintra_owner` can do (both stay
+RLS-bound). `clintra_fixtures` is `BYPASSRLS`, which defeats every guarantee
+on this page outright for whoever holds it. It must **only ever exist in
+local dev and CI databases**, is used exclusively by the test suite's own
+`pgsql_fixtures` connection, and must never be created in a production
+database or referenced by application code. See `api/README.md` for the
+exact setup SQL, and `config/database.php` — its credentials have no default,
+so an environment that never sets `DB_FIXTURES_USERNAME`/
+`DB_FIXTURES_PASSWORD` never has a working connection for it at all.
+
 ## How to add a new table
 
 1. Migration creates the table (uuid primary key, client-generated —

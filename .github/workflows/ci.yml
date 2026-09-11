@@ -88,11 +88,10 @@ jobs:
         run: pnpm exec playwright test --grep-invert @screenshot
 
   # Proves the Laravel backend builds, migrates cleanly against a real
-  # Postgres (roles, schema, RLS policies included), and boots. This is
-  # NOT where isolation itself gets verified — the two-role/FORCE RLS/RLS
-  # policy checks are a local, manual exercise (see api/docs/rls.md);
-  # CI's job here is only to prove every migration runs without error
-  # against a fresh database, then that the existing test suite passes.
+  # Postgres (roles, schema, RLS policies included), and boots — and, via
+  # tests/Feature/Rls, that isolation itself actually holds: every table has
+  # RLS forced, a membership sees only its own scope, cross-org writes are
+  # rejected by the database, etc. See api/docs/rls.md.
   api:
     runs-on: ubuntu-latest
     services:
@@ -134,22 +133,31 @@ jobs:
       # Same two-role model as local dev (see api/docs/rls.md): clintra_owner
       # owns every table and runs migrations; clintra_app is what the app
       # connects as; clintra_rls is the NOLOGIN BYPASSRLS role the RLS
-      # migration's SECURITY DEFINER helper functions run as. These
-      # passwords are throwaway, scoped to this one job's ephemeral
-      # container — not real secrets.
-      - name: Provision Postgres roles and database
+      # migration's SECURITY DEFINER helper functions run as. clintra_fixtures
+      # is a fourth, test-only role (also BYPASSRLS) — tests/Feature/Rls uses
+      # it to insert/clean up fixture data; it must never exist outside CI
+      # and local dev (api/docs/rls.md). These passwords are throwaway,
+      # scoped to this one job's ephemeral container — not real secrets.
+      - name: Provision Postgres roles and databases
         env:
           PGPASSWORD: ci_postgres_superuser
         run: |
           psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_owner LOGIN PASSWORD 'ci_owner_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE;"
           psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_app LOGIN PASSWORD 'ci_app_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE;"
           psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_rls NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
+          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_fixtures LOGIN PASSWORD 'ci_fixtures_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
           psql -h 127.0.0.1 -U postgres -c "GRANT clintra_rls TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE clintra OWNER clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -d clintra -c "ALTER SCHEMA public OWNER TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -d clintra -c "GRANT USAGE ON SCHEMA public TO clintra_app;"
-          psql -h 127.0.0.1 -U postgres -d clintra -c "GRANT CREATE ON SCHEMA public TO clintra_rls;"
-          psql -h 127.0.0.1 -U postgres -d clintra -c "GRANT CONNECT ON DATABASE clintra TO clintra_app;"
+
+          for db in clintra clintra_test; do
+            psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE $db OWNER clintra_owner;"
+            psql -h 127.0.0.1 -U postgres -d "$db" -c "ALTER SCHEMA public OWNER TO clintra_owner;"
+            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT USAGE ON SCHEMA public TO clintra_app;"
+            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_rls;"
+            psql -h 127.0.0.1 -U postgres -c "GRANT CONNECT ON DATABASE $db TO clintra_app;"
+            psql -h 127.0.0.1 -U postgres -c "GRANT CONNECT ON DATABASE $db TO clintra_fixtures;"
+            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT USAGE ON SCHEMA public TO clintra_fixtures;"
+            psql -h 127.0.0.1 -U postgres -d "$db" -c "ALTER DEFAULT PRIVILEGES FOR ROLE clintra_owner IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clintra_fixtures;"
+          done
 
       - name: Point .env at the CI database
         working-directory: api
@@ -160,11 +168,19 @@ jobs:
             $env = preg_replace("/^DB_APP_PASSWORD=.*/m", "DB_APP_PASSWORD=ci_app_pw", $env);
             $env = preg_replace("/^DB_OWNER_USERNAME=.*/m", "DB_OWNER_USERNAME=clintra_owner", $env);
             $env = preg_replace("/^DB_OWNER_PASSWORD=.*/m", "DB_OWNER_PASSWORD=ci_owner_pw", $env);
+            $env = preg_replace("/^DB_FIXTURES_USERNAME=.*/m", "DB_FIXTURES_USERNAME=clintra_fixtures", $env);
+            $env = preg_replace("/^DB_FIXTURES_PASSWORD=.*/m", "DB_FIXTURES_PASSWORD=ci_fixtures_pw", $env);
             file_put_contents(".env", $env);
           '
 
-      - name: Run migrations
+      - name: Run migrations (dev database)
         working-directory: api
+        run: php artisan migrate --database=pgsql_owner --force
+
+      - name: Run migrations (test database)
+        working-directory: api
+        env:
+          DB_DATABASE: clintra_test
         run: php artisan migrate --database=pgsql_owner --force
 
       - name: Run tests

@@ -28,6 +28,61 @@ GRANT CREATE ON SCHEMA public TO clintra_rls;
 GRANT CONNECT ON DATABASE clintra TO clintra_app;
 ```
 
+A fourth role, **local and CI only**: the RLS isolation suite
+(`tests/Feature/Rls`) needs to insert fixture data (an organization, a
+membership, ...) without a membership already in place to grant RLS scope —
+something neither `clintra_app` (RLS via `ENABLE`) nor `clintra_owner` (RLS
+via `FORCE`) can do. `clintra_fixtures` exists only for that: `BYPASSRLS`,
+used exclusively by the test suite's fixtures connection
+(`DB_FIXTURES_USERNAME`/`DB_FIXTURES_PASSWORD`, `config/database.php`'s
+`pgsql_fixtures`), never by application code. **This role must never be
+created in a production environment, and the application must never be
+configured to connect as it** — `BYPASSRLS` defeats every guarantee in
+`docs/rls.md` outright for whoever holds it. Nothing in `config/database.php`
+defaults these credentials to anything; a production `.env` that simply
+never sets `DB_FIXTURES_USERNAME`/`DB_FIXTURES_PASSWORD` never has a working
+`pgsql_fixtures` connection at all.
+
+```sql
+CREATE ROLE clintra_fixtures LOGIN PASSWORD '...' NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
+GRANT CONNECT ON DATABASE clintra TO clintra_fixtures;
+\c clintra
+GRANT USAGE ON SCHEMA public TO clintra_fixtures;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO clintra_fixtures;
+ALTER DEFAULT PRIVILEGES FOR ROLE clintra_owner IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clintra_fixtures;
+```
+
+The `ALTER DEFAULT PRIVILEGES` line means every future table a migration
+creates (always as `clintra_owner`) is automatically granted to
+`clintra_fixtures` too — no need to touch this setup again when the schema
+grows.
+
+### Test database
+
+Tests never run against the dev database — `phpunit.xml` points
+`DB_DATABASE` at a separate `clintra_test` database, which needs the same
+roles/grants as `clintra` above, then its own migration run. CI provisions
+and migrates this same database name (`.github/workflows/ci.yml`); do the
+same locally, once:
+
+```sql
+CREATE DATABASE clintra_test OWNER clintra_owner;
+\c clintra_test
+ALTER SCHEMA public OWNER TO clintra_owner;
+GRANT USAGE ON SCHEMA public TO clintra_app;
+GRANT CREATE ON SCHEMA public TO clintra_rls;
+GRANT CONNECT ON DATABASE clintra_test TO clintra_app;
+GRANT CONNECT ON DATABASE clintra_test TO clintra_fixtures;
+GRANT USAGE ON SCHEMA public TO clintra_fixtures;
+ALTER DEFAULT PRIVILEGES FOR ROLE clintra_owner IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clintra_fixtures;
+```
+
+```
+DB_DATABASE=clintra_test php artisan migrate --database=pgsql_owner
+```
+
 ## Setup
 
 ```

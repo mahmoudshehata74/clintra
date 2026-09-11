@@ -121,6 +121,32 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
+        // Same database, authenticated as clintra_fixtures — a superuser-ish
+        // role (BYPASSRLS) used ONLY by the RLS isolation test suite to
+        // insert and clean up fixture data. Neither clintra_app nor
+        // clintra_owner can be used for this: both are RLS-bound (clintra_app
+        // via ENABLE, clintra_owner via FORCE), and fixture setup (e.g. an
+        // organization before any membership exists to grant scope) needs to
+        // bypass RLS entirely. Every assertion in those tests still goes
+        // through pgsql/pgsql_owner — never this connection — so the tests
+        // actually exercise the same policies real requests do. Credentials
+        // come from env only (phpunit.xml/CI, or a local .env), never a
+        // default here — see api/docs/rls.md.
+        'pgsql_fixtures' => [
+            'driver' => 'pgsql',
+            'url' => env('DB_URL'),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '5432'),
+            'database' => env('DB_DATABASE', 'laravel'),
+            'username' => env('DB_FIXTURES_USERNAME'),
+            'password' => env('DB_FIXTURES_PASSWORD'),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),

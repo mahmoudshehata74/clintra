@@ -117,11 +117,27 @@ checklist: `api/docs/rls.md`.
   instead of 422/401 with any useful detail. No validation or auth
   endpoints exist yet, so this hasn't bitten anything — but it will need a
   real case for at least those two exception types before endpoints ship.
-- The five RLS verification checks (isolation fails safe, scoped read,
-  owner also blocked without a membership, cross-org insert rejected by
-  `WITH CHECK`) were run manually against local Postgres this session —
-  none are automated tests. `php artisan test` still only runs Laravel's
-  stock example tests; there is no Pest/PHPUnit coverage of RLS itself yet.
+- The five RLS verification checks from the schema commit are now automated
+  (Pest, `api/tests/Feature/Rls`) and run in CI — see the next bullet for
+  what building that suite found and fixed. `php artisan test` uses Pest
+  (`pestphp/pest` + `pestphp/pest-plugin-laravel`) against a separate,
+  already-migrated `clintra_test` database (`api/README.md`), never the dev
+  database, via a fourth Postgres role (`clintra_fixtures`, `BYPASSRLS`,
+  test-only — see `api/docs/rls.md`).
+- Building that suite found a real cross-tenant hole:
+  `specialty_templates`/`form_definitions`' original policies used one
+  expression for both `USING` and `WITH CHECK`
+  (`org_id = current_org() OR org_id IS NULL`), so any org's membership
+  could read AND write (`INSERT`/`UPDATE`/`DELETE`) system-wide rows, not
+  just its own org's. Fixed by
+  `2026_09_11_170030_split_specialty_template_write_policies.php` (see
+  `api/docs/rls.md`'s "A worked failure" section) — but the fix means
+  `clintra_app` now has **no path at all** to write an `org_id IS NULL` row.
+  Seeding system-wide reference data (e.g. the "general" specialty
+  template every v1 practitioner points at, per `docs/schema.md`) needs a
+  separate, owner-run bootstrap step that does not exist yet. Nothing seeds
+  it today, so this hasn't bitten anything yet — but the first real
+  `practitioners` endpoint will need that bootstrap in place first.
 - `contract/` (OpenAPI + shared enums, per the CLI brief's repo layout)
   does not exist. The visit state machine is defined once, in
   `web/src/domain/transitions.ts`, and nowhere else — the API has no
@@ -131,9 +147,13 @@ checklist: `api/docs/rls.md`.
 Web: `pnpm --dir web test` · `pnpm exec tsc -b --noEmit` · `pnpm --dir web
 build` · `pnpm --dir web test:e2e`. API: `cd api && composer install`,
 `php artisan migrate --database=pgsql_owner`, `php artisan test`,
-`./vendor/bin/pint --test`. CI has four jobs: `build`, `e2e`, `api`
-(spins up a throwaway `postgres:16` service, provisions the three roles,
-runs migrations, then the test suite).
+`./vendor/bin/pint --test`. `php artisan test` needs the separate
+`clintra_test` database set up per `api/README.md` first (one-time, local
+only — CI provisions it itself). CI has four jobs: `build`, `e2e`, `api`
+(spins up a throwaway `postgres:16` service, provisions all four roles and
+both databases, runs migrations against both, then the test suite —
+`api/tests/Feature/Rls` is what actually verifies isolation now, not a
+manual exercise).
 
 ## Next task
 Phase 3 — device registration + staff PIN auth via Sanctum, plus one real
