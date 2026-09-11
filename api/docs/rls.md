@@ -150,6 +150,67 @@ broader read access than the write policies already do. There is
 deliberately no `DELETE` policy — reference rows are upserted, never
 removed by a migration.
 
+## Provisioning: the one door into an empty database
+
+`organizations`' policy is `id = current_org()`, and `current_org()` can
+never resolve without an active membership — but a membership needs an org
+to belong to already. Neither `clintra_app` nor `clintra_owner` (both fully
+RLS-bound) can create the very first organization; this is by design, not
+an oversight — RLS isn't supposed to have a hole an ordinary connection can
+walk through, even for bootstrapping.
+
+`2026_09_11_170033_add_organization_provisioning.php` opens exactly one
+door: a fifth role, `clintra_provision` (`NOLOGIN`, `BYPASSRLS` — same
+local/CI-only provisioning as `clintra_rls`/`clintra_fixtures`, see
+`api/README.md`), owns one `SECURITY DEFINER` function,
+`provision_organization(jsonb)`. It creates an organization, its first
+location, the owner's `users` row (or reuses one by phone — a user can hold
+memberships in several orgs), a practitioner, the `practitioner_locations`
+link, the owner membership, and an `audit_log` row for every row created —
+all inside one transaction, so a partial provision can never exist.
+
+**Why a function, not `SET ROLE` from PHP.** The obvious shortcut —
+grant `clintra_app` (or a request-scoped connection) permission to
+`SET ROLE clintra_provision` directly, then run ordinary inserts — was
+rejected: it would mean *any* authenticated request could, in principle,
+assume a `BYPASSRLS` identity and touch anything, constrained only by
+remembering to `RESET ROLE` correctly on every code path, including
+exceptions. A `SECURITY DEFINER` function has a hard boundary instead: the
+bypass exists only inside this one function body, for exactly the columns
+and tables its own code touches, and the caller never holds the elevated
+role itself — it only ever gets to ask the function to run, if it has
+`EXECUTE`.
+
+**The `REVOKE EXECUTE FROM PUBLIC` trap.** PostgreSQL grants `EXECUTE` on
+every newly created function to `PUBLIC` by default — unlike tables, which
+start with no grants at all. Skipping the `REVOKE` here would mean
+`clintra_app` (and anyone else who can connect) could call
+`provision_organization(...)` directly and bypass RLS on all seven tables
+it touches, the exact hole `docs/rls.md` exists to prevent everywhere else.
+The migration revokes from `PUBLIC` and grants `EXECUTE` only to
+`clintra_owner` — never `clintra_app`. `App\Console\Commands\ProvisionOrganization`
+(`clintra:provision`) is the only caller, and it runs on the
+`pgsql_owner` connection.
+
+**`INSERT ... RETURNING` needs `SELECT` too.** An earlier version of this
+function used `RETURNING * INTO ...` to capture each inserted row for its
+audit snapshot, and failed "permission denied for table organizations" at
+runtime despite `clintra_provision` having `INSERT` — confirmed empirically
+that `RETURNING` requires `SELECT` privilege on the target table as well.
+Rather than widen the grants past what provisioning actually writes, the
+function builds every audit "after" snapshot from the values it already
+has in hand (from its `jsonb` argument or fixed constants), so the grants
+stay exactly `INSERT` on the seven tables it writes, plus `SELECT` only
+where genuinely needed: `users` (the phone-reuse check) and `audit_log`
+(`MAX(seq)`).
+
+**Every id is caller-supplied.** The function never calls
+`gen_random_uuid()` — `clintra:provision` generates every id itself, "the
+install tool acting as a client" (the same rule client apps follow for
+every other id in this schema). The one exception by design: a
+system-wide reference id like `specialty_id` (the "general" template) is
+read from `contract/reference-data.json`, never invented.
+
 ## clintra_fixtures — test-only, never production
 
 A fourth role exists purely for the RLS test suite (`tests/Feature/Rls`) to

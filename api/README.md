@@ -28,6 +28,21 @@ GRANT CREATE ON SCHEMA public TO clintra_rls;
 GRANT CONNECT ON DATABASE clintra TO clintra_app;
 ```
 
+A fourth role, needed in **every** environment including production (unlike
+`clintra_fixtures` below, which is local/CI only): `clintra_provision`
+(`NOLOGIN`, `BYPASSRLS`) owns `provision_organization(jsonb)`, the one
+`SECURITY DEFINER` function that can create the very first organization —
+`clintra_app` and `clintra_owner` are both fully RLS-bound and can never
+create one themselves. See `docs/rls.md`'s "Provisioning: the one door
+into an empty database".
+
+```sql
+CREATE ROLE clintra_provision NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
+GRANT clintra_provision TO clintra_owner;
+\c clintra
+GRANT CREATE ON SCHEMA public TO clintra_provision;
+```
+
 A fourth role, **local and CI only**: the RLS isolation suite
 (`tests/Feature/Rls`) needs to insert fixture data (an organization, a
 membership, ...) without a membership already in place to grant RLS scope —
@@ -72,6 +87,7 @@ CREATE DATABASE clintra_test OWNER clintra_owner;
 ALTER SCHEMA public OWNER TO clintra_owner;
 GRANT USAGE ON SCHEMA public TO clintra_app;
 GRANT CREATE ON SCHEMA public TO clintra_rls;
+GRANT CREATE ON SCHEMA public TO clintra_provision;
 GRANT CONNECT ON DATABASE clintra_test TO clintra_app;
 GRANT CONNECT ON DATABASE clintra_test TO clintra_fixtures;
 GRANT USAGE ON SCHEMA public TO clintra_fixtures;

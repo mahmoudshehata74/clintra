@@ -164,13 +164,58 @@ checklist: `api/docs/rls.md`.
   row: no clinic is live on this app yet, so there is no real data to
   reconcile — but the first sync implementation must not assume every
   device's local "general" row already has the contract id.
-- **New gap, next step's problem**: creating the very first organization +
-  owner membership is impossible through `clintra_app` — the
-  `organizations` policy is `id = current_org()`, and `current_org()` can
-  never resolve without a membership that itself requires an org to already
-  exist. Nothing in this session built an org-bootstrap path (deliberately
-  out of scope — see the RLS migration's own comment on `organizations`'
-  policy). This blocks the very first real signup/onboarding endpoint.
+- **Closed**: creating the very first organization + owner membership was
+  impossible through `clintra_app` or `clintra_owner` (both fully
+  RLS-bound). Fixed by a fifth role, `clintra_provision` (`NOLOGIN`,
+  `BYPASSRLS`, needed in every environment including production — see
+  `api/README.md`), owning one `SECURITY DEFINER` function,
+  `provision_organization(jsonb)`
+  (`2026_09_11_170033_add_organization_provisioning.php`). It creates an
+  org, its first location, the owner's user row (or reuses one by phone),
+  a practitioner, the `practitioner_locations` link, the owner membership,
+  and an `audit_log` row per created row, atomically. `EXECUTE` is revoked
+  from `PUBLIC` and granted only to `clintra_owner` — never `clintra_app`.
+  The install-team flow's backend is `php artisan clintra:provision`
+  (`App\Console\Commands\ProvisionOrganization`), which prompts for org/
+  location/doctor details + a PIN, generates every id itself (the install
+  tool acting as a client), and calls the function once. Full reasoning —
+  why a function and not `SET ROLE` from PHP, and the
+  `REVOKE EXECUTE FROM PUBLIC` trap — in `api/docs/rls.md`'s "Provisioning:
+  the one door into an empty database".
+- The owner-only reference-data `SELECT` policy added two sessions ago
+  (`specialty_templates`/`form_definitions`, restricted to `org_id IS
+  NULL`) means `clintra_owner` is no longer "sees zero rows with no
+  membership" across *every* table without qualification — it still is for
+  every ordinary, tenant-scoped table, but it now sees system-wide
+  reference rows regardless of membership, by design. Made explicit in
+  `tests/Feature/Rls/OwnerBlockedWithoutMembershipTest.php` (two tests now,
+  not one) rather than silently narrowing the old test's table list.
+- PIN hashing is now shared, byte-for-byte, between web and the API: both
+  read the same Argon2id parameters from `contract/pin-hash.json` (web via
+  `web/src/auth/pinHashParams.ts`, a thin re-export; the API via
+  `App\Support\PinHash`, `sodium_crypto_pwhash(...,
+  SODIUM_CRYPTO_PWHASH_ALG_ARGON2ID13)` — not `password_hash()`). Verified,
+  not assumed: computed a real test vector with the web's `@noble/hashes`
+  implementation, reproduced it byte-identical in PHP, and pinned it in
+  `contract/pin-hash.json`'s `testVector`, asserted by both
+  `web/src/auth/pinHash.test.ts` and `api/tests/Feature/PinHashTest.php`.
+- `App\Support\EgyptianPhone` ports `web/src/domain/phone.ts`'s
+  `normalizeEgyptianPhone` classification rules to PHP (not shared via
+  `contract/` — pure validation logic, no stored value either side needs to
+  agree on byte-for-byte). `api/tests/Feature/EgyptianPhoneTest.php` runs
+  the same cases as the web's own phone test.
+- **Windows/Git-Bash gotcha, not a code bug**: piping answers into
+  `clintra:provision` via stdin (e.g. `printf '...' | php artisan
+  clintra:provision`) hangs forever at the first `secret()` (hidden PIN)
+  prompt in this environment — `Command::secret()`'s hidden-input handling
+  doesn't consume piped, non-TTY input correctly here, so every retry sees
+  an empty answer. Discovered by actually running the command by hand
+  outside Pest, which hung indefinitely until the process was killed. Real
+  interactive terminals are unaffected; Pest's `expectsQuestion()` (used by
+  `tests/Feature/Rls/ProvisioningTest.php`) doesn't go through real stdin
+  either, so it's unaffected too. Hardened anyway: both prompt loops
+  (`promptForPhone`, `promptForPin`) now cap retries at 5 attempts and
+  raise a clear error, rather than looping forever regardless of cause.
 
 ## Verify
 Web: `pnpm --dir web test` · `pnpm exec tsc -b --noEmit` · `pnpm --dir web
@@ -179,11 +224,14 @@ build` · `pnpm --dir web test:e2e`. API: `cd api && composer install`,
 `./vendor/bin/pint --test`. `php artisan test` needs the separate
 `clintra_test` database set up per `api/README.md` first (one-time, local
 only — CI provisions it itself). CI has four jobs: `build`, `e2e`, `api`
-(spins up a throwaway `postgres:16` service, provisions all four roles and
+(spins up a throwaway `postgres:16` service, provisions all five roles and
 both databases, runs migrations against both, then the test suite —
 `api/tests/Feature/Rls` is what actually verifies isolation now, not a
 manual exercise).
 
 ## Next task
-Phase 3 — device registration + staff PIN auth via Sanctum, plus one real
-endpoint as proof the whole stack (RLS included) works end to end.
+Device registration + Sanctum token issuance + PIN login against the API
+— the very first real request path that turns a provisioned membership
+(now provisionable, see above) into an authenticated `X-Membership-Id`-free
+session. `ApplyMembership`'s client-supplied header is still the known,
+commented bridge this replaces (see "Known gaps" above).

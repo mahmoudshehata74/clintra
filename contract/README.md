@@ -37,3 +37,27 @@ for sync to reconcile there at all.
    by id (idempotent — safe across `migrate:fresh` and repeated runs).
 3. Any client that needs the row's id imports it from this file — never
    regenerates it.
+
+## pin-hash.json
+
+Staff PINs (Layer 2, `docs/auth-plan.md`) are hashed with Argon2id, never
+compared or stored in plaintext. The KDF parameters (`t`, `m`, `p`, `dkLen`,
+salt length) live here so the web client and the API can never drift onto
+different settings and silently produce incompatible digests for the same
+PIN — a stored hash is meaningless unless both sides compute it identically.
+
+`web/src/auth/pinHashParams.ts` is a thin re-export of `argon2id` from this
+file. The API's PIN hashing (`app/Support/PinHash.php`) reads the same
+values. Web hashes with `@noble/hashes`' pure-JS `argon2id`; the API hashes
+with `sodium_crypto_pwhash(..., SODIUM_CRYPTO_PWHASH_ALG_ARGON2ID13)` —
+different implementations of the same standardized (RFC 9106) algorithm, so
+identical parameters + identical salt + identical PIN must produce identical
+bytes. `testVector` is a fixed PIN/salt/expected-digest triple, computed
+once with the web implementation and asserted against directly by both a
+vitest test and a Pest test — if either implementation or its dependency
+ever silently changes behavior, that test vector is what catches it.
+
+**Never change `argon2id`'s values without re-deriving `testVector` first**
+(hash the same PIN/salt with the new parameters, in either implementation,
+and update the expected digest) — a stale test vector would make the tests
+lie about which parameters are actually in effect.

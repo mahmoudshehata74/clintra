@@ -130,14 +130,17 @@ jobs:
         working-directory: api
         run: php artisan key:generate
 
-      # Same two-role model as local dev (see api/docs/rls.md): clintra_owner
+      # Same role model as local dev (see api/docs/rls.md): clintra_owner
       # owns every table and runs migrations; clintra_app is what the app
       # connects as; clintra_rls is the NOLOGIN BYPASSRLS role the RLS
-      # migration's SECURITY DEFINER helper functions run as. clintra_fixtures
-      # is a fourth, test-only role (also BYPASSRLS) — tests/Feature/Rls uses
-      # it to insert/clean up fixture data; it must never exist outside CI
-      # and local dev (api/docs/rls.md). These passwords are throwaway,
-      # scoped to this one job's ephemeral container — not real secrets.
+      # migration's SECURITY DEFINER helper functions run as; clintra_provision
+      # (also NOLOGIN BYPASSRLS) owns provision_organization(jsonb), the one
+      # door into an empty database — needed in every environment, including
+      # production, unlike clintra_fixtures below. clintra_fixtures is a
+      # fifth, test-only role (also BYPASSRLS) — tests/Feature/Rls uses it to
+      # insert/clean up fixture data; it must never exist outside CI and
+      # local dev (api/docs/rls.md). These passwords are throwaway, scoped to
+      # this one job's ephemeral container — not real secrets.
       - name: Provision Postgres roles and databases
         env:
           PGPASSWORD: ci_postgres_superuser
@@ -145,14 +148,17 @@ jobs:
           psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_owner LOGIN PASSWORD 'ci_owner_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE;"
           psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_app LOGIN PASSWORD 'ci_app_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE;"
           psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_rls NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
+          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_provision NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
           psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_fixtures LOGIN PASSWORD 'ci_fixtures_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
           psql -h 127.0.0.1 -U postgres -c "GRANT clintra_rls TO clintra_owner;"
+          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_provision TO clintra_owner;"
 
           for db in clintra clintra_test; do
             psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE $db OWNER clintra_owner;"
             psql -h 127.0.0.1 -U postgres -d "$db" -c "ALTER SCHEMA public OWNER TO clintra_owner;"
             psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT USAGE ON SCHEMA public TO clintra_app;"
             psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_rls;"
+            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_provision;"
             psql -h 127.0.0.1 -U postgres -c "GRANT CONNECT ON DATABASE $db TO clintra_app;"
             psql -h 127.0.0.1 -U postgres -c "GRANT CONNECT ON DATABASE $db TO clintra_fixtures;"
             psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT USAGE ON SCHEMA public TO clintra_fixtures;"
