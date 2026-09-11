@@ -235,6 +235,79 @@ rather than assumes, because "unreachable today" and "unreachable forever"
 are different claims, and this function doesn't get to be wrong about
 which one it's making.
 
+## Registration: the second door, and why Sanctum can't authenticate through RLS
+
+A device registering has no membership yet, same bootstrapping problem as
+provisioning, but for a *read* that has to happen on every single
+authenticated request afterward, not just once. `register_device(jsonb)`
+(`2026_09_12_000006_add_register_device_function.php`) is `SECURITY
+DEFINER`, owned by `clintra_provision` (same `BYPASSRLS` role
+provisioning uses) — but `EXECUTE` is granted to `clintra_app`, not
+`clintra_owner`, because this one is called from a live, unauthenticated
+HTTP request (`POST /api/devices/register`), never from a CLI command on
+the `pgsql_owner` connection. It verifies the activation code (exists,
+unused, unexpired) and the submitted phone (matches an active owner
+membership in that code's org), atomically marks the code used, creates
+the `device` row, and returns the full bootstrap payload the device needs
+— organization, locations, practitioners, and every membership including
+`pin_hash`/`pin_salt` (see `docs/auth-plan.md`'s registration credential
+resolution for why that crossing the wire once, here, is intentional).
+
+Every credential failure — wrong code, expired, already used, wrong phone,
+right phone but the wrong org's code — raises the exact same generic
+exception. This is deliberate, not laziness: distinguishing them would
+hand an attacker a working oracle for guessing valid phones or codes one
+bit at a time. Payload *shape* problems (not a real phone, not real hex,
+not a real uuid) are caught by a Laravel `FormRequest` before this
+function is ever called, and rendered as 422 — a shape problem is the
+caller's bug, not a credential-guessing signal, so being specific about
+those costs nothing.
+
+**Why `ApplyMembership` doesn't use `auth:sanctum`.** Sanctum's guard
+resolves an authenticated request's token, then loads the token's
+*tokenable* — ordinarily a `User` — via a plain Eloquent query. Every
+domain table in this schema, `device` included, carries `FORCE ROW LEVEL
+SECURITY`; loading a tokenable row this way, before any membership is
+known, is exactly the read this schema's RLS is built to block, and would
+make authentication itself silently fail (the query returns zero rows,
+Sanctum reports "unauthenticated" even for a perfectly valid token).
+Granting `device` a bypass for this one read would either mean weakening
+its policy (a real hole: anyone who could still be listening on the
+connection could then read every device row) or inventing a second,
+narrower session GUC (in the spirit of `app.membership_id`) purely to
+smuggle the row past its own policy — solvable, but a second bootstrapping
+mechanism this schema doesn't need yet.
+
+Instead, `ApplyMembership` verifies the bearer token by hand, directly
+against `personal_access_tokens` — the one auth-adjacent table that
+carries **no RLS at all** (`grantAppAccessWithoutRls`, same as
+`sessions`/`cache`/`jobs`): replicates Sanctum's own `id|token` lookup,
+hashes the presented token, compares with `hash_equals`, and reads the
+membership id out of the token's `abilities` (stored as
+`membership:<uuid>` at issuance — `App\Models\Device` exists solely to
+mint tokens in this shape at registration; nothing ever fetches a `Device`
+model afterward). This sidesteps the RLS/Sanctum-guard conflict entirely,
+at the cost of not using Sanctum's `Auth::user()`/`$request->user()`
+sugar on membership-gated routes — `/api/isolation-probe` is the only one
+that exists so far.
+
+**The local-only header bridge is enforced in code, not config.**
+`ApplyMembership` still accepts `X-Membership-Id` — but only when
+`app()->environment('local')` is literally true, checked in the middleware
+itself. Not a `.env` flag, not a config value: an environment-specific
+config file accidentally shipped to staging or production would silently
+re-open this bridge if the gate lived in config instead of in code that
+reads the real, framework-detected environment.
+
+**Devices get replaced.** `mint_activation_code(jsonb)`
+(`2026_09_12_000005_add_mint_activation_code_function.php`) mints a fresh
+code for an org that already exists, via `php artisan clintra:mint-activation-code`
+— `EXECUTE` granted only to `clintra_owner`, same CLI-only path as
+`provision_organization`, never `clintra_app`. It has no acting membership
+of its own to attribute an audit row to (it's a bare CLI invocation, not a
+request from a logged-in owner), so it looks up the org's own active owner
+membership and attributes the code-creation audit row to that.
+
 ## clintra_fixtures — test-only, never production
 
 A fourth role exists purely for the RLS test suite (`tests/Feature/Rls`) to

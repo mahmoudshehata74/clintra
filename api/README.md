@@ -124,6 +124,27 @@ The server listens on `http://localhost:8000` by default. Health check:
 curl http://localhost:8000/api/health
 ```
 
+## Provisioning the first organization
+
+```
+php artisan clintra:provision
+```
+
+Prompts for org/location/doctor details and a PIN, then prints the created
+ids and a one-time activation code — write it down, it is never shown
+again. A device activates against it via `POST /api/devices/register`
+(phone + activation code + a client-generated `device_id`), which returns
+a Sanctum token plus the org's locations/practitioners/memberships. See
+`docs/auth-plan.md`'s registration credential resolution and
+`api/docs/rls.md`'s "Provisioning"/"Registration" sections for the full
+reasoning.
+
+Devices get replaced — mint a fresh code for an existing org with:
+
+```
+php artisan clintra:mint-activation-code {org_id} {location_id}
+```
+
 ## Conventions
 - IDs are UUID v4, always generated on the client — Laravel never generates
   its own (`config('app.client_generated_ids')`).

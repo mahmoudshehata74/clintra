@@ -7,10 +7,10 @@ use Ramsey\Uuid\Uuid;
 /**
  * Runs `clintra:provision` with deterministic ids (Str::createUuidsUsing) so
  * assertions and cleanup can target exact rows, instead of parsing the
- * printed table. Returns the 12 ids in the exact order
+ * printed table. Returns the ids in the exact order
  * App\Console\Commands\ProvisionOrganization generates them.
  *
- * @return array{org: string, location: string, user: string, practitioner: string, practitionerLocation: string, membership: string, auditOrg: string, auditLocation: string, auditUser: string, auditPractitioner: string, auditPractitionerLocation: string, auditMembership: string}
+ * @return array{org: string, location: string, user: string, practitioner: string, practitionerLocation: string, membership: string, activationCode: string, auditOrg: string, auditLocation: string, auditUser: string, auditPractitioner: string, auditPractitionerLocation: string, auditMembership: string, auditActivationCode: string}
  */
 function provisionViaCommand(
     string $orgName,
@@ -22,8 +22,9 @@ function provisionViaCommand(
     string $pin = '1234',
 ): array {
     $keys = [
-        'org', 'location', 'user', 'practitioner', 'practitionerLocation', 'membership',
-        'auditOrg', 'auditLocation', 'auditUser', 'auditPractitioner', 'auditPractitionerLocation', 'auditMembership',
+        'org', 'location', 'user', 'practitioner', 'practitionerLocation', 'membership', 'activationCode',
+        'auditOrg', 'auditLocation', 'auditUser', 'auditPractitioner', 'auditPractitionerLocation',
+        'auditMembership', 'auditActivationCode',
     ];
     $ids = collect($keys)->mapWithKeys(fn (string $key) => [$key => (string) Str::uuid()]);
 
@@ -55,6 +56,7 @@ function cleanupProvisioned(array $ids): void
 {
     $fx = test()->fx();
     $fx->table('audit_log')->where('org_id', $ids['org'])->delete();
+    $fx->table('activation_codes')->where('id', $ids['activationCode'])->delete();
     $fx->table('memberships')->where('id', $ids['membership'])->delete();
     $fx->table('practitioner_locations')->where('id', $ids['practitionerLocation'])->delete();
     $fx->table('practitioners')->where('id', $ids['practitioner'])->delete();
@@ -141,9 +143,9 @@ test('audit rows exist for every created row, attributed to the new owner member
 
     $auditRows = $this->fx()->table('audit_log')->where('org_id', $org['org'])->orderBy('seq')->get();
 
-    expect($auditRows)->toHaveCount(6);
+    expect($auditRows)->toHaveCount(7);
 
-    $expectedEntities = ['organizations', 'locations', 'users', 'practitioners', 'practitioner_locations', 'memberships'];
+    $expectedEntities = ['organizations', 'locations', 'users', 'practitioners', 'practitioner_locations', 'memberships', 'activation_codes'];
     expect($auditRows->pluck('entity')->all())->toBe($expectedEntities);
 
     foreach ($auditRows as $row) {
@@ -155,8 +157,13 @@ test('audit rows exist for every created row, attributed to the new owner member
     $entityIds = $auditRows->pluck('entity_id')->all();
     expect($entityIds)->toBe([
         $org['org'], $org['location'], $org['user'], $org['practitioner'],
-        $org['practitionerLocation'], $org['membership'],
+        $org['practitionerLocation'], $org['membership'], $org['activationCode'],
     ]);
+
+    // The activation code's own hash must never appear in its audit snapshot.
+    $activationCodeAudit = $auditRows->firstWhere('entity', 'activation_codes');
+    $activationAfter = json_decode($activationCodeAudit->after, associative: true);
+    expect($activationAfter)->not->toHaveKey('code_hash');
 
     // pin_hash/pin_salt must never appear in the membership's audit snapshot.
     $membershipAudit = $auditRows->firstWhere('entity', 'memberships');

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\ActivationCode;
 use App\Support\EgyptianPhone;
 use App\Support\PinHash;
 use Illuminate\Console\Command;
@@ -42,6 +43,9 @@ class ProvisionOrganization extends Command
         $pinHash = PinHash::hash($pin, $pinSalt);
         unset($pin);
 
+        $activationCode = ActivationCode::generate();
+        $activationCodeHash = ActivationCode::hash($activationCode);
+
         $orgId = (string) Str::uuid();
 
         $payload = [
@@ -68,12 +72,16 @@ class ProvisionOrganization extends Command
             'practitioner_scope' => 'all',
             'pin_hash' => $pinHash,
             'pin_salt' => $pinSalt,
+            'activation_code_id' => (string) Str::uuid(),
+            'activation_code_hash' => $activationCodeHash,
+            'activation_code_expires_at' => now()->addHours(ActivationCode::LIFETIME_HOURS)->toIso8601String(),
             'audit_organization_id' => (string) Str::uuid(),
             'audit_location_id' => (string) Str::uuid(),
             'audit_user_id' => (string) Str::uuid(),
             'audit_practitioner_id' => (string) Str::uuid(),
             'audit_practitioner_location_id' => (string) Str::uuid(),
             'audit_membership_id' => (string) Str::uuid(),
+            'audit_activation_code_id' => (string) Str::uuid(),
         ];
 
         $row = DB::connection('pgsql_owner')->selectOne(
@@ -92,6 +100,12 @@ class ProvisionOrganization extends Command
             ['practitioner_location_id', $result['practitioner_location_id']],
             ['membership_id', $result['membership_id']],
         ]);
+
+        $this->newLine();
+        $this->warn('ACTIVATION CODE — shown once, write it down now:');
+        $this->line("    {$activationCode}");
+        $this->warn('Expires in '.ActivationCode::LIFETIME_HOURS.' hours. It will not be shown again — '.
+            'use `php artisan clintra:mint-activation-code` to generate a new one if it is lost.');
 
         return self::SUCCESS;
     }

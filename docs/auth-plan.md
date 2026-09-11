@@ -47,11 +47,10 @@ secrets and the eventual server side), not the primary control.
 
 - **Recommendation:** (c) hardcoded via the seed for v1; the real
   registration flow — the reference's screen 1 — ships with Laravel.
-- **Rationale:** Screen 1 activates a device with **mobile number + password +
-  clinic code**, which are inherently *server-verified* credentials that return
-  which org/location the device serves; with no Laravel backend there is
-  nothing to verify against, so a v1 wizard would be throwaway UI over a single
-  seeded org/location.
+- **Rationale:** Screen 1 activates a device with a server-verified
+  credential that returns which org/location the device serves; with no
+  Laravel backend there is nothing to verify against, so a v1 wizard would
+  be throwaway UI over a single seeded org/location.
 - **Constraint:** Reference screen 1 (`تسجيل الدخول (وقت التركيب)`, tables
   `users · memberships`, marked "shown once, install day; the assistant will
   never see it"); `docs/schema.md` `memberships`.
@@ -60,6 +59,45 @@ secrets and the eventual server side), not the primary control.
   must serve more than one org or location, or (ii) staff accounts must be
   provisioned against a server rather than the seed.
 - **Status:** decided.
+
+#### Resolution: the registration credential (recorded once the API shipped)
+
+The mockup's screen 1 shows three fields — mobile number, "كلمة المرور"
+(password), and "كود العيادة" (clinic code) — and this document's original
+rationale above cited "mobile number + password + clinic code" as the
+credential set. That wording was imprecise, discovered as a real blocker
+when device registration was actually implemented: **"password" names no
+field anywhere in `docs/schema.md`, has no hashing scheme, and directly
+contradicts this repo's own `docs/session-handoff.md`, which states
+elsewhere that "Clintra has no password-based login; device + PIN per
+membership only."** There was never a second, separate password —
+"password" was the mockup author's informal label for what this document
+already calls the staff PIN, and reusing it for registration was rejected
+outright: **a 4-digit PIN must never become a network-facing credential.**
+The whole point of Layer 2's design (this document's own framing note,
+above) is that the PIN's hash never leaves the device; making it do double
+duty as a bearer credential sent to a server would contradict that on its
+face, regardless of how it's transmitted.
+
+**Resolved credential: owner phone + a one-time activation code.** This is
+what screen 1's "clinic code" already gestures at, but with real entropy —
+not the mockup's illustrative 4-digit `CLT-4821` — and bound to a specific
+org and location, single-use, and expiring. See `docs/schema.md`'s
+`activation_codes` (v10) and `api/docs/rls.md`'s registration section for
+the full mechanics (`POST /api/devices/register`,
+`php artisan clintra:provision` / `clintra:mint-activation-code`).
+
+**A PIN hash does cross the wire exactly once, and this is intentional and
+documented, not an exception to Layer 2's invariant.** Registration's
+response includes every membership's `pin_hash`/`pin_salt` for the newly
+activated org — the device needs them locally to run PIN entry offline,
+the same way the seed used to provide them. This single transfer happens
+over a channel already authenticated by the activation code (a
+server-verified, single-use secret independent of any PIN), immediately
+before the device stores the hash and never sends it again. The Layer 2
+invariant is precisely "a PIN hash never leaves the device **after
+registration**" — registration is the one moment a fresh device doesn't
+have it yet and must receive it from somewhere.
 
 ### 3. What happens if a registered device's local DB is wiped?
 

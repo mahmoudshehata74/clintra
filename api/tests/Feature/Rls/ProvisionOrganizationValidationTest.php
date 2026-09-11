@@ -39,12 +39,16 @@ function validProvisioningPayload(): array
         'practitioner_scope' => 'all',
         'pin_hash' => str_repeat('a', 64),
         'pin_salt' => str_repeat('b', 32),
+        'activation_code_id' => (string) Str::uuid(),
+        'activation_code_hash' => str_repeat('c', 64),
+        'activation_code_expires_at' => now()->addHours(72)->toIso8601String(),
         'audit_organization_id' => (string) Str::uuid(),
         'audit_location_id' => (string) Str::uuid(),
         'audit_user_id' => (string) Str::uuid(),
         'audit_practitioner_id' => (string) Str::uuid(),
         'audit_practitioner_location_id' => (string) Str::uuid(),
         'audit_membership_id' => (string) Str::uuid(),
+        'audit_activation_code_id' => (string) Str::uuid(),
     ];
 }
 
@@ -225,6 +229,31 @@ test('rejects a membership_org_id that does not match org_id', function () {
     expect($caught->getCode())->toBe('22023');
 });
 
+test('rejects an activation_code_hash that is not 64 lowercase hex characters', function (string $badHash) {
+    $payload = validProvisioningPayload();
+    $payload['activation_code_hash'] = $badHash;
+
+    $caught = callProvisionOrganization($payload);
+
+    expect($caught)->not->toBeNull();
+    expect($caught->getCode())->toBe('22023');
+})->with([
+    'too short' => [str_repeat('c', 63)],
+    'too long' => [str_repeat('c', 65)],
+    'uppercase' => [str_repeat('C', 64)],
+    'non-hex characters' => [str_repeat('g', 64)],
+]);
+
+test('rejects an activation_code_expires_at that is not in the future', function () {
+    $payload = validProvisioningPayload();
+    $payload['activation_code_expires_at'] = now()->subMinute()->toIso8601String();
+
+    $caught = callProvisionOrganization($payload);
+
+    expect($caught)->not->toBeNull();
+    expect($caught->getCode())->toBe('22023');
+});
+
 test('accepts a fully valid payload (control case for every rejection test above)', function () {
     $payload = validProvisioningPayload();
 
@@ -234,6 +263,7 @@ test('accepts a fully valid payload (control case for every rejection test above
 
     // Clean up the org this control case actually created.
     $this->fx()->table('audit_log')->where('org_id', $payload['org_id'])->delete();
+    $this->fx()->table('activation_codes')->where('id', $payload['activation_code_id'])->delete();
     $this->fx()->table('memberships')->where('id', $payload['membership_id'])->delete();
     $this->fx()->table('practitioner_locations')->where('id', $payload['practitioner_location_id'])->delete();
     $this->fx()->table('practitioners')->where('id', $payload['practitioner_id'])->delete();

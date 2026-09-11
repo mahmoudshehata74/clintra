@@ -25,6 +25,7 @@ trait RlsFixtures
         'visits',
         'membership_locations',
         'membership_practitioners',
+        'activation_codes',
         'memberships',
         'practitioners',
         'patients',
@@ -211,6 +212,27 @@ trait RlsFixtures
         ], $overrides));
 
         return $this->track('memberships', $id);
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    protected function makeActivationCode(string $orgId, string $locationId, string $plainCode, array $overrides = []): string
+    {
+        $id = (string) Str::uuid();
+
+        $this->fx()->table('activation_codes')->insert(array_merge([
+            'id' => $id,
+            'org_id' => $orgId,
+            'location_id' => $locationId,
+            'code_hash' => hash('sha256', $plainCode),
+            'expires_at' => now()->addHours(72),
+            'used_at' => null,
+            'used_by_device_id' => null,
+            'created_at' => now(),
+        ], $overrides));
+
+        return $this->track('activation_codes', $id);
     }
 
     protected function makeMembershipLocation(string $membershipId, string $locationId): string

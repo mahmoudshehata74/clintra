@@ -34,11 +34,14 @@ checklist: `api/docs/rls.md`.
 ## Open WIP / deferred
 - No entity endpoints (patients, visits, invoices, ...) — that's the next
   phase after auth.
-- Real device registration + staff PIN auth via Sanctum not built. Web's
-  existing Layer 1/Layer 2 auth is local-only (IndexedDB), unrelated to
-  the API's Sanctum scaffold.
-- `contract/` does not exist yet. The visit status state machine lives only
-  in `web/src/domain/transitions.ts` — not yet duplicated/shared with the
+- **Device registration + token issuance is now built** (API side —
+  `POST /api/devices/register`, see "Known gaps" below for the full
+  writeup). Web's existing Layer 1/Layer 2 auth is still local-only
+  (IndexedDB); nothing on the web side calls this endpoint yet — that's
+  the next task.
+- `contract/` now exists (`reference-data.json`, `pin-hash.json`,
+  `phone-cases.json`). The visit status state machine still lives only in
+  `web/src/domain/transitions.ts` — not yet duplicated/shared with the
   API, so nothing stops the two from drifting apart.
 
 ## Gotchas any future session must know
@@ -106,17 +109,15 @@ checklist: `api/docs/rls.md`.
   here.
 
 ## Known gaps (deferred on purpose, not bugs to fix reflexively)
-- `ApplyMembership` (`app/Http/Middleware`) trusts a client-supplied
-  `X-Membership-Id` header. This is an explicit, commented TODO bridge —
-  it MUST be replaced by reading the membership from the authenticated
-  Sanctum token before this API is reachable from anywhere but local dev.
-- `bootstrap/app.php`'s generic `Throwable` exception handler checks
-  `method_exists($e, 'getStatusCode')` to pick a status code, defaulting to
-  500 otherwise. Neither `ValidationException` nor `AuthenticationException`
-  has that method, so both currently render as a generic 500 `server_error`
-  instead of 422/401 with any useful detail. No validation or auth
-  endpoints exist yet, so this hasn't bitten anything — but it will need a
-  real case for at least those two exception types before endpoints ship.
+- **Closed**: `ApplyMembership` no longer trusts a client-supplied
+  `X-Membership-Id` header except when `APP_ENV` is literally `local`
+  (checked in the middleware itself, not config — see the device
+  registration bullet below). The membership now comes from an
+  authenticated device's Sanctum-format bearer token in every other
+  environment.
+- **Closed**: `bootstrap/app.php` now renders `ValidationException` as 422
+  and `AuthenticationException` as 401, registered before the generic
+  `Throwable` handler (which still catches everything else, unchanged).
 - The five RLS verification checks from the schema commit are now automated
   (Pest, `api/tests/Feature/Rls`) and run in CI — see the next bullet for
   what building that suite found and fixed. `php artisan test` uses Pest
@@ -234,6 +235,54 @@ checklist: `api/docs/rls.md`.
   either, so it's unaffected too. Hardened anyway: both prompt loops
   (`promptForPhone`, `promptForPin`) now cap retries at 5 attempts and
   raise a clear error, rather than looping forever regardless of cause.
+- **Device registration is now real** (API side): `POST /api/devices/register`.
+  The registration credential — owner phone + a one-time activation code —
+  was a real decision, not an implementation detail: `docs/auth-plan.md`'s
+  original Q2 cited the mockup's "mobile + password + clinic code", but
+  "password" named no field anywhere and directly contradicted this same
+  document's own "no password-based login" line elsewhere. Resolved and
+  recorded in `docs/auth-plan.md`'s "Resolution: the registration
+  credential" — see it before touching this flow.
+  - `docs/schema.md`'s v10 additions: `activation_codes` (new table) and
+    `device.membership_id` (new column). Codes are SHA-256-hashed
+    (`App\Support\ActivationCode`), never stored in plaintext, single-use,
+    expire after 72 hours.
+  - Two more `SECURITY DEFINER` doors alongside `provision_organization`:
+    `mint_activation_code(jsonb)` (CLI-only, `clintra_owner`, for
+    replacement devices — `php artisan clintra:mint-activation-code`) and
+    `register_device(jsonb)` (the new one reachable from `clintra_app`
+    itself, since it's called from a live, unauthenticated HTTP request).
+    Full reasoning for both, and the exact validation/generic-error
+    behavior, in `api/docs/rls.md`'s "Registration: the second door"
+    section — read it before adding anything that touches either.
+  - **The interesting design problem**: Sanctum's `auth:sanctum` guard
+    loads a token's tokenable via a plain Eloquent query — but every table
+    here (including `device`) carries `FORCE ROW LEVEL SECURITY`, so that
+    read would silently return nothing before any membership is known,
+    making authentication itself fail. `ApplyMembership` doesn't use
+    `auth:sanctum` at all; it verifies the bearer token by hand against
+    `personal_access_tokens` (the one auth table with no RLS at all) and
+    reads the membership id out of the token's `abilities`
+    (`membership:<uuid>`, set at issuance). `App\Models\Device` exists only
+    to mint tokens in `App\Http\Controllers\DeviceRegistrationController`;
+    nothing ever fetches a `Device` model afterward. Full writeup in
+    `api/docs/rls.md`.
+  - `tests/Feature/Rls/IsolationProbeHttpTest.php` now authenticates with a
+    real token instead of the header; `/api/isolation-probe` also returns
+    `visible_organization_ids` now (still verification-only, not a real
+    entity endpoint), specifically so a test can prove cross-org isolation
+    end to end over HTTP, not just that membership resolution works.
+  - Rate-limited by IP and by the submitted code (`RateLimiter`, 5
+    attempts / 15 minutes each); the plaintext code and its hash are never
+    logged (nothing catches and logs the underlying `QueryException`; the
+    controller returns one fixed generic message regardless of which
+    check failed) — see `tests/Feature/Rls/DeviceRegistrationTest.php`'s
+    log-grep test.
+  - **Still open, explicitly out of scope for this step**: no web-side
+    caller of this endpoint yet. The web app's own `device`
+    IndexedDB table has no `membership_id` column to match the API's v10
+    addition — that's the next task's problem, not a bug in what shipped
+    here.
 
 ## Verify
 Web: `pnpm --dir web test` · `pnpm exec tsc -b --noEmit` · `pnpm --dir web
@@ -248,8 +297,11 @@ both databases, runs migrations against both, then the test suite —
 manual exercise).
 
 ## Next task
-Device registration + Sanctum token issuance + PIN login against the API
-— the very first real request path that turns a provisioned membership
-(now provisionable, see above) into an authenticated `X-Membership-Id`-free
-session. `ApplyMembership`'s client-supplied header is still the known,
-commented bridge this replaces (see "Known gaps" above).
+The web side of device registration: a real caller of
+`POST /api/devices/register` (replacing the seed-based org/location
+binding — see `docs/auth-plan.md`'s Layer 1, Q2), plus a
+`membership_id` column on the web's own local `device` table to receive
+the API's bootstrap response and the token. After that: the first real
+entity endpoint (patients/visits/invoices) proving the whole authenticated
++ RLS-scoped stack works end to end for something other than the
+isolation probe.

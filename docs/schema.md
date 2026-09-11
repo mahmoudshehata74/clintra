@@ -352,6 +352,49 @@ fresh hash of the entered PIN.
 
 Added in local database version 9; versions 1-8 are unchanged.
 
+## v10 additions
+
+### activation_codes
+
+id, org_id, location_id, code_hash, expires_at, used_at, used_by_device_id?,
+created_at
+
+Server-side only — API schema, not (yet) a local IndexedDB table. Backs
+real device registration (`docs/auth-plan.md`'s Layer 1, Q2): a one-time
+credential an owner types into a new device to activate it against their
+org and a specific location. `code_hash` is a SHA-256 hex digest; the
+plaintext code (format `CLT-XXXX-XXXX-XXXX-XXXX`, 16 characters from an
+unambiguous alphabet excluding `0/O/1/I/L`, CSPRNG-generated) is never
+stored and is shown to the installer exactly once, at creation time.
+Single-use: `used_at` is set atomically on successful registration, and a
+code with `used_at` already set — or past `expires_at` (72 hours after
+`created_at`) — is rejected identically to one that never existed, so a
+failed registration attempt reveals nothing about *why* it failed.
+`used_by_device_id` records which device consumed it, once used.
+
+Minted two ways, both through the API's provisioning path (never through
+the ordinary tenant-facing connection — see `api/docs/rls.md`): once
+automatically when an organization is first provisioned
+(`php artisan clintra:provision`), and again on demand for a replacement
+device (`php artisan clintra:mint-activation-code`), since devices get
+replaced over a clinic's lifetime.
+
+### device.membership_id
+
+`device` (v8) recorded which org and location a device serves, but not
+which membership activated it — needed once device registration issues a
+real Sanctum token, which must be bound to a specific membership as well
+as a specific device (`api/docs/rls.md`'s "Provisioning: the one door into
+an empty database" — the same bootstrapping concern applies to
+registration). Set once, at registration, to the owner membership whose
+phone + activation code activated the device; not reassigned afterward in
+v1 (there is no multi-staff API session yet — Layer 2's PIN switching
+stays local-only, per `docs/auth-plan.md`).
+
+Added in local database version 10 (API-side only so far — `web/src/db/database.ts`'s
+local `device` table does not yet have `membership_id`, since the web
+client does not yet talk to this endpoint); versions 1-9 are unchanged.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.
