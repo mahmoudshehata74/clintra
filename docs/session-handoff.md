@@ -154,10 +154,12 @@ checklist: `api/docs/rls.md`.
   it tried to push either table. Fixed: `seed.ts` now imports the fixed ids
   from `contract/reference-data.json` (via `web/src/domain/referenceData.ts`,
   a thin re-export — `web/tsconfig.app.json` gained `resolveJsonModule` for
-  this). The Vercel build (Root Directory `web/`) does read a file outside
-  `web/` here — verify this is still true after any future change to
-  Vercel's project settings, since `web/`'s own build has no way to assert
-  it. No migration exists (or is needed) for a device that already seeded
+  this). Confirmed: the Vercel build (Root Directory `web/`) can read a
+  file outside `web/` — commit `3b05c83`'s deploy completed successfully
+  reading `contract/reference-data.json`. Re-verify this if Vercel's
+  project settings ever change (e.g. a "skip files outside Root Directory"
+  toggle), since `web/`'s own build has no way to assert it from inside
+  CI. No migration exists (or is needed) for a device that already seeded
   the old random-id
   row: no clinic is live on this app yet, so there is no real data to
   reconcile — but the first sync implementation must not assume every
