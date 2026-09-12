@@ -180,6 +180,72 @@ test('two ops for the same slot: the chronologically older wins, proven with arr
     $this->fx()->table('day_state')->where('id', $olderOp['entity_id'])->delete();
 });
 
+/**
+ * The device whose visit gets evicted (SyncOpApplier::evictSlotLoser)
+ * already received `accepted` for its own push, truthfully, before the
+ * eviction happened in a *later*, unrelated request. That response can't
+ * be un-sent. The only mechanism that could tell this device its own row
+ * changed is a pull — GET /api/sync/pull does not exist yet
+ * (docs/sync-plan.md's Q9 explicitly scopes it out of this step) — so as
+ * of today, an evicted device has no way to discover this at all through
+ * the API surface. This test exists to keep that gap visible and
+ * testable, not to assert it's acceptable. Skipped, not silently omitted:
+ * un-skip once GET /api/sync/pull exists, and assert the evicted visit
+ * (with its bumped rev, is_overbooked=true, and reassigned position)
+ * appears in that device's pull results.
+ */
+test('the device whose visit was evicted can discover the change via a pull', function () {
+    $credential = makeAuthenticatedDevice();
+    $specialtyId = $this->makeSpecialtyTemplate(null);
+    $practitionerId = $this->makePractitioner($credential['orgId'], $specialtyId);
+    $patientId = $this->makePatient($credential['orgId']);
+    $date = now()->addDays(5)->toDateString();
+
+    $newerVisitId = (string) Str::uuid();
+    $newerOp = [
+        'op_id' => (string) Str::uuid(),
+        'entity' => 'visits',
+        'entity_id' => $newerVisitId,
+        'action' => 'create',
+        'payload' => [
+            'id' => $newerVisitId,
+            'org_id' => $credential['orgId'],
+            'location_id' => $credential['locationId'],
+            'practitioner_id' => $practitionerId,
+            'patient_id' => $patientId,
+            'visit_date' => $date,
+            'position' => 1,
+            'status' => 'booked',
+            'is_overbooked' => false,
+            'source' => 'walkin',
+            'created_by' => $credential['membershipId'],
+            'created_at' => now()->toIso8601String(),
+        ],
+        'created_at' => now()->subMinute()->toIso8601String(),
+    ];
+
+    $olderVisitId = (string) Str::uuid();
+    $olderOp = $newerOp;
+    $olderOp['op_id'] = (string) Str::uuid();
+    $olderOp['entity_id'] = $olderVisitId;
+    $olderOp['payload']['id'] = $olderVisitId;
+    $olderOp['created_at'] = now()->subMinutes(10)->toIso8601String();
+
+    pushOps($credential['token'], [$newerOp])->assertOk();
+    pushOps($credential['token'], [$olderOp])->assertJson(['results' => [['op_id' => $olderOp['op_id'], 'status' => 'accepted']]]);
+
+    // Confirmed, out of band, that the eviction really happened — this is
+    // the fact the rest of this test is about the device NOT being able
+    // to observe through the API itself.
+    $evicted = $this->fx()->table('visits')->where('id', $newerVisitId)->first();
+    expect($evicted->is_overbooked)->toBeTrue();
+    expect($evicted->rev)->toBe(2);
+
+    $this->fx()->table('audit_log')->whereIn('entity_id', [$newerVisitId, $olderVisitId])->delete();
+    $this->fx()->table('sync_ledger')->whereIn('op_id', [$newerOp['op_id'], $olderOp['op_id']])->delete();
+    $this->fx()->table('visits')->whereIn('id', [$newerVisitId, $olderVisitId])->delete();
+})->skip('No GET /api/sync/pull exists yet (docs/sync-plan.md Q9) — the evicted device currently has no API-level way to discover this change at all, only a direct database query. Un-skip once the pull endpoint exists.');
+
 test('a future-dated created_at on a slot op returns failed', function () {
     $credential = makeAuthenticatedDevice();
     $specialtyId = $this->makeSpecialtyTemplate(null);
