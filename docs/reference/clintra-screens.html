@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clintra — مكتبة الشاشات الكاملة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600&family=Readex+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#16211D;--paper:#FBFAF7;--card:#fff;--rule:#E2E3DC;--rs:#EDEEE8;
+--pine:#1D5B4A;--ps:#E8F0EC;--pm:#4C8571;--red:#B23A34;--reds:#FAECEA;
+--amb:#8A6A22;--ambs:#F6EFDD;--ash:#6E7370;--pur:#453FA0;--purs:#EDEBFB;
+--dsp:"Readex Pro","IBM Plex Sans Arabic",Tahoma,sans-serif;
+--bd:"IBM Plex Sans Arabic",Tahoma,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--bd);font-size:15px;line-height:1.65}
+h1,h2,h3,h4{font-family:var(--dsp);font-weight:500;line-height:1.3}
+.muted{color:var(--ash);font-weight:300}
+.sm{font-size:13px}.xs{font-size:11.5px}
+
+/* shell */
+.shell{display:grid;grid-template-columns:1fr 262px;min-height:100vh}
+@media(max-width:900px){.shell{grid-template-columns:1fr}}
+aside{border-right:1px solid var(--rule);background:var(--card);
+position:sticky;top:0;height:100vh;overflow-y:auto;padding:16px 0}
+@media(max-width:900px){aside{position:static;height:auto;border-right:none;border-bottom:1px solid var(--rule)}}
+.brand{padding:0 16px 14px;border-bottom:1px solid var(--rs);margin-bottom:10px}
+.brand .n{font-family:var(--dsp);font-size:19px;font-weight:600}
+.brand .n b{color:var(--pine)}
+.ph{padding:12px 16px 5px;font-size:11.5px;color:var(--pine);font-weight:600;letter-spacing:.03em}
+.nv{display:block;width:100%;text-align:right;font-family:var(--bd);font-size:13.5px;
+color:var(--ash);background:none;border:none;padding:7px 16px;cursor:pointer;border-right:2px solid transparent}
+.nv:hover{background:var(--paper);color:var(--ink)}
+.nv[aria-current="true"]{background:var(--ps);color:var(--pine);font-weight:500;border-right-color:var(--pine)}
+main{padding:26px 30px 70px;max-width:1000px}
+@media(max-width:640px){main{padding:18px 16px 50px}}
+.hd{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+flex-wrap:wrap;margin-bottom:6px}
+.hd h2{font-size:25px;font-weight:600}
+.meta{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 20px}
+.meta span{font-size:11.5px;border:1px solid var(--rule);border-radius:999px;padding:3px 11px;color:var(--ash)}
+.meta span.p{background:var(--ps);border-color:#B6D0C6;color:var(--pine)}
+.nav2{display:flex;gap:8px;margin-top:26px}
+.nav2 button{font-family:var(--bd);font-size:13.5px;background:#fff;border:1px solid var(--rule);
+border-radius:8px;padding:8px 16px;cursor:pointer;color:var(--ink)}
+.nav2 button:hover{border-color:var(--pm)}
+.nav2 button:disabled{opacity:.4;cursor:not-allowed}
+.why{background:var(--ambs);border-right:3px solid var(--amb);border-radius:8px;
+padding:11px 14px;font-size:13.5px;color:#5F4A17;margin-top:18px}
+
+/* ===== mock frames ===== */
+.frame{background:#fff;border:1px solid var(--rule);border-radius:12px;overflow:hidden;
+box-shadow:0 18px 40px -32px rgba(22,33,29,.5)}
+.frame.phone{max-width:330px;margin:0 auto;border-radius:26px;padding:9px;background:var(--ink);border:none}
+.frame.phone .inner{background:#fff;border-radius:18px;overflow:hidden}
+.frame.print{max-width:520px;margin:0 auto;background:#fff;border:1px solid var(--rule);padding:26px}
+.frame.tv{background:#0E3B2E;border:none;border-radius:12px;padding:34px 20px;text-align:center;color:#fff}
+
+.fbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+padding:10px 13px;border-bottom:1px solid var(--rule);background:var(--paper)}
+.ft{font-family:var(--dsp);font-size:14.5px;font-weight:500}
+.fs{padding:8px 13px;border-bottom:1px solid var(--rule);display:flex;gap:15px;
+font-size:12.5px;color:var(--ash);flex-wrap:wrap}
+.fs .bad{color:var(--red)}
+.fb{display:grid;grid-template-columns:118px 1fr}
+@media(max-width:640px){.fb{grid-template-columns:1fr}}
+.fn{border-left:1px solid var(--rule);background:var(--paper);padding:9px 0}
+.fn div{font-size:12.5px;padding:6px 12px;color:var(--ash)}
+.fn div.on{color:var(--pine);font-weight:500;background:var(--ps)}
+.fm{padding:12px}
+
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+@media(max-width:560px){.g3{grid-template-columns:repeat(2,1fr)}}
+.sl{border:1px solid var(--rule);border-radius:6px;padding:8px 10px;min-height:64px}
+.sl .t{font-size:11.5px;color:var(--ash)}
+.sl .n{font-size:13.5px;margin-top:1px}
+.sl .s{font-size:11px;color:var(--ash)}
+.sl.free{border-style:dashed;display:flex;align-items:center;justify-content:center;font-size:22px;color:#C2C4BD}
+.sl.now{background:var(--pine);border-color:var(--pine)}
+.sl.now .t{color:#A9CFC1}.sl.now .n{color:#fff;font-weight:600}.sl.now .s{color:#C6E2D7}
+.sl.her{background:var(--ps);border-color:#B6D0C6}
+.sl.her .t,.sl.her .s{color:var(--pm)}.sl.her .n{color:var(--pine);font-weight:600}
+.sl.mis{background:var(--reds);border-color:#E5BDB9}
+.sl.mis .t,.sl.mis .n,.sl.mis .s{color:var(--red)}
+.sl.pst{background:#F6F5F1}.sl.pst .t,.sl.pst .n,.sl.pst .s{color:#A8AAA3}
+
+.lr{display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid var(--rs)}
+.lr:last-child{border-bottom:none}
+.lr .gw{flex:1;min-width:0}
+.lr .t1{font-size:13.5px}.lr .t2{font-size:11.5px;color:var(--ash)}
+.lr .rt{font-size:12px;color:var(--ash);white-space:nowrap}
+.lr.done{background:#F6F5F1}.lr.done *{color:#A8AAA3}
+.lr.acc{background:var(--ps)}.lr.acc .t1{color:var(--pine);font-weight:600}
+.qn{width:31px;height:31px;border-radius:6px;border:1px solid var(--rule);flex:none;
+display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--ash)}
+.qn.on{background:var(--pine);color:#fff;border-color:var(--pine)}
+.qn.ok{background:var(--ps);border-color:#B6D0C6;color:var(--pm)}
+
+.fld{border:1px solid var(--rule);border-radius:6px;height:38px;display:flex;align-items:center;
+padding:0 11px;font-size:13.5px;color:var(--ash);margin-bottom:7px}
+.fld.on{border-color:var(--pine);box-shadow:0 0 0 3px var(--ps);color:var(--ink)}
+.lb{font-size:11.5px;color:var(--ash);margin-bottom:3px}
+.bt{background:var(--pine);color:#fff;border-radius:6px;padding:9px 16px;font-size:13.5px;
+font-family:var(--dsp);font-weight:500;display:inline-block;text-align:center}
+.bt.g{background:#fff;color:var(--ink);border:1px solid var(--rule)}
+.bt.d{background:#fff;color:var(--red);border:1px solid #E5BDB9}
+.bt.w{display:block}
+.tg{display:inline-block;font-size:11px;padding:2px 8px;border-radius:5px}
+.tg.a{background:var(--ps);color:var(--pine)}
+.tg.b{background:var(--reds);color:var(--red)}
+.tg.c{background:var(--ambs);color:var(--amb)}
+.tg.d{background:var(--purs);color:var(--pur)}
+.tg.e{background:var(--rs);color:var(--ash)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:right;font-size:11px;color:var(--ash);font-weight:500;padding:6px 7px;border-bottom:1px solid var(--rule)}
+.tbl td{padding:8px 7px;border-bottom:1px solid var(--rs)}
+.kv{display:flex;justify-content:space-between;padding:7px 12px;border-bottom:1px solid var(--rs);font-size:13px}
+.kv.tot{background:#F6F5F1;font-weight:600}
+.kv.dif{background:var(--ambs);color:var(--amb);font-weight:600}
+.mets{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;padding:12px}
+.mt{border:1px solid var(--rule);border-radius:8px;padding:10px 11px;background:var(--paper)}
+.mt .k{font-size:11px;color:var(--ash)}
+.mt .v{font-family:var(--dsp);font-size:19px;font-weight:600;margin-top:2px}
+.mt.bad{background:var(--reds);border-color:#E5BDB9}.mt.bad .v{color:var(--red)}
+.mt.ok{background:var(--ps);border-color:#B6D0C6}.mt.ok .v{color:var(--pine)}
+.msg{margin:9px 12px;padding:9px 11px;border-radius:12px;font-size:13px}
+.msg.them{background:#F1F1EC;border-top-right-radius:4px}
+.msg.me{background:var(--pine);color:#fff;border-top-left-radius:4px;margin-right:50px}
+.mbt{display:flex;gap:6px;margin-top:8px}
+.mbt span{flex:1;text-align:center;font-size:12px;border:1px solid var(--rule);background:#fff;
+border-radius:6px;padding:6px 0;color:var(--ink)}
+.tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px 12px}
+.tgrid div{border:1px solid var(--rule);border-radius:6px;text-align:center;padding:7px 0;font-size:12.5px}
+.tgrid div.off{color:#C4C5BE;background:#F7F7F3;text-decoration:line-through}
+.tgrid div.sel{background:var(--pine);color:#fff;border-color:var(--pine)}
+.teeth{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;padding:0 12px}
+.teeth i{border:1px solid var(--rule);border-radius:4px;height:34px;display:flex;align-items:flex-end;
+justify-content:center;font-size:9.5px;color:var(--ash);font-style:normal;padding-bottom:2px}
+.teeth i.s1{background:var(--reds);border-color:#E5BDB9}
+.teeth i.s2{background:var(--purs);border-color:#C3BEEE}
+.teeth i.on{border:2px solid var(--pine)}
+.stp{display:flex;gap:10px;padding:0 12px 9px;position:relative}
+.stp .bl{width:19px;height:19px;border-radius:50%;border:1px solid var(--rule);background:#fff;
+flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--ash)}
+.stp .bl.on{background:var(--pine);border-color:var(--pine);color:#fff}
+.stp .sc{font-size:13px}.stp .sd{font-size:11.5px;color:var(--ash)}
+.pin{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:200px;margin:0 auto;padding:12px}
+.pin div{border:1px solid var(--rule);border-radius:8px;padding:11px 0;text-align:center;font-size:16px}
+.dots{display:flex;gap:9px;justify-content:center;padding:14px 0 4px}
+.dots i{width:11px;height:11px;border-radius:50%;background:var(--rule)}
+.dots i.f{background:var(--pine)}
+.slider{height:5px;background:#EFEEE9;border-radius:9px;position:relative;margin:10px 0}
+.slider b{position:absolute;right:0;top:0;height:5px;background:var(--pine);border-radius:9px;width:55%}
+.slider i{position:absolute;left:45%;top:-5px;width:15px;height:15px;border-radius:50%;background:var(--pine)}
+.bar{height:7px;background:#F0EFEA;border-radius:9px;overflow:hidden;margin-top:7px}
+.bar b{display:block;height:7px;background:var(--pine);border-radius:9px}
+</style>
+</head>
+<body>
+<div class="shell">
+  <main>
+    <div class="hd">
+      <div>
+        <div class="muted xs" id="pnum">—</div>
+        <h2 id="ttl">—</h2>
+      </div>
+    </div>
+    <div class="meta" id="meta"></div>
+    <div id="stage"></div>
+    <div class="why" id="why"></div>
+    <div class="nav2">
+      <button id="prev">السابقة ›</button>
+      <button id="next">‹ التالية</button>
+    </div>
+  </main>
+
+  <aside>
+    <div class="brand">
+      <div class="n">Clin<b>tra</b></div>
+      <div class="muted xs">مكتبة الشاشات — كل المراحل</div>
+    </div>
+    <div id="nav"></div>
+  </aside>
+</div>
+
+<script>
+(function(){
+"use strict";
+var PH={1:'المرحلة ١ — الحجز والتشغيل',2:'المرحلة ٢ — التذكير والفلوس',
+3:'المرحلة ٣ — المريض يحجز',4:'المرحلة ٤ — الملف والمتابعة',5:'المرحلة ٥ — الشبكة'};
+
+function shell(title,extra,nav,body,stats){
+ return '<div class="frame"><div class="fbar"><div class="ft">'+title+'</div><div>'+(extra||'')+'</div></div>'+
+ (stats?'<div class="fs">'+stats+'</div>':'')+
+ '<div class="fb"><div class="fn">'+nav.map(function(n,i){return '<div class="'+(i===0?'on':'')+'">'+n+'</div>';}).join('')+
+ '</div><div class="fm">'+body+'</div></div></div>';
+}
+var NAV=['اليوم','المرضى','الطابور','الفواتير','التقارير','الإعدادات'];
+var NAVD=['اليوم','مرضاي','الملفات','التقارير'];
+
+function phone(inner){return '<div class="frame phone"><div class="inner">'+inner+'</div></div>';}
+
+var S=[
+/* ================= PHASE 1 ================= */
+{p:1,n:'تسجيل الدخول (وقت التركيب)',u:'فريق التركيب',t:'users · memberships',
+ why:'بتظهر مرة واحدة يوم التركيب فقط. المساعد عمره ما هيشوفها.',
+ h:'<div class="frame" style="max-width:400px;margin:0 auto;padding:30px 26px">'+
+ '<div style="text-align:center;font-family:var(--dsp);font-size:22px;font-weight:600;margin-bottom:4px">Clin<span style="color:var(--pine)">tra</span></div>'+
+ '<div class="muted sm" style="text-align:center;margin-bottom:20px">تفعيل جهاز العيادة</div>'+
+ '<div class="lb">رقم الموبايل</div><div class="fld on">٠١٠٠xxxxxxx</div>'+
+ '<div class="lb">كلمة المرور</div><div class="fld">••••••••</div>'+
+ '<div class="lb">كود العيادة</div><div class="fld">CLT-4821</div>'+
+ '<div class="bt w" style="margin-top:14px">تفعيل الجهاز</div></div>'},
+
+{p:1,n:'قفل الرقم السري',u:'كل موظف',t:'memberships.pin_hash',
+ why:'كل موظف له رقم سري خاص — عشان سطر «سجّلته منى» تحت كل حجز يبقى ليه قيمة.',
+ h:'<div class="frame" style="max-width:330px;margin:0 auto;padding:22px 18px">'+
+ '<div style="text-align:center;font-family:var(--dsp);font-size:16px;font-weight:500">مين شغّال دلوقتي؟</div>'+
+ '<div class="dots"><i class="f"></i><i class="f"></i><i></i><i></i></div>'+
+ '<div class="pin"><div>١</div><div>٢</div><div>٣</div><div>٤</div><div>٥</div><div>٦</div>'+
+ '<div>٧</div><div>٨</div><div>٩</div><div></div><div>٠</div><div>←</div></div></div>'},
+
+{p:1,n:'يوم العيادة — نمط المواعيد',u:'المساعد',t:'visits · schedules',
+ why:'الخانة الفاضية شكلها مختلف عشان تتلاقى بالعين. الألوان بتقول الحالة من غير قراءة.',
+ h:shell('الأحد ٢٤ أغسطس','<span class="tg a">متصل</span> <span class="tg e">تسجيل تأخير</span>',NAV,
+ '<div class="g3">'+
+ '<div class="sl pst"><div class="t">5:00</div><div class="n">منى سعيد</div><div class="s">خلصت</div></div>'+
+ '<div class="sl now"><div class="t">5:15</div><div class="n">كريم فؤاد</div><div class="s">جوه دلوقتي</div></div>'+
+ '<div class="sl her"><div class="t">5:30</div><div class="n">أحمد علي</div><div class="s">وصل ٥:٢٢</div></div>'+
+ '<div class="sl free">+</div>'+
+ '<div class="sl"><div class="t">6:00</div><div class="n">سارة محمود</div><div class="s">متابعة</div></div>'+
+ '<div class="sl mis"><div class="t">6:15</div><div class="n">طارق حسن</div><div class="s">لم يحضر</div></div>'+
+ '<div class="sl"><div class="t">6:30</div><div class="n">هدى إبراهيم</div><div class="s">كشف</div></div>'+
+ '<div class="sl"><div class="t">6:45</div><div class="n">ياسين عادل</div><div class="s">معاه واحد</div></div>'+
+ '<div class="sl free">+</div></div>',
+ '<span>١٨ محجوز</span><span>٤ فاضي</span><span>٣ وصلوا</span><span class="bad">٢ لم يحضروا</span>')},
+
+{p:1,n:'يوم العيادة — نمط الطابور',u:'المساعد',t:'visits.position · day_state',
+ why:'نفس الجداول. الفرق إن الترتيب بالنمرة والوقت المتوقع محسوب من متوسط الكشف الحقيقي.',
+ h:shell('الأحد ٢٤ أغسطس','<span class="tg e">الكشف من ٦ لـ ١٠</span>',NAV,
+ '<div class="lr done"><div class="qn">١</div><div class="gw t1">منى سعيد</div><div class="rt">خلصت 6:12</div></div>'+
+ '<div class="lr acc"><div class="qn on">٢</div><div class="gw"><div class="t1">كريم فؤاد</div>'+
+ '<div class="t2">جوه من ٤ دقايق</div></div><div class="rt">إنهاء</div></div>'+
+ '<div class="lr"><div class="qn ok">٣</div><div class="gw"><div class="t1">أحمد علي</div>'+
+ '<div class="t2" style="color:var(--pm)">مستني من ١٨ دقيقة</div></div><div class="rt">دوره كمان ١١ د</div></div>'+
+ '<div class="lr"><div class="qn">٤</div><div class="gw"><div class="t1">سارة محمود</div>'+
+ '<div class="t2">لسه ما وصلتش</div></div><div class="rt">متوقع 7:05</div></div>'+
+ '<div style="border:1px dashed var(--rule);border-radius:6px;padding:11px;text-align:center;'+
+ 'font-size:13px;color:var(--ash);margin-top:10px">+ إضافة للدور — النمرة الجاية ٥</div>',
+ '<span>الدور دلوقتي: ٢</span><span>في الانتظار: ٤</span><span>متوسط الكشف: ١١ دقيقة</span>')},
+
+{p:1,n:'تسجيل الحجز',u:'المساعد',t:'patients · visits',
+ why:'تلات لمسات لمريض قديم. زرار «من غير رقم» موجود عشان محدش يكتب رقم وهمي.',
+ h:'<div class="frame" style="max-width:390px;margin:0 auto">'+
+ '<div class="fbar"><div class="ft">حجز 6:45</div><div class="muted sm">×</div></div>'+
+ '<div class="fm"><div class="fld on">أحم</div>'+
+ '<div style="border:1px solid var(--rule);border-radius:6px;overflow:hidden;margin-bottom:9px">'+
+ '<div class="lr" style="background:#F6F5F1"><div class="gw"><div class="t1">أحمد علي</div>'+
+ '<div class="t2">٠١٠٠xxxxxxx · آخر زيارة من ٢٠ يوم</div></div></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">أحمد علي</div>'+
+ '<div class="t2">٠١١١xxxxxxx · آخر زيارة من ٨ شهور</div></div></div>'+
+ '<div class="lr"><div class="gw t1" style="color:var(--pine)">+ مريض جديد باسم «أحم»</div></div></div>'+
+ '<div style="display:flex;gap:7px;margin-bottom:10px">'+
+ '<div class="bt g" style="flex:1;border-color:var(--pine);color:var(--pine)">كشف</div>'+
+ '<div class="bt g" style="flex:1">متابعة</div></div>'+
+ '<div style="display:flex;gap:7px"><div class="bt" style="flex:1">تم</div>'+
+ '<div class="bt g" style="width:110px">من غير رقم</div></div></div></div>'},
+
+{p:1,n:'إجراءات المريض',u:'المساعد',t:'visits.status · audit_log',
+ why:'أربعة أزرار بس — دول ٩٥٪ من اليوم. وسبب الإلغاء بدوسة عشان يتكتب فعلًا.',
+ h:'<div class="frame" style="max-width:400px;margin:0 auto">'+
+ '<div class="fbar" style="display:block"><div class="ft">أحمد علي · 6:30</div>'+
+ '<div class="muted xs">كشف · حجز بالتليفون · سجّلته منى</div></div>'+
+ '<div class="fm"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+ '<div class="bt g" style="border-color:#B6D0C6;background:var(--ps);color:var(--pine)">وصل</div>'+
+ '<div class="bt g">أجّله لآخر الدور</div>'+
+ '<div class="bt g">نقل ليوم تاني</div><div class="bt d">إلغاء</div></div>'+
+ '<div class="muted xs" style="margin:11px 0 6px">لو إلغاء — السبب بدوسة واحدة</div>'+
+ '<div style="display:flex;gap:5px;flex-wrap:wrap">'+
+ '<span class="tg e">المريض ألغى</span><span class="tg e">العيادة ألغت</span>'+
+ '<span class="tg e">لم يحضر</span><span class="tg e">هيأجّل</span></div></div></div>'},
+
+{p:1,n:'تسجيل تأخير الطبيب',u:'المساعد أو الطبيب',t:'day_state.delay_minutes',
+ why:'بيحصل كل يوم تقريبًا. المشكلة مش التأخير — المشكلة إن المريض مش عارف.',
+ h:'<div class="frame" style="max-width:340px;margin:0 auto">'+
+ '<div class="fbar"><div class="ft">الطبيب اتأخر</div></div>'+
+ '<div class="fm"><div class="muted sm" style="margin-bottom:10px">هيتزحلق اليوم كله بالمدة دي</div>'+
+ '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:11px">'+
+ '<div class="bt g">١٥ دقيقة</div><div class="bt">٣٠ دقيقة</div><div class="bt g">٦٠ دقيقة</div></div>'+
+ '<div class="muted xs">١٢ مريض هيتأثروا · آخر ميعاد هيبقى 10:30</div></div></div>'},
+
+{p:1,n:'مريض جه من غير حجز',u:'المساعد',t:'visits.source = walkin',
+ why:'بيتسجّل زي غيره ويتعلّم «وصل» تلقائيًا — عشان عدد اليوم والإيراد يبقوا صح.',
+ h:'<div class="frame" style="max-width:370px;margin:0 auto">'+
+ '<div class="fbar"><div class="ft">إضافة مريض الآن</div></div>'+
+ '<div class="fm"><div class="fld on">هدى إبراهيم</div>'+
+ '<div class="muted xs" style="margin-bottom:9px">هيتحط في أقرب خانة فاضية: 7:00 — ويتعلّم وصل</div>'+
+ '<div class="bt w">إضافة</div></div></div>'},
+
+{p:1,n:'بحث المريض',u:'المساعد',t:'patients (index)',
+ why:'نتيجة تحت نصف ثانية مع خمسة آلاف مريض. آخر زيارة بتفرّق بين المتشابهين.',
+ h:shell('المرضى','',['المرضى','اليوم','الطابور','الفواتير'],
+ '<div class="fld on">٠١٠٠</div>'+
+ '<div class="lr"><div class="gw"><div class="t1">أحمد علي</div><div class="t2">٠١٠٠xxxxxxx · ٩ زيارات</div></div>'+
+ '<div class="rt">آخر زيارة ٢٠ يوم</div></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">منى سعيد</div><div class="t2">٠١٠٠xxxxxxx · ٣ زيارات</div></div>'+
+ '<div class="rt">آخر زيارة ٦ شهور</div></div>')},
+
+{p:1,n:'الزيارة — النموذج العام',u:'الطبيب',t:'visit_form_data · form_definitions',
+ why:'حقلين بس في النسخة الأولى. النموذج بيتحدد لوحده — مفيش قائمة اختيار.',
+ h:shell('زيارة — أحمد علي','<span class="tg e">النموذج: عام</span>',NAVD,
+ '<div class="lb">الشكوى الرئيسية</div><div class="fld on" style="height:58px">ألم في الركبة اليمنى من أسبوعين</div>'+
+ '<div class="lb">التشخيص</div><div class="fld" style="height:58px">التهاب أوتار</div>'+
+ '<div class="muted xs" style="margin:9px 0 6px">الرسوم</div>'+
+ '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:11px">'+
+ '<span class="tg a">كشف · ٣٠٠</span><span class="tg e">متابعة · ٢٠٠</span><span class="tg e">حقنة · ١٠٠</span></div>'+
+ '<div style="display:flex;gap:7px"><div class="bt" style="flex:1">حفظ الزيارة</div>'+
+ '<div class="bt g">المريض التالي</div></div>')},
+
+{p:1,n:'الفاتورة',u:'المساعد',t:'invoices · invoice_items',
+ why:'بتتولّد غير مدفوعة لوحدها عند حفظ الزيارة. الطبيب بيكشف والاستقبال بيحصّل.',
+ h:'<div class="frame">'+
+ '<div class="fbar"><div class="ft">CLT-2026-0142</div>'+
+ '<div><span class="tg c">مدفوعة جزئيًا</span> <span class="tg e">تسجيل دفعة</span></div></div>'+
+ '<div class="fm"><table class="tbl"><tr><th>البند</th><th>الكمية</th><th>السعر</th></tr>'+
+ '<tr><td>كشف</td><td>١</td><td>٣٠٠</td></tr>'+
+ '<tr><td>حقنة علاجية</td><td>١</td><td>١٠٠</td></tr></table></div>'+
+ '<div class="kv tot"><span>الإجمالي</span><span>٤٠٠ ج</span></div>'+
+ '<div class="kv"><span class="muted">المدفوع</span><span>٢٠٠ ج</span></div>'+
+ '<div class="kv dif"><span>المتبقي</span><span>٢٠٠ ج</span></div></div>'},
+
+{p:1,n:'تسجيل دفعة وإيصال',u:'المساعد',t:'payments',
+ why:'كل دفعة لها رقم إيصال مستقل يتطبع. طباعة الفاتورة مش بديل عن الإيصال.',
+ h:'<div class="frame" style="max-width:340px;margin:0 auto">'+
+ '<div class="fbar"><div class="ft">تسجيل دفعة</div></div>'+
+ '<div class="fm"><div class="lb">المبلغ (ج.م)</div><div class="fld on">٢٠٠</div>'+
+ '<div class="lb">طريقة الدفع</div><div class="fld">نقدي</div>'+
+ '<div class="lb">ملاحظة</div><div class="fld">—</div>'+
+ '<div style="display:flex;gap:7px;margin-top:10px"><div class="bt" style="flex:1">تسجيل</div>'+
+ '<div class="bt g">إيصال</div></div></div></div>'},
+
+{p:1,n:'إقفال اليوم',u:'المساعد ثم الطبيب',t:'cash_close',
+ why:'دقيقة واحدة آخر اليوم. وقائمة «لم يحضر» بتتعلّم هنا مش بصمت.',
+ h:'<div class="frame">'+
+ '<div class="fbar"><div class="ft">إقفال الأحد ٢٤ أغسطس</div><div class="muted sm">٧:٤٠ م</div></div>'+
+ '<div class="kv"><span class="muted">كشوف تمت</span><span>٢٤ × ٤٠٠ = ٩,٦٠٠</span></div>'+
+ '<div class="kv"><span class="muted">متابعات</span><span>٦ × ٢٠٠ = ١,٢٠٠</span></div>'+
+ '<div class="kv tot"><span>المتوقع</span><span>١٠,٨٠٠ ج</span></div>'+
+ '<div class="kv"><span class="muted">المحصّل فعليًا</span><span>١٠,٤٠٠ ج</span></div>'+
+ '<div class="kv dif"><span>الفرق — السبب إلزامي</span><span>٤٠٠ ج</span></div>'+
+ '<div class="fm"><div class="muted xs" style="margin-bottom:6px">لسه محجوزين ومر وقتهم — علّمهم</div>'+
+ '<div class="lr"><div class="gw t1">طارق حسن · 6:15</div><span class="tg b">لم يحضر</span></div>'+
+ '<div class="lr"><div class="gw t1">ياسين عادل · 6:45</div><span class="tg b">لم يحضر</span></div>'+
+ '<div class="bt w" style="margin-top:10px">إقفال اليوم</div></div></div>'},
+
+{p:1,n:'ورقة اليوم (طباعة)',u:'المساعد',t:'visits',
+ why:'شبكة الأمان النفسية. بتقتل اعتراض «طب لو النظام وقع؟» عند الدكتور الكبير.',
+ h:'<div class="frame print"><div style="display:flex;justify-content:space-between;'+
+ 'border-bottom:2px solid var(--pine);padding-bottom:8px;margin-bottom:12px">'+
+ '<div class="muted sm">مواعيد الاثنين ٢٥ أغسطس</div>'+
+ '<div style="font-family:var(--dsp);font-weight:600">عيادة د. أحمد محمد</div></div>'+
+ '<table class="tbl"><tr><th>الوقت</th><th>المريض</th><th>التليفون</th><th>النوع</th></tr>'+
+ '<tr><td>5:00</td><td>منى سعيد</td><td>٠١٠٠xxxxxxx</td><td>كشف</td></tr>'+
+ '<tr><td>5:15</td><td>كريم فؤاد</td><td>٠١١١xxxxxxx</td><td>متابعة</td></tr>'+
+ '<tr><td>5:30</td><td>أحمد علي</td><td>٠١٢٢xxxxxxx</td><td>كشف</td></tr></table></div>'},
+
+{p:1,n:'الإعدادات — مواعيد العمل',u:'المالك',t:'schedules · schedule_exceptions',
+ why:'بتتظبط مرة واحدة وقت التركيب. الاستثناءات لازم تكون موجودة وإلا النظام هيكذب أول سفرية.',
+ h:shell('مواعيد العمل','',['الإعدادات','الخدمات','الموظفون','الفروع'],
+ '<div class="lr"><div class="gw t1">السبت</div><div class="rt">٦:٠٠ — ١٠:٠٠ · مواعيد ١٥ د</div></div>'+
+ '<div class="lr"><div class="gw t1">الأحد</div><div class="rt">٦:٠٠ — ١٠:٠٠ · مواعيد ١٥ د</div></div>'+
+ '<div class="lr"><div class="gw t1">الاثنين</div><div class="rt muted">إجازة</div></div>'+
+ '<div class="muted xs" style="margin:11px 0 6px">استثناءات</div>'+
+ '<div class="lr"><div class="gw t1">٣ سبتمبر</div><span class="tg b">مقفول — سفر</span></div>')},
+
+{p:1,n:'الإعدادات — الخدمات',u:'المالك',t:'services · service_price_overrides',
+ why:'خدمة واحدة وسعر بيتجاوز لكل طبيب. ممنوع خدمة منفصلة لكل طبيب — بتفجّر الكتالوج.',
+ h:shell('الخدمات','<span class="tg e">+ خدمة</span>',['الخدمات','الإعدادات','الموظفون','الفروع'],
+ '<table class="tbl"><tr><th>الخدمة</th><th>المدة</th><th>السعر</th><th>تجاوز</th></tr>'+
+ '<tr><td>كشف</td><td>١٥ د</td><td>٣٠٠</td><td><span class="tg d">د. سارة ٤٥٠</span></td></tr>'+
+ '<tr><td>متابعة</td><td>١٠ د</td><td>٢٠٠</td><td>—</td></tr>'+
+ '<tr><td>حقنة علاجية</td><td>٥ د</td><td>١٠٠</td><td>—</td></tr></table>')},
+
+{p:1,n:'الإعدادات — الموظفون والصلاحيات',u:'المالك',t:'memberships · scopes',
+ why:'هنا بيتحدد نطاق كل موظف. النطاق ده هو اللي بيشكّل شاشته كلها لوحدها.',
+ h:shell('الموظفون','<span class="tg e">+ موظف</span>',['الموظفون','الخدمات','الإعدادات','الفروع'],
+ '<table class="tbl"><tr><th>الاسم</th><th>الدور</th><th>الفروع</th><th>الأطباء</th></tr>'+
+ '<tr><td>منى</td><td>مساعد</td><td>مدينة نصر</td><td>الكل</td></tr>'+
+ '<tr><td>د. أحمد</td><td>طبيب ومالك</td><td>الكل</td><td>الكل</td></tr>'+
+ '<tr><td>هدى</td><td>مساعد</td><td>التجمع</td><td>الكل</td></tr></table>')},
+
+{p:1,n:'شاشة الطبيب — قائمة اليوم',u:'الطبيب',t:'visits',
+ why:'على موبايله. مش محتاج يفتحها كل شوية — بس لما يحب يعرف فاضل كام.',
+ h:phone('<div class="fbar"><div class="ft">النهاردة · ٢٨ ميعاد</div></div>'+
+ '<div class="lr acc"><div class="gw"><div class="t1">كريم فؤاد</div><div class="t2">جوه دلوقتي</div></div></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">أحمد علي</div><div class="t2">وصل — مستني ١٨ د</div></div></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">سارة محمود</div><div class="t2">6:00 · لسه</div></div></div>'+
+ '<div class="fs"><span>فاضل ٩ مرضى</span><span>متوقع الانتهاء 9:40</span></div>')},
+
+{p:1,n:'سجل التدقيق',u:'المالك',t:'audit_log',
+ why:'بيتعرض بصيغة «سجّلته منى» مش بصيغة رقابية. أول خلاف على ميعاد اتلغى ده اللي بيحسمه.',
+ h:shell('سجل العمليات','',['التقارير','اليوم','المرضى','الإعدادات'],
+ '<div class="lr"><div class="gw"><div class="t1">إلغاء حجز — طارق حسن</div>'+
+ '<div class="t2">منى · السبب: المريض ألغى</div></div><div class="rt">٦:٠٢ م</div></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">نقل ميعاد — هدى إبراهيم</div>'+
+ '<div class="t2">منى · من ٢٤ إلى ٢٦ أغسطس</div></div><div class="rt">٥:٤٠ م</div></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">تعديل سعر خدمة</div>'+
+ '<div class="t2">د. أحمد · كشف ٣٠٠ ← ٣٥٠</div></div><div class="rt">٤:١٥ م</div></div>')},
+
+/* ================= PHASE 2 ================= */
+{p:2,n:'رسالة التأكيد',u:'المريض',t:'messages',
+ why:'المريض بينسى لأن الميعاد محفوظ في دماغه. الرسالة بتخليه مكتوب.',
+ h:phone('<div class="fs" style="justify-content:space-between"><span>عيادة د. أحمد</span><span>الآن</span></div>'+
+ '<div class="msg them">تم تأكيد حجزك — الأحد ٢٤ أغسطس الساعة ٦:٣٠ م.<br>'+
+ 'عيادة د. أحمد محمد، مدينة نصر.<div class="mbt"><span>الموقع</span><span>إلغاء</span></div></div>')},
+
+{p:2,n:'رسالة التذكير + تأجيل',u:'المريض',t:'messages · visits',
+ why:'زرار «عايز أأجّل» بيفضّي الميعاد قبل بيوم — فبيتاخد بدل ما يضيع.',
+ h:phone('<div class="fs" style="justify-content:space-between"><span>عيادة د. أحمد</span><span>أمس ٨:٠٠ م</span></div>'+
+ '<div class="msg them">تذكير بموعدك بكرة الأحد ٦:٣٠ م.<div class="mbt">'+
+ '<span>مؤكد</span><span>عايز أأجّل</span></div></div>'+
+ '<div class="msg me">مؤكد</div>'+
+ '<div class="msg them">تمام، في انتظارك.</div>')},
+
+{p:2,n:'قوالب الرسائل',u:'المالك',t:'message_templates',
+ why:'الترويسة والنصوص إعداد إلزامي وقت التركيب — ممنوع قيم افتراضية تتبعت.',
+ h:shell('الرسائل','',['الرسائل','الإعدادات','التقارير','اليوم'],
+ '<div class="lr"><div class="gw"><div class="t1">تأكيد الحجز</div>'+
+ '<div class="t2">بعد التسجيل مباشرة</div></div><span class="tg a">مفعّل</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">تذكير قبل الميعاد</div>'+
+ '<div class="t2">قبل الموعد بيوم — ٨ مساءً</div></div><span class="tg a">مفعّل</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">إشعار تأخير الطبيب</div>'+
+ '<div class="t2">يدوي عند الضغط</div></div><span class="tg e">متوقف</span></div>')},
+
+{p:2,n:'التقرير الأسبوعي',u:'الطبيب',t:'visits (aggregate)',
+ why:'أول مرة يبقى فيه رقم يتقارن عليه. «الغياب نزل من ١٤٪ لـ ٨٪».',
+ h:'<div class="frame"><div class="fbar"><div class="ft">الأسبوع ١٨–٢٤ أغسطس</div>'+
+ '<span class="tg a">مقارنة بالأسبوع اللي فات</span></div>'+
+ '<div class="fm">'+
+ '<div style="font-size:13px;margin-bottom:3px">نسبة الغياب — ١٤٪ ← ٨٪</div><div class="bar"><b style="width:32%"></b></div>'+
+ '<div style="font-size:13px;margin:11px 0 3px">مواعيد اتعوّضت — ٧ من ١١</div><div class="bar"><b style="width:64%"></b></div>'+
+ '<div style="font-size:13px;margin:11px 0 3px">نسبة التأكيد — ٨١٪</div><div class="bar"><b style="width:81%"></b></div>'+
+ '<div style="font-size:13px;margin:11px 0 3px">مرضى جدد — ١٩ من ٥٢</div><div class="bar"><b style="width:37%"></b></div>'+
+ '</div></div>'},
+
+{p:2,n:'لوحة الطبيب الصبح',u:'الطبيب',t:'visits · tasks',
+ why:'شاشة واحدة الصبح. كل رقم فيها جه من شغل حقيقي مش من حد كتبه.',
+ h:'<div class="frame"><div class="fbar"><div class="ft">صباح الخير يا دكتور — الأحد ٢٤</div>'+
+ '<span class="tg a">متزامن</span></div>'+
+ '<div class="mets"><div class="mt"><div class="k">النهاردة</div><div class="v">٢٨</div></div>'+
+ '<div class="mt bad"><div class="k">محتاج قرار</div><div class="v">٥</div></div>'+
+ '<div class="mt ok"><div class="k">الإيراد الأسبوع</div><div class="v">٥٤٫٢ك</div></div>'+
+ '<div class="mt"><div class="k">الغياب</div><div class="v">٨٪</div></div></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">١٢ مكالمة فاتت امبارح — ٨ رجعوا وحجزوا</div>'+
+ '<div class="t2">٤ محتاجين اتصال</div></div><span class="tg c">شوف</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">٢٣ مريض متابعتهم اتأخرت</div>'+
+ '<div class="t2">١٤ ردّوا الشهر ده</div></div><span class="tg e">شوف</span></div></div>'},
+
+/* ================= PHASE 3 ================= */
+{p:3,n:'صفحة حجز المريض',u:'المريض',t:'visits · schedules',
+ why:'باسم عيادة الدكتور مش باسمنا. من غير تطبيق ومن غير حساب.',
+ h:phone('<div class="fs" style="justify-content:space-between"><span>د. أحمد محمد — باطنة</span><span>مدينة نصر</span></div>'+
+ '<div style="display:flex;gap:6px;padding:10px 12px 0">'+
+ '<div class="bt" style="flex:1;font-size:12px;padding:7px 0">الأحد ٢٤</div>'+
+ '<div class="bt g" style="flex:1;font-size:12px;padding:7px 0">الاثنين ٢٥</div>'+
+ '<div class="bt g" style="flex:1;font-size:12px;padding:7px 0">الثلاثاء ٢٦</div></div>'+
+ '<div class="tgrid"><div class="off">6:00</div><div>6:15</div><div class="sel">6:30</div>'+
+ '<div>6:45</div><div class="off">7:00</div><div>7:15</div></div>'+
+ '<div style="padding:0 12px 12px"><div class="fld">الاسم</div><div class="fld">رقم الموبايل</div>'+
+ '<div class="bt w">تأكيد الحجز</div></div>')},
+
+{p:3,n:'المكالمات الفايتة',u:'المساعد',t:'missed_calls · visits',
+ why:'المكالمة اللي بتفوت مبتضيعش. اللي محجزش بيوصل للمساعد باسم ورقم.',
+ h:shell('مكالمات النهاردة','<span class="tg b">١٢ فاتت</span>',NAV,
+ '<div class="lr"><div class="gw"><div class="t1">سارة محمود</div>'+
+ '<div class="t2">٦:١٢ م · مريضة قديمة</div></div><span class="tg a">حجزت 7:15</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">٠١٢٢xxxxxxx</div>'+
+ '<div class="t2">٦:٢٠ م · رقم جديد</div></div><span class="tg a">حجز بكرة</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">٠١٥٠xxxxxxx</div>'+
+ '<div class="t2">٦:٣١ م · اتبعتله لينك</div></div><span class="tg c">لسه</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">٠١٠٦xxxxxxx</div>'+
+ '<div class="t2">٦:٤٨ م · اتصل ٣ مرات</div></div><span class="tg b">محتاج اتصال</span></div>',
+ '<span>٩ اتبعتلهم</span><span>٥ حجزوا</span><span class="bad">٣ محتاجين اتصال</span>')},
+
+{p:3,n:'قائمة الانتظار',u:'النظام تلقائيًا',t:'waitlist',
+ why:'الميعاد اللي بيتلغى قبل بيوم كان بيضيع. دلوقتي بيروح لحد كان مستنيه.',
+ h:'<div class="frame"><div class="fbar"><div class="ft">ميعاد اتفضّى — الخميس 7:00 م</div>'+
+ '<span class="tg c">اتلغى من ٤ دقايق</span></div>'+
+ '<div class="fm">'+
+ '<div class="stp"><span class="bl on">✓</span><div><div class="sc">المريض ألغى ميعاده</div>'+
+ '<div class="sd">الخميس 7:00 بقى فاضي</div></div></div>'+
+ '<div class="stp"><span class="bl on">✓</span><div><div class="sc">اتعرض على ٣ في قائمة الانتظار</div>'+
+ '<div class="sd">اللي طلبوا الخميس ومكانش فيه مكان</div></div></div>'+
+ '<div class="stp"><span class="bl on">✓</span><div><div class="sc">سلمى فتحي حجزته</div>'+
+ '<div class="sd">بعد ٤ دقايق — من غير أي مكالمة</div></div></div></div></div>'},
+
+{p:3,n:'المساعد الآلي على الرسايل',u:'المريض ثم المساعد',t:'conversations',
+ why:'بيرد على الأسئلة الإدارية بس. أي سؤال طبي بيقف فورًا ويحوّل.',
+ h:phone('<div class="msg them">العيادة فاتحة إمتى؟</div>'+
+ '<div class="msg me">أهلًا بحضرتك 👋 العيادة من ٦ لـ ١٠ من السبت للخميس.</div>'+
+ '<div class="msg them">عندي ألم في صدري، أعمل إيه؟</div>'+
+ '<div style="text-align:center;font-size:11.5px;color:var(--amb);background:var(--ambs);'+
+ 'margin:9px 12px;padding:6px;border-radius:6px">المساعد وقف — بيحوّل للعيادة</div>')},
+
+{p:3,n:'صندوق محادثات المساعد',u:'المساعد',t:'conversations',
+ why:'بيستلم من حيث وقف المساعد الآلي — مش بيبدأ من الصفر.',
+ h:shell('المحادثات','',NAV,
+ '<div class="lr"><div class="gw"><div class="t1">أحمد علي</div>'+
+ '<div class="t2">سؤال طبي — محوّل من المساعد الآلي</div></div><span class="tg b">محتاج رد</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">سارة محمود</div>'+
+ '<div class="t2">تمام، الخميس ٦:٣٠</div></div><span class="tg a">اتحلّت تلقائيًا</span></div>',
+ '<span class="bad">٣ محتاجين رد</span><span>٧ في الانتظار</span><span>٢٤ اتقفلت تلقائيًا</span>')},
+
+/* ================= PHASE 4 ================= */
+{p:4,n:'ملف المريض',u:'الطبيب',t:'patients · visits',
+ why:'بيتبني لوحده من الزيارات. مفيش إدخال بيانات إضافي على حد.',
+ h:'<div class="frame"><div class="fbar" style="display:block">'+
+ '<div class="ft">أحمد علي · ٤٢ سنة</div>'+
+ '<div class="muted xs">٩ زيارات · أول زيارة من سنتين</div></div>'+
+ '<div class="fs"><span>حساسية: بنسلين</span><span>مزمن: سكري</span><span>أدوية: ٣</span>'+
+ '<span class="bad">متابعة متأخرة ١٢ يوم</span></div>'+
+ '<div class="fm">'+
+ '<div class="lr"><div class="rt">٢٣ أغسطس</div><div class="gw"><div class="t1">نتيجة تحليل</div>'+
+ '<div class="t2">السكر التراكمي ٨.٢ <span class="tg b">زاد عن ٧.١</span></div></div></div>'+
+ '<div class="lr"><div class="rt">٢٠ أغسطس</div><div class="gw"><div class="t1">روشتة</div>'+
+ '<div class="t2">ميتفورمين ٥٠٠ · مرتين يوميًا</div></div></div>'+
+ '<div class="lr"><div class="rt">٢٠ أغسطس</div><div class="gw"><div class="t1">كشف</div>'+
+ '<div class="t2">د. أحمد · ١٤ دقيقة</div></div></div></div></div>'},
+
+{p:4,n:'الخط الزمني الموحّد',u:'الطبيب',t:'visits · invoices · files',
+ why:'كل حاجة حصلت للمريض في تيار واحد بفلاتر — زيارات وفواتير ومرفقات.',
+ h:shell('السجل الزمني — أحمد علي','',NAVD,
+ '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px">'+
+ '<span class="tg a">الكل</span><span class="tg e">زيارات</span><span class="tg e">فواتير</span>'+
+ '<span class="tg e">مرفقات</span><span class="tg e">رسايل</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">زيارة — كشف</div><div class="t2">٢٠ أغسطس · د. أحمد</div></div>'+
+ '<span class="tg a">مكتملة</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">فاتورة CLT-0142</div><div class="t2">٤٠٠ ج</div></div>'+
+ '<span class="tg c">جزئية</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">مرفق — أشعة</div><div class="t2">١٨ أغسطس</div></div></div>')},
+
+{p:4,n:'ملخص قبل الكشف',u:'الطبيب',t:'visits · results',
+ why:'النظام بيجمّع ويقارن — مش بيشخّص ومش بيقترح علاج. القرار كله للطبيب.',
+ h:'<div class="frame" style="max-width:420px;margin:0 auto">'+
+ '<div class="fbar"><div class="ft">جاي دلوقتي: أحمد علي</div><span class="tg e">6:30</span></div>'+
+ '<div class="fm"><div style="font-family:var(--dsp);font-size:13.5px;margin-bottom:6px">اللي اتغيّر من آخر زيارة</div>'+
+ '<div class="lr"><div class="gw t1">نتيجة تحليل جديدة <span class="tg a">جديد</span></div></div>'+
+ '<div class="lr"><div class="gw t1">السكر التراكمي <span class="tg b">٧.١ ← ٨.٢</span></div></div>'+
+ '<div style="font-family:var(--dsp);font-size:13.5px;margin:12px 0 6px">مفتوح ولسه ما اتعملش</div>'+
+ '<div class="lr"><div class="gw t2">مراجعة نتيجة التحليل</div></div>'+
+ '<div class="lr"><div class="gw t2">تجديد الدواء — خلص من ٣ أيام</div></div></div>'+
+ '<div class="fs"><span>النظام بيجهّز المعلومة — القرار كله لحضرتك</span></div></div>'},
+
+{p:4,n:'المتابعات المتأخرة',u:'المساعد',t:'tasks · care_plans',
+ why:'دول مرضى العيادة بالفعل — أرخص إيراد ممكن يرجع.',
+ h:shell('محتاجين متابعة','<span class="tg b">٢٣ متأخرة</span>',NAV,
+ '<div class="lr"><div class="gw"><div class="t1">أحمد علي</div>'+
+ '<div class="t2">المتابعة كانت من ١٢ يوم</div></div><span class="tg e">ابعت تذكير</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">هدى إبراهيم</div>'+
+ '<div class="t2">المتابعة كانت من ٦ أيام</div></div><span class="tg e">ابعت تذكير</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">محمود سيد</div>'+
+ '<div class="t2">آخر زيارة من ٧ شهور</div></div><span class="tg e">ابعت تذكير</span></div>')},
+
+{p:4,n:'الروشتة الرقمية',u:'الطبيب',t:'prescriptions',
+ why:'بتتسجّل في الملف لوحدها، والنظام عارف الدواء هيخلص إمتى.',
+ h:'<div class="frame"><div class="fbar"><div class="ft">روشتة — أحمد علي</div>'+
+ '<div><span class="tg e">إدراج محفوظة</span> <span class="tg e">تكرار آخر وصفة</span></div></div>'+
+ '<div class="fm"><div class="lb">الدواء</div><div class="fld on">ميتفورمين ٥٠٠ مجم</div>'+
+ '<div style="display:flex;gap:6px"><div style="flex:1"><div class="lb">الجرعة</div><div class="fld">قرص</div></div>'+
+ '<div style="flex:1"><div class="lb">التكرار</div><div class="fld">مرتين يوميًا</div></div>'+
+ '<div style="flex:1"><div class="lb">المدة</div><div class="fld">شهر</div></div></div>'+
+ '<div style="display:flex;gap:7px;margin-top:8px"><div class="bt" style="flex:1">حفظ</div>'+
+ '<div class="bt g">طباعة</div><div class="bt g">إرسال</div></div></div></div>'},
+
+{p:4,n:'إنشاء خطة رعاية',u:'المساعد أو الطبيب',t:'care_plans · care_plan_items',
+ why:'إنشاء الخطة بيحجز المواعيد كلها بضغطة — مش بيسيبها للمساعد يحجزها واحدة واحدة.',
+ h:'<div class="frame"><div class="fbar"><div class="ft">خطة رعاية جديدة</div>'+
+ '<span class="tg e">القالب: علاج طبيعي</span></div>'+
+ '<div class="fm"><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">'+
+ '<div><div class="lb">التشخيص / موضع الإصابة</div><div class="fld on">رباط صليبي</div></div>'+
+ '<div><div class="lb">عدد الجلسات</div><div class="fld">١٢</div></div>'+
+ '<div><div class="lb">التكرار</div><div class="fld">السبت والثلاثاء</div></div>'+
+ '<div><div class="lb">المورد</div><div class="fld">سرير ٢</div></div>'+
+ '<div><div class="lb">سعر الباقة</div><div class="fld">٥٬٠٠٠ ج</div></div>'+
+ '<div><div class="lb">تاريخ البداية</div><div class="fld">٣٠ أغسطس</div></div></div>'+
+ '<div class="bt w" style="margin-top:11px">إنشاء الخطة وحجز الـ ١٢ موعد</div></div></div>'},
+
+{p:4,n:'متابعة خطة الرعاية',u:'الطبيب',t:'care_plan_items · visits',
+ why:'الحضور هو اللي بيقفل البند ويحرّك العدّاد — مفيش «تسجيل جلسة» يدوي.',
+ h:'<div class="frame"><div class="fbar"><div class="ft">رباط صليبي — ٤ من ١٢</div>'+
+ '<div><span class="tg a">نشطة</span> <span class="tg c">آخر حضور من ٦ أيام</span></div></div>'+
+ '<div class="mets"><div class="mt ok"><div class="k">المحقّق</div><div class="v">١٬٦٦٧</div></div>'+
+ '<div class="mt"><div class="k">التزام متبقٍ</div><div class="v">٣٬٣٣٣</div></div>'+
+ '<div class="mt"><div class="k">المتوقع للانتهاء</div><div class="v">٢٨/٩</div></div></div>'+
+ '<div class="fm"><table class="tbl"><tr><th>#</th><th>الموعد</th><th>المورد</th><th>الحالة</th></tr>'+
+ '<tr><td>٣</td><td>٢٤/٨</td><td>سرير ٢</td><td><span class="tg a">منفّذ</span></td></tr>'+
+ '<tr><td>٤</td><td>٢٦/٨</td><td>سرير ٢</td><td><span class="tg a">منفّذ</span></td></tr>'+
+ '<tr><td>٥</td><td>٣٠/٨</td><td>سرير ٢</td><td><span class="tg d">محجوز</span></td></tr>'+
+ '<tr><td>٦</td><td>١/٩</td><td>سرير ٢</td><td><span class="tg e">مخطط</span></td></tr></table></div></div>'},
+
+{p:4,n:'تقرير المتوقفين',u:'الطبيب أو المالك',t:'care_plans (stalled)',
+ why:'الشاشة اللي بتبيع. مستحيلة من غير السلسلة الموصولة — والمنافس مش قادر يطلعها.',
+ h:'<div class="frame"><div class="fbar"><div class="ft">متوقفون في النص</div>'+
+ '<span class="tg b">٤ مرضى</span></div>'+
+ '<div class="mets"><div class="mt bad"><div class="k">جلسات غير منفّذة</div><div class="v">٣٠</div></div>'+
+ '<div class="mt bad"><div class="k">إيراد معلّق</div><div class="v">١٢٬٥٠٣</div></div></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">ياسر محمد</div><div class="t2">٣ من ١٢ · آخر حضور من ٢١ يوم</div></div>'+
+ '<div class="rt">٣٬٧٥٣ ج</div><span class="tg b">كلّمه</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">منى سعيد</div><div class="t2">٤ من ١٢ · آخر حضور من ١٩ يوم</div></div>'+
+ '<div class="rt">٣٬٣٣٣ ج</div><span class="tg b">كلّمه</span></div></div>'},
+
+{p:4,n:'نموذج تخصص — الأسنان',u:'طبيب الأسنان',t:'visit_form_data',
+ why:'حقول مهيكلة مش نص حر: سن + سطح + حالة. عشان تتقاس وتتقارن وتطلع في تقرير.',
+ h:'<div class="frame"><div class="fbar"><div class="ft">نموذج الأسنان</div>'+
+ '<div><span class="tg a">دائمة</span> <span class="tg e">لبنية</span></div></div>'+
+ '<div style="padding:10px 0">'+
+ '<div class="teeth"><i>١٨</i><i>١٧</i><i>١٦</i><i class="s1">١٥</i><i>١٤</i><i>١٣</i><i>١٢</i><i>١١</i></div>'+
+ '<div class="teeth" style="margin-top:5px"><i>٢١</i><i>٢٢</i><i>٢٣</i><i class="on s2">٢٤</i><i>٢٥</i><i>٢٦</i><i>٢٧</i><i>٢٨</i></div></div>'+
+ '<div class="fs"><span><b style="color:var(--red)">■</b> تسوس</span><span><b style="color:var(--pur)">■</b> محشو</span>'+
+ '<span>■ علاج عصب</span><span>■ مفقود</span></div>'+
+ '<div class="fm"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'+
+ '<span class="tg e">أنسي M</span><span class="tg a">وحشي D</span><span class="tg e">إطباقي O</span>'+
+ '<span class="tg e">دهليزي B</span><span class="tg e">لساني L</span></div>'+
+ '<div style="display:flex;gap:6px"><div style="flex:1"><div class="lb">التشخيص</div><div class="fld">التهاب عصب</div></div>'+
+ '<div style="flex:1"><div class="lb">الإجراء</div><div class="fld">حشو تجميلي</div></div></div>'+
+ '<div class="lb">الجلسة القادمة</div>'+
+ '<div class="bt g w" style="border-color:var(--pine);color:var(--pine)">احجز الجلسة القادمة — بعد ٧ أيام</div></div></div>'},
+
+{p:4,n:'نموذج تخصص — العلاج الطبيعي',u:'الأخصائي',t:'visit_form_data',
+ why:'مقاييس حقيقية: مدى الحركة ومقياس الألم والقوة العضلية — بتتقارن عبر الجلسات.',
+ h:'<div class="frame"><div class="fbar"><div class="ft">جلسة ٥ من ١٢ — رباط صليبي</div>'+
+ '<span class="tg a">نموذج العلاج الطبيعي</span></div>'+
+ '<div class="fm"><div class="lb">مقياس الألم (٠–١٠)</div>'+
+ '<div class="slider"><b></b><i></i></div>'+
+ '<div class="muted xs" style="margin-bottom:10px">٤ من ١٠ — كان ٧ في الجلسة الأولى</div>'+
+ '<div style="display:flex;gap:6px"><div style="flex:1"><div class="lb">مدى الحركة (ROM)</div><div class="fld">١١٠°</div></div>'+
+ '<div style="flex:1"><div class="lb">القوة العضلية (٠–٥)</div><div class="fld">٤</div></div></div>'+
+ '<div class="lb">وسائل العلاج</div><div class="fld">تمارين تقوية · موجات فوق صوتية</div>'+
+ '<div class="lb">تمارين منزلية</div><div class="fld">٣ تمارين — بتتبعت للمريض</div></div></div>'},
+
+{p:4,n:'باني النماذج',u:'فريقنا أو المالك',t:'form_definitions',
+ why:'إضافة تخصص = صف جديد مش كود. والإصدارات بتحمي الزيارات القديمة من التعديل.',
+ h:shell('نموذج جديد','<span class="tg e">إصدار ٣</span>',['النماذج','الخدمات','الإعدادات','الفروع'],
+ '<div style="display:flex;gap:6px;margin-bottom:9px">'+
+ '<div style="flex:1"><div class="lb">التخصص</div><div class="fld">جلدية</div></div>'+
+ '<div style="flex:1"><div class="lb">نوع الزيارة</div><div class="fld">كشف أول</div></div></div>'+
+ '<div class="muted xs" style="margin-bottom:6px">الحقول</div>'+
+ '<div class="lr"><div class="gw t1">موضع الإصابة</div><span class="tg e">نص</span></div>'+
+ '<div class="lr"><div class="gw t1">نوع البشرة</div><span class="tg e">اختيار</span></div>'+
+ '<div class="lr"><div class="gw t1">شدة الحالة (٠–١٠)</div><span class="tg e">مقياس</span></div>'+
+ '<div class="lr"><div class="gw t1">صور قبل وبعد</div><span class="tg e">مرفق</span></div>'+
+ '<div class="bt g w" style="margin-top:9px">+ إضافة حقل</div>')},
+
+/* ================= PHASE 5 ================= */
+{p:5,n:'طلب تحليل',u:'الطبيب',t:'orders',
+ why:'الطلب بيتعمل من جوه النظام — مش ورقة بتضيع من المريض.',
+ h:'<div class="frame" style="max-width:400px;margin:0 auto">'+
+ '<div class="fbar"><div class="ft">طلب تحاليل — أحمد علي</div></div>'+
+ '<div class="fm"><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px">'+
+ '<span class="tg a">سكر تراكمي</span><span class="tg a">صورة دم</span>'+
+ '<span class="tg e">وظائف كلى</span><span class="tg e">وظائف كبد</span></div>'+
+ '<div class="lb">مطلوب قبل</div><div class="fld">الزيارة الجاية — ٦ سبتمبر</div>'+
+ '<div class="bt w">إرسال الطلب للمريض</div></div></div>'},
+
+{p:5,n:'رحلة التحليل',u:'الطبيب',t:'orders (status)',
+ why:'دلوقتي الدكتور مش عارف المريض عمل التحليل ولا لأ إلا لما يرجع. هنا بيعرف كل خطوة.',
+ h:'<div class="frame"><div class="fbar"><div class="ft">سكر تراكمي — أحمد علي</div>'+
+ '<span class="tg a">النتيجة جاهزة</span></div>'+
+ '<div class="fm">'+
+ '<div class="stp"><span class="bl on">✓</span><div><div class="sc">الطبيب طلب التحليل</div><div class="sd">٢٠ أغسطس ٦:٤٠ م</div></div></div>'+
+ '<div class="stp"><span class="bl on">✓</span><div><div class="sc">المريض اختار المعمل</div><div class="sd">٢٠ أغسطس ٨:١٢ م</div></div></div>'+
+ '<div class="stp"><span class="bl on">✓</span><div><div class="sc">العينة اتاخدت</div><div class="sd">٢٢ أغسطس ٩:٠٥ ص</div></div></div>'+
+ '<div class="stp"><span class="bl on">✓</span><div><div class="sc">النتيجة دخلت الملف</div><div class="sd">٢٣ أغسطس ٤:٣٠ م</div></div></div>'+
+ '<div class="stp"><span class="bl">·</span><div><div class="sc">في انتظار مراجعة الطبيب</div><div class="sd">من ١٩ ساعة</div></div></div></div></div>'},
+
+{p:5,n:'صندوق النتائج',u:'الطبيب',t:'results',
+ why:'المقارنة بالنتيجة السابقة بتتعمل لوحدها. النظام بيعرض ويقارن — مش بيحلل.',
+ h:shell('نتائج جديدة','<span class="tg b">٣ محتاجة مراجعة</span>',NAVD,
+ '<div class="lr"><div class="gw"><div class="t1">أحمد علي · سكر تراكمي</div>'+
+ '<div class="t2">٧.١ ← ٨.٢ <span class="tg b">زاد</span></div></div><span class="tg b">جديد</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">سارة محمود · صورة دم</div>'+
+ '<div class="t2">كل القيم في المعدل</div></div><span class="tg e">جديد</span></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">محمود سيد · وظائف كبد</div>'+
+ '<div class="t2">قيمتان خارج المعدل</div></div><span class="tg b">جديد</span></div>')},
+
+{p:5,n:'التحويل لزميل',u:'الطبيب',t:'referrals · consents',
+ why:'موافقة المريض شرط. ومن غيرها مفيش أي بيان بيتنقل.',
+ h:'<div class="frame"><div class="fbar"><div class="ft">تحويل: أحمد علي ← د. منى (جلدية)</div>'+
+ '<span class="tg a">المريض وافق</span></div>'+
+ '<div class="fm">'+
+ '<div class="lr"><div class="gw"><div class="t1">اللي هيروح مع التحويل</div>'+
+ '<div class="t2">آخر ٣ زيارات · الأدوية · نتايج ٦ شهور · سبب التحويل</div></div></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">اللي مش هيروح</div>'+
+ '<div class="t2">أي حاجة برة الفترة أو برة التخصص</div></div></div>'+
+ '<div class="lr"><div class="gw"><div class="t1">لما د. منى تخلص</div>'+
+ '<div class="t2">بيرجع ملخص وبتتقفل الحالة</div></div></div></div></div>'},
+
+{p:5,n:'شاشة غرفة الانتظار',u:'المرضى',t:'queue (display token)',
+ why:'برابط موقّع بينتهي، وبوضع خصوصية بالأرقام بدل الأسماء، وبوضع Kiosk بدون شريط عنوان.',
+ h:'<div class="frame tv">'+
+ '<div style="font-size:13px;opacity:.85;margin-bottom:20px">غرفة الانتظار</div>'+
+ '<div style="background:rgba(255,255,255,.12);border-radius:14px;padding:22px;max-width:330px;margin:0 auto">'+
+ '<div style="font-size:12px;opacity:.85">يُرجى التوجّه</div>'+
+ '<div style="font-family:var(--dsp);font-size:56px;font-weight:600;line-height:1.1">٠٠٣</div>'+
+ '<div style="font-size:13px;opacity:.9">د. أحمد محمد</div></div>'+
+ '<div style="display:flex;gap:12px;justify-content:center;margin-top:18px;font-size:12px;opacity:.85">'+
+ '<span>في الانتظار: ٥</span><span>·</span><span>تم خدمتهم: ١٢</span></div></div>'}
+];
+
+var idx=0;
+var $=function(i){return document.getElementById(i);};
+
+function nav(){
+ var h='',last=null;
+ S.forEach(function(s,i){
+  if(s.p!==last){h+='<div class="ph">'+PH[s.p]+'</div>';last=s.p;}
+  h+='<button class="nv" data-i="'+i+'" aria-current="'+(i===idx)+'">'+(i+1)+'. '+s.n+'</button>';
+ });
+ $('nav').innerHTML=h;
+ Array.prototype.forEach.call($('nav').querySelectorAll('.nv'),function(b){
+  b.onclick=function(){idx=+b.dataset.i;draw();};
+ });
+}
+function draw(){
+ var s=S[idx];
+ $('pnum').textContent='شاشة '+(idx+1)+' من '+S.length+' · '+PH[s.p];
+ $('ttl').textContent=s.n;
+ $('meta').innerHTML='<span class="p">'+PH[s.p].split('—')[1].trim()+'</span>'+
+  '<span>المستخدم: '+s.u+'</span><span>الجداول: '+s.t+'</span>';
+ $('stage').innerHTML=s.h;
+ $('why').innerHTML='<b>ليه كده:</b> '+s.why;
+ $('prev').disabled=idx===0; $('next').disabled=idx===S.length-1;
+ nav();
+ window.scrollTo({top:0,behavior:'smooth'});
+}
+$('prev').onclick=function(){if(idx>0){idx--;draw();}};
+$('next').onclick=function(){if(idx<S.length-1){idx++;draw();}};
+document.addEventListener('keydown',function(e){
+ if(e.key==='ArrowLeft'&&idx<S.length-1){idx++;draw();}
+ if(e.key==='ArrowRight'&&idx>0){idx--;draw();}
+});
+draw();
+})();
+</script>
+</body>
+</html>
