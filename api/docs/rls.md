@@ -532,6 +532,51 @@ is server-created, for its own server-side actions, not a client's synced
 history. Designing that reconciliation is future work; see
 `docs/schema.md`'s new "v11 additions" section.
 
+## Audit attribution is enforced in the database, not application code
+
+`audit_log_insert`'s `WITH CHECK` originally scoped only the row's org
+(`org_id = current_org()`, `2026_09_11_170029_enable_rls_policies.php:178`)
+— it said nothing about whether the row's `actor_membership_id` was
+actually the membership doing the writing. Any membership inside an org
+could `INSERT` an audit row naming any *other* membership in that same org
+as the actor. The audit trail is the only record of who did what in this
+system; an actor column forgeable from inside the org it audits isn't
+evidence, it's a claim.
+
+`2026_09_12_000011_enforce_audit_attribution.php` ANDs a second condition
+onto the same policy: `actor_membership_id = current_membership()`.
+`current_membership()` (defined alongside `current_org()` in the RLS
+helpers migration) is a plain function — not `SECURITY DEFINER`, no
+`BYPASSRLS` involved — that reads the session's own declared
+`app.membership_id`; already `EXECUTE`-granted to `clintra_app`, so no new
+grant was needed. Org scoping, the `SELECT` policy, and the deliberate
+absence of any `UPDATE`/`DELETE` policy (audit history stays immutable by
+construction) are all untouched.
+
+**The three provisioning functions are unaffected — confirmed, not
+assumed.** `provision_organization`, `mint_activation_code`, and
+`register_device` all write `audit_log` rows as their own owning roles
+(`clintra_provision`/`clintra_mint`/`clintra_register`), each
+`SECURITY DEFINER` and `BYPASSRLS`. `BYPASSRLS` means every RLS policy —
+including this new check — never applies to their execution at all,
+regardless of what the policy says; the actor they write is always a
+membership id the function itself resolved server-side
+(`v_membership_id`/`v_owner_membership_id`), never one taken from a
+caller's payload. Confirmed by grepping `app/` and every migration for
+`audit_log` writes: the only three call sites are these three functions,
+and the full test suite — including `ProvisioningTest.php`,
+`MintActivationCodeTest.php`, and `DeviceRegistrationTest.php`, none of
+which changed for this migration — still passes unmodified with the new
+policy in place. Nothing today writes an audit row through the ordinary,
+RLS-bound `clintra_app` connection at all (no entity endpoints exist
+yet), so there was no existing legitimate use this narrows.
+
+Behavioral coverage in `tests/Feature/Rls/AuditLogAttributionTest.php`: a
+membership can insert an audit row attributed to itself; the same
+membership attributing one to a *different* membership in the same org is
+rejected (`42501`); a cross-org insert is still rejected, confirming the
+original check wasn't weakened by ANDing the new one onto it.
+
 ## Hardening pass: hand-rolled token verification in ApplyMembership
 
 `ApplyMembership` carries the entire isolation guarantee for every

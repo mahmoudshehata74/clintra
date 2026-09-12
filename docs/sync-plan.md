@@ -353,30 +353,35 @@ verified brief constraint.
 
 ### 13. Can a device push an audit_log row attributed to a different membership? It must not be able to. How is that enforced?
 
-- **Recommendation:** It must not be possible, enforced by never reading
-  `actor_membership_id` (or equivalent) from any client payload at all —
-  the server always substitutes the token-resolved membership, the same
-  as Q12's recommendation for that field specifically.
-- **Finding — this is not yet enforced anywhere it would need to be:**
-  `audit_log`'s own `INSERT` policy is `WITH CHECK (org_id = current_org())`
-  only — it does **not** check `actor_membership_id` against the
-  requester's own membership at all
-  (`api/database/migrations/2026_09_11_170029_enable_rls_policies.php:178`,
-  with the surrounding comment explicitly noting `INSERT` is
-  "deliberately open beyond location/practitioner scope"). So today, RLS
-  alone would let one membership within an org write an audit row
-  attributed to a *different* membership in that same org — it only
-  blocks a different *org's* membership. This is currently moot in
-  practice only because nothing pushes `audit_log` rows at all yet (Q1);
-  it becomes a real, live hole the moment any future endpoint — sync or
-  otherwise — accepts a client-supplied actor field and inserts it
-  through the ordinary connection.
+- **Recommendation (implemented):** It is now enforced in the database
+  itself, not left to application code to get right later.
+- **What was done:** `audit_log_insert`'s `WITH CHECK` used to be
+  `org_id = current_org()` only — it did not check `actor_membership_id`
+  against the requester's own membership at all, so one membership within
+  an org could write an audit row naming a *different* membership in that
+  same org as the actor.
+  `api/database/migrations/2026_09_12_000011_enforce_audit_attribution.php`
+  ANDs `actor_membership_id = current_membership()` onto the same check.
+  Org scoping, the `SELECT` policy, and the immutability of `audit_log`
+  (no `UPDATE`/`DELETE` policy at all) are unchanged. Confirmed, not
+  assumed, that the three provisioning functions (which write `audit_log`
+  as `BYPASSRLS` roles) are unaffected — see `api/docs/rls.md`'s "Audit
+  attribution is enforced in the database" for the full writeup and the
+  grep that found zero other `audit_log` write paths to break.
+  `tests/Feature/Rls/AuditLogAttributionTest.php` covers: self-attribution
+  succeeds, same-org misattribution is rejected (`42501`), cross-org is
+  still rejected.
 - **Constraint:**
-  `api/database/migrations/2026_09_11_170029_enable_rls_policies.php:169-178`.
-- **Status:** decided in principle (never accept the field, full stop —
-  matches 100% of existing precedent), but flagged because the current
-  RLS policy would not catch a violation on its own if this principle
-  isn't also enforced in application code once a sync endpoint exists.
+  `api/database/migrations/2026_09_11_170029_enable_rls_policies.php:169-178`
+  (the original policy and `current_membership()`'s definition);
+  `api/database/migrations/2026_09_12_000011_enforce_audit_attribution.php`
+  (the fix).
+- **Status:** decided, and shipped — this narrow piece no longer waits on
+  the rest of the sync design. The broader point Q12 makes (the server
+  must never trust a client-supplied actor field once a sync endpoint
+  exists) is still the operative principle for that future endpoint; this
+  fix means a mistake there would now be caught by the database too, not
+  only by getting the application code right.
 
 ---
 
