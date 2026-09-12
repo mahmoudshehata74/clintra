@@ -776,6 +776,84 @@ afterward instead of permanently aborted. Found by running the slot-conflict
 test, not by inspection — it failed with a raw "current transaction is
 aborted" error before this fix.
 
+## The sync pull endpoint
+
+`GET /api/sync/pull` (`App\Http\Controllers\SyncPullController`,
+`App\Support\Sync\SyncPuller`) matches `SyncTransport.pullSince` exactly
+(`web/src/sync/transport.ts`): one opaque cursor in, a batch and a new
+cursor out. Same connection as push — the ordinary, RLS-bound
+`clintra_app` connection, behind the same `membership` middleware. No web
+changes shipped alongside it; `HttpTransport` implementing the
+`SyncTransport` interface against these two endpoints is a separate step.
+
+**Org isolation is never a hand-written filter.** Every query in
+`SyncPuller` reads either `sync_ledger` or one of the 14 syncable entity
+tables exactly as any other RLS-bound `clintra_app` query would — there is
+no `->where('org_id', ...)` anywhere in the class to forget. `sync_ledger`'s
+own `sync_ledger_select` policy (`org_id = current_org()`) scopes which
+rows a cursor can ever see; each entity table's own SELECT policy scopes
+the current-state lookup for that row's `payload`. A device holding
+another org's cursor, or another org's `entity_id`, gets nothing back
+through this path for the same reason `/api/isolation-probe` does — RLS
+itself, not application logic, is what a missing filter would have had to
+route around, and there's no code path here that could.
+
+**The cursor is `sync_ledger.seq`** — the same global identity column
+`audit_log.seq` already uses ("Sequence-backed audit ordering" above), one
+counter shared across every org, not reset per org. `null`/absent means
+"from the beginning" (`since = 0`); a cursor greater than the caller's own
+RLS-scoped `MAX(seq)` is rejected outright with a 422 (`invalid_cursor`)
+rather than silently answered as "nothing new" — a real client following
+this contract could never legitimately hold a cursor ahead of what it can
+see, so one arriving anyway is corrupted, forged, or borrowed from another
+org's sequence space, and is treated as an error rather than hidden as an
+empty page. A negative or non-integer cursor never reaches this check at
+all — `PullSyncOpsRequest`'s `nullable|integer|min:0` rule rejects it with
+a 422 first.
+
+**Page size is 200, capped by fetching 201 and checking the count.** Kept
+deliberately small: this response has to complete over a connection bad
+enough that the offline-first architecture exists for in the first place
+(`docs/reference/clintra-cli-brief.md`, section 1 — the app "opens and
+works with the network down"). Each row's `payload` is a full entity (a
+`visits` row has roughly twenty columns), so 200 keeps one page's JSON
+small enough that a single round trip stays resumable within an ordinary
+request timeout, instead of one giant page risking a timeout with no
+partial progress to show for it. `has_more` tells the client whether to
+keep calling with the newly returned cursor.
+
+**The ledger doesn't store row content, so `payload` is read fresh at
+pull time.** `sync_ledger` records that an `entity_id` changed and what
+`rev` it reached — never the field values themselves. `SyncPuller`
+resolves each row's current state with a plain `SELECT ... WHERE id = ?`
+against that entity's own table at the moment of the pull, through that
+table's own RLS policy, not a historical snapshot. `null` means the row
+has since been deleted by this op or a later one — the pulling device's
+own job to interpret once `HttpTransport` exists to hand it this response
+at all.
+
+**Two things this endpoint deliberately does not do, flagged rather than
+guessed at** — both spelled out in `docs/sync-plan.md`'s Q9:
+
+- **No 60-day windowing.** The brief bounds local storage to the last 60
+  days and the next 60 days, but that only has an unambiguous meaning for
+  entities with their own date (`visits.visit_date`, `day_state.date`).
+  Most syncable tables — `patients`, `services`, `memberships` — have no
+  principled date to filter by; a patient created 90 days ago can still
+  have a visit tomorrow. Inventing a per-entity rule (e.g. windowing by
+  `created_at`) risks silently starving a device of rows it still
+  legitimately needs. This endpoint currently returns full history, no
+  age cutoff, until a real rule exists.
+- **A device's own ops are not excluded from its own pull.** Excluding
+  them looked appealing — a device already knows what it just pushed —
+  but breaks recovery from a push that succeeded server-side while its
+  own response was lost in transit: with no other device around to later
+  touch the same row, the pushing device would have no other way to ever
+  learn the `rev` it needs for `base_rev` on its next edit. Pull is the
+  one channel guaranteed to eventually tell a device its own outcome, so
+  every row it's entitled to see through RLS is included regardless of
+  which device wrote it.
+
 ## The sync endpoint is accept-or-reject only
 
 **Standing rule**: the sync push endpoint accepts or rejects the op in
@@ -783,6 +861,18 @@ front of it. It never modifies a third row — any row other than the one
 `entity_id` the op itself names — on its own initiative. If a design
 needs to attribute a change to an acting membership and there isn't a
 real one, the design is wrong, not the audit trail.
+
+**The one narrow exception, made explicit so the rule isn't read more
+loosely later**: the endpoint may write the *calling device's own*
+metadata — specifically `device.clock_skew_ms`/`clock_skew_observed_at`
+(`SyncOpApplier::checkClientClock`). This is the device recording a fact
+about itself as a side effect of the request it is already making, not
+the server rewriting another actor's data on its own initiative — the
+device's own row is not a third row in the sense this rule forbids. It is
+still bound by the rule's spirit: it never writes anything that isn't
+either (a) the entity the op names, or (b) the calling device's own
+identity row, and it never writes anything attributed to an actor other
+than the one the token resolves.
 
 This rule exists because an earlier version of `resolveSlotConflict`
 broke it: when a chronologically older `create` lost a race to an
@@ -798,8 +888,10 @@ was built on top of it, three problems fell out of the same mistake:
 - **No discoverability.** The evicted device had already received
   `accepted` for its own push, truthfully, before the eviction happened
   in a later, unrelated request. Nothing could tell it afterward —
-  `GET /api/sync/pull` doesn't exist yet, so there was no mechanism at
-  all, not even a designed-but-unbuilt one.
+  `GET /api/sync/pull` didn't exist yet at the time, so there was no
+  mechanism at all, not even a designed-but-unbuilt one. It exists now
+  (see "The sync pull endpoint" below) precisely so a losing device learns
+  the truth by asking, instead of the server rewriting anything for it.
 - **No respect for a closed day.** `day_state`'s eviction branch deleted
   the existing row unconditionally, including a row with `is_closed =
   true` and a real, computed `avg_consult_minutes` — an operation that

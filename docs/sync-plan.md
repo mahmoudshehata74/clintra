@@ -413,10 +413,11 @@ them as one rule would be wrong:
   takes one cursor and returns a batch (`PullSinceResult.ops`). Both are
   already batched, not per-op, in the interface itself. Brief confirmed
   silent on endpoint topology.
-- **Status:** decided; the push half is shipped
-  (`POST /api/sync/push`). `GET /api/sync/pull` does not exist yet —
-  explicitly out of scope for the push-endpoint step, a separate one to
-  follow.
+- **Status:** decided; **both endpoints are now shipped** —
+  `POST /api/sync/push` and `GET /api/sync/pull` (see `api/docs/rls.md`'s
+  "The sync pull endpoint"). `web/`'s `HttpTransport` implementing
+  `SyncTransport` against them is the next, separate step — no web changes
+  landed with the pull endpoint itself.
 
 ### 9. How does a device know what it's missing — a cursor, a server sequence, timestamps?
 
@@ -450,9 +451,29 @@ them as one rule would be wrong:
   resolved too: `sync_ledger` exists (`docs/schema.md`'s "v12 additions"),
   with `client_created_at` added on top of the original design
   ("v13 additions" — needed once the push endpoint actually had to compare
-  timestamps for slot conflicts, see Q4/Q5). What's still open: the pull
-  endpoint itself, `GET /api/sync/pull`, doesn't exist — this decision
-  fixes what the cursor *is*, not how a device retrieves one yet.
+  timestamps for slot conflicts, see Q4/Q5). **`GET /api/sync/pull` is now
+  shipped** and uses `sync_ledger.seq` as the cursor exactly as decided
+  here. Two things left genuinely open, surfaced while building it rather
+  than resolved by inventing a rule:
+  - **The 60-day window is not implemented.** It only has an unambiguous
+    meaning for entities with their own date (`visits.visit_date`,
+    `day_state.date`); most syncable tables (`patients`, `services`,
+    `memberships`, ...) have no principled date to filter by — a patient
+    created 90 days ago can still have a visit tomorrow. Windowing those
+    by, say, `created_at` would silently stop syncing rows a device still
+    legitimately needs. The endpoint currently returns full history with
+    no age cutoff at all; the brief and schema don't settle what a
+    per-entity rule should be, so none was invented. Needed before this
+    can be called done: either a per-entity windowing rule (and where it
+    comes from) or a decision that unbounded history is acceptable here.
+  - **A device's own ops are not excluded from its own pull**, on purpose.
+    Excluding them looked appealing (a device already knows what it just
+    pushed) but breaks recovery from a push whose request succeeded
+    server-side while its response was lost in transit: with no other
+    device around to later touch the same row, the pushing device would
+    have no way to ever learn the `rev` it needs for `base_rev` on its
+    next edit. Pull is the only channel that guarantees it eventually
+    hears its own outcome, so it always can.
 
 ### 10. What does the assistant see while sync is down, and what is she blocked from doing, if anything?
 
