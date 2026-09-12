@@ -19,6 +19,7 @@ const SCHEDULE: Schedule = {
   slot_minutes: 30,
   max_capacity: null,
   resource_count: 1,
+  rev: 1,
 };
 
 describe("resolveBookingScheduleNote", () => {

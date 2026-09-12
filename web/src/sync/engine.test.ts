@@ -4,10 +4,11 @@ import { VisitSource } from "../domain/visitSource";
 import { VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "../db/database";
 import { mutate } from "../db/mutate";
+import { getDeviceId } from "../db/deviceRegistration";
 import { AuditAction, type SyncOp, type Visit } from "../db/types";
 import { FakeTransport } from "./fakeTransport";
-import { runSyncCycle, startSyncEngine } from "./engine";
-import type { PullSinceResult, PushOpResult, SyncTransport } from "./transport";
+import { describeFailedOpEscalation, runPullCycle, runSyncCycle, startSyncEngine } from "./engine";
+import { SyncAuthError, type PulledChange, type PullSinceResult, type PushOpResult, type SyncTransport } from "./transport";
 
 let db: ClintraDatabase;
 
@@ -38,6 +39,7 @@ function makeVisit(overrides: Partial<Visit> = {}): Visit {
     rescheduled_from: null,
     created_by: "membership-1",
     created_at: "2026-09-07T06:00:00.000Z",
+    rev: 1,
     ...overrides,
   };
 }
@@ -58,6 +60,12 @@ async function writeVisit(visit: Visit): Promise<void> {
 /** A stub transport with full control over per-op outcomes and call recording. */
 class StubTransport implements SyncTransport {
   calls: SyncOp[][] = [];
+  pullCalls: (string | null)[] = [];
+  pullOutcomeFor: (cursor: string | null) => PullSinceResult | Promise<PullSinceResult> = () => ({
+    cursor: "",
+    hasMore: false,
+    changes: [],
+  });
   private readonly outcomeFor: (op: SyncOp) => PushOpResult;
 
   constructor(outcomeFor: (op: SyncOp) => PushOpResult) {
@@ -69,16 +77,19 @@ class StubTransport implements SyncTransport {
     return ops.map((op) => this.outcomeFor(op));
   }
 
-  async pullSince(): Promise<PullSinceResult> {
-    return { cursor: "", ops: [] };
+  async pullSince(cursor: string | null): Promise<PullSinceResult> {
+    this.pullCalls.push(cursor);
+    return this.pullOutcomeFor(cursor);
   }
 }
+
+const BASE_SYNC_OP_FIELDS = { base_rev: null, failure_count: 0, next_retry_at: null } as const;
 
 describe("runSyncCycle", () => {
   it("marks synced_at on accepted ops and does not resend them", async () => {
     const visit = makeVisit();
     await writeVisit(visit);
-    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "accepted" }));
+    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "accepted", rev: 1 }));
 
     await runSyncCycle(db, transport);
 
@@ -162,6 +173,7 @@ describe("runSyncCycle", () => {
       device_id: "device-1",
       created_at: "2026-09-07T06:00:00.000Z",
       synced_at: null,
+      ...BASE_SYNC_OP_FIELDS,
     };
     const middle: SyncOp = { ...early, op_id: "op-middle", entity_id: "visit-middle", created_at: "2026-09-07T06:05:00.000Z" };
     const late: SyncOp = { ...early, op_id: "op-late", entity_id: "visit-late", created_at: "2026-09-07T06:10:00.000Z" };
@@ -169,7 +181,7 @@ describe("runSyncCycle", () => {
     // Inserted out of chronological order.
     await db.sync_ops.bulkAdd([late, early, middle]);
 
-    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "accepted" }));
+    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "accepted", rev: 1 }));
     await runSyncCycle(db, transport);
 
     expect(transport.calls).toHaveLength(1);
@@ -177,7 +189,7 @@ describe("runSyncCycle", () => {
   });
 
   it("does nothing when there is nothing unsent", async () => {
-    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted" }));
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
     await runSyncCycle(db, transport);
     expect(transport.calls).toHaveLength(0);
   });
@@ -244,10 +256,21 @@ describe("startSyncEngine", () => {
     // Something must actually be unsent, or runSyncCycle returns before ever
     // calling pushOps and this test would pass without exercising anything.
     await writeVisit(makeVisit());
+    // runPullCycle (chained after runSyncCycle in runGuarded) requires a
+    // registered device — without one it would throw on every tick,
+    // caught by the outer catch, but noisily and pointlessly for a test
+    // about push concurrency specifically.
+    await db.device.add({
+      id: getDeviceId(),
+      org_id: "org-1",
+      location_id: "location-1",
+      registered_at: new Date().toISOString(),
+      pull_cursor: null,
+    });
 
     let concurrentCalls = 0;
     let maxConcurrent = 0;
-    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "accepted" }));
+    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "accepted", rev: 1 }));
     const originalPushOps = transport.pushOps.bind(transport);
     transport.pushOps = async (ops) => {
       concurrentCalls++;
@@ -271,5 +294,220 @@ describe("startSyncEngine", () => {
 
     expect(maxConcurrent).toBeLessThanOrEqual(1);
     handle.stop();
+  });
+});
+
+describe("runSyncCycle: accepted writes the server's rev back to the local row", () => {
+  it("updates the entity row's rev field on an accepted create/update", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "accepted", rev: 7 }));
+
+    await runSyncCycle(db, transport);
+
+    const stored = await db.visits.get(visit.id);
+    expect(stored?.rev).toBe(7);
+  });
+
+  it("does not throw when the accepted op was a delete (no local row left to update)", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    await db.visits.delete(visit.id);
+    await db.sync_ops.toCollection().modify({ action: AuditAction.Delete });
+    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "accepted", rev: 2 }));
+
+    await expect(runSyncCycle(db, transport)).resolves.toBeUndefined();
+  });
+});
+
+describe("runSyncCycle: failed vs blocked (docs/sync-plan.md's Q11/Q2)", () => {
+  it("a failed op is retried with backoff and never enters sync_review", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "failed", reason: "internal_error" }));
+
+    await runSyncCycle(db, transport);
+
+    const [op] = await db.sync_ops.toArray();
+    expect(op.synced_at).toBeNull();
+    expect(op.failure_count).toBe(1);
+    expect(op.next_retry_at).not.toBeNull();
+    expect(new Date(op.next_retry_at!).getTime()).toBeGreaterThan(Date.now());
+    expect(await db.sync_review.count()).toBe(0);
+
+    // Backed off: a second cycle right away must not resend it yet.
+    await runSyncCycle(db, transport);
+    expect(transport.calls).toHaveLength(1);
+
+    // Once the backoff window has passed, it is eligible again.
+    await db.sync_ops.update(op.op_id, { next_retry_at: new Date(Date.now() - 1000).toISOString() });
+    await runSyncCycle(db, transport);
+    expect(transport.calls).toHaveLength(2);
+    const [retried] = await db.sync_ops.toArray();
+    expect(retried.failure_count).toBe(2);
+  });
+
+  it("a blocked op stays queued untouched and is retried next cycle, never reviewed", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "blocked" }));
+
+    await runSyncCycle(db, transport);
+
+    const [op] = await db.sync_ops.toArray();
+    expect(op.synced_at).toBeNull();
+    expect(op.failure_count).toBe(0);
+    expect(await db.sync_review.count()).toBe(0);
+
+    await runSyncCycle(db, transport);
+    expect(transport.calls).toHaveLength(2);
+  });
+});
+
+describe("describeFailedOpEscalation", () => {
+  const baseOp: SyncOp = {
+    op_id: "12345678-abcd",
+    entity: "visits",
+    entity_id: "visit-1",
+    action: AuditAction.Update,
+    payload: {},
+    device_id: "device-1",
+    created_at: "2026-09-07T06:00:00.000Z",
+    synced_at: null,
+    ...BASE_SYNC_OP_FIELDS,
+  };
+
+  it("returns null below the escalation cap — nothing is ever shown for an ordinary retry", () => {
+    expect(describeFailedOpEscalation({ ...baseOp, failure_count: 4 })).toBeNull();
+  });
+
+  it("returns a stable, quotable reference code once the cap is reached", () => {
+    const escalation = describeFailedOpEscalation({ ...baseOp, failure_count: 5 });
+    expect(escalation).not.toBeNull();
+    expect(escalation!.referenceCode).toBe("12345678".toUpperCase());
+  });
+});
+
+describe("runPullCycle", () => {
+  beforeEach(async () => {
+    await db.device.add({
+      id: getDeviceId(),
+      org_id: "org-1",
+      location_id: "location-1",
+      registered_at: new Date().toISOString(),
+      pull_cursor: null,
+    });
+  });
+
+  it("throws when no device is registered — pull has no meaning without one", async () => {
+    const freshDb = new (Object.getPrototypeOf(db).constructor)(`clintra-pull-unregistered-${crypto.randomUUID()}`);
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    await expect(runPullCycle(freshDb, transport)).rejects.toThrow("pull_requires_registered_device");
+  });
+
+  it("applies a pulled change (upsert) and advances the persisted cursor", async () => {
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    const change: PulledChange = {
+      entity: "patients",
+      entity_id: "patient-remote-1",
+      rev: 3,
+      payload: {
+        id: "patient-remote-1",
+        org_id: "org-1",
+        full_name: "مريض بعيد",
+        phone: null,
+        gender: null,
+        birth_year: null,
+        note: null,
+        created_at: "2026-09-07T06:00:00.000Z",
+        rev: 3,
+      },
+    };
+    transport.pullOutcomeFor = () => ({ cursor: "10", hasMore: false, changes: [change] });
+
+    await runPullCycle(db, transport);
+
+    const stored = await db.patients.get("patient-remote-1");
+    expect(stored?.rev).toBe(3);
+    expect((await db.device.get(getDeviceId()))?.pull_cursor).toBe("10");
+  });
+
+  it("deletes the local row when a pulled change's payload is null", async () => {
+    await db.patients.add({
+      id: "patient-to-delete",
+      org_id: "org-1",
+      full_name: "سيُحذف",
+      phone: null,
+      gender: null,
+      birth_year: null,
+      note: null,
+      created_at: "2026-09-07T06:00:00.000Z",
+      rev: 1,
+    });
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    transport.pullOutcomeFor = () => ({
+      cursor: "11",
+      hasMore: false,
+      changes: [{ entity: "patients", entity_id: "patient-to-delete", rev: 2, payload: null }],
+    });
+
+    await runPullCycle(db, transport);
+
+    expect(await db.patients.get("patient-to-delete")).toBeUndefined();
+  });
+
+  it("follows hasMore across pages before returning, resuming from each page's own cursor", async () => {
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    const pages: Record<string, PullSinceResult> = {
+      null: { cursor: "1", hasMore: true, changes: [] },
+      "1": { cursor: "2", hasMore: false, changes: [] },
+    };
+    transport.pullOutcomeFor = (cursor) => pages[cursor === null ? "null" : cursor];
+
+    await runPullCycle(db, transport);
+
+    expect(transport.pullCalls).toEqual([null, "1"]);
+    expect((await db.device.get(getDeviceId()))?.pull_cursor).toBe("2");
+  });
+});
+
+describe("SyncAuthError: a 401 is surfaced, never left to throw uncaught into a bare console.error", () => {
+  // This suite runs without a DOM (no jsdom — see vitest.config.ts), so
+  // SYNC_AUTH_ERROR_EVENT_NAME's actual window dispatch is untestable here,
+  // the same as MUTATION_EVENT_NAME's dispatch always has been; both are
+  // guarded by the identical `typeof window !== "undefined"` check
+  // (mutate.ts's notifyMutationCommitted, engine.ts's notifySyncAuthError).
+  // What is testable, and is the actual behavior this task requires, is
+  // that a SyncAuthError from the transport resolves the cycle cleanly
+  // instead of rejecting it — the thing that would otherwise reach
+  // startSyncEngine's generic `.catch(console.error)`.
+  it("runSyncCycle resolves cleanly on a SyncAuthError instead of rejecting", async () => {
+    await writeVisit(makeVisit());
+    const transport: SyncTransport = {
+      pushOps: () => {
+        throw new SyncAuthError();
+      },
+      pullSince: async () => ({ cursor: "", hasMore: false, changes: [] }),
+    };
+
+    await expect(runSyncCycle(db, transport)).resolves.toBeUndefined();
+  });
+
+  it("runPullCycle resolves cleanly on a SyncAuthError instead of rejecting", async () => {
+    await db.device.add({
+      id: getDeviceId(),
+      org_id: "org-1",
+      location_id: "location-1",
+      registered_at: new Date().toISOString(),
+      pull_cursor: null,
+    });
+    const transport: SyncTransport = {
+      pushOps: async () => [],
+      pullSince: () => {
+        throw new SyncAuthError();
+      },
+    };
+
+    await expect(runPullCycle(db, transport)).resolves.toBeUndefined();
   });
 });

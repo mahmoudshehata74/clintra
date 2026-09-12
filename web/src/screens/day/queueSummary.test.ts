@@ -26,6 +26,7 @@ function makeVisit(overrides: Partial<Visit> = {}): Visit {
     rescheduled_from: null,
     created_by: "membership-1",
     created_at: "2026-09-07T06:00:00.000Z",
+    rev: 1,
     ...overrides,
   };
 }

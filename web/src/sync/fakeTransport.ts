@@ -1,7 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import { ClintraDatabase } from "../db/database";
 import { AuditAction, type SyncOp } from "../db/types";
-import type { PullSinceResult, PushOpResult, SyncTransport } from "./transport";
+import type { PulledChange, PullSinceResult, PushOpResult, SyncTransport } from "./transport";
 
 /** The default name two tabs on the same device share, so they see one coherent server. */
 export const FAKE_SERVER_DB_NAME = "clintra-fake-server";
@@ -88,15 +88,35 @@ export class FakeTransport implements SyncTransport {
 
       // Recorded as both "seen" (for dedup) and "applied" (for pullSince) in one row.
       await this.db.sync_ops.add(op);
-      return { op_id: op.op_id, status: "accepted" };
+      // Fake never runs a real rev-versioning trigger (unlike the server's
+      // enforce_row_rev() — api/docs/rls.md) — it simply echoes back
+      // whatever rev the pushing device's own local row already carried,
+      // which is good enough for a stand-in that exists to exercise the
+      // *shape* of an accepted response, not real conflict semantics.
+      const rev = (op.payload as { rev?: number } | null)?.rev ?? 1;
+      return { op_id: op.op_id, status: "accepted", rev };
     });
   }
 
+  /**
+   * Never paginates (hasMore is always false) and returns every applied op
+   * reshaped into a PulledChange — entity/entity_id/rev/payload only, the
+   * same trimmed-down shape the real pull endpoint returns, even though
+   * Fake's own sync_ops rows happen to carry more (op_id, action, ...): the
+   * point of Fake is to exercise callers against this interface, not to
+   * leak its own richer internal representation through it.
+   */
   async pullSince(cursor: string | null): Promise<PullSinceResult> {
     const allOps = await this.db.sync_ops.toArray();
     const sorted = allOps.slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
     const ops = cursor ? sorted.filter((op) => op.created_at > cursor) : sorted;
     const newCursor = sorted.length > 0 ? sorted[sorted.length - 1].created_at : (cursor ?? "");
-    return { cursor: newCursor, ops };
+    const changes: PulledChange[] = ops.map((op) => ({
+      entity: op.entity,
+      entity_id: op.entity_id,
+      rev: (op.payload as { rev?: number } | null)?.rev ?? 1,
+      payload: op.action === AuditAction.Delete ? null : (op.payload as Record<string, unknown>),
+    }));
+    return { cursor: newCursor, hasMore: false, changes };
   }
 }

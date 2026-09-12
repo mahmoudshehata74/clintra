@@ -58,6 +58,8 @@ export interface Membership {
    */
   pin_salt: string | null;
   is_active: boolean;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 /** Natural key is the composite membership_id + location_id; `id` added as the Dexie primary key. */
@@ -65,6 +67,8 @@ export interface MembershipLocation {
   id: string;
   membership_id: string;
   location_id: string;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 /** Natural key is the composite membership_id + practitioner_id; `id` added as the Dexie primary key. */
@@ -72,6 +76,8 @@ export interface MembershipPractitioner {
   id: string;
   membership_id: string;
   practitioner_id: string;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 export interface Practitioner {
@@ -99,6 +105,8 @@ export interface Service {
   duration_minutes: number;
   default_price: Piastres;
   is_active: boolean;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 export interface ServicePriceOverride {
@@ -107,6 +115,8 @@ export interface ServicePriceOverride {
   practitioner_id: string | null;
   location_id: string | null;
   price: Piastres;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 export interface Schedule {
@@ -124,6 +134,8 @@ export interface Schedule {
   max_capacity: number | null;
   /** Defaults to 1. */
   resource_count: number;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 export const ScheduleExceptionType = {
@@ -153,6 +165,8 @@ export interface Patient {
   birth_year: number | null;
   note: string | null;
   created_at: Instant;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 export interface Visit {
@@ -187,6 +201,18 @@ export interface Visit {
   /** Membership id. */
   created_by: string;
   created_at: Instant;
+  /**
+   * Mirrors the server's row-versioning column of the same name
+   * (`enforce_row_rev()`, `2026_09_12_000012_add_row_versioning.php`) —
+   * never assigned by this device, only ever overwritten by (a) the
+   * response to an accepted push of this row, or (b) a pulled row's own
+   * `rev` (see sync/engine.ts). A row this device created but has never
+   * had confirmed by a real server starts at 1, the same value the
+   * server's own INSERT trigger would assign — see database.ts's version
+   * 12 upgrade for why that specific number, not 0, is what an
+   * unconfirmed row gets.
+   */
+  rev: number;
 }
 
 /** Natural key is the composite practitioner_id + location_id + date; `id` added as the Dexie primary key. */
@@ -199,6 +225,8 @@ export interface DayState {
   is_closed: boolean;
   /** Derived from started_at to ended_at. */
   avg_consult_minutes: number | null;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 export const InvoiceStatus = {
@@ -231,6 +259,8 @@ export interface Invoice {
   paid: Piastres;
   status: InvoiceStatus;
   issued_at: Instant;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 export interface InvoiceItem {
@@ -241,6 +271,8 @@ export interface InvoiceItem {
   qty: number;
   unit_price: Piastres;
   total: Piastres;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 export const PaymentMethod = {
@@ -277,6 +309,8 @@ export interface Payment {
   /** Membership id. */
   created_by: string;
   created_at: Instant;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 export interface CashClose {
@@ -291,6 +325,8 @@ export interface CashClose {
   /** Membership id. */
   closed_by: string;
   closed_at: Instant;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 export const AuditAction = {
@@ -338,6 +374,23 @@ export interface SyncOp {
   device_id: string;
   created_at: Instant;
   synced_at: Instant | null;
+  /**
+   * The entity's `rev` as this device last saw it, required by the server
+   * for every update/delete (docs/sync-plan.md's Q5) and never sent for a
+   * create — there is no prior row to have a rev at all. Set once, at
+   * queue time, by db/mutate.ts; never revised afterward.
+   */
+  base_rev: number | null;
+  /**
+   * How many consecutive times the transport has reported this exact op
+   * `failed` (a server bug, never a business conflict — docs/sync-plan.md's
+   * Q11). Drives the backoff `next_retry_at` below and, past a cap, an
+   * escalation to "needs support" (sync/engine.ts). Never incremented for
+   * `rejected` or `blocked` — only `failed`.
+   */
+  failure_count: number;
+  /** Set after a `failed` result; this op is not resent before this instant. Null means eligible now. */
+  next_retry_at: Instant | null;
 }
 
 /**
@@ -369,6 +422,15 @@ export interface DeviceRegistration {
   org_id: string;
   location_id: string;
   registered_at: Instant;
+  /**
+   * The last `sync_ledger.seq` this device has pulled (sync/engine.ts's
+   * runPullCycle), opaque to this app the same way it is opaque to the
+   * server's own client contract (docs/sync-plan.md's Q9). Null means this
+   * device has never pulled anything yet. Kept here, not localStorage, for
+   * the same reason the device id itself moved here in version 8: it
+   * shares fate with the data it governs.
+   */
+  pull_cursor: string | null;
 }
 
 // Declared now, unused in v1, no screens.
@@ -421,6 +483,8 @@ export interface VisitFormData {
   visit_id: string;
   form_definition_id: string;
   data: unknown;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 export interface CarePlan {

@@ -175,6 +175,7 @@ describe("recordPayment", () => {
       difference_note: null,
       closed_by: "membership-1",
       closed_at: new Date().toISOString(),
+      rev: 1,
     });
 
     const result = await recordPayment(db, {

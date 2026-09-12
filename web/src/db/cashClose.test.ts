@@ -32,6 +32,7 @@ describe("computeExpectedCashTotal", () => {
       practitioner_id: "pr",
       visit_id: null,
       status: "unpaid" as const,
+      rev: 1,
     };
     const invoices = [
       { ...base, id: "1", location_id: "loc-a", paid: 100 as Piastres, total: 100 as Piastres, issued_at: "2026-09-07T08:00:00.000Z" },

@@ -126,6 +126,7 @@ export async function moveVisit(db: ClintraDatabase, input: MoveVisitInput): Pro
               rescheduled_from: oldVisit.id,
               created_by: actor.id,
               created_at: now,
+              rev: 1,
             };
 
         const newVisitAuditLogId = await mutate(db, {

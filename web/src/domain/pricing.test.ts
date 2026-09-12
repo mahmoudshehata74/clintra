@@ -10,6 +10,7 @@ const SERVICE: Service = {
   duration_minutes: 30,
   default_price: 20000 as Piastres,
   is_active: true,
+  rev: 1,
 };
 
 const CONTEXT = { practitionerId: "practitioner-1", locationId: "location-1" };
@@ -21,6 +22,7 @@ function override(overrides: Partial<ServicePriceOverride> = {}): ServicePriceOv
     practitioner_id: null,
     location_id: null,
     price: 15000 as Piastres,
+    rev: 1,
     ...overrides,
   };
 }

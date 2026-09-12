@@ -19,6 +19,7 @@ function makePatient(overrides: Partial<Patient>): Patient {
     birth_year: null,
     note: null,
     created_at: new Date().toISOString(),
+    rev: 1,
     ...overrides,
   };
 }
@@ -115,6 +116,7 @@ describe("searchPatients", () => {
         rescheduled_from: null,
         created_by: "membership-1",
         created_at: "2026-01-05T08:00:00.000Z",
+        rev: 1,
       },
       actorMembershipId: "membership-1",
       orgId: "org-1",

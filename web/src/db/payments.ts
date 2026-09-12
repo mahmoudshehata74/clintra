@@ -81,6 +81,7 @@ export async function recordPayment(db: ClintraDatabase, input: RecordPaymentInp
       after_close: Boolean(closedForToday),
       created_by: actor.id,
       created_at: now,
+      rev: 1,
     };
 
     const paymentAuditLogId = await write({

@@ -90,6 +90,12 @@ export async function saveVisitFormField(
     visit_id: visitId,
     form_definition_id: formDefinition.id,
     data: { ...beforeValues, [field]: value } satisfies VisitFormFieldValues,
+    // Unlike every other create-vs-update write in db/, this rebuilds the
+    // full row from scratch either way rather than spreading `existing` —
+    // so rev must be carried forward explicitly on an update (existing.rev)
+    // rather than reset to 1, which would wrongly erase a row's real,
+    // already-confirmed server rev the next time this same field autosaves.
+    rev: existing?.rev ?? 1,
   };
 
   return mutate(db, {

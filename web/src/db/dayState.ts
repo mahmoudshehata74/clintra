@@ -42,6 +42,7 @@ export async function setDayDelay(db: ClintraDatabase, input: SetDayDelayInput):
           delay_minutes: input.delayMinutes,
           is_closed: false,
           avg_consult_minutes: null,
+          rev: 1,
         };
 
     return mutate(db, {

@@ -96,6 +96,7 @@ export async function bookExistingPatientVisit(
           rescheduled_from: null,
           created_by: actor.id,
           created_at: now,
+          rev: 1,
         };
 
         const auditLogId = await mutate(db, {
@@ -166,6 +167,7 @@ export async function bookExistingPatientVisit(
             rescheduled_from: null,
             created_by: actor.id,
             created_at: now,
+            rev: 1,
           };
 
       const auditLogId = await mutate(db, {

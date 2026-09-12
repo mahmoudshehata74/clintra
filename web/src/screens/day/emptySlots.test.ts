@@ -19,6 +19,7 @@ const SCHEDULE: Schedule = {
   slot_minutes: 30,
   max_capacity: null,
   resource_count: 1,
+  rev: 1,
 };
 
 function visitAt(time: string, status: Visit["status"], overrides: Partial<Visit> = {}): Visit {
@@ -43,6 +44,7 @@ function visitAt(time: string, status: Visit["status"], overrides: Partial<Visit
     rescheduled_from: null,
     created_by: "membership-1",
     created_at: new Date().toISOString(),
+    rev: 1,
     ...overrides,
   };
 }

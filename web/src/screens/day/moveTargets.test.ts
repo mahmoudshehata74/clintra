@@ -20,6 +20,7 @@ function scheduleFor(weekday: number): Schedule {
     slot_minutes: 30,
     max_capacity: null,
     resource_count: 1,
+    rev: 1,
   };
 }
 
@@ -45,6 +46,7 @@ function bookedVisit(date: string, time: string): Visit {
     rescheduled_from: null,
     created_by: "membership-1",
     created_at: new Date().toISOString(),
+    rev: 1,
   };
 }
 

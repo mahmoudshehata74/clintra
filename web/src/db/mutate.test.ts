@@ -237,6 +237,7 @@ describe("undoMostRecentVisitMutation", () => {
         birth_year: null,
         note: null,
         created_at: new Date().toISOString(),
+        rev: 1,
       } satisfies Patient,
       actorMembershipId: membership.id,
       orgId: membership.org_id,
@@ -249,5 +250,99 @@ describe("undoMostRecentVisitMutation", () => {
     const auditRows = await db.audit_log.toArray();
     const undoRow = auditRows.find((row) => row.action === AuditAction.Delete && row.entity_id === patientId);
     expect(undoRow).toBeTruthy();
+  });
+
+  describe("base_rev (docs/sync-plan.md's Q5)", () => {
+    it("a create's sync_op carries no base_rev — there is no prior row to have one", async () => {
+      await seedDatabase(db);
+      const [membership] = await db.memberships.toArray();
+      const patientId = id();
+
+      await mutate(db, {
+        table: db.patients,
+        entity: "patients",
+        entityId: patientId,
+        action: AuditAction.Create,
+        before: null,
+        after: {
+          id: patientId,
+          org_id: membership.org_id,
+          full_name: "مريض جديد",
+          phone: null,
+          gender: null,
+          birth_year: null,
+          note: null,
+          created_at: new Date().toISOString(),
+          rev: 1,
+        } satisfies Patient,
+        actorMembershipId: membership.id,
+        orgId: membership.org_id,
+      });
+
+      const op = (await db.sync_ops.toArray()).find((row) => row.entity_id === patientId)!;
+      expect(op.base_rev).toBeNull();
+    });
+
+    it("an update's sync_op carries the prior row's own rev as base_rev", async () => {
+      await seedDatabase(db);
+      const [membership] = await db.memberships.toArray();
+      const visit = findByPosition(await db.visits.toArray(), 1);
+      expect(visit.rev).toBe(1); // seed's own backfill value
+
+      await mutate(db, {
+        table: db.visits,
+        entity: "visits",
+        entityId: visit.id,
+        action: AuditAction.Update,
+        before: visit,
+        after: { ...visit, status: VisitStatus.Confirmed, rev: 1 },
+        actorMembershipId: membership.id,
+        orgId: visit.org_id,
+      });
+
+      const op = (await db.sync_ops.toArray()).find((row) => row.entity_id === visit.id)!;
+      expect(op.base_rev).toBe(1);
+    });
+
+    it("a delete's sync_op also carries the prior row's rev as base_rev", async () => {
+      await seedDatabase(db);
+      const [membership] = await db.memberships.toArray();
+      const visit = findByPosition(await db.visits.toArray(), 1);
+
+      await mutate(db, {
+        table: db.visits,
+        entity: "visits",
+        entityId: visit.id,
+        action: AuditAction.Delete,
+        before: visit,
+        after: null,
+        actorMembershipId: membership.id,
+        orgId: visit.org_id,
+      });
+
+      const op = (await db.sync_ops.toArray()).find((row) => row.entity_id === visit.id)!;
+      expect(op.base_rev).toBe(visit.rev);
+    });
+
+    it("every new sync_ops row starts with failure_count 0 and next_retry_at null, eligible for its first attempt immediately", async () => {
+      await seedDatabase(db);
+      const [membership] = await db.memberships.toArray();
+      const visit = findByPosition(await db.visits.toArray(), 1);
+
+      await mutate(db, {
+        table: db.visits,
+        entity: "visits",
+        entityId: visit.id,
+        action: AuditAction.Update,
+        before: visit,
+        after: { ...visit, status: VisitStatus.Arrived },
+        actorMembershipId: membership.id,
+        orgId: visit.org_id,
+      });
+
+      const op = (await db.sync_ops.toArray()).find((row) => row.entity_id === visit.id)!;
+      expect(op.failure_count).toBe(0);
+      expect(op.next_retry_at).toBeNull();
+    });
   });
 });

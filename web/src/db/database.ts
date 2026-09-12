@@ -213,6 +213,83 @@ export class ClintraDatabase extends Dexie {
         rows.sort((a, b) => (a.at === b.at ? (a.id < b.id ? -1 : 1) : a.at < b.at ? -1 : 1));
         await Promise.all(rows.map((row, index) => tx.table("audit_log").update(row.id, { seq: index + 1 })));
       });
+
+    // Row versioning for the sync layer (docs/sync-plan.md's Q5/Q9;
+    // api/docs/rls.md's "Sequence-backed audit ordering" sibling on the
+    // server side, `enforce_row_rev()`). No index changes — rev is never
+    // queried by value, only read and written by primary key alongside the
+    // rest of each row — so every change here is upgrade-callback backfill,
+    // not a stores() change.
+    //
+    // Every existing row across the 14 tables the real server tracks (this
+    // list must be kept in sync with api/app/Support/Sync/SyncableTables.php's
+    // NAMES — there is no way to derive one from the other across the
+    // language boundary) gets rev backfilled to 1, not 0. 1 is what the
+    // server's own INSERT trigger assigns a brand new row, and every one of
+    // these rows predates any real sync ever happening (no server existed
+    // before this session), so "as if this row's local state already is
+    // that first accepted write" is the closest honest approximation
+    // available, and it fails safely if it's ever wrong: a real edit to a
+    // row whose true state is otherwise (a) still lands as a clean, single
+    // "rejected: conflict_stale_rev" from PushSyncOpsRequest's ordinary
+    // path, reviewable and non-destructive — never a whole-batch validation
+    // 422, which is what backfilling 0 would risk instead
+    // (PushSyncOpsRequest requires base_rev >= 1 for any update/delete).
+    // Every row created locally from this version on starts at 1 too (see
+    // each db/*.ts write site), for the identical reason: it optimistically
+    // matches what the server will assign on its create op's acceptance.
+    //
+    // sync_ops rows gain base_rev/failure_count/next_retry_at
+    // (sync/engine.ts, db/mutate.ts): existing create ops are unaffected
+    // (base_rev stays null, exactly what "an insert carries no base_rev"
+    // already requires); existing update/delete ops predate base_rev
+    // entirely, so null here is the honest "unknown", not a guess — see
+    // sync/engine.ts's own doc comment on why it never sends such an op
+    // until a fresh edit gives it a real one.
+    //
+    // device gains pull_cursor, starting null ("never pulled yet") for any
+    // already-registered device.
+    const REV_BACKFILLED_TABLES = [
+      "cash_close",
+      "day_state",
+      "invoice_items",
+      "invoices",
+      "membership_locations",
+      "membership_practitioners",
+      "memberships",
+      "patients",
+      "payments",
+      "schedules",
+      "service_price_overrides",
+      "services",
+      "visit_form_data",
+      "visits",
+    ] as const;
+
+    this.version(12)
+      .stores({})
+      .upgrade(async (tx) => {
+        await Promise.all(
+          REV_BACKFILLED_TABLES.map(async (tableName) => {
+            const rows = await tx.table(tableName).toArray();
+            await Promise.all(rows.map((row) => tx.table(tableName).update(row.id, { rev: 1 })));
+          }),
+        );
+
+        const ops = await tx.table("sync_ops").toArray();
+        await Promise.all(
+          ops.map((op) =>
+            tx.table("sync_ops").update(op.op_id, {
+              base_rev: op.action === "create" ? null : (op.base_rev ?? null),
+              failure_count: 0,
+              next_retry_at: null,
+            }),
+          ),
+        );
+
+        const devices = await tx.table("device").toArray();
+        await Promise.all(devices.map((device) => tx.table("device").update(device.id, { pull_cursor: null })));
+      });
   }
 }
 

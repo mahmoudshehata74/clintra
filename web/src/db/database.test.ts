@@ -35,6 +35,7 @@ function makeVisit(overrides: Partial<Visit>): Visit {
     rescheduled_from: null,
     created_by: "membership-1",
     created_at: new Date().toISOString(),
+    rev: 1,
     ...overrides,
   };
 }
@@ -97,6 +98,7 @@ describe("invoices index", () => {
       paid: 0 as Piastres,
       status: InvoiceStatus.Unpaid,
       issued_at: new Date().toISOString(),
+      rev: 1,
       ...overrides,
     };
   }
@@ -127,6 +129,7 @@ describe("payments index", () => {
       after_close: false,
       created_by: "membership-1",
       created_at: new Date().toISOString(),
+      rev: 1,
     };
 
     await db.payments.add(payment);
@@ -146,6 +149,7 @@ describe("cash_close index", () => {
       difference_note: null,
       closed_by: "membership-1",
       closed_at: new Date().toISOString(),
+      rev: 1,
     };
 
     await db.cash_close.add(close);
@@ -165,6 +169,7 @@ describe("patients indexes", () => {
         birth_year: null,
         note: null,
         created_at: new Date().toISOString(),
+        rev: 1,
       },
       {
         id: id(),
@@ -175,6 +180,7 @@ describe("patients indexes", () => {
         birth_year: null,
         note: null,
         created_at: new Date().toISOString(),
+        rev: 1,
       },
     ]);
 
@@ -196,6 +202,7 @@ describe("patients indexes", () => {
       birth_year: null,
       note: null,
       created_at: new Date().toISOString(),
+      rev: 1,
     });
 
     await expect(
@@ -208,6 +215,7 @@ describe("patients indexes", () => {
         birth_year: null,
         note: null,
         created_at: new Date().toISOString(),
+        rev: 1,
       }),
     ).resolves.toBeTruthy();
   });

@@ -72,6 +72,7 @@ export async function addToQueue(db: ClintraDatabase, input: AddToQueueInput): P
       rescheduled_from: null,
       created_by: actor.id,
       created_at: now,
+      rev: 1,
     };
 
     const auditLogId = await mutate(db, {

@@ -69,6 +69,7 @@ export async function closeCashForDay(db: ClintraDatabase, input: CloseCashInput
         difference_note: input.differenceNote,
         closed_by: actor.id,
         closed_at: new Date().toISOString(),
+        rev: 1,
       };
 
       const auditLogId = await write({

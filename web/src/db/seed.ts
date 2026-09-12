@@ -258,6 +258,7 @@ async function writeSeedData(
     pin_salt: assistantPinSalt,
     pin_hash: hashPin(DEV_SEED_PINS.assistant, assistantPinSalt),
     is_active: true,
+    rev: 1,
   };
 
   // A second staff member so the lock screen has more than one membership to
@@ -284,6 +285,7 @@ async function writeSeedData(
     pin_salt: practitionerPinSalt,
     pin_hash: hashPin(DEV_SEED_PINS.practitioner, practitionerPinSalt),
     is_active: true,
+    rev: 1,
   };
 
   const services: Service[] = [
@@ -294,6 +296,7 @@ async function writeSeedData(
       duration_minutes: 30,
       default_price: 300_00 as Piastres,
       is_active: true,
+      rev: 1,
     },
     {
       id: id(),
@@ -302,6 +305,7 @@ async function writeSeedData(
       duration_minutes: 15,
       default_price: 150_00 as Piastres,
       is_active: true,
+      rev: 1,
     },
     {
       id: id(),
@@ -310,6 +314,7 @@ async function writeSeedData(
       duration_minutes: 45,
       default_price: 500_00 as Piastres,
       is_active: true,
+      rev: 1,
     },
   ];
 
@@ -323,6 +328,7 @@ async function writeSeedData(
     slot_minutes: 30,
     max_capacity: null,
     resource_count: 1,
+    rev: 1,
   } as const;
 
   const schedules: Schedule[] = Array.from({ length: 7 }, (_, weekday) => ({
@@ -342,6 +348,7 @@ async function writeSeedData(
     slot_minutes: null,
     max_capacity: 20,
     resource_count: 1,
+    rev: 1,
   } as const;
 
   const queueSchedules: Schedule[] = Array.from({ length: 7 }, (_, weekday) => ({
@@ -367,6 +374,7 @@ async function writeSeedData(
     birth_year: null,
     note: null,
     created_at: now,
+    rev: 1,
   }));
 
   const slotTimes = generateSlotTimes(SCHEDULE_TEMPLATE);
@@ -407,6 +415,7 @@ async function writeSeedData(
       rescheduled_from: null,
       created_by: assistantMembership.id,
       created_at: now,
+      rev: 1,
     };
   });
 
@@ -450,6 +459,7 @@ async function writeSeedData(
       rescheduled_from: null,
       created_by: assistantMembership.id,
       created_at: now,
+      rev: 1,
     };
   });
 
@@ -462,6 +472,7 @@ async function writeSeedData(
     is_closed: false,
     // The median of the two completed visits' durations above (10, 12).
     avg_consult_minutes: 11,
+    rev: 1,
   };
 
   await db.organizations.add(organization);

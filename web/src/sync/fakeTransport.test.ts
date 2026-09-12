@@ -35,6 +35,7 @@ function makeVisit(overrides: Partial<Visit> = {}): Visit {
     rescheduled_from: null,
     created_by: "membership-1",
     created_at: "2026-09-07T06:00:00.000Z",
+    rev: 1,
     ...overrides,
   };
 }
@@ -53,6 +54,9 @@ function baseOp(visit: Visit) {
     device_id: "device-1",
     created_at: visit.created_at,
     synced_at: null,
+    base_rev: null,
+    failure_count: 0,
+    next_retry_at: null,
   };
 }
 
@@ -63,7 +67,7 @@ describe("FakeTransport", () => {
     const op = makeOp(visit);
 
     const [result] = await transport.pushOps([op]);
-    expect(result).toEqual({ op_id: op.op_id, status: "accepted" });
+    expect(result).toEqual({ op_id: op.op_id, status: "accepted", rev: 1 });
   });
 
   it("dedups by op_id: resending the exact same op does not double-write", async () => {
@@ -122,8 +126,8 @@ describe("FakeTransport", () => {
     // versa — only possible if they share the same underlying database.
     const seenByB = await transportB.pullSince(null);
     const seenByA = await transportA.pullSince(null);
-    expect(seenByB.ops.map((op) => op.entity_id).sort()).toEqual([visitA.id, visitB.id].sort());
-    expect(seenByA.ops.map((op) => op.entity_id).sort()).toEqual([visitA.id, visitB.id].sort());
+    expect(seenByB.changes.map((change) => change.entity_id).sort()).toEqual([visitA.id, visitB.id].sort());
+    expect(seenByA.changes.map((change) => change.entity_id).sort()).toEqual([visitA.id, visitB.id].sort());
   });
 
   describe("pullSince", () => {
@@ -141,7 +145,7 @@ describe("FakeTransport", () => {
       await transport.pushOps([makeOp(visit1), makeOp(visit2)]);
 
       const result = await transport.pullSince(null);
-      expect(result.ops.map((op) => op.entity_id)).toEqual([visit1.id, visit2.id]);
+      expect(result.changes.map((change) => change.entity_id)).toEqual([visit1.id, visit2.id]);
     });
 
     it("returns nothing new when nothing has been pushed since the cursor", async () => {
@@ -151,7 +155,7 @@ describe("FakeTransport", () => {
 
       const first = await transport.pullSince(null);
       const second = await transport.pullSince(first.cursor);
-      expect(second.ops).toEqual([]);
+      expect(second.changes).toEqual([]);
     });
 
     it("returns only ops pushed after the given cursor", async () => {
@@ -170,7 +174,7 @@ describe("FakeTransport", () => {
       await transport.pushOps([makeOp(visit2)]);
 
       const result = await transport.pullSince(afterFirst.cursor);
-      expect(result.ops.map((op) => op.entity_id)).toEqual([visit2.id]);
+      expect(result.changes.map((change) => change.entity_id)).toEqual([visit2.id]);
     });
   });
 
@@ -191,6 +195,9 @@ describe("FakeTransport", () => {
         device_id: "device-1",
         created_at: "2026-09-07T06:00:00.000Z",
         synced_at: null,
+        base_rev: null,
+        failure_count: 0,
+        next_retry_at: null,
       };
 
       const [result] = await transport.pushOps([op]);

@@ -92,6 +92,7 @@ export async function ensureDeviceRegistration(db: ClintraDatabase): Promise<Dev
     org_id: location.org_id,
     location_id: location.id,
     registered_at: new Date().toISOString(),
+    pull_cursor: null,
   };
   await db.device.add(registration);
   clearLegacyLocalStorageDeviceId();

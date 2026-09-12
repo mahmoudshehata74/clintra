@@ -25,6 +25,7 @@ export async function createService(
     duration_minutes: input.durationMinutes,
     default_price: input.defaultPrice,
     is_active: true,
+    rev: 1,
   };
   const auditLogId = await mutate(db, {
     table: db.services,
@@ -105,6 +106,7 @@ export async function addServicePriceOverride(db: ClintraDatabase, input: NewOve
     practitioner_id: input.practitionerId,
     location_id: input.locationId,
     price: input.price,
+    rev: 1,
   };
   await mutate(db, {
     table: db.service_price_overrides,

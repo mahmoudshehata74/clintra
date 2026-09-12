@@ -15,6 +15,7 @@ import { Role } from "./domain/role";
 import DayScreen from "./screens/day/DayScreen";
 import { startSyncEngine } from "./sync/engine";
 import { FakeTransport } from "./sync/fakeTransport";
+import { selectSyncTransport } from "./sync/httpTransport";
 
 // Idle auto-lock window — 10 minutes, decided by the owner in
 // docs/auth-plan.md (Layer 3): long enough to survive a reschedule phone call,
@@ -24,9 +25,15 @@ const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 export default function App() {
   // Started once, app-wide: every tab on this device shares one
   // FakeTransport database name (see fakeTransport.ts's default), which is
-  // what lets two tabs converge on one coherent view of "the server".
+  // what lets two tabs converge on one coherent view of "the server". The
+  // real transport is selected by whether a real device token is available
+  // (selectSyncTransport, sync/httpTransport.ts) — always null today, since
+  // nothing in web/ yet calls POST /api/devices/register (see
+  // HttpTransport's own doc comment), so this always resolves to Fake. Not
+  // a placeholder to revisit later: it is the actual, deliberate switch,
+  // simply with only one live input for now.
   useEffect(() => {
-    const handle = startSyncEngine(db, new FakeTransport());
+    const handle = startSyncEngine(db, selectSyncTransport(null, new FakeTransport()));
     return () => handle.stop();
   }, []);
 

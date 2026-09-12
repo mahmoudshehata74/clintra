@@ -108,6 +108,7 @@ export async function completeVisitWithInvoice(
         paid: 0 as Piastres,
         status: service ? InvoiceStatus.Unpaid : InvoiceStatus.Paid,
         issued_at: now,
+        rev: 1,
       };
 
       const invoiceAuditLogId = await write({
@@ -131,6 +132,7 @@ export async function completeVisitWithInvoice(
           qty: 1,
           unit_price: unitPrice,
           total: unitPrice,
+          rev: 1,
         };
         invoiceItemAuditLogId = await write({
           table: db.invoice_items,
@@ -172,6 +174,7 @@ export async function completeVisitWithInvoice(
             delay_minutes: 0,
             is_closed: false,
             avg_consult_minutes: avgConsultMinutes,
+            rev: 1,
           };
       const dayStateAuditLogId = await write({
         table: db.day_state,

@@ -78,6 +78,15 @@ async function applyEntityWrite<T>(db: ClintraDatabase, input: MutationInput<T>)
     device_id: getDeviceId(),
     created_at: now,
     synced_at: null,
+    // The prior row's rev, for the server's base_rev check — never sent for
+    // a create (there is no prior row), and read generically here rather
+    // than restricted to the 14 syncable tables, since a table with no rev
+    // field (e.g. users) simply has none to read and this falls through to
+    // null, which is exactly as inert for a table the real endpoint never
+    // validates base_rev against in the first place.
+    base_rev: input.action === AuditAction.Create ? null : ((input.before as { rev?: number } | null)?.rev ?? null),
+    failure_count: 0,
+    next_retry_at: null,
   });
 
   return auditLogId;

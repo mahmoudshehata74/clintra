@@ -34,47 +34,74 @@ file."
 Nothing below is implemented. This is the punch list the eight decisions
 in this document create, for whenever sync implementation starts.
 
-**web/**
-- `SyncOp` gains `base_rev` (the `rev` the device last saw for the row
-  being written) — Q5.
-- Every synced entity table gains a local `rev` field, updated whenever a
-  row is created, pulled, or has an op accepted — Q5, Q9.
-- `PushOpResult` gains a fourth variant, `failed`, distinct from
-  `rejected` — Q11.
-- `engine.ts`: hold an op back while an earlier unresolved op targets the
-  same `entity_id` (same-row dependency only, no general DAG) — Q2. Treat
-  `failed` differently from `rejected`: retry with backoff, never enter
-  `sync_review`, escalate with a reference code after a retry cap — Q11.
-  Track consecutive transport failures (thrown errors from `pushOps`,
-  currently only `console.error`'d) — Q10. Wire up an actual pull cycle
-  using a persisted "last seq seen" cursor — Q9 (nothing calls
-  `pullSince` today).
+**web/** — status as of `HttpTransport` shipping (see
+`api/docs/rls.md`'s "The sync push endpoint" / "The sync pull endpoint",
+this file's own local schema/engine changes):
+- ~~`SyncOp` gains `base_rev`...~~ — **shipped**
+  (`db/types.ts`, set by `db/mutate.ts`'s `applyEntityWrite`) — Q5.
+- ~~Every synced entity table gains a local `rev` field...~~ — **shipped**
+  across all 14 tables (Dexie schema version 12); written back on an
+  accepted push and on every pulled change (`sync/engine.ts`) — Q5, Q9.
+- ~~`PushOpResult` gains a fourth variant, `failed`...~~ — **shipped, and
+  a fifth, `blocked`, alongside it** (`sync/transport.ts`) — Q2, Q11. Both
+  match the real `POST /api/sync/push` response exactly.
+- `engine.ts`: ~~Treat `failed` differently from `rejected`: retry with
+  backoff, never enter `sync_review`, escalate with a reference code
+  after a retry cap~~ — **shipped** (`describeFailedOpEscalation`).
+  ~~Wire up an actual pull cycle using a persisted cursor~~ — **shipped**
+  (`runPullCycle`, cursor persisted on `device.pull_cursor`, follows
+  `hasMore` to completion). Still open: hold an op back while an earlier
+  *unresolved* op targets the same `entity_id` before ever sending it —
+  Q2's client-side half is unaffected by this task, since the whole batch
+  is still sent together and the server's own `blocked` response is what
+  the client now correctly does nothing destructive with. Also still
+  open: tracking *consecutive transport failures* (a thrown error from
+  `pushOps` itself, distinct from a per-op `failed` result) for the
+  network-down indicator — Q10, `SyncStatusChip.tsx`'s job below.
+- `HttpTransport` (`sync/httpTransport.ts`) — **shipped**: implements
+  `SyncTransport` against the real endpoints, tested against a mocked
+  `fetch` for all five push statuses and a paginated pull. A 401 throws
+  `SyncAuthError`, caught by `engine.ts` and surfaced as a dispatched
+  event rather than reaching the generic `console.error` Q10 already
+  flagged. **Not reachable in the running app yet**: nothing in `web/`
+  calls `POST /api/devices/register` or stores what it returns —
+  `db/deviceRegistration.ts`'s "registration" is still the pre-existing
+  local seed binding. `selectSyncTransport` is the deliberate switch
+  (Fake unless a real token is passed in); `App.tsx` always passes `null`
+  today, so the running app is unchanged until that separate, unbuilt
+  task exists.
 - `reviewActions.ts`: "خليها كده" (keep mine) and "شيلها" (discard mine)
   must diverge into real, different operations instead of both calling
-  the same dismiss — Q6.
+  the same dismiss — Q6. Untouched by this task, deliberately.
 - `reviewSummary.ts`: remove the raw-machine-code fallback; every reason
-  shown to the assistant must be a real Arabic label — Q11.
+  shown to the assistant must be a real Arabic label — Q11. Untouched by
+  this task, deliberately (grouped with `reviewActions.ts` as the next,
+  UX-scoped step).
 - `SyncStatusChip.tsx`: a fourth state distinguishing "network interface
   down" from "server not responding," still small and non-intrusive,
   never blocking — Q10.
 - Day screen: a visible "this booking was rejected, rebook" state for a
   visit whose `create` lost a slot conflict, not inferable only from the
-  sync chip — Q7. Depends on the pull endpoint existing first (the
-  rejected device only finds out its own push failed, which it already
-  can; nothing server-side rewrites a row for it to notice).
-- A retention policy enforcing the brief's 60-days-back / 60-days-forward
-  local storage window — Q9.
+  sync chip — Q7. The pull endpoint it depends on now exists and is wired
+  up end to end (`runPullCycle`); this is the remaining, UI-only half.
+- A client-side retention policy pruning `visits` and `day_state` rows
+  outside the brief's 60-days-back/60-days-forward window from IndexedDB
+  — Q9. **Not implemented in this task** (explicitly out of scope — see
+  Q9's own status below for why this is a *device-storage* concern, not a
+  pull-endpoint one). Reference entities (`patients`, `services`,
+  `memberships`, ...) are kept whole regardless of age, for the identical
+  reason the pull endpoint itself does not window them: no principled
+  date exists to prune them by.
 - No change to local `audit_log` writing or `undoMostRecentMutation` — Q1
   confirms these stay device-local permanently.
 
-**api/** — status as of `POST /api/sync/push` shipping (see
-`api/docs/rls.md`'s "The sync push endpoint"):
-- ~~Two new endpoints~~ — **`POST /api/sync/push` shipped.
-  `GET /api/sync/pull` still doesn't exist** — Q8, a separate later step.
+**api/** — status as of both endpoints shipping (see api/docs/rls.md's
+"The sync push endpoint" / "The sync pull endpoint"):
+- ~~Two new endpoints~~ — **both shipped**: `POST /api/sync/push` and
+  `GET /api/sync/pull` — Q8.
 - ~~A new server-side sync ledger table with an identity-column `seq`~~ —
-  **shipped** (`sync_ledger`, `docs/schema.md`'s "v12"/"v13" additions) —
-  Q9. The pull endpoint that would actually use it as a cursor is still
-  the open half.
+  **shipped** (`sync_ledger`, `docs/schema.md`'s "v12"/"v13" additions),
+  **and now actually used as the pull cursor** — Q9.
 - ~~A `rev` integer column on every syncable entity table...~~ —
   **shipped**, and the push endpoint enforces the `base_rev` check — Q5
   (edit conflicts).
@@ -83,11 +110,11 @@ in this document create, for whenever sync implementation starts.
   conflicts).
 - ~~When an accepted sync_op is applied, the server writes its own
   `audit_log` row...~~ — **shipped** — Q1.
-- A `failed`-equivalent response status — **shipped** server-side
-  (`PushOpResult`'s fourth variant doesn't exist client-side yet, but the
-  API returns exactly this shape). Still open: the retry/backoff policy
-  and reference-code escalation are client behavior, `HttpTransport`'s
-  job — Q11.
+- ~~A `failed`-equivalent response status~~ — **shipped on both sides**:
+  the server returns it, and `PushOpResult`'s fourth (and fifth, `blocked`)
+  variant now exists client-side too, with the retry/backoff policy and
+  reference-code escalation `HttpTransport`'s doc comment always said
+  were the remaining half — Q11.
 
 ---
 
@@ -413,11 +440,16 @@ them as one rule would be wrong:
   takes one cursor and returns a batch (`PullSinceResult.ops`). Both are
   already batched, not per-op, in the interface itself. Brief confirmed
   silent on endpoint topology.
-- **Status:** decided; **both endpoints are now shipped** —
-  `POST /api/sync/push` and `GET /api/sync/pull` (see `api/docs/rls.md`'s
-  "The sync pull endpoint"). `web/`'s `HttpTransport` implementing
-  `SyncTransport` against them is the next, separate step — no web changes
-  landed with the pull endpoint itself.
+- **Status:** decided; **both endpoints are shipped**
+  (`POST /api/sync/push`, `GET /api/sync/pull` — see `api/docs/rls.md`'s
+  "The sync pull endpoint"), and **`web/src/sync/httpTransport.ts` now
+  implements `SyncTransport` against them**, tested against a mocked
+  `fetch`. What's still missing is a real credential to construct it
+  with: nothing in `web/` calls `POST /api/devices/register` yet, so
+  `HttpTransport` cannot be switched on in the running app until that
+  separate registration-integration task exists — see
+  `HttpTransport`'s own doc comment and `selectSyncTransport`, the
+  explicit Fake-vs-Http seam this now goes through.
 
 ### 9. How does a device know what it's missing — a cursor, a server sequence, timestamps?
 
@@ -524,22 +556,27 @@ them as one rule would be wrong:
   behavior, dismissing didn't fix anything and the op resent on the next
   cycle — a persistent bug would become a silent, recurring
   reject-review-dismiss-retry loop with no escalation path. "Ops behind
-  it" are not blocked (see Q2) — everything in `toSend` is attempted
-  regardless of any other op's result.
+  it" were not blocked at the time this was written — see Q2, since
+  superseded: the server now returns `blocked` for exactly this case.
 - **Constraint:** `web/src/sync/transport.ts:4-9`,
   `web/src/sync/reviewSummary.ts:11-20`, `web/src/sync/engine.ts:24-32`.
   Brief checked in full — confirmed genuinely silent on distinguishing a
   server bug from a business conflict; this decision is this plan's own,
   not derived from the brief.
-- **Status:** decided; the server half is shipped.
-  `POST /api/sync/push` returns `failed` (with a generic reason like
-  `internal_error`, `org_mismatch`, `future_dated_created_at`) for exactly
-  this class of thing, and never leaks a SQLSTATE or query text doing it
+- **Status:** decided; **shipped on both sides**. `POST /api/sync/push`
+  returns `failed` (with a generic reason like `internal_error`,
+  `org_mismatch`, `future_dated_created_at`) for exactly this class of
+  thing, and never leaks a SQLSTATE or query text doing it
   (`tests/Feature/Rls/SyncPushTest.php` proves this against both a clean
-  conflict path and a genuine caught `QueryException`). Still open, and
-  still web-side: `web/src/sync/transport.ts`'s `PushOpResult` type itself,
-  the retry/backoff policy, and the reference-code escalation — all
-  `HttpTransport`'s job, a later step.
+  conflict path and a genuine caught `QueryException`). `web/src/sync/transport.ts`'s
+  `PushOpResult` now carries `failed` (and `blocked`); `sync/engine.ts`'s
+  `runSyncCycle` retries a `failed` op with exponential backoff
+  (`next_retry_at`, capped) and never writes it to `sync_review`;
+  `describeFailedOpEscalation` returns a stable reference code once a
+  retry cap is reached. Still open: `reviewSummary.ts`'s raw-machine-code
+  fallback (a separate, UX-scoped step grouped with `reviewActions.ts`'s
+  Q6 work) and any actual UI surfacing the escalation reference code —
+  this decision ships the data/retry mechanics, not a screen.
 
 ---
 
@@ -625,15 +662,22 @@ them as one rule would be wrong:
   filed this session. Sections 8 (sync/offline architecture), 9 (mandatory
   code rules, rule 10 on audit attribution), and 10 (isolation and auth,
   trap #4 on token scope) are what most of the decisions above rest on.
-- `web/src/sync/engine.ts` — the push cycle: what gets sent, in what
-  order, and how results are applied (or not) to `sync_ops`/`sync_review`.
+- `web/src/sync/engine.ts` — the push cycle (`runSyncCycle`) and the pull
+  cycle (`runPullCycle`): what gets sent, in what order, how results are
+  applied (or not) to `sync_ops`/`sync_review`, and how a pulled change is
+  applied to its local table.
 - `web/src/sync/transport.ts` — the `SyncTransport` interface a real
   Laravel backend must implement; the contract every question about
-  endpoint shape is checked against.
-- `web/src/sync/fakeTransport.ts` — the only implementation that exists
-  today; its behavior (dedup, constraint-based conflict detection,
-  timestamp-based cursor) is what every "current behavior" finding above
-  is checked against.
+  endpoint shape is checked against. Now matches the real endpoints'
+  actual shapes (five `PushOpResult` statuses, `PulledChange`), not the
+  provisional shape written before either endpoint existed.
+- `web/src/sync/fakeTransport.ts` — the test-only stand-in; its behavior
+  (dedup, constraint-based conflict detection, timestamp-based cursor) is
+  what every "current behavior" finding above is checked against.
+- `web/src/sync/httpTransport.ts` — `HttpTransport`, the real
+  implementation, and `selectSyncTransport`, the Fake-vs-Http switch —
+  see its own doc comment for why nothing in the running app can select
+  Http yet.
 - `web/src/sync/useOnlineStatus.ts`, `web/src/screens/day/SyncStatusChip.tsx`,
   `web/src/sync/reviewActions.ts`, `web/src/sync/reviewSummary.ts` — what
   the assistant actually sees and can do today.
@@ -649,12 +693,14 @@ them as one rule would be wrong:
   precedent Q9 reuses), "One role per provisioning function", "Audit
   attribution is enforced in the database" (Q13's shipped fix),
   "Registration: the second door" (the token-derived-identity pattern
-  Q12 leans on), and "The sync push endpoint" (Q1/Q2/Q3/Q4/Q5/Q11/Q12's
-  shipped implementation).
+  Q12 leans on), "The sync push endpoint", and "The sync pull endpoint"
+  (Q1/Q2/Q3/Q4/Q5/Q9/Q11/Q12's shipped implementation).
 - `App\Http\Controllers\SyncPushController`, `App\Support\Sync\SyncOpApplier`,
   `App\Support\Sync\SyncableTables`, `App\Http\Requests\PushSyncOpsRequest`
-  — the push endpoint itself. `tests/Feature/Rls/SyncPushTest.php` — its
-  test coverage.
+  — the push endpoint itself. `App\Http\Controllers\SyncPullController`,
+  `App\Support\Sync\SyncPuller`, `App\Http\Requests\PullSyncOpsRequest` —
+  the pull endpoint. `tests/Feature/Rls/SyncPushTest.php`,
+  `tests/Feature/Rls/SyncPullTest.php` — their test coverage.
 - `api/app/Http/Middleware/ApplyMembership.php`,
   `api/database/migrations/2026_09_11_170029_enable_rls_policies.php`,
   `api/database/migrations/2026_09_12_000011_enforce_audit_attribution.php`,

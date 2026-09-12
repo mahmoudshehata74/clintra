@@ -91,6 +91,7 @@ export async function createStaffMembership(db: ClintraDatabase, input: NewStaff
         pin_salt: pinSalt,
         pin_hash: pinHash,
         is_active: true,
+        rev: 1,
       };
       await write({
         table: db.memberships,
@@ -105,7 +106,7 @@ export async function createStaffMembership(db: ClintraDatabase, input: NewStaff
 
       if (input.locationScope === LocationScope.Listed) {
         for (const locationId of input.listedLocationIds) {
-          const link: MembershipLocation = { id: id(), membership_id: membershipId, location_id: locationId };
+          const link: MembershipLocation = { id: id(), membership_id: membershipId, location_id: locationId, rev: 1 };
           await write({
             table: db.membership_locations,
             entity: "membership_locations",
@@ -125,6 +126,7 @@ export async function createStaffMembership(db: ClintraDatabase, input: NewStaff
             id: id(),
             membership_id: membershipId,
             practitioner_id: linkedPractitionerId,
+            rev: 1,
           };
           await write({
             table: db.membership_practitioners,
