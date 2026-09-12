@@ -407,6 +407,17 @@ export interface SyncReview {
   payload: unknown;
   needs_review: boolean;
   created_at: Instant;
+  /**
+   * The rejected op's own action and base_rev, carried over so
+   * sync/reviewActions.ts can decide how to resolve this without
+   * re-reading a sync_ops row that may already be gone (e.g. after
+   * resolution deletes it). A `create` rejection (a slot/unique-key
+   * collision) has no server row to rebase onto under this entity_id at
+   * all — docs/sync-plan.md's Q7; only an `update`/`delete` rejection
+   * with a real `base_rev` is ever rebasable.
+   */
+  action: AuditAction;
+  base_rev: number | null;
 }
 
 /**

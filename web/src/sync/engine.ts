@@ -40,6 +40,57 @@ function notifySyncAuthError(): void {
 }
 
 /**
+ * How many consecutive transport-level failures (a thrown error from
+ * `pushOps`/`pullSince` itself — the network is down, or the server isn't
+ * responding at all, as opposed to an ordinary per-op `rejected`/`failed`
+ * result) before `SyncStatusChip` distinguishes "server not responding"
+ * from a plain "شغّال محلي" (docs/sync-plan.md's Q10). Three is enough to
+ * absorb one transient blip (a single dropped request) without flapping
+ * the indicator, and few enough that a real outage surfaces within about
+ * 30 seconds of normal cycle activity — not derived from the brief, which
+ * only constrains the UI treatment ("a small indicator only"), not the
+ * threshold.
+ */
+const TRANSPORT_FAILURE_THRESHOLD = 3;
+
+let consecutiveTransportFailures = 0;
+
+/** Dispatched whenever the transport-health counter crosses the threshold in either direction — SyncStatusChip's fourth state listens for this. */
+export const SYNC_TRANSPORT_STATUS_EVENT_NAME = "clintra:sync-transport-status";
+
+function notifyTransportStatusChanged(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(SYNC_TRANSPORT_STATUS_EVENT_NAME));
+  }
+}
+
+/** True once the transport has failed outright (not a per-op rejection) enough consecutive times in a row to call it "not responding" rather than a blip. */
+export function isServerUnreachable(): boolean {
+  return consecutiveTransportFailures >= TRANSPORT_FAILURE_THRESHOLD;
+}
+
+/** Test-only: reset between tests so one test's failures never leak into the next. */
+export function resetTransportHealthForTests(): void {
+  consecutiveTransportFailures = 0;
+}
+
+function recordTransportFailure(): void {
+  const wasUnreachable = isServerUnreachable();
+  consecutiveTransportFailures += 1;
+  if (!wasUnreachable && isServerUnreachable()) {
+    notifyTransportStatusChanged();
+  }
+}
+
+function recordTransportSuccess(): void {
+  const wasUnreachable = isServerUnreachable();
+  consecutiveTransportFailures = 0;
+  if (wasUnreachable) {
+    notifyTransportStatusChanged();
+  }
+}
+
+/**
  * How many consecutive `failed` results (never `rejected` — see
  * PushOpResult's own doc comment) an op can accumulate before it's treated
  * as needing support rather than quietly retried forever. Chosen as "more
@@ -113,12 +164,14 @@ export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport
   let results;
   try {
     results = await transport.pushOps(toSend);
+    recordTransportSuccess();
   } catch (error) {
     if (error instanceof SyncAuthError) {
       notifySyncAuthError();
       return;
     }
-    throw error;
+    recordTransportFailure();
+    return;
   }
 
   const now = new Date().toISOString();
@@ -164,6 +217,8 @@ export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport
       payload: op.payload,
       needs_review: true,
       created_at: now,
+      action: op.action,
+      base_rev: op.base_rev,
     });
   }
 }
@@ -194,12 +249,14 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
     let result;
     try {
       result = await transport.pullSince(cursor);
+      recordTransportSuccess();
     } catch (error) {
       if (error instanceof SyncAuthError) {
         notifySyncAuthError();
         return;
       }
-      throw error;
+      recordTransportFailure();
+      return;
     }
 
     for (const change of result.changes) {

@@ -359,7 +359,34 @@ them as one rule would be wrong:
   staff member. Never silently deleted."* Brief is silent on what the two
   review actions should each concretely do — that mechanism (rebase vs.
   discard-and-overwrite) is this plan's own decision, not the brief's.
-- **Status:** decided.
+- **Status:** shipped. `keepMine`/`discardMine` (`sync/reviewActions.ts`)
+  now genuinely differ, and differ again by *why* the op was rejected:
+  - `conflict_stale_rev` (a real edit conflict): keepMine rebases the
+    assistant's own payload onto the row's current server rev and resends
+    it; discardMine leaves the local row as the server's version
+    (already applied by the pull that made this resolvable — see below)
+    and just stops resending mine. Neither is offered until a pull has
+    actually brought in that current server row —
+    `getReviewComparison`'s `ready` flag, gated on the local row's `rev`
+    having moved past the rejected op's own `base_rev`. Before that, the
+    rejection response alone never carries the server's current row or
+    rev (`SyncOpApplier::rejected()` is `{op_id, status, reason}`,
+    nothing else) — there would be nothing real to show or rebase onto.
+  - `conflict_slot_taken`/`conflict_already_exists` (a `create` rejected
+    — Q7): there is no server row under this `entity_id` at all, ever,
+    so nothing needs a pull first; both actions are always immediately
+    offered. See Q7 below for what each one does.
+  - `conflict_day_closed`: a permanent state block, not a rev problem —
+    resending after a rebase would fail identically every time. keepMine
+    here only means "stop trying," never a rebase.
+  - The review sheet shows both versions before either action is
+    offered, generically across entity types (`describeReviewFieldDiffs`
+    — a field-by-field diff, not a per-entity layout; see Q7's own note
+    on why nothing in `clintra-screens.html` covers this).
+  - `reviewSummary.ts`'s raw-reason fallback is gone too (Q11's own
+    principle, extended here): an unrecognised reason now renders a
+    generic Arabic message plus a short reference code derived from the
+    review row's own id, never the raw string.
 
 ### 7. Two devices book the same slot while both offline. What happens?
 
@@ -403,21 +430,42 @@ them as one rule would be wrong:
   the losing device can use to notice and rebook, not a server-side
   rewrite of the winner's row — a later step, not a default anyone should
   read as unnoticed.
-- **Finding (current client-side behavior, still accurate):** The losing
-  device's create is correctly rejected once it syncs
-  (`conflict_slot_taken`), and correctly lands in `sync_review`. But the
-  rejected `sync_op`'s entity row is never touched —
-  `runSyncCycle`'s rejection branch only writes a `sync_review` row and
-  leaves `sync_ops` exactly as it was (`web/src/sync/engine.ts:42-57`). So
-  today the losing assistant's own screen keeps showing the slot as
-  booked with no visible distinction, until she notices the chip.
+- **Finding (superseded — the losing assistant's screen now does
+  distinguish this):** Until this task, the rejected `sync_op`'s entity
+  row was never touched, so the losing assistant's own screen kept
+  showing the slot as booked with no visible distinction until she
+  noticed the chip. That gap is closed:
+  - **"خليها كده" (keep mine):** the patient's visit record survives —
+    nothing about the patient link is lost — but its `status` becomes
+    `cancelled` with `cancel_reason: "sync_conflict"`
+    (`domain/visitStatus.ts`), which is what actually stops the slot
+    from looking confirmed (`occupiesSlot()` already treats `cancelled`
+    as freeing the slot — no new rendering logic was needed). The
+    futile rejected `create` is never resent (the slot is permanently
+    someone else's); rebooking the patient elsewhere is a manual,
+    ordinary booking afterward, not automatic.
+  - **"شيلها" (discard mine):** the phantom local row — never real
+    server-side in the first place — is deleted outright. There is
+    nothing to overwrite it *with*: the winner's own visit is whatever
+    the day grid already shows (or will, once pulled) under that slot.
+  - Both actions also drop every other still-unsent op for that same
+    `entity_id`, not just the original rejected one: any further op
+    naming a `create`-conflict's `entity_id` (e.g. `keepMine`'s own
+    cancellation write) would forever come back `conflict_stale_rev`
+    too, since no server row under that id will ever exist to update —
+    and `getReviewComparison` would then report *that* follow-up review
+    permanently not-ready, since a pull can never bring in a version of
+    a row that was never created. This id's story with the server ends
+    with the assistant's own choice, not a second silent conflict.
 - **Constraint:** `docs/reference/clintra-cli-brief.md`, section 8
   (quoted under Q4/Q6). `web/src/sync/engine.ts:36-57`,
-  `web/src/screens/day/SyncStatusChip.tsx:26-32`.
-- **Status:** decided, and shipped — narrower than the brief's literal
-  rule, deliberately. The web-visible "this booking failed, rebook"
-  experience is still open, and now explicitly depends on the pull
-  endpoint existing first, not just a web-rendering decision.
+  `web/src/sync/reviewActions.ts`, `web/src/screens/day/SyncStatusChip.tsx`.
+- **Status:** shipped, both server- and web-side. The remaining open
+  half is narrower than before: an explicit "rebook" affordance (a
+  one-tap shortcut from the now-cancelled row straight into the booking
+  sheet) rather than the assistant using the ordinary booking flow by
+  hand — a UX nicety, not a data-loss risk, since Q6's own guarantee
+  ("no path may lose both versions") already holds regardless.
 
 ---
 
@@ -533,7 +581,20 @@ them as one rule would be wrong:
   `docs/hardening.md:433` independently confirms `FakeTransport` can't
   exercise this today ("`setOffline` does not affect `FakeTransport` at
   all").
-- **Status:** decided.
+- **Status:** shipped. `sync/engine.ts` tracks consecutive transport-level
+  failures — a thrown error from `pushOps`/`pullSince` itself, never an
+  ordinary per-op `rejected`/`failed` result, and never a `SyncAuthError`
+  (that's a different, already-handled signal — Q10 isn't about a dead
+  credential). Three in a row (`TRANSPORT_FAILURE_THRESHOLD`) flips
+  `isServerUnreachable()`, dispatched via `SYNC_TRANSPORT_STATUS_EVENT_NAME`
+  only when the threshold is actually crossed in either direction, not on
+  every failure — `SyncStatusChip`'s new fourth state ("السيرفر مش راد"),
+  read through `sync/useTransportHealth.ts`'s `useServerUnreachable`
+  hook. Priority order is unchanged from before: `needs_review` still
+  outranks this, which outranks `!isOnline`'s existing "شغّال محلي".
+  Three was chosen to absorb one transient blip without flapping the
+  indicator, not derived from the brief (which only constrains the UI
+  treatment, never a threshold).
 
 ### 11. Server rejects an op because RLS refuses it (a real bug, not a conflict). What happens to that op and to the ops behind it?
 

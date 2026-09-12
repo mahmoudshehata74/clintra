@@ -127,12 +127,24 @@ export const dayScreenStrings = {
   // The sync status chip in the day header, and its needs-review list.
   syncOnline: "متصل",
   syncLocal: "شغّال محلي",
+  // The network interface is up but the server itself keeps failing to
+  // respond — distinct from syncLocal (docs/sync-plan.md's Q10;
+  // sync/engine.ts's consecutive-transport-failure counter).
+  syncServerUnreachable: "السيرفر مش راد",
   syncNeedsReview: "فيه حاجة محتاجة مراجعة",
   syncReviewListTitle: "حاجات محتاجة مراجعة",
-  // Both actions dismiss the review row the same way for now — see
-  // sync/reviewActions.ts for why a real resolution flow is a later task.
+  // The two review actions now genuinely differ — sync/reviewActions.ts's
+  // keepMine/discardMine.
   syncReviewKeepAction: "خليها كده",
   syncReviewRemoveAction: "شيلها",
+  // Shown instead of the two actions until getReviewComparison reports
+  // ready — offering a choice before the data to choose from exists would
+  // be a blind choice (docs/sync-plan.md's Q6).
+  syncReviewWaitingForServer: "في انتظار تحديث من السيرفر…",
+  syncReviewMineLabel: "نسختي",
+  syncReviewServerLabel: "نسخة السيرفر",
+  // A create-conflict's "server" side, shown in place of syncReviewServerLabel's row — there is no server row under this id at all (Q7).
+  syncReviewNoServerRow: "مفيش نسخة على السيرفر — الميعاد ده اتحجز لمريض تاني",
 
   // The overflow menu's invoice entry, only shown once a visit has one.
   invoiceMenuLabel: "الفاتورة",

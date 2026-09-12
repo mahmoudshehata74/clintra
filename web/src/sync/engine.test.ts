@@ -7,12 +7,20 @@ import { mutate } from "../db/mutate";
 import { getDeviceId } from "../db/deviceRegistration";
 import { AuditAction, type SyncOp, type Visit } from "../db/types";
 import { FakeTransport } from "./fakeTransport";
-import { describeFailedOpEscalation, runPullCycle, runSyncCycle, startSyncEngine } from "./engine";
+import {
+  describeFailedOpEscalation,
+  isServerUnreachable,
+  resetTransportHealthForTests,
+  runPullCycle,
+  runSyncCycle,
+  startSyncEngine,
+} from "./engine";
 import { SyncAuthError, type PulledChange, type PullSinceResult, type PushOpResult, type SyncTransport } from "./transport";
 
 let db: ClintraDatabase;
 
 beforeEach(() => {
+  resetTransportHealthForTests();
   db = new ClintraDatabase(`clintra-sync-engine-test-${crypto.randomUUID()}`);
 });
 
@@ -515,5 +523,83 @@ describe("SyncAuthError: a 401 is surfaced, never left to throw uncaught into a 
     };
 
     await expect(runPullCycle(db, transport)).resolves.toBeUndefined();
+  });
+});
+
+describe("isServerUnreachable: the sync chip's fourth state (docs/sync-plan.md's Q10)", () => {
+  async function registerDevice() {
+    await db.device.add({
+      id: getDeviceId(),
+      org_id: "org-1",
+      location_id: "location-1",
+      registered_at: new Date().toISOString(),
+      pull_cursor: null,
+      membership_id: null,
+      token: null,
+    });
+  }
+
+  function throwingTransport(): SyncTransport {
+    return {
+      pushOps: async () => {
+        throw new Error("network down");
+      },
+      pullSince: async () => {
+        throw new Error("network down");
+      },
+    };
+  }
+
+  it("stays false below the consecutive-failure threshold, then flips true once it's reached", async () => {
+    await registerDevice();
+    const transport = throwingTransport();
+
+    expect(isServerUnreachable()).toBe(false);
+    await runPullCycle(db, transport); // 1
+    expect(isServerUnreachable()).toBe(false);
+    await runPullCycle(db, transport); // 2
+    expect(isServerUnreachable()).toBe(false);
+    await runPullCycle(db, transport); // 3 — the threshold
+    expect(isServerUnreachable()).toBe(true);
+  });
+
+  // SYNC_TRANSPORT_STATUS_EVENT_NAME's actual window dispatch is
+  // untestable in this suite (no jsdom — see vitest.config.ts), the same
+  // as SyncAuthError's own event in the tests above; both are guarded by
+  // an identical `typeof window !== "undefined"` check. What's tested
+  // here is the state transition the event exists to announce.
+
+  it("returns to normal (and fires the event again) on the very next success — no lingering unreachable state", async () => {
+    await registerDevice();
+    const failing = throwingTransport();
+    await runPullCycle(db, failing);
+    await runPullCycle(db, failing);
+    await runPullCycle(db, failing);
+    expect(isServerUnreachable()).toBe(true);
+
+    const recovered: SyncTransport = {
+      pushOps: async () => [],
+      pullSince: async () => ({ cursor: "", hasMore: false, changes: [] }),
+    };
+    await runPullCycle(db, recovered);
+
+    expect(isServerUnreachable()).toBe(false);
+  });
+
+  it("a SyncAuthError never counts as a transport failure — it is a different, already-handled signal", async () => {
+    await registerDevice();
+    const authFailing: SyncTransport = {
+      pushOps: async () => [],
+      pullSince: async () => {
+        throw new SyncAuthError();
+      },
+    };
+
+    await runPullCycle(db, authFailing);
+    await runPullCycle(db, authFailing);
+    await runPullCycle(db, authFailing);
+    await runPullCycle(db, authFailing);
+
+    expect(isServerUnreachable()).toBe(false);
   });
 });

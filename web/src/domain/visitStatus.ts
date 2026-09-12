@@ -18,6 +18,15 @@ export const CancelReason = {
   Clinic: "clinic",
   NoShow: "no_show",
   Postpone: "postpone",
+  /**
+   * "Keep mine" on a lost slot conflict (sync/reviewActions.ts,
+   * docs/sync-plan.md's Q7): the create that would have booked this slot
+   * was rejected because another device's already-accepted visit holds
+   * it. The patient's record survives — this status change is what keeps
+   * the slot from looking confirmed, per Q7's own wording — but nothing
+   * automatically finds it a new time; that's a manual rebooking.
+   */
+  SyncConflict: "sync_conflict",
 } as const;
 
 export type CancelReason = (typeof CancelReason)[keyof typeof CancelReason];
