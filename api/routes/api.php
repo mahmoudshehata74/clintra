@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DeviceRegistrationController;
+use App\Http\Controllers\SyncPushController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -8,6 +9,11 @@ use Illuminate\Support\Facades\Route;
 // No auth middleware: this endpoint IS how a device gets its first
 // credential — see App\Http\Controllers\DeviceRegistrationController.
 Route::post('/devices/register', [DeviceRegistrationController::class, 'register']);
+
+// Matches SyncTransport.pushOps (web/src/sync/transport.ts) exactly — see
+// App\Http\Controllers\SyncPushController. Behind `membership`, on the
+// ordinary RLS-bound connection; no pull endpoint yet (a separate step).
+Route::middleware('membership')->post('/sync/push', [SyncPushController::class, 'push']);
 
 Route::get('/health', function () {
     $composer = json_decode(file_get_contents(base_path('composer.json')), true);

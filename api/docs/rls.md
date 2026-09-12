@@ -704,6 +704,125 @@ carries a plaintext token, a token hash, and a membership's
 `pin_hash`/`pin_salt` all at once, in its response body — never writes any
 of those, or the three DB connection passwords, to the log either.
 
+## The sync push endpoint
+
+`POST /api/sync/push` (`App\Http\Controllers\SyncPushController`,
+`App\Support\Sync\SyncOpApplier`) is the first entity write path that
+runs through the ordinary, RLS-bound `clintra_app` connection rather than
+a `SECURITY DEFINER`/`BYPASSRLS` function — everything before it
+(provisioning, registration) existed specifically to bootstrap around RLS;
+this is the first thing RLS is actually meant to constrain in the way
+every other future entity endpoint will inherit. It matches
+`SyncTransport.pushOps` exactly (`web/src/sync/transport.ts`): an array of
+ops in, one result per op out, same order, behind the `membership`
+middleware.
+
+**The syncable-table list, and one deliberate exclusion.** Exactly the 14
+tables `2026_09_12_000012_add_row_versioning.php` gave a `rev` column —
+derived from what `web/src/db/mutate.ts` callers actually pass as
+`entity:`, not the full v1 table list. `users` stays excluded here too,
+for the same reason: no single owning org.
+
+**Four result statuses, one meaning each** (`App\Support\Sync\SyncOpApplier`):
+
+- `accepted` — applied; the response carries the new `rev`.
+- `duplicate` — `op_id` already in `sync_ledger`, checked before any
+  write, never reapplied (the brief's own idempotency rule).
+- `rejected` — a genuine business conflict: a stale `base_rev` (edit
+  conflict), an insert whose `entity_id` already has a row, or a slot
+  already taken by a chronologically older occupant.
+- `failed` — anything else: an org mismatch, a future-dated or
+  out-of-window `created_at`, or a caught `QueryException` this class
+  doesn't otherwise model (a foreign key pointing at nothing, for
+  instance). Never leaks the underlying SQLSTATE or query text — every
+  `QueryException` this class doesn't explicitly recognize is `report()`ed
+  server-side and mapped to the single generic reason `internal_error`.
+
+**Trust, per docs/sync-plan.md's Q12/Q13 — applied, not just decided.**
+`actor_membership_id`, and any table's own equivalent (`visits.created_by`,
+`payments.created_by`, `cash_close.closed_by` —
+`App\Support\Sync\SyncableTables::ACTOR_COLUMNS`), is always the
+token-resolved membership, overwritten after merging the payload,
+regardless of what the payload itself claims. `org_id` is different:
+where a table's payload carries one directly (`SyncableTables::DIRECT_ORG_ID_TABLES`),
+a mismatch against `current_org()` is checked explicitly and returns
+`failed` with a clean `org_mismatch` reason, before any write is
+attempted — for tables whose payload has no direct `org_id` at all, RLS's
+own `WITH CHECK` catches a transitive mismatch (a `location_id` or
+`practitioner_id` belonging to another org) as a `42501`, which this
+class's generic `QueryException` handling still turns into a clean
+`failed`/`internal_error` rather than surfacing the SQLSTATE.
+
+**Same-entity_id blocking, not a general op DAG** (the controller, not the
+applier — it sequences the batch and knows nothing else about ordering).
+Once an op targeting a given `entity_id` returns `rejected` or `failed`,
+every later op in the same batch targeting that same `entity_id` returns
+`blocked` without being attempted. Ops on other entities are unaffected.
+This is `docs/sync-plan.md`'s Q2 decision; the brief only mandates the
+ops arrive in chronological order per device, which this endpoint trusts
+and preserves rather than re-sorting.
+
+**A real bug, caught before it shipped**: catching a `QueryException`
+mid-transaction (to detect a unique-constraint violation on a slot table)
+leaves Postgres refusing every further statement in that transaction
+until a `ROLLBACK` — including the lookups slot-conflict resolution needs
+to run immediately afterward, in the *same* transaction. Wrapping just the
+risky `INSERT` in its own nested `DB::transaction()` makes Laravel issue a
+real `SAVEPOINT` (automatic once transaction depth is greater than one)
+and roll back to it on failure, leaving the outer transaction usable
+afterward instead of permanently aborted. Found by running the slot-conflict
+test, not by inspection — it failed with a raw "current transaction is
+aborted" error before this fix.
+
+**Slot conflicts: the chronologically older op wins, per the brief —
+implemented, not just decided.** `sync_ledger.client_created_at`
+(`docs/schema.md`'s "v13 additions") is where "when did the op that
+currently occupies this slot claim to happen" is read from — not the
+entity row itself, since `day_state` has no `created_at` column of its
+own. Both sides of the comparison are parsed into real instants before
+comparing (`Carbon::parse(...)->lessThan(...)`), never compared as raw
+strings — Postgres renders a stored `timestamptz` back in its own textual
+format on read, not the client's original ISO 8601 shape, so a string
+comparison between the two would not reliably reflect true chronological
+order. This was also caught by running the reversed-arrival-order test,
+not by inspection.
+
+Before trusting a slot op's `created_at` at all: reject as `failed` if
+it's in the future relative to server time (`future_dated_created_at`), or
+more than 60 days in the past (`created_at_outside_window`, the brief's
+own local-storage window). Every slot op's observed skew (server time
+minus claimed `created_at`) is recorded into `device.clock_skew_ms`
+regardless of whether the op is accepted, rejected, or failed, so a
+device's clock drifting slowly stays visible even while every individual
+op still lands inside the valid window.
+
+**Eviction uses only fields the web app already renders — no new status
+value.** The loser of a slot conflict is never deleted (the brief: "never
+silently deleted") and never left looking like it still holds the slot:
+`day_state` has no "displaced but still valid" concept of its own (it's a
+day's settings, not a booking), so the loser is simply removed and the
+winning insert takes its place. `visits` is displaced instead — marked
+`is_overbooked = true` with `unique_scheduled_at` cleared (frees the
+slots-mode constraint) and its `position` bumped to the end of the queue
+(frees the queue-mode constraint) — both applied unconditionally rather
+than parsing which specific constraint fired, since neither one is
+harmful to apply to a row that didn't actually collide on it. This is a
+deliberate, narrower choice than `docs/sync-plan.md`'s Q7 describes (a
+distinct, web-visible "needs-rebooking" state): that's a new status value
+the web app has no rendering logic for yet, out of scope for a
+server-only step. Displacing into fields the web already understands
+keeps the patient record intact and the row bookable-ish without asking
+for a web change this step explicitly excluded.
+
+**Confirmed, not assumed: this endpoint holds no privilege beyond the
+ordinary `clintra_app` connection.** It runs no `SECURITY DEFINER`
+function, owns no `BYPASSRLS` role, and is subject to every RLS policy
+like any other write through this connection — the grants audit that
+mattered for `register_device` (a `BYPASSRLS` path) simply doesn't apply
+here by construction.
+
+Full test coverage in `tests/Feature/Rls/SyncPushTest.php`.
+
 ## clintra_fixtures — test-only, never production
 
 A fourth role exists purely for the RLS test suite (`tests/Feature/Rls`) to

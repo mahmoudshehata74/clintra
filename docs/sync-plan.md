@@ -64,24 +64,27 @@ in this document create, for whenever sync implementation starts.
 - No change to local `audit_log` writing or `undoMostRecentMutation` — Q1
   confirms these stay device-local permanently.
 
-**api/**
-- Two new endpoints: `POST /api/sync/push`, `GET /api/sync/pull` — Q8
-  (already decided, unaffected by this round).
-- A new server-side sync ledger table with an identity-column `seq`,
-  backing the pull cursor — Q9 (schema itself still open).
-- A `rev` integer column on every syncable entity table, server-assigned
-  and incremented on each accepted write; reject a push whose `base_rev`
-  doesn't match — Q5 (edit conflicts).
-- For slot-constrained tables (`visits`, `day_state`): reject a push whose
-  `created_at` is in the future relative to server time; reject anything
-  outside the 60-day window; record per-device clock skew somewhere
-  inspectable — Q5 (slot conflicts).
-- When an accepted sync_op is applied, the server writes its own
-  `audit_log` row as a side effect, attributed to the token-resolved
-  membership — Q1. This is new application logic; today only the three
-  provisioning functions write `audit_log`.
-- A `failed`-equivalent response status, a retry/backoff policy, and a
-  reference-code mechanism for escalation — Q11.
+**api/** — status as of `POST /api/sync/push` shipping (see
+`api/docs/rls.md`'s "The sync push endpoint"):
+- ~~Two new endpoints~~ — **`POST /api/sync/push` shipped.
+  `GET /api/sync/pull` still doesn't exist** — Q8, a separate later step.
+- ~~A new server-side sync ledger table with an identity-column `seq`~~ —
+  **shipped** (`sync_ledger`, `docs/schema.md`'s "v12"/"v13" additions) —
+  Q9. The pull endpoint that would actually use it as a cursor is still
+  the open half.
+- ~~A `rev` integer column on every syncable entity table...~~ —
+  **shipped**, and the push endpoint enforces the `base_rev` check — Q5
+  (edit conflicts).
+- ~~For slot-constrained tables... reject a push whose `created_at` is in
+  the future... record per-device clock skew~~ — **shipped** — Q5 (slot
+  conflicts).
+- ~~When an accepted sync_op is applied, the server writes its own
+  `audit_log` row...~~ — **shipped** — Q1.
+- A `failed`-equivalent response status — **shipped** server-side
+  (`PushOpResult`'s fourth variant doesn't exist client-side yet, but the
+  API returns exactly this shape). Still open: the retry/backoff policy
+  and reference-code escalation are client behavior, `HttpTransport`'s
+  job — Q11.
 
 ---
 
@@ -132,7 +135,10 @@ in this document create, for whenever sync implementation starts.
   own grants agree independently, not by coincidence of one covering for
   the other. See `api/docs/rls.md`'s "Redundant grants revoked, not just
   inert."
-- **Status:** decided.
+- **Status:** decided, and shipped. `POST /api/sync/push` writes its own
+  `audit_log` row (attributed to the token-resolved membership) as a side
+  effect of every accepted op — see `api/docs/rls.md`'s "The sync push
+  endpoint."
 
 ### 2. Do sync_ops push in strict per-device order, and what happens when op N fails but N+1 would succeed?
 
@@ -156,7 +162,11 @@ in this document create, for whenever sync implementation starts.
   failure-blocks-later-ops half; that part is this document's own
   decision, not a brief requirement.) `web/src/sync/engine.ts:27-34`,
   `web/src/sync/fakeTransport.ts:49-93`.
-- **Status:** decided (both halves).
+- **Status:** decided, and shipped server-side — `SyncPushController`
+  sequences the batch and returns `blocked` for any op behind a
+  `rejected`/`failed` one on the same `entity_id`; different entities are
+  never blocked. The client still sends the whole batch in one call
+  regardless (that half is unchanged).
 
 ### 3. Are ops idempotent on replay after a network failure that succeeded server-side but lost the response? What makes them so.
 
@@ -171,7 +181,10 @@ in this document create, for whenever sync implementation starts.
   *before* touching the entity table, returning `"duplicate"` without
   reapplying anything. `op_id` is generated client-side per op
   (`web/src/db/mutate.ts:73`).
-- **Status:** decided.
+- **Status:** decided, and shipped server-side — `SyncOpApplier` checks
+  `sync_ledger` for the `op_id` before any write, in the same transaction,
+  and returns `duplicate` without reapplying anything, mirroring
+  `FakeTransport`'s own mechanism exactly.
 
 ---
 
@@ -204,17 +217,18 @@ them as one rule would be wrong:
     to collide on at all). Detected by a new per-row `rev` counter (Q5),
     closing the "no conflict detection at all" gap this question
     originally found.
-- **Pre-launch TODO (a bug to fix before shipping sync, not an open
-  question):** nothing in the current code compares timestamps at all for
-  slot conflicts. `FakeTransport.pushOne` relies entirely on the
-  database's native unique-constraint race — whichever op's `INSERT`
-  happens to execute first server-side wins. Over a real network, arrival
-  order can disagree with chronological (`created_at`) order — a device
-  that booked earlier but reconnected later could still lose to a device
-  that booked later but reconnected sooner. That is a direct violation of
-  the brief's "the chronologically older wins" (section 8), and whatever
-  implements Q5's slot-conflict rule for real must actually compare
-  timestamps, not rely on incidental processing order.
+- **Pre-launch TODO — fixed, not just found.** The gap this section
+  originally flagged (nothing compared timestamps for slot conflicts, so
+  arrival order could disagree with chronological order over a real
+  network) is closed: `SyncOpApplier::resolveSlotConflict` reads the
+  existing occupant's original `created_at` from `sync_ledger.client_created_at`
+  and compares it against the incoming op's own, as real parsed instants
+  (never as raw strings — Postgres renders a stored `timestamptz` back in
+  its own textual format on read, not the client's ISO 8601 shape, which
+  was a real bug caught by the reversed-arrival-order test before this
+  landed, not by inspection). `tests/Feature/Rls/SyncPushTest.php`'s
+  "chronologically older wins" test proves this with arrival order
+  reversed, matching this section's own instruction.
 - **Constraint:** `docs/reference/clintra-cli-brief.md`, section 8:
   *"On a conflict over the same slot: the chronologically older wins..."*
   (settles slot conflicts; brief is silent on edit conflicts — confirmed
@@ -224,9 +238,10 @@ them as one rule would be wrong:
   and `2026_09_11_170016_create_day_state_table.php:29`.
   `api/database/migrations/2026_09_11_170014_create_patients_table.php:9-10`
   (phone deliberately non-unique — why `patients` had zero detection
-  before this decision). `web/src/sync/fakeTransport.ts:73-86` (today's
-  detection is `Dexie.ConstraintError` or nothing).
-- **Status:** decided.
+  before this decision). `App\Support\Sync\SyncOpApplier::resolveSlotConflict`
+  (the fix); `api/docs/rls.md`'s "The sync push endpoint" for the full
+  writeup.
+- **Status:** decided, and shipped.
 
 ### 5. Last-write-wins, per-field, or per-entity rules? Where does the timestamp come from — device clock or server?
 
@@ -258,7 +273,13 @@ them as one rule would be wrong:
   rule, quoted under Q4); brief confirmed silent on edit-conflict
   resolution after reading the full document. `web/src/db/types.ts:332-341`,
   `web/src/sync/fakeTransport.ts:71`, `web/src/db/mutate.ts:38`.
-- **Status:** decided.
+- **Status:** decided, and shipped server-side for both types.
+  `App\Support\Sync\SyncOpApplier` implements the slot-conflict clock rule
+  (`resolveSlotConflict`) and the edit-conflict `base_rev` check
+  (`applyUpdate`/`applyDelete`, `WHERE id = ? AND rev = ?`) exactly as
+  decided here. Not yet true client-side: `web/src/db/types.ts`'s `SyncOp`
+  still carries no `base_rev` field — that's `HttpTransport`'s job, a
+  later step.
 
 ### 6. Which conflicts land in sync_review for a human, and which resolve silently? The brief says the assistant must never lose data.
 
@@ -322,7 +343,17 @@ them as one rule would be wrong:
 - **Constraint:** `docs/reference/clintra-cli-brief.md`, section 8
   (quoted under Q4/Q6). `web/src/sync/engine.ts:36-57`,
   `web/src/screens/day/SyncStatusChip.tsx:26-32`.
-- **Status:** decided.
+- **Status:** decided; the server half is shipped, narrower than
+  described here on purpose. `SyncOpApplier::evictSlotLoser` never
+  deletes the loser and never leaves it looking confirmed, but displaces
+  it using only fields the web app already renders (`visits`:
+  `is_overbooked = true`, `unique_scheduled_at` cleared, `position`
+  bumped to the end of the queue; `day_state`: removed outright, since it
+  has no "displaced but still valid" concept of its own) rather than the
+  distinct "needs-rebooking" status value described above — introducing
+  one is a web-rendering decision explicitly out of scope for a
+  server-only step. See `api/docs/rls.md`'s "The sync push endpoint" for
+  the reasoning. The web-visible distinct state itself is still open.
 
 ---
 
@@ -345,7 +376,10 @@ them as one rule would be wrong:
   takes one cursor and returns a batch (`PullSinceResult.ops`). Both are
   already batched, not per-op, in the interface itself. Brief confirmed
   silent on endpoint topology.
-- **Status:** decided.
+- **Status:** decided; the push half is shipped
+  (`POST /api/sync/push`). `GET /api/sync/pull` does not exist yet —
+  explicitly out of scope for the push-endpoint step, a separate one to
+  follow.
 
 ### 9. How does a device know what it's missing — a cursor, a server sequence, timestamps?
 
@@ -375,7 +409,13 @@ them as one rule would be wrong:
   timestamp specifically). Brief confirmed silent on the specific
   mechanism (identity column vs. something else) — the 60-day window is
   the only concrete constraint it gives here.
-- **Status:** decided on mechanism; open on schema.
+- **Status:** decided on mechanism, and the schema question is now
+  resolved too: `sync_ledger` exists (`docs/schema.md`'s "v12 additions"),
+  with `client_created_at` added on top of the original design
+  ("v13 additions" — needed once the push endpoint actually had to compare
+  timestamps for slot conflicts, see Q4/Q5). What's still open: the pull
+  endpoint itself, `GET /api/sync/pull`, doesn't exist — this decision
+  fixes what the cursor *is*, not how a device retrieves one yet.
 
 ### 10. What does the assistant see while sync is down, and what is she blocked from doing, if anything?
 
@@ -433,7 +473,15 @@ them as one rule would be wrong:
   Brief checked in full — confirmed genuinely silent on distinguishing a
   server bug from a business conflict; this decision is this plan's own,
   not derived from the brief.
-- **Status:** decided.
+- **Status:** decided; the server half is shipped.
+  `POST /api/sync/push` returns `failed` (with a generic reason like
+  `internal_error`, `org_mismatch`, `future_dated_created_at`) for exactly
+  this class of thing, and never leaks a SQLSTATE or query text doing it
+  (`tests/Feature/Rls/SyncPushTest.php` proves this against both a clean
+  conflict path and a genuine caught `QueryException`). Still open, and
+  still web-side: `web/src/sync/transport.ts`'s `PushOpResult` type itself,
+  the retry/backoff policy, and the reference-code escalation — all
+  `HttpTransport`'s job, a later step.
 
 ---
 
@@ -466,8 +514,15 @@ them as one rule would be wrong:
   every request, never cached from a client-supplied value) and
   `api/database/migrations/2026_09_11_170029_enable_rls_policies.php`
   (org/location `WITH CHECK` policies throughout).
-- **Status:** decided — now grounded directly in brief text, not only in
-  precedent. The concrete sync endpoint doesn't exist yet to apply it to.
+- **Status:** decided, and shipped. `App\Support\Sync\SyncOpApplier`
+  applies exactly this: `org_id` is validated where a table's payload
+  carries one directly and rejected on mismatch (`failed`/`org_mismatch`,
+  never silently substituted); every "who did this" column
+  (`actor_membership_id`, and its per-table equivalents —
+  `visits.created_by`, `payments.created_by`, `cash_close.closed_by`) is
+  always overwritten with the token-resolved membership, regardless of
+  what the payload claims. See `api/docs/rls.md`'s "The sync push
+  endpoint."
 
 ### 13. Can a device push an audit_log row attributed to a different membership? It must not be able to. How is that enforced?
 
@@ -528,12 +583,20 @@ them as one rule would be wrong:
   how `audit_log`, `sync_ops`, and `sync_review` rows are shaped and
   written locally.
 - `docs/schema.md` — `audit_log` (v1, "v11 additions"), `sync_ops` (v2),
-  `sync_review` (v6), `device` (v8, "device.membership_id").
+  `sync_review` (v6), `device` (v8, "device.membership_id"), "v12
+  additions" (`rev`, `sync_ledger`, clock-skew columns) and "v13
+  additions" (`sync_ledger.client_created_at`, the widened
+  `clock_skew_ms`) — the schema the push endpoint actually runs against.
 - `api/docs/rls.md` — "Sequence-backed audit ordering" (the seq-counter
   precedent Q9 reuses), "One role per provisioning function", "Audit
-  attribution is enforced in the database" (Q13's shipped fix), and
+  attribution is enforced in the database" (Q13's shipped fix),
   "Registration: the second door" (the token-derived-identity pattern
-  Q12 leans on).
+  Q12 leans on), and "The sync push endpoint" (Q1/Q2/Q3/Q4/Q5/Q11/Q12's
+  shipped implementation).
+- `App\Http\Controllers\SyncPushController`, `App\Support\Sync\SyncOpApplier`,
+  `App\Support\Sync\SyncableTables`, `App\Http\Requests\PushSyncOpsRequest`
+  — the push endpoint itself. `tests/Feature/Rls/SyncPushTest.php` — its
+  test coverage.
 - `api/app/Http/Middleware/ApplyMembership.php`,
   `api/database/migrations/2026_09_11_170029_enable_rls_policies.php`,
   `api/database/migrations/2026_09_12_000011_enforce_audit_attribution.php`,

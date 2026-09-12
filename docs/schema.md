@@ -517,6 +517,32 @@ compute it (comparing a device's claimed `created_at` against the server's
 own clock). The rejection rules themselves (future-dated ops, ops outside
 the 60-day window) belong with that future endpoint, not this version.
 
+## v13 additions
+
+The push endpoint (`POST /api/sync/push` — see `api/docs/rls.md`'s "The
+sync push endpoint") turned two of v12's "storage only, no enforcement
+yet" additions into load-bearing columns, and found one was sized wrong.
+
+### `sync_ledger.client_created_at`
+
+Added because implementing v12's own slot-conflict rule required it:
+comparing "which op is chronologically older" needs the *client's*
+claimed timestamp for whichever op currently occupies a slot, and not
+every syncable table carries its own `created_at` column (`day_state`
+doesn't). `sync_ledger` already records one row per accepted op, so this
+is the single, uniform place every syncable table's original op timestamp
+is now guaranteed to be recorded, regardless of whether the entity table
+itself has anywhere to put it.
+
+### `device.clock_skew_ms` widened to `bigint`
+
+Shipped in v12 as a plain `integer` (max ~2.1 billion). 60 days in
+milliseconds — the brief's own window, the exact case this column exists
+to make visible — is already ~5.18 billion, past `integer`'s range before
+the skew itself is even unusually large. A real push against this column
+overflowed immediately once the 60-day-window test was written. Widened
+to `bigint`.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.

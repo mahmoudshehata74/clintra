@@ -76,6 +76,13 @@ class ApplyMembership
                 }
             }
 
+            // Exposed for routes that need to attribute a write to the
+            // calling device (e.g. sync_ledger.device_id) — membership_id
+            // itself is deliberately not duplicated here, since
+            // current_membership() is already the single source of truth
+            // for it and every existing route reads it that way.
+            $request->attributes->set('device_id', $credential['device_id']);
+
             return $next($request);
         });
     }

@@ -59,6 +59,7 @@ test('a duplicate op_id is rejected by the unique constraint', function () {
             'actor_membership_id' => $membership,
             'device_id' => $device,
             'applied_at' => now()->toIso8601String(),
+            'client_created_at' => now()->toIso8601String(),
         ]);
     } catch (QueryException $e) {
         $caught = $e;

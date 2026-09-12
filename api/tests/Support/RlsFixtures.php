@@ -384,6 +384,7 @@ trait RlsFixtures
             'actor_membership_id' => $actorMembershipId,
             'device_id' => $deviceId,
             'applied_at' => now(),
+            'client_created_at' => now(),
         ], $overrides));
 
         $this->fx()->table('sync_ledger')->insert($attributes);

@@ -30,8 +30,8 @@ $statement = $pdo->prepare("SELECT set_config('app.membership_id', ?, true)");
 $statement->execute([$membershipId]);
 
 $statement = $pdo->prepare(<<<'SQL'
-    INSERT INTO sync_ledger (op_id, org_id, entity, entity_id, rev, actor_membership_id, device_id, applied_at)
-    VALUES (?, ?, 'patients', ?, 1, ?, ?, now())
+    INSERT INTO sync_ledger (op_id, org_id, entity, entity_id, rev, actor_membership_id, device_id, applied_at, client_created_at)
+    VALUES (?, ?, 'patients', ?, 1, ?, ?, now(), now())
     RETURNING seq
 SQL);
 $statement->execute([$opId, $orgId, $entityId, $membershipId, $deviceId]);
