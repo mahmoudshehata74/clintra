@@ -525,14 +525,18 @@ yet" additions into load-bearing columns, and found one was sized wrong.
 
 ### `sync_ledger.client_created_at`
 
-Added because implementing v12's own slot-conflict rule required it:
-comparing "which op is chronologically older" needs the *client's*
-claimed timestamp for whichever op currently occupies a slot, and not
-every syncable table carries its own `created_at` column (`day_state`
-doesn't). `sync_ledger` already records one row per accepted op, so this
-is the single, uniform place every syncable table's original op timestamp
-is now guaranteed to be recorded, regardless of whether the entity table
-itself has anywhere to put it.
+Added to compare "which op is chronologically older" when resolving a
+slot conflict — an initial version of that resolution read this column
+back to decide whether an incoming op should evict the row currently
+holding a slot. That comparison (and the eviction it fed) was removed:
+the sync endpoint never modifies a row it wasn't given, so nothing reads
+this column back for a decision any more (see `api/docs/rls.md`'s "The
+sync endpoint is accept-or-reject only"). The column stays: `sync_ledger`
+already records one row per accepted op, and the client's claimed
+timestamp is still worth keeping as ledger history — not every syncable
+table carries its own `created_at` column (`day_state` doesn't), so this
+remains the one place every syncable table's original op timestamp is
+guaranteed to be recorded, even though it is currently write-only.
 
 ### `device.clock_skew_ms` widened to `bigint`
 
@@ -542,6 +546,26 @@ to make visible — is already ~5.18 billion, past `integer`'s range before
 the skew itself is even unusually large. A real push against this column
 overflowed immediately once the 60-day-window test was written. Widened
 to `bigint`.
+
+## v14 additions
+
+### `day_state`'s closed-row lock
+
+Once `day_state.is_closed` is `true`, the row can never be `UPDATE`d or
+`DELETE`d, by any role, through any connection — enforced by a trigger
+(`2026_09_12_000018_lock_closed_day_state.php`), not an RLS policy, since
+a trigger is the only mechanism that also binds `BYPASSRLS` roles. The
+brief is silent on whether a closed day is immutable (checked directly,
+not assumed); this is a standing decision this version makes, prompted by
+a real bug: an earlier version of the sync push endpoint's slot-conflict
+resolution could delete a `day_state` row unconditionally, including one
+with `is_closed = true` and a real, computed `avg_consult_minutes` — see
+`api/docs/rls.md`'s "The sync endpoint is accept-or-reject only." Only
+the transition *into* being closed (`false` -> `true`) is allowed; a row
+already closed is locked from that point on. Confirmed before this
+landed: no screen in `web/src/` currently sets `day_state.is_closed` to
+`true` at all, so this introduces no product conflict with anything
+shipped today.
 
 ## Rules
 

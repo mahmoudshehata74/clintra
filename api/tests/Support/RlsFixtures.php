@@ -24,6 +24,7 @@ trait RlsFixtures
         'audit_log',
         'sync_ledger',
         'visits',
+        'day_state',
         'membership_locations',
         'membership_practitioners',
         'activation_codes',
@@ -303,6 +304,26 @@ trait RlsFixtures
         ]);
 
         return $this->track('membership_locations', $id);
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    protected function makeDayState(string $practitionerId, string $locationId, string $date, array $overrides = []): string
+    {
+        $id = (string) Str::uuid();
+
+        $this->fx()->table('day_state')->insert(array_merge([
+            'id' => $id,
+            'practitioner_id' => $practitionerId,
+            'location_id' => $locationId,
+            'date' => $date,
+            'delay_minutes' => 0,
+            'is_closed' => false,
+            'avg_consult_minutes' => null,
+        ], $overrides));
+
+        return $this->track('day_state', $id);
     }
 
     protected function makePatient(string $orgId, string $fullName = 'patient'): string

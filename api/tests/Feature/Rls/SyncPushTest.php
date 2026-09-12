@@ -140,7 +140,18 @@ test('a stale base_rev is rejected and the row is unchanged', function () {
     $this->fx()->table('patients')->where('id', $createOp['entity_id'])->delete();
 });
 
-test('two ops for the same slot: the chronologically older wins, proven with arrival order reversed', function () {
+/**
+ * The sync endpoint never mutates a row it wasn't given (see
+ * api/docs/rls.md's "The sync push endpoint is accept-or-reject only").
+ * Two ops for the same slot always resolve by arrival order, never by
+ * created_at — even when the second op's created_at is chronologically
+ * older, it still loses, because winning would mean rewriting the first
+ * op's already-accepted row on the server's own initiative. This is a
+ * deliberate, accepted departure from the brief's literal "chronologically
+ * older wins" — see docs/sync-plan.md's Q4/Q5 for the exact scenario it
+ * costs and why.
+ */
+test('two ops for the same slot: whichever arrives first keeps it, even if the second op is chronologically older', function () {
     $credential = makeAuthenticatedDevice();
     $specialtyId = $this->makeSpecialtyTemplate(null);
     $practitionerId = $this->makePractitioner($credential['orgId'], $specialtyId);
@@ -149,102 +160,72 @@ test('two ops for the same slot: the chronologically older wins, proven with arr
     $older = now()->subMinutes(10)->toIso8601String();
     $newer = now()->subMinute()->toIso8601String();
 
-    $newerOp = dayStateOp($practitionerId, $credential['locationId'], $date, ['created_at' => $newer, 'delay_minutes' => 15]);
-    $olderOp = dayStateOp($practitionerId, $credential['locationId'], $date, ['created_at' => $older, 'delay_minutes' => 5]);
+    // Arrives first, but is chronologically NEWER.
+    $firstToArrive = dayStateOp($practitionerId, $credential['locationId'], $date, ['created_at' => $newer, 'delay_minutes' => 15]);
+    // Arrives second, and is chronologically OLDER — must still lose.
+    $secondToArrive = dayStateOp($practitionerId, $credential['locationId'], $date, ['created_at' => $older, 'delay_minutes' => 5]);
 
-    // Reversed arrival: the newer op is pushed FIRST, in its own request,
-    // and succeeds (the slot is free). The older op arrives SECOND, in a
-    // separate request, and must still win per the brief's rule.
-    pushOps($credential['token'], [$newerOp])->assertOk();
-    $secondResponse = pushOps($credential['token'], [$olderOp]);
+    pushOps($credential['token'], [$firstToArrive])->assertOk();
+    $secondResponse = pushOps($credential['token'], [$secondToArrive]);
 
     $secondResponse->assertOk();
-    $secondResponse->assertJson(['results' => [['op_id' => $olderOp['op_id'], 'status' => 'accepted']]]);
+    $secondResponse->assertJson(['results' => [['op_id' => $secondToArrive['op_id'], 'status' => 'rejected', 'reason' => 'conflict_slot_taken']]]);
 
-    // The older op's row now holds the slot, with its own data.
-    $winner = $this->fx()->table('day_state')
+    // The first op's row is untouched — never modified, never deleted.
+    $row = $this->fx()->table('day_state')
         ->where('practitioner_id', $practitionerId)
         ->where('location_id', $credential['locationId'])
         ->where('date', $date)
         ->first();
-    expect($winner)->not->toBeNull();
-    expect($winner->id)->toBe($olderOp['entity_id']);
-    expect($winner->delay_minutes)->toBe(5);
+    expect($row->id)->toBe($firstToArrive['entity_id']);
+    expect($row->delay_minutes)->toBe(15);
+    expect($row->rev)->toBe(1);
+    expect($this->fx()->table('day_state')->where('id', $secondToArrive['entity_id'])->exists())->toBeFalse();
 
-    // The newer op's original row is gone — day_state has no "displaced
-    // but intact" concept of its own (see SyncOpApplier::evictSlotLoser).
-    expect($this->fx()->table('day_state')->where('id', $newerOp['entity_id'])->exists())->toBeFalse();
-
-    $this->fx()->table('audit_log')->whereIn('entity_id', [$newerOp['entity_id'], $olderOp['entity_id']])->delete();
-    $this->fx()->table('sync_ledger')->whereIn('op_id', [$newerOp['op_id'], $olderOp['op_id']])->delete();
-    $this->fx()->table('day_state')->where('id', $olderOp['entity_id'])->delete();
+    $this->fx()->table('audit_log')->where('entity_id', $firstToArrive['entity_id'])->delete();
+    $this->fx()->table('sync_ledger')->where('op_id', $firstToArrive['op_id'])->delete();
+    $this->fx()->table('day_state')->where('id', $firstToArrive['entity_id'])->delete();
 });
 
-/**
- * The device whose visit gets evicted (SyncOpApplier::evictSlotLoser)
- * already received `accepted` for its own push, truthfully, before the
- * eviction happened in a *later*, unrelated request. That response can't
- * be un-sent. The only mechanism that could tell this device its own row
- * changed is a pull — GET /api/sync/pull does not exist yet
- * (docs/sync-plan.md's Q9 explicitly scopes it out of this step) — so as
- * of today, an evicted device has no way to discover this at all through
- * the API surface. This test exists to keep that gap visible and
- * testable, not to assert it's acceptable. Skipped, not silently omitted:
- * un-skip once GET /api/sync/pull exists, and assert the evicted visit
- * (with its bumped rev, is_overbooked=true, and reassigned position)
- * appears in that device's pull results.
- */
-test('the device whose visit was evicted can discover the change via a pull', function () {
+test('a push op targeting a closed day returns a clean rejection, not a 500', function () {
     $credential = makeAuthenticatedDevice();
     $specialtyId = $this->makeSpecialtyTemplate(null);
     $practitionerId = $this->makePractitioner($credential['orgId'], $specialtyId);
-    $patientId = $this->makePatient($credential['orgId']);
     $date = now()->addDays(5)->toDateString();
+    $dayStateId = $this->makeDayState($practitionerId, $credential['locationId'], $date, ['is_closed' => true]);
 
-    $newerVisitId = (string) Str::uuid();
-    $newerOp = [
+    $op = [
         'op_id' => (string) Str::uuid(),
-        'entity' => 'visits',
-        'entity_id' => $newerVisitId,
-        'action' => 'create',
+        'entity' => 'day_state',
+        'entity_id' => $dayStateId,
+        'action' => 'update',
         'payload' => [
-            'id' => $newerVisitId,
-            'org_id' => $credential['orgId'],
-            'location_id' => $credential['locationId'],
+            'id' => $dayStateId,
             'practitioner_id' => $practitionerId,
-            'patient_id' => $patientId,
-            'visit_date' => $date,
-            'position' => 1,
-            'status' => 'booked',
-            'is_overbooked' => false,
-            'source' => 'walkin',
-            'created_by' => $credential['membershipId'],
-            'created_at' => now()->toIso8601String(),
+            'location_id' => $credential['locationId'],
+            'date' => $date,
+            'delay_minutes' => 20,
+            'is_closed' => true,
         ],
-        'created_at' => now()->subMinute()->toIso8601String(),
+        'created_at' => now()->toIso8601String(),
+        'base_rev' => 1,
     ];
 
-    $olderVisitId = (string) Str::uuid();
-    $olderOp = $newerOp;
-    $olderOp['op_id'] = (string) Str::uuid();
-    $olderOp['entity_id'] = $olderVisitId;
-    $olderOp['payload']['id'] = $olderVisitId;
-    $olderOp['created_at'] = now()->subMinutes(10)->toIso8601String();
+    $response = pushOps($credential['token'], [$op]);
 
-    pushOps($credential['token'], [$newerOp])->assertOk();
-    pushOps($credential['token'], [$olderOp])->assertJson(['results' => [['op_id' => $olderOp['op_id'], 'status' => 'accepted']]]);
+    $response->assertOk();
+    $response->assertJson(['results' => [['op_id' => $op['op_id'], 'status' => 'rejected', 'reason' => 'conflict_day_closed']]]);
 
-    // Confirmed, out of band, that the eviction really happened — this is
-    // the fact the rest of this test is about the device NOT being able
-    // to observe through the API itself.
-    $evicted = $this->fx()->table('visits')->where('id', $newerVisitId)->first();
-    expect($evicted->is_overbooked)->toBeTrue();
-    expect($evicted->rev)->toBe(2);
+    $body = $response->getContent();
+    expect($body)->not->toMatch('/SQLSTATE/');
+    expect($body)->not->toContain('pgsql');
 
-    $this->fx()->table('audit_log')->whereIn('entity_id', [$newerVisitId, $olderVisitId])->delete();
-    $this->fx()->table('sync_ledger')->whereIn('op_id', [$newerOp['op_id'], $olderOp['op_id']])->delete();
-    $this->fx()->table('visits')->whereIn('id', [$newerVisitId, $olderVisitId])->delete();
-})->skip('No GET /api/sync/pull exists yet (docs/sync-plan.md Q9) — the evicted device currently has no API-level way to discover this change at all, only a direct database query. Un-skip once the pull endpoint exists.');
+    expect($this->fx()->table('day_state')->where('id', $dayStateId)->value('delay_minutes'))->toBe(0);
+
+    $this->asOwner()->statement('ALTER TABLE day_state DISABLE TRIGGER day_state_immutable_when_closed');
+    $this->fx()->table('day_state')->where('id', $dayStateId)->delete();
+    $this->asOwner()->statement('ALTER TABLE day_state ENABLE TRIGGER day_state_immutable_when_closed');
+});
 
 test('a future-dated created_at on a slot op returns failed', function () {
     $credential = makeAuthenticatedDevice();

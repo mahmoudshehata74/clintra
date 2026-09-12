@@ -729,8 +729,10 @@ for the same reason: no single owning org.
 - `duplicate` — `op_id` already in `sync_ledger`, checked before any
   write, never reapplied (the brief's own idempotency rule).
 - `rejected` — a genuine business conflict: a stale `base_rev` (edit
-  conflict), an insert whose `entity_id` already has a row, or a slot
-  already taken by a chronologically older occupant.
+  conflict), an insert whose `entity_id` already has a row, a slot
+  already occupied (`conflict_slot_taken` — see "Slot conflicts" below),
+  or a write against a closed `day_state` row (`conflict_day_closed` —
+  see "Closed days are immutable" below).
 - `failed` — anything else: an org mismatch, a future-dated or
   out-of-window `created_at`, or a caught `QueryException` this class
   doesn't otherwise model (a foreign key pointing at nothing, for
@@ -774,45 +776,104 @@ afterward instead of permanently aborted. Found by running the slot-conflict
 test, not by inspection — it failed with a raw "current transaction is
 aborted" error before this fix.
 
-**Slot conflicts: the chronologically older op wins, per the brief —
-implemented, not just decided.** `sync_ledger.client_created_at`
-(`docs/schema.md`'s "v13 additions") is where "when did the op that
-currently occupies this slot claim to happen" is read from — not the
-entity row itself, since `day_state` has no `created_at` column of its
-own. Both sides of the comparison are parsed into real instants before
-comparing (`Carbon::parse(...)->lessThan(...)`), never compared as raw
-strings — Postgres renders a stored `timestamptz` back in its own textual
-format on read, not the client's original ISO 8601 shape, so a string
-comparison between the two would not reliably reflect true chronological
-order. This was also caught by running the reversed-arrival-order test,
-not by inspection.
+## The sync endpoint is accept-or-reject only
 
-Before trusting a slot op's `created_at` at all: reject as `failed` if
-it's in the future relative to server time (`future_dated_created_at`), or
-more than 60 days in the past (`created_at_outside_window`, the brief's
-own local-storage window). Every slot op's observed skew (server time
-minus claimed `created_at`) is recorded into `device.clock_skew_ms`
-regardless of whether the op is accepted, rejected, or failed, so a
-device's clock drifting slowly stays visible even while every individual
-op still lands inside the valid window.
+**Standing rule**: the sync push endpoint accepts or rejects the op in
+front of it. It never modifies a third row — any row other than the one
+`entity_id` the op itself names — on its own initiative. If a design
+needs to attribute a change to an acting membership and there isn't a
+real one, the design is wrong, not the audit trail.
 
-**Eviction uses only fields the web app already renders — no new status
-value.** The loser of a slot conflict is never deleted (the brief: "never
-silently deleted") and never left looking like it still holds the slot:
-`day_state` has no "displaced but still valid" concept of its own (it's a
-day's settings, not a booking), so the loser is simply removed and the
-winning insert takes its place. `visits` is displaced instead — marked
-`is_overbooked = true` with `unique_scheduled_at` cleared (frees the
-slots-mode constraint) and its `position` bumped to the end of the queue
-(frees the queue-mode constraint) — both applied unconditionally rather
-than parsing which specific constraint fired, since neither one is
-harmful to apply to a row that didn't actually collide on it. This is a
-deliberate, narrower choice than `docs/sync-plan.md`'s Q7 describes (a
-distinct, web-visible "needs-rebooking" state): that's a new status value
-the web app has no rendering logic for yet, out of scope for a
-server-only step. Displacing into fields the web already understands
-keeps the patient record intact and the row bookable-ish without asking
-for a web change this step explicitly excluded.
+This rule exists because an earlier version of `resolveSlotConflict`
+broke it: when a chronologically older `create` lost a race to an
+already-accepted newer row, that version *evicted* the occupant —
+mutating `visits` (`is_overbooked = true`, `unique_scheduled_at` cleared,
+`position` bumped) or deleting `day_state` outright — to let the older op
+claim the slot retroactively. Asked to explain that design before pull
+was built on top of it, three problems fell out of the same mistake:
+
+- **No real audit actor.** The eviction had no acting membership of its
+  own to attribute a change to — it was the *server's* decision, on
+  behalf of nobody, about a row a different device owned.
+- **No discoverability.** The evicted device had already received
+  `accepted` for its own push, truthfully, before the eviction happened
+  in a later, unrelated request. Nothing could tell it afterward —
+  `GET /api/sync/pull` doesn't exist yet, so there was no mechanism at
+  all, not even a designed-but-unbuilt one.
+- **No respect for a closed day.** `day_state`'s eviction branch deleted
+  the existing row unconditionally, including a row with `is_closed =
+  true` and a real, computed `avg_consult_minutes` — an operation that
+  should never have been able to run against a closed day, because it
+  shouldn't have been able to run against *any* row it wasn't given.
+
+All three are branches of the same root cause, not three separate bugs:
+once the endpoint stopped being accept-or-reject-only, there was no
+principled place to stop.
+
+## Slot conflicts: accept-or-reject, not chronologically-older-wins
+
+`resolveSlotConflict` now does exactly one thing: if a `create`'s natural
+key collides with an existing row, `rejected`/`conflict_slot_taken` —
+always, regardless of `created_at`. No lookup of the occupant's original
+timestamp, no comparison, no second insert. This is the op-in-front-of-it
+being rejected, full stop.
+
+**Deliberate departure from the brief's literal text, accepted knowingly
+(`docs/sync-plan.md`'s Q4/Q5).** Section 8 says "the chronologically
+older wins." As implemented, the slot instead goes to whichever op
+*arrives* first — the brief's rule holds only when arrival order and
+chronological order happen to agree. The exact scenario this costs:
+**two devices book the same slot while both offline; the device with the
+chronologically earlier booking reconnects last.** Under the brief's
+literal rule it should still win; under this implementation it loses,
+because winning would require the server to rewrite the other device's
+already-accepted row on its own initiative — precisely what the standing
+rule above forbids. The alternative (evicting the current occupant) is
+the design just removed, for the three reasons above. Fixing this
+properly needs a pull endpoint the losing device can use to notice its
+booking failed and rebook — not a server-side rewrite of someone else's
+row.
+
+`created_at` validation is unchanged and still worth having even though
+nothing compares it for a *winner* anymore: reject a slot op as `failed`
+if it's in the future relative to server time (`future_dated_created_at`),
+or more than 60 days in the past (`created_at_outside_window`, the
+brief's own local-storage window). Every slot op's observed skew (server
+time minus claimed `created_at`) is still recorded into
+`device.clock_skew_ms` regardless of outcome, so a device's clock
+drifting slowly stays visible. `sync_ledger.client_created_at`
+(`docs/schema.md`'s "v13 additions") is retained too — every accepted
+op's claimed timestamp is still worth recording as ledger history, even
+though nothing reads it back for a decision any more.
+
+## Closed days are immutable in the database
+
+The brief is silent on whether a closed day can be reopened or modified
+— checked directly (`grep -n -i "clos"` across the whole document; it
+only ever mentions "day close" as a screen/feature). This is therefore a
+standing decision, not a brief requirement: once `day_state.is_closed` is
+`true`, that row can never be modified or deleted, by any role, through
+any connection (`2026_09_12_000018_lock_closed_day_state.php`).
+
+**Enforced with a trigger, not an RLS policy — the trigger is the
+strictly tighter guarantee.** An RLS policy only ever binds `clintra_app`
+(RLS via `ENABLE`) and `clintra_owner` (RLS via `FORCE`); `clintra_fixtures`
+and any future `BYPASSRLS` role would pass straight through it — the same
+gap `enforce_row_rev()` was built to close for `rev` itself
+(`2026_09_12_000012_add_row_versioning.php`). A `BEFORE UPDATE OR DELETE`
+trigger fires for every role unconditionally, RLS-bound or not. It checks
+only `OLD.is_closed` — the transition that actually closes a day
+(`false` -> `true`) is untouched; only a row *already* closed is locked.
+
+The push endpoint catches this specific failure (`SQLSTATE 55000`,
+`object_not_in_prerequisite_state` — a real Postgres class, not a custom
+one) and maps it to a clean `rejected`/`conflict_day_closed`, the same
+"never leak a SQLSTATE" discipline as everything else in
+`SyncOpApplier`. Confirmed before this landed, not assumed: no screen in
+`web/src/` currently sets `day_state.is_closed` to `true` at all — the
+day-close screen (13, "إقفال اليوم") writes a separate `cash_close` row
+entirely — so this constraint introduces no product conflict with
+anything shipped today.
 
 **Confirmed, not assumed: this endpoint holds no privilege beyond the
 ordinary `clintra_app` connection.** It runs no `SECURITY DEFINER`
@@ -821,7 +882,8 @@ like any other write through this connection — the grants audit that
 mattered for `register_device` (a `BYPASSRLS` path) simply doesn't apply
 here by construction.
 
-Full test coverage in `tests/Feature/Rls/SyncPushTest.php`.
+Full test coverage in `tests/Feature/Rls/SyncPushTest.php` and
+`tests/Feature/Rls/ClosedDayStateTest.php`.
 
 ## clintra_fixtures — test-only, never production
 

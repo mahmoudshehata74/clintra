@@ -57,8 +57,11 @@ in this document create, for whenever sync implementation starts.
 - `SyncStatusChip.tsx`: a fourth state distinguishing "network interface
   down" from "server not responding," still small and non-intrusive,
   never blocking — Q10.
-- Day screen: a visible needs-rebooking state for a visit that lost a
-  slot conflict, not inferable only from the sync chip — Q7.
+- Day screen: a visible "this booking was rejected, rebook" state for a
+  visit whose `create` lost a slot conflict, not inferable only from the
+  sync chip — Q7. Depends on the pull endpoint existing first (the
+  rejected device only finds out its own push failed, which it already
+  can; nothing server-side rewrites a row for it to notice).
 - A retention policy enforcing the brief's 60-days-back / 60-days-forward
   local storage window — Q9.
 - No change to local `audit_log` writing or `undoMostRecentMutation` — Q1
@@ -217,18 +220,21 @@ them as one rule would be wrong:
     to collide on at all). Detected by a new per-row `rev` counter (Q5),
     closing the "no conflict detection at all" gap this question
     originally found.
-- **Pre-launch TODO — fixed, not just found.** The gap this section
-  originally flagged (nothing compared timestamps for slot conflicts, so
-  arrival order could disagree with chronological order over a real
-  network) is closed: `SyncOpApplier::resolveSlotConflict` reads the
-  existing occupant's original `created_at` from `sync_ledger.client_created_at`
-  and compares it against the incoming op's own, as real parsed instants
-  (never as raw strings — Postgres renders a stored `timestamptz` back in
-  its own textual format on read, not the client's ISO 8601 shape, which
-  was a real bug caught by the reversed-arrival-order test before this
-  landed, not by inspection). `tests/Feature/Rls/SyncPushTest.php`'s
-  "chronologically older wins" test proves this with arrival order
-  reversed, matching this section's own instruction.
+- **Pre-launch TODO — reconsidered, not fixed as first attempted.** An
+  earlier version of this section reported the timestamp-comparison gap
+  as fixed: the server would read the existing occupant's original
+  `created_at` from `sync_ledger.client_created_at` and, if the incoming
+  op was older, *evict* the occupant to let the older op claim the slot
+  retroactively. That eviction was removed — see Q7 below and
+  `api/docs/rls.md`'s "The sync endpoint is accept-or-reject only" for
+  why: it mutated a row the op never named, with no real audit actor, no
+  way for the evicted device to ever find out, and no protection for a
+  closed `day_state` row. `SyncOpApplier::resolveSlotConflict` now does
+  exactly one thing on a natural-key collision — `rejected`/`conflict_slot_taken`,
+  unconditionally, regardless of `created_at`. The timestamp-comparison
+  gap this section originally flagged is therefore *not* closed; it's
+  resolved by removing the thing that would have needed it, at the cost
+  Q7 describes.
 - **Constraint:** `docs/reference/clintra-cli-brief.md`, section 8:
   *"On a conflict over the same slot: the chronologically older wins..."*
   (settles slot conflicts; brief is silent on edit conflicts — confirmed
@@ -238,22 +244,30 @@ them as one rule would be wrong:
   and `2026_09_11_170016_create_day_state_table.php:29`.
   `api/database/migrations/2026_09_11_170014_create_patients_table.php:9-10`
   (phone deliberately non-unique — why `patients` had zero detection
-  before this decision). `App\Support\Sync\SyncOpApplier::resolveSlotConflict`
-  (the fix); `api/docs/rls.md`'s "The sync push endpoint" for the full
-  writeup.
-- **Status:** decided, and shipped.
+  before this decision). `App\Support\Sync\SyncOpApplier::resolveSlotConflict`;
+  `api/docs/rls.md`'s "The sync endpoint is accept-or-reject only" and
+  "Slot conflicts: accept-or-reject, not chronologically-older-wins" for
+  the full writeup.
+- **Status:** decided, and shipped — deliberately narrower than the
+  brief's literal text. See Q7.
 
 ### 5. Last-write-wins, per-field, or per-entity rules? Where does the timestamp come from — device clock or server?
 
-- **Decision, split by conflict type — do not apply one rule to both:**
-  - **Slot conflicts** (visits' unique slot keys, `day_state`): the
-    earliest `created_at` wins, per the brief. Because device clocks are
-    untrustworthy, the server enforcing this must additionally (a) reject
-    any op whose `created_at` is in the future relative to server time;
-    (b) reject any op outside the brief's 60-day window (see Q9); and (c)
-    record per-device clock skew somewhere inspectable, so a badly-set
-    device's clock is visible rather than silently winning or losing
-    every race it's in.
+- **Decision, split by conflict type — do not apply one rule to both.
+  Revised once for slot conflicts — see the note below.**
+  - **Slot conflicts** (visits' unique slot keys, `day_state`): ~~the
+    earliest `created_at` wins, per the brief~~ — **revised: whichever op
+    arrives first wins; the brief's "chronologically older wins" is honoured
+    only when arrival order and chronological order agree.** The original
+    decision (implement the brief literally, by having the server compare
+    timestamps and retroactively evict the current occupant when the
+    incoming op was older) was reversed after being asked to explain it in
+    concrete terms before a pull endpoint got built on top of it — see Q7
+    for why. The clock defenses survive regardless, since they're
+    independently worth having: reject any slot op whose `created_at` is
+    in the future relative to server time; reject any outside the brief's
+    60-day window (see Q9); record per-device clock skew somewhere
+    inspectable, so a badly-set device's clock stays visible.
   - **Edit conflicts** (everything else, including `patients`): every
     syncable row gets a `rev` integer, assigned and incremented by the
     server on each accepted write. Each `sync_op` carries `base_rev` — the
@@ -273,13 +287,14 @@ them as one rule would be wrong:
   rule, quoted under Q4); brief confirmed silent on edit-conflict
   resolution after reading the full document. `web/src/db/types.ts:332-341`,
   `web/src/sync/fakeTransport.ts:71`, `web/src/db/mutate.ts:38`.
-- **Status:** decided, and shipped server-side for both types.
-  `App\Support\Sync\SyncOpApplier` implements the slot-conflict clock rule
-  (`resolveSlotConflict`) and the edit-conflict `base_rev` check
-  (`applyUpdate`/`applyDelete`, `WHERE id = ? AND rev = ?`) exactly as
-  decided here. Not yet true client-side: `web/src/db/types.ts`'s `SyncOp`
-  still carries no `base_rev` field — that's `HttpTransport`'s job, a
-  later step.
+- **Status:** decided, and shipped server-side for both types, with the
+  slot half revised as noted above. `App\Support\Sync\SyncOpApplier`
+  implements the (revised) slot-conflict rule (`resolveSlotConflict`,
+  always `rejected`/`conflict_slot_taken` on collision) and the
+  edit-conflict `base_rev` check (`applyUpdate`/`applyDelete`,
+  `WHERE id = ? AND rev = ?`) exactly as decided here. Not yet true
+  client-side: `web/src/db/types.ts`'s `SyncOp` still carries no
+  `base_rev` field — that's `HttpTransport`'s job, a later step.
 
 ### 6. Which conflicts land in sync_review for a human, and which resolve silently? The brief says the assistant must never lose data.
 
@@ -321,39 +336,61 @@ them as one rule would be wrong:
 
 ### 7. Two devices book the same slot while both offline. What happens?
 
-- **Decision:** The loser's local row must survive un-deleted — the
-  brief's "never silently deleted" confirms `FakeTransport` not touching
-  the rejected op's entity row is correct behavior, not the bug this
-  question originally suspected. But the brief also requires the loser be
-  "shown to the staff member," and a visit still rendering as a confirmed
-  booking on the day screen is not shown as a loser. So: don't delete it,
-  and don't leave it looking confirmed either. The local row moves to a
-  distinct needs-rebooking state — not cancelled, not deleted — that
-  keeps the patient record intact and is visible directly on the day
-  screen itself, not only inferable via the sync chip.
-- **Finding (current behavior):** The losing device's create is correctly
-  rejected once it syncs (`conflict_slot_taken`), and correctly lands in
-  `sync_review`. But the rejected `sync_op`'s entity row is never touched
-  — `runSyncCycle`'s rejection branch only writes a `sync_review` row and
+- **Decision, revised.** An earlier version of this answer (and of the
+  shipped code) had the server evict whichever row currently held the
+  slot when a chronologically older op arrived later, so the older op
+  could win retroactively — matching the brief's literal text. Asked to
+  walk through that design in concrete terms before a pull endpoint got
+  built on top of it, three things fell out of one root cause (full
+  writeup: `api/docs/rls.md`'s "The sync endpoint is accept-or-reject
+  only"):
+  - The eviction had no real acting membership to attribute an audit row
+    to — it was the server's own initiative against a row a different
+    device owned, not a real actor's action.
+  - The evicted device had no way to ever find out. It already received
+    `accepted` for its own push, truthfully, before the eviction happened
+    in a later, unrelated request — and there is no pull endpoint to tell
+    it afterward, not even a designed-but-unbuilt one.
+  - `day_state`'s eviction branch deleted the existing row unconditionally
+    — including a row with `is_closed = true` and a real, computed
+    `avg_consult_minutes` — an operation that should never run against a
+    closed day, because it shouldn't run against any row the endpoint
+    wasn't given in the first place.
+  - **Decided now:** the sync endpoint never modifies a third row on its
+    own initiative, full stop (recorded as a standing rule in
+    `api/docs/rls.md`). A slot conflict always resolves as
+    `rejected`/`conflict_slot_taken` against whichever op arrives when the
+    slot is already taken — never a comparison, never a retroactive
+    rewrite. The loser's local row is never touched by the server at all,
+    which trivially satisfies "never silently deleted" — there was never
+    a question of the *winner's* row being deleted, only the loser's, and
+    now nothing about either row changes as a side effect of the other.
+- **The accepted cost, named precisely so it reads as deliberate, not
+  overlooked:** two devices offline, same slot; the device with the
+  chronologically *earlier* booking reconnects *last*. Under the brief's
+  literal rule, that device's booking should win. Under this
+  implementation, it loses — its `create` is rejected on arrival, because
+  the slot was already taken by the device that happened to reconnect
+  first. This is first-arrival-wins, not chronologically-older-wins,
+  whenever the two disagree. Fixing this properly needs a pull endpoint
+  the losing device can use to notice and rebook, not a server-side
+  rewrite of the winner's row — a later step, not a default anyone should
+  read as unnoticed.
+- **Finding (current client-side behavior, still accurate):** The losing
+  device's create is correctly rejected once it syncs
+  (`conflict_slot_taken`), and correctly lands in `sync_review`. But the
+  rejected `sync_op`'s entity row is never touched —
+  `runSyncCycle`'s rejection branch only writes a `sync_review` row and
   leaves `sync_ops` exactly as it was (`web/src/sync/engine.ts:42-57`). So
   today the losing assistant's own screen keeps showing the slot as
-  booked with no visible distinction, until she notices the chip — which
-  is compliant with "never deleted" but not yet with "shown to the staff
-  member" as a loser specifically.
+  booked with no visible distinction, until she notices the chip.
 - **Constraint:** `docs/reference/clintra-cli-brief.md`, section 8
   (quoted under Q4/Q6). `web/src/sync/engine.ts:36-57`,
   `web/src/screens/day/SyncStatusChip.tsx:26-32`.
-- **Status:** decided; the server half is shipped, narrower than
-  described here on purpose. `SyncOpApplier::evictSlotLoser` never
-  deletes the loser and never leaves it looking confirmed, but displaces
-  it using only fields the web app already renders (`visits`:
-  `is_overbooked = true`, `unique_scheduled_at` cleared, `position`
-  bumped to the end of the queue; `day_state`: removed outright, since it
-  has no "displaced but still valid" concept of its own) rather than the
-  distinct "needs-rebooking" status value described above — introducing
-  one is a web-rendering decision explicitly out of scope for a
-  server-only step. See `api/docs/rls.md`'s "The sync push endpoint" for
-  the reasoning. The web-visible distinct state itself is still open.
+- **Status:** decided, and shipped — narrower than the brief's literal
+  rule, deliberately. The web-visible "this booking failed, rebook"
+  experience is still open, and now explicitly depends on the pull
+  endpoint existing first, not just a web-rendering decision.
 
 ---
 

@@ -147,7 +147,7 @@ class SyncOpApplier
             }
 
             if (SyncableTables::isSlotTable($table)) {
-                return $this->resolveSlotConflict($op, $table, $attributes, $membershipId, $deviceId, $orgId);
+                return $this->resolveSlotConflict($op, $table, $attributes);
             }
 
             // Not a slot table: the only unique constraint is the primary
@@ -168,10 +168,18 @@ class SyncOpApplier
         $attributes = $this->buildAttributes($op, $table, $membershipId);
         unset($attributes['id']);
 
-        $updated = DB::table($table)
-            ->where('id', $op['entity_id'])
-            ->where('rev', $op['base_rev'])
-            ->update($attributes);
+        try {
+            $updated = DB::table($table)
+                ->where('id', $op['entity_id'])
+                ->where('rev', $op['base_rev'])
+                ->update($attributes);
+        } catch (QueryException $e) {
+            if ($this->isClosedDayViolation($e)) {
+                return $this->rejected($op, 'conflict_day_closed');
+            }
+
+            throw $e;
+        }
 
         if ($updated === 0) {
             // Either the row doesn't exist at all, or its rev has moved
@@ -193,10 +201,18 @@ class SyncOpApplier
     {
         $before = DB::table($table)->where('id', $op['entity_id'])->first();
 
-        $deleted = DB::table($table)
-            ->where('id', $op['entity_id'])
-            ->where('rev', $op['base_rev'])
-            ->delete();
+        try {
+            $deleted = DB::table($table)
+                ->where('id', $op['entity_id'])
+                ->where('rev', $op['base_rev'])
+                ->delete();
+        } catch (QueryException $e) {
+            if ($this->isClosedDayViolation($e)) {
+                return $this->rejected($op, 'conflict_day_closed');
+            }
+
+            throw $e;
+        }
 
         if ($deleted === 0) {
             return $this->rejected($op, 'conflict_stale_rev');
@@ -209,15 +225,17 @@ class SyncOpApplier
 
     /**
      * A "create" that collides with an existing row on a slot's natural
-     * key (not the primary key — a genuinely different entity_id) is
-     * resolved per docs/sync-plan.md's Q5: the chronologically older
-     * client `created_at` wins, regardless of arrival order. The
-     * occupant's own original `created_at` is read from `sync_ledger`
-     * (not the entity row itself — `day_state` has no `created_at` column
-     * of its own, so the ledger is the one place every syncable table's
-     * original op timestamp is guaranteed to be recorded).
+     * key (not the primary key — a genuinely different entity_id) always
+     * loses, regardless of `created_at`. This endpoint accepts or rejects
+     * the op in front of it — it never mutates a row it wasn't given
+     * (see api/docs/rls.md's "The sync push endpoint is accept-or-reject
+     * only" for the standing rule and why an earlier version of this
+     * method violated it). The brief's "chronologically older wins" is
+     * therefore honoured only when the older op happens to arrive first;
+     * see docs/sync-plan.md's Q4/Q5 for the accepted cost of that and the
+     * exact scenario it gives up.
      */
-    private function resolveSlotConflict(array $op, string $table, array $attributes, string $membershipId, string $deviceId, string $orgId): array
+    private function resolveSlotConflict(array $op, string $table, array $attributes): array
     {
         foreach (SyncableTables::SLOT_CONSTRAINTS[$table] as $columns) {
             $values = [];
@@ -230,39 +248,9 @@ class SyncOpApplier
                 $values[$column] = $attributes[$column];
             }
 
-            $existing = DB::table($table)->where($values)->first();
-
-            if ($existing === null) {
-                continue;
+            if (DB::table($table)->where($values)->exists()) {
+                return $this->rejected($op, 'conflict_slot_taken');
             }
-
-            $existingOriginalOp = DB::table('sync_ledger')
-                ->where('entity', $table)
-                ->where('entity_id', $existing->id)
-                ->orderBy('seq')
-                ->first();
-
-            $existingCreatedAt = $existingOriginalOp->client_created_at ?? null;
-
-            // Compared as real instants, never as raw strings: Postgres
-            // renders client_created_at back in its own textual format
-            // ("2026-09-12 17:35:00+03"), not the client's original
-            // ISO 8601 shape — a string comparison between the two would
-            // not reliably reflect true chronological order.
-            $incomingIsOlder = $existingCreatedAt !== null
-                && Carbon::parse($op['created_at'])->lessThan(Carbon::parse($existingCreatedAt));
-
-            if ($incomingIsOlder) {
-                $this->evictSlotLoser($table, $existing);
-                DB::table($table)->insert($attributes);
-
-                $rev = (int) DB::table($table)->where('id', $op['entity_id'])->value('rev');
-                $this->recordAcceptedWrite($op, $table, $rev, $membershipId, $deviceId, $orgId, before: null);
-
-                return ['op_id' => $op['op_id'], 'status' => 'accepted', 'rev' => $rev];
-            }
-
-            return $this->rejected($op, 'conflict_slot_taken');
         }
 
         // Every constraint's key had a null component (so none of them
@@ -270,37 +258,6 @@ class SyncOpApplier
         // unique violation — something this method doesn't model. Treat
         // as unexpected rather than guessing.
         return $this->failed($op, 'internal_error');
-    }
-
-    /**
-     * Displaces the losing occupant of a slot without deleting it or its
-     * patient record (docs/sync-plan.md's Q7: "never silently deleted").
-     * Uses only fields the web app already renders — no new status value
-     * is introduced here, since that is a web-side decision out of scope
-     * for this step. `day_state` has no equivalent "still exists, just
-     * displaced" concept (it is a day's settings, not a booking), so the
-     * loser is simply removed; the winning insert takes its place.
-     */
-    private function evictSlotLoser(string $table, object $existing): void
-    {
-        if ($table === 'day_state') {
-            DB::table('day_state')->where('id', $existing->id)->delete();
-
-            return;
-        }
-
-        if ($table === 'visits') {
-            $maxPosition = (int) DB::table('visits')
-                ->where('practitioner_id', $existing->practitioner_id)
-                ->where('visit_date', $existing->visit_date)
-                ->max('position');
-
-            DB::table('visits')->where('id', $existing->id)->update([
-                'is_overbooked' => true,
-                'unique_scheduled_at' => null,
-                'position' => $maxPosition + 1,
-            ]);
-        }
     }
 
     /**
@@ -371,5 +328,20 @@ class SyncOpApplier
     private function isUniqueViolation(QueryException $e): bool
     {
         return $e->getCode() === '23505';
+    }
+
+    /**
+     * SQLSTATE 55000 (object_not_in_prerequisite_state) is what
+     * prevent_closed_day_state_mutation() raises
+     * (2026_09_12_000018_lock_closed_day_state.php) — a real Postgres
+     * error class matching this case: the operation itself is otherwise
+     * valid, the object's current state just doesn't allow it. Distinct
+     * from a generic `internal_error`, since this is a genuine business
+     * conflict a client's own assumptions could reasonably have avoided,
+     * not a bug.
+     */
+    private function isClosedDayViolation(QueryException $e): bool
+    {
+        return $e->getCode() === '55000';
     }
 }
