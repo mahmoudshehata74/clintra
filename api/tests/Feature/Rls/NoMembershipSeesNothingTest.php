@@ -17,6 +17,8 @@ test('a connection with no membership set sees zero rows everywhere, even with f
     $patientId = $this->makePatient($orgId);
     $this->makeVisit($orgId, $locationId, $practitionerId, $patientId, $membershipId);
     $this->makeAuditLog($orgId, $membershipId);
+    $deviceId = $this->makeDevice($orgId, $locationId, $membershipId);
+    $this->makeSyncLedgerRow($orgId, $membershipId, $deviceId);
 
     foreach ($this->rlsTableNames() as $table) {
         $count = $this->asApp()->table($table)->count();

@@ -22,6 +22,7 @@ trait RlsFixtures
 
     private const CLEANUP_ORDER = [
         'audit_log',
+        'sync_ledger',
         'visits',
         'membership_locations',
         'membership_practitioners',
@@ -70,13 +71,24 @@ trait RlsFixtures
         });
     }
 
+    /**
+     * Every tracked table is cleaned up by its `id` column except the ones
+     * named here — `sync_ledger`'s primary key is the identity `seq`, not
+     * a client-generated `id`, so it's tracked (and cleaned up) by its
+     * `op_id` instead, the one column a fixture actually controls.
+     */
+    private const CLEANUP_KEY_COLUMN = [
+        'sync_ledger' => 'op_id',
+    ];
+
     protected function cleanupFixtures(): void
     {
         foreach (self::CLEANUP_ORDER as $table) {
             $ids = $this->fixtureIds[$table] ?? [];
 
             if ($ids !== []) {
-                $this->fx()->table($table)->whereIn('id', $ids)->delete();
+                $column = self::CLEANUP_KEY_COLUMN[$table] ?? 'id';
+                $this->fx()->table($table)->whereIn($column, $ids)->delete();
             }
         }
 
@@ -356,6 +368,29 @@ trait RlsFixtures
         ], $overrides)));
 
         return $this->track('audit_log', $id);
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    protected function makeSyncLedgerRow(string $orgId, string $actorMembershipId, string $deviceId, array $overrides = []): string
+    {
+        $attributes = $this->normalizeTimestamps(array_merge([
+            'op_id' => (string) Str::uuid(),
+            'org_id' => $orgId,
+            'entity' => 'patients',
+            'entity_id' => (string) Str::uuid(),
+            'rev' => 1,
+            'actor_membership_id' => $actorMembershipId,
+            'device_id' => $deviceId,
+            'applied_at' => now(),
+        ], $overrides));
+
+        $this->fx()->table('sync_ledger')->insert($attributes);
+
+        // Tracked from the merged result, not a locally-generated value —
+        // an $overrides['op_id'] must be the id cleanup actually deletes.
+        return $this->track('sync_ledger', $attributes['op_id']);
     }
 
     /**

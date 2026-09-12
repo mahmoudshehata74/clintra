@@ -436,6 +436,87 @@ reconciliation (whether the server re-numbers incoming rows, keeps a
 separate per-device sequence, or something else) is a later step, not
 decided by this version.
 
+## v12 additions
+
+Server-side only — none of the three additions below exist yet in the
+local IndexedDB store. They implement the first two items of
+`docs/sync-plan.md`'s checklist: row versioning and the sync ledger, the
+foundations the eventual push/pull endpoints will build on. No endpoint
+exists yet; these are storage only.
+
+### `rev` on every syncable table
+
+`cash_close`, `day_state`, `invoice_items`, `invoices`,
+`membership_locations`, `membership_practitioners`, `memberships`,
+`patients`, `payments`, `schedules`, `service_price_overrides`,
+`services`, `visit_form_data`, `visits` each gain `rev` — a server-assigned
+integer, starting at 1 on insert and incremented on every accepted update.
+This is `docs/sync-plan.md`'s Q5 edit-conflict mechanism: a future push
+endpoint rejects any op whose `base_rev` doesn't match a row's current
+`rev`.
+
+The syncable-table list is every entity `web/src/db/mutate.ts` callers
+actually pass to `mutate()`/`applyEntityWrite()` today (`entity: "..."` at
+each call site), cross-checked against this file and the CLI brief's
+section 9 rule 10 — not a guess from the v1 table list alone, since several
+v1 tables (`organizations`, `locations`, `practitioners`,
+`specialty_templates`, `form_definitions`, `schedule_exceptions`, `device`,
+`activation_codes`) have no client write path in v1 at all and are
+deliberately excluded.
+
+**`users` is deliberately excluded, not omitted by oversight.** Every other
+syncable table has exactly one owning organization; `users` does not — it
+has no `org_id` column at all, and the same row is visible to (and, per its
+RLS policy, editable by) every org a person holds a membership in
+(`id IN (SELECT user_id FROM memberships WHERE org_id = current_org())`).
+Giving it `rev` today would make it the first table where two *different
+organizations'* devices could race on the same counter — a materially
+different kind of conflict than anything else in this schema, and a
+product decision this version does not make. Revisit when `users` actually
+needs edit-conflict detection.
+
+`rev` is enforced by a single shared trigger (`enforce_row_rev()`), not by
+restricting `clintra_app`'s column grants — see
+`api/database/migrations/2026_09_12_000012_add_row_versioning.php`'s own
+comment for why a trigger is the only mechanism that actually computes the
+increment, and why it requires no grant changes at all. A client-supplied
+`rev` value, on insert or update, is never honoured: the trigger overwrites
+it unconditionally before the row is written.
+
+### `sync_ledger`
+
+seq, op_id, org_id, entity, entity_id, rev, actor_membership_id, device_id,
+applied_at
+
+The server-side record of every accepted sync op, backing the pull cursor
+`docs/sync-plan.md`'s Q9 decided on: a device pulls everything with `seq`
+greater than the last one it saw — `seq` is a real Postgres identity
+column, the same pattern `audit_log.seq` uses (see "v11 additions" above),
+never a client-supplied timestamp. `op_id` is unique — the idempotency key
+the CLI brief describes ("the server ignores any duplicate op_id"). FORCE
+RLS, org-scoped, append-only: no `UPDATE`/`DELETE` policy exists at all, the
+same as `audit_log`.
+
+Not the same table as `sync_ops` (v2 additions, above) — that table already
+exists server-side too (`api/database/migrations/2026_09_11_170027_create_sync_ops_table.php`),
+mirroring the client's own outbound-queue shape, but nothing writes to it
+yet. `sync_ledger` is a different, additive concept: a lean, ordered
+receipt of what was actually applied and what `rev` it produced, not a
+payload archive. Whether a future push endpoint also writes into the
+existing `sync_ops` table (as a payload/idempotency store) alongside
+writing here is that endpoint's own decision, not resolved by this version.
+
+### `device.clock_skew_ms`, `device.clock_skew_observed_at`
+
+Storage only, both nullable — no enforcement logic exists yet. Groundwork
+for `docs/sync-plan.md`'s Q5 slot-conflict rule ("chronologically older
+wins," per the CLI brief section 8): resolving a slot conflict by client
+`created_at` requires defending against a badly-set device clock, and this
+is where that observation will be recorded once a push endpoint exists to
+compute it (comparing a device's claimed `created_at` against the server's
+own clock). The rejection rules themselves (future-dated ops, ops outside
+the 60-day window) belong with that future endpoint, not this version.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.
