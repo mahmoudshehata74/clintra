@@ -76,13 +76,33 @@ test('sync_ledger rows cannot be updated or deleted through clintra_app', functi
     $device = $this->makeDevice($org, $location, $membership);
     $opId = $this->makeSyncLedgerRow($org, $membership, $device);
 
-    $this->withMembership($this->asApp(), $membership, function ($db) use ($opId) {
-        $updated = $db->table('sync_ledger')->where('op_id', $opId)->update(['rev' => 99]);
-        expect($updated)->toBe(0);
+    // Since 2026_09_12_000015_revoke_inert_write_grants.php, clintra_app
+    // holds no UPDATE/DELETE grant on sync_ledger at all — the statement
+    // never reaches the (still-absent) RLS policy check, it fails loudly
+    // on the grant itself instead of silently affecting zero rows.
+    $updateCaught = null;
+    $deleteCaught = null;
 
-        $deleted = $db->table('sync_ledger')->where('op_id', $opId)->delete();
-        expect($deleted)->toBe(0);
+    $this->withMembership($this->asApp(), $membership, function ($db) use ($opId, &$updateCaught) {
+        try {
+            $db->table('sync_ledger')->where('op_id', $opId)->update(['rev' => 99]);
+        } catch (QueryException $e) {
+            $updateCaught = $e;
+        }
     });
+
+    $this->withMembership($this->asApp(), $membership, function ($db) use ($opId, &$deleteCaught) {
+        try {
+            $db->table('sync_ledger')->where('op_id', $opId)->delete();
+        } catch (QueryException $e) {
+            $deleteCaught = $e;
+        }
+    });
+
+    expect($updateCaught)->not->toBeNull('UPDATE must be rejected by the grant, not silently no-op');
+    expect($updateCaught->getCode())->toBe('42501');
+    expect($deleteCaught)->not->toBeNull('DELETE must be rejected by the grant, not silently no-op');
+    expect($deleteCaught->getCode())->toBe('42501');
 
     expect($this->fx()->table('sync_ledger')->where('op_id', $opId)->where('rev', 1)->exists())->toBeTrue();
 });

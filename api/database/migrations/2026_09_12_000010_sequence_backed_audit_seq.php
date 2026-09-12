@@ -30,9 +30,15 @@ use Illuminate\Support\Facades\DB;
  * sequence needs no separate USAGE grant for a role that already has
  * INSERT on the table — Postgres treats the sequence as an implicit part
  * of the table for this purpose, unlike a role calling nextval() directly.
- * `clintra_app` isn't touched here either: it has no grant on audit_log at
- * all today (no entity endpoints exist yet — see docs/session-handoff.md),
- * so there is nothing for it to need.
+ * `clintra_app` is not touched here — this migration only revokes SELECT
+ * from the three provisioning roles. (Corrected: an earlier version of
+ * this comment claimed clintra_app had no grant on audit_log at all,
+ * which was wrong — it already held full SELECT/INSERT/UPDATE/DELETE via
+ * the standard EnablesRowLevelSecurity grant, same as every other table
+ * — see 2026_09_11_170021_create_audit_log_table.php. The absence of any
+ * UPDATE/DELETE *policy* is what made those two inert, not the absence of
+ * the grant; 2026_09_12_000015_revoke_inert_write_grants.php later
+ * revokes them explicitly so both layers hold independently.)
  *
  * See docs/schema.md's new "v11 additions" section for the column's
  * documented shape, and api/docs/rls.md for the concurrency test.

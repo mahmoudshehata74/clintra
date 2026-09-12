@@ -497,12 +497,26 @@ confirmed directly (a throwaway table, an identity column, a role granted
 Postgres treats an identity column's sequence as an implicit part of the
 table for this purpose; `USAGE` only matters for a role calling
 `nextval()`/`currval()`/`setval()` directly, which nothing here does
-anymore. `clintra_app` needed nothing either — it holds no grant on
-`audit_log` at all today, since no entity endpoints exist yet that would
-write one from the ordinary request connection.
+anymore. `clintra_app` was not touched here.
 `tests/Feature/Rls/ProvisioningRoleGrantsTest.php` now asserts all three
 roles hold `INSERT`-only on `audit_log`, failing if anything ever
 re-grants `SELECT` there without a fresh reason.
+
+**Correction**: an earlier version of this section (and of
+`2026_09_12_000010_sequence_backed_audit_seq.php`'s own comment) claimed
+`clintra_app` "holds no grant on `audit_log` at all" — that was wrong.
+`clintra_app` has held full `SELECT`/`INSERT`/`UPDATE`/`DELETE` on
+`audit_log` since the table was created, via the standard
+`EnablesRowLevelSecurity` grant every table gets
+(`2026_09_11_170021_create_audit_log_table.php`). What actually made the
+claim's *conclusion* true (nothing today can effectively update or delete
+an audit row through `clintra_app`) was the absence of any `UPDATE`/
+`DELETE` **policy** — with `FORCE ROW LEVEL SECURITY` and no matching
+policy, the grant exists but can never take effect. That is one policy
+away from a forgeable audit trail, not a structurally safe state: adding
+an `UPDATE`/`DELETE` policy later, for any reason, would silently
+reactivate a grant nobody meant to leave live. See "Redundant grants
+revoked, not just inert" below for the fix.
 
 **Concurrency proof**: `tests/Feature/Rls/AuditLogSequenceTest.php` runs
 two completely independent, valid `register_device` calls — different
@@ -576,6 +590,34 @@ membership can insert an audit row attributed to itself; the same
 membership attributing one to a *different* membership in the same org is
 rejected (`42501`); a cross-org insert is still rejected, confirming the
 original check wasn't weakened by ANDing the new one onto it.
+
+## Redundant grants revoked, not just inert
+
+`audit_log` and `sync_ledger` are both meant to be append-only, and both
+relied on the same structural pattern to get there: the standard
+`EnablesRowLevelSecurity` grant gives `clintra_app` full
+`SELECT`/`INSERT`/`UPDATE`/`DELETE` on every table, and neither of these
+two ever had an `UPDATE`/`DELETE` *policy* — so with `FORCE ROW LEVEL
+SECURITY`, those two privileges affected zero rows regardless of holding
+the grant. Correct in practice, but a single-layer guarantee: adding an
+`UPDATE`/`DELETE` policy to either table later, for any unrelated reason,
+would silently reactivate a grant nobody meant to leave live. The audit
+trail is the only record of who did what, and the sync ledger is the only
+receipt of what actually synced — one policy away from a forgeable
+history isn't the same guarantee as two independent layers both saying
+no.
+
+`2026_09_12_000015_revoke_inert_write_grants.php` revokes `UPDATE` and
+`DELETE` on both tables from `clintra_app` directly. `SELECT`/`INSERT`
+are untouched. `tests/Feature/Rls/AppendOnlyGrantsTest.php` asserts the
+grant itself is gone, not just its effect.
+
+**This also corrects a factual error from two earlier sessions**: both
+`2026_09_12_000010_sequence_backed_audit_seq.php`'s own comment and this
+document's "Sequence-backed audit ordering" section above claimed
+`clintra_app` "holds no grant on `audit_log` at all." That was never
+true — `clintra_app` held the standard full-CRUD grant on `audit_log`
+from the moment the table was created. Both are corrected above and here.
 
 ## Hardening pass: hand-rolled token verification in ApplyMembership
 

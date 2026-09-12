@@ -121,6 +121,17 @@ in this document create, for whenever sync implementation starts.
   the acting membership, never to the device."* `web/src/db/mutate.ts:56-70`
   (local seq, confirmed never queued for push); `web/src/sync/fakeTransport.ts:22-28`
   (entity resolution has no audit_log case).
+- **Correction**: earlier work in this session claimed `clintra_app` had
+  no grant on `audit_log` at all, as if that were what kept it
+  write-protected — wrong, and now fixed on both counts.
+  `clintra_app` always held the standard full-CRUD grant; what actually
+  protected the table was the absence of an `UPDATE`/`DELETE` policy, a
+  single-layer guarantee. `api/database/migrations/2026_09_12_000015_revoke_inert_write_grants.php`
+  now revokes `UPDATE`/`DELETE` from `clintra_app` directly, so the
+  "devices never push audit_log rows" decision above and the database's
+  own grants agree independently, not by coincidence of one covering for
+  the other. See `api/docs/rls.md`'s "Redundant grants revoked, not just
+  inert."
 - **Status:** decided.
 
 ### 2. Do sync_ops push in strict per-device order, and what happens when op N fails but N+1 would succeed?
