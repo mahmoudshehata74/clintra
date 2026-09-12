@@ -93,6 +93,10 @@ export async function ensureDeviceRegistration(db: ClintraDatabase): Promise<Dev
     location_id: location.id,
     registered_at: new Date().toISOString(),
     pull_cursor: null,
+    // Never went through real registration (db/registration.ts) — this is
+    // the seed/demo fallback binding, which has no server-issued identity.
+    membership_id: null,
+    token: null,
   };
   await db.device.add(registration);
   clearLegacyLocalStorageDeviceId();

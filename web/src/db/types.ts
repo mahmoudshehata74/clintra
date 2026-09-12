@@ -431,6 +431,22 @@ export interface DeviceRegistration {
    * shares fate with the data it governs.
    */
   pull_cursor: string | null;
+  /**
+   * The membership POST /api/devices/register resolved from the
+   * activation code's owner phone — null for a device bound the old way
+   * (db/seed.ts's demo/dev fallback, which never talks to a real server).
+   * Added in database version 13.
+   */
+  membership_id: string | null;
+  /**
+   * The Sanctum bearer token from a real POST /api/devices/register
+   * response — the credential sync/httpTransport.ts's HttpTransport sends
+   * as `Authorization: Bearer <token>`. Null until real registration
+   * completes. This is the one place it is ever stored; never logged,
+   * never put in a URL (auth/RegistrationScreen.tsx, db/registration.ts).
+   * Added in database version 13.
+   */
+  token: string | null;
 }
 
 // Declared now, unused in v1, no screens.

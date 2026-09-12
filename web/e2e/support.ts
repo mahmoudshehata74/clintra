@@ -99,9 +99,15 @@ export async function login(
  * screen's day, so a row only surfaces when that day is the real today (the
  * seeded day is a fixed past Monday). The every-weekday seed schedule means
  * today still has a bookable grid; it just starts empty of seeded visits.
+ *
+ * ?demo=1 is required here since real device registration shipped
+ * (src/domain/appMode.ts, src/auth/RegistrationScreen.tsx): a plain "/"
+ * with no device row holding a real token now shows the activation
+ * screen instead of silently seeding demo data. gotoSeededDay doesn't
+ * need its own copy of this — ?seedDay=1 already counts as demo mode.
  */
 export async function gotoRealDay(page: Page): Promise<void> {
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await page.evaluate(() => localStorage.clear());
   await login(page);
   await expect(page.getByRole("button", { name: SLOTS_DR })).toBeVisible();

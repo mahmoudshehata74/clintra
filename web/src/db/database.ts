@@ -290,6 +290,22 @@ export class ClintraDatabase extends Dexie {
         const devices = await tx.table("device").toArray();
         await Promise.all(devices.map((device) => tx.table("device").update(device.id, { pull_cursor: null })));
       });
+
+    // Real device registration (docs/auth-plan.md's registration
+    // credential resolution; db/registration.ts): every existing device
+    // row predates this and was bound the old, seed-based way
+    // (db/deviceRegistration.ts's ensureDeviceRegistration fallback), so
+    // it has no membership_id and no token — exactly the state that
+    // means "not really registered" going forward, which is honest: none
+    // of them ever talked to a real server.
+    this.version(13)
+      .stores({})
+      .upgrade(async (tx) => {
+        const devices = await tx.table("device").toArray();
+        await Promise.all(
+          devices.map((device) => tx.table("device").update(device.id, { membership_id: null, token: null })),
+        );
+      });
   }
 }
 

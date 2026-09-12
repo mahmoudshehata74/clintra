@@ -266,6 +266,8 @@ describe("startSyncEngine", () => {
       location_id: "location-1",
       registered_at: new Date().toISOString(),
       pull_cursor: null,
+      membership_id: null,
+      token: null,
     });
 
     let concurrentCalls = 0;
@@ -396,6 +398,8 @@ describe("runPullCycle", () => {
       location_id: "location-1",
       registered_at: new Date().toISOString(),
       pull_cursor: null,
+      membership_id: null,
+      token: null,
     });
   });
 
@@ -500,6 +504,8 @@ describe("SyncAuthError: a 401 is surfaced, never left to throw uncaught into a 
       location_id: "location-1",
       registered_at: new Date().toISOString(),
       pull_cursor: null,
+      membership_id: null,
+      token: null,
     });
     const transport: SyncTransport = {
       pushOps: async () => [],

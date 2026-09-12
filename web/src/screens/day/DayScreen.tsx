@@ -61,13 +61,7 @@ import { dayScreenStrings } from "./strings";
 import SyncStatusChip from "./SyncStatusChip";
 import type { UndoAction } from "./undoAction";
 import UndoToast from "./UndoToast";
-
-// Development-only: appending ?seedDay=1 to the URL pins the screen to the
-// seed's fixed demo date instead of today, so the seeded visits (which no
-// longer sit on "today" — see seed.ts) are reachable without a real date
-// navigation screen. Remove this once one exists. No other query param, no
-// UI, no persisted state: absence of the param leaves behaviour unchanged.
-const SEED_DAY_QUERY_PARAM = "seedDay";
+import { SEED_DAY_QUERY_PARAM } from "../../domain/appMode";
 
 interface StaticData {
   locations: Location[];

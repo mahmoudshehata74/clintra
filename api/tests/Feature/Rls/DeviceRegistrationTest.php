@@ -49,10 +49,24 @@ test('happy path registers and returns a usable token plus bootstrap data', func
     ]);
 
     $response->assertOk();
-    $response->assertJsonStructure(['token', 'organization', 'locations', 'practitioners', 'memberships']);
+    $response->assertJsonStructure([
+        'token', 'device_id', 'org_id', 'location_id', 'membership_id',
+        'organization', 'locations', 'practitioners', 'memberships', 'users',
+    ]);
 
     $token = $response->json('token');
     expect($token)->toBeString();
+
+    // The four scalar ids the web client cannot derive any other way (it
+    // already knows device_id — it minted it — but not which org/location/
+    // membership the activation code just resolved it to) — see
+    // docs/auth-plan.md's registration credential resolution and
+    // web/src/db/deviceRegistration.ts's bootstrap, which binds the local
+    // device row from exactly these four fields.
+    expect($response->json('device_id'))->toBe($deviceId);
+    expect($response->json('org_id'))->toBe($fixture['orgId']);
+    expect($response->json('location_id'))->toBe($fixture['locationId']);
+    expect($response->json('membership_id'))->toBe($fixture['membershipId']);
 
     // organization/locations/memberships in the response actually match
     // this org — including the membership's pin_hash/pin_salt, per
@@ -61,7 +75,19 @@ test('happy path registers and returns a usable token plus bootstrap data', func
     expect(collect($response->json('locations'))->pluck('id')->all())->toBe([$fixture['locationId']]);
     $membershipsInResponse = collect($response->json('memberships'));
     expect($membershipsInResponse->pluck('id')->all())->toBe([$fixture['membershipId']]);
-    expect($membershipsInResponse->first())->toHaveKeys(['pin_hash', 'pin_salt']);
+    expect($membershipsInResponse->first())->toHaveKeys(['pin_hash', 'pin_salt', 'rev']);
+    // rev must be the row's real server value (1, fresh from provisioning),
+    // not a placeholder — see 2026_09_12_000019_add_rev_to_register_device_response.php's
+    // own doc comment for why guessing this would be a real bug.
+    expect($membershipsInResponse->first()['rev'])->toBe(1);
+
+    // The user the registering owner's own membership points at is in the
+    // payload too — web/src/auth/LockScreen.tsx joins memberships to users
+    // by user_id to label the PIN picker; without this a freshly
+    // registered device's picker would have no name to show.
+    $usersInResponse = collect($response->json('users'));
+    expect($usersInResponse->pluck('id')->all())->toBe([$fixture['userId']]);
+    expect($usersInResponse->first())->toHaveKeys(['full_name', 'phone', 'email', 'is_active']);
 
     // The token actually works, end to end over HTTP, and resolves to the
     // registering owner's own membership.

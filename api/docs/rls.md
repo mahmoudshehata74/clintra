@@ -244,17 +244,29 @@ A device registering has no membership yet, same bootstrapping problem as
 provisioning, but for a *read* that has to happen on every single
 authenticated request afterward, not just once. `register_device(jsonb)`
 (`2026_09_12_000006_add_register_device_function.php`) is `SECURITY
-DEFINER`, owned by `clintra_provision` (same `BYPASSRLS` role
-provisioning uses) — but `EXECUTE` is granted to `clintra_app`, not
+DEFINER`, owned by `clintra_register` (its own `BYPASSRLS` role since
+`2026_09_12_000009_split_provisioning_roles.php` — never shared with
+`clintra_provision`/`clintra_mint`, see "One role per provisioning
+function") — but `EXECUTE` is granted to `clintra_app`, not
 `clintra_owner`, because this one is called from a live, unauthenticated
 HTTP request (`POST /api/devices/register`), never from a CLI command on
 the `pgsql_owner` connection. It verifies the activation code (exists,
 unused, unexpired) and the submitted phone (matches an active owner
 membership in that code's org), atomically marks the code used, creates
-the `device` row, and returns the full bootstrap payload the device needs
-— organization, locations, practitioners, and every membership including
-`pin_hash`/`pin_salt` (see `docs/auth-plan.md`'s registration credential
-resolution for why that crossing the wire once, here, is intentional).
+the `device` row, and returns the full bootstrap payload the web client
+needs to actually render from: the four resolved ids
+(`device_id`/`org_id`/`location_id`/`membership_id` — the client already
+knows `device_id`, it minted it, but not which org/location/membership
+the code just resolved it to), the organization, every location and
+practitioner in the org, every membership (including `pin_hash`/`pin_salt`
+— see `docs/auth-plan.md`'s registration credential resolution for why
+that crossing the wire once, here, is intentional — and `rev`, so a later
+edit to that membership has a real `base_rev` to send, not a guess), and
+every user a returned membership's `user_id` points at (`web/src/auth/LockScreen.tsx`
+joins memberships to users by id to label its PIN picker; the first
+version of this payload omitted `users` and `rev` both, caught while
+wiring up the real registration screen —
+`2026_09_12_000019_add_rev_to_register_device_response.php`).
 
 Every credential failure — wrong code, expired, already used, wrong phone,
 right phone but the wrong org's code — raises the exact same generic

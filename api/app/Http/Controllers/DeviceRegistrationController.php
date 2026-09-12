@@ -86,10 +86,15 @@ class DeviceRegistrationController extends Controller
 
         return response()->json([
             'token' => $token,
+            'device_id' => $result['device_id'],
+            'org_id' => $result['org_id'],
+            'location_id' => $result['location_id'],
+            'membership_id' => $result['membership_id'],
             'organization' => $result['organization'],
             'locations' => $result['locations'],
             'practitioners' => $result['practitioners'],
             'memberships' => $result['memberships'],
+            'users' => $result['users'],
         ]);
     }
 

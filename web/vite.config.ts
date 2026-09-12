@@ -62,4 +62,15 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    // `pnpm dev` proxies /api to the local Laravel server (`php artisan
+    // serve`, default port) — every fetch in src/sync/httpTransport.ts and
+    // src/db/registration.ts already uses a relative "/api/..." URL, same
+    // origin as this dev server, so nothing in application code needs to
+    // know this exists. Never used by the production build (Vercel serves
+    // the built static app; the real API is deployed separately).
+    proxy: {
+      "/api": "http://127.0.0.1:8000",
+    },
+  },
 });

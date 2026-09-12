@@ -99,6 +99,78 @@ invariant is precisely "a PIN hash never leaves the device **after
 registration**" — registration is the one moment a fresh device doesn't
 have it yet and must receive it from somewhere.
 
+#### Resolution: the web side (recorded once screen 1 shipped)
+
+**The response was missing three things the client actually needs to
+render from it, found while wiring this up, not while designing it.** All
+three were additive, backward-compatible fixes to
+`register_device(jsonb)` and `DeviceRegistrationController`
+(`2026_09_12_000019_add_rev_to_register_device_response.php`):
+
+- **`device_id`/`org_id`/`location_id`/`membership_id` at the top level.**
+  The response returned `organization`/`locations`/`practitioners`/`memberships`
+  but never the four scalar ids that say which of them is *this* device's —
+  the client already knows `device_id` (it minted it), but not which
+  org/location/membership the activation code just resolved it to.
+- **Every membership's `rev`.** `memberships` is one of the 14
+  row-versioned tables (`2026_09_12_000012_add_row_versioning.php`), and
+  the bootstrap forgot it — a device that received a membership row
+  without its real `rev` would send a guessed `base_rev` on its first
+  edit to it, and a wrong guess reads as a false `conflict_stale_rev`.
+- **`users`.** Entirely absent from the original payload, even though
+  `web/src/auth/LockScreen.tsx` — the screen this payload exists to
+  bootstrap in the first place — joins memberships to users by `user_id`
+  to label its PIN picker. Without this, a freshly registered device's
+  PIN screen would show membership rows with no name.
+
+**`web/src/domain/appMode.ts` decides demo vs. real registration, by an
+explicit query-param opt-in, not by inspecting local state.** `?seedDay=1`
+(already existed) or a new `?demo=1` means "seed-based demo/dev boot,
+exactly as this app has always worked" — `db/seed.ts` runs, `db/deviceRegistration.ts`'s
+`ensureDeviceRegistration` auto-binds a tokenless device, and
+`auth/RegistrationScreen.tsx` never shows. Absent both, `App.tsx` checks
+whether `device` holds a row with a real `token`
+(`db/registration.ts`'s `isDeviceRegistered`); if not, it renders
+`RegistrationScreen` and nothing else — not layered under the app shell,
+in place of it — until a successful activation flips that check. This
+was a deliberate, explicit default change: a plain `/` used to always
+auto-seed demo data; it now means "genuinely fresh install" unless told
+otherwise. `web/e2e/support.ts`'s `gotoRealDay` was updated to pass
+`?demo=1` for exactly this reason; every other e2e entry point already
+used `?seedDay=1`.
+
+**What happens to `db/seed.ts`'s demo data on a device that registers
+for real: nothing, by construction, not by a new guard.** `seedDatabase()`
+already only ever writes when `organizations.count() === 0`
+(`web/src/db/seed.ts`'s own doc comment, predating this task). Real
+registration's bootstrap (`db/registration.ts`) writes the organization
+row *before* `DayScreen.tsx`'s effect ever gets a chance to call
+`seedDatabase()`, so that check is already false by the time it runs — no
+separate "skip seeding for a real device" flag was needed or added. A
+real clinic's device therefore never sees demo patients, and neither
+call site had to know about the other's existence.
+
+**Bootstrap rows are written directly (`bulkPut`/`put`), never through
+`mutate()`.** Same reasoning as `db/seed.ts`'s own demo data: these are
+server-authoritative facts the device didn't create, and must never queue
+a `sync_ops` row claiming otherwise (api/docs/rls.md's "The sync endpoint
+is accept-or-reject only" is the same principle from the other
+direction — a device inventing history for a row it was only ever handed
+is the same class of problem as a server inventing a write it wasn't
+given).
+
+**`selectSyncTransport` is now wired to a real credential, at last** — the
+gap the previous (`feat(web): http sync transport`) task's stop condition
+flagged. `App.tsx` reads `device.token` once the registration gate
+resolves and passes it straight through; demo mode's device row never has
+one, so Fake remains the default there exactly as before. A 401
+(`SyncAuthError`) is caught by `sync/engine.ts` and dispatched as
+`SYNC_AUTH_ERROR_EVENT_NAME`; `App.tsx` listens app-wide and shows a
+persistent, non-blocking banner offering re-registration — it never wipes
+local data on its own; only a fresh, successful activation overwrites the
+`device` row's token (and, harmlessly, re-`put`s the same
+organization/location/practitioner/membership/user rows it already has).
+
 ### 3. What happens if a registered device's local DB is wiped?
 
 - **Recommendation:** Re-registration is required — because (per Q1)
