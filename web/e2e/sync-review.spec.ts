@@ -63,7 +63,7 @@ async function putIndexedDbRows<T>(page: Page, storeName: string, rows: readonly
  * and both actions' visible effect, reading and writing this exact same
  * IndexedDB state through the running app.
  */
-async function plantLostSlotConflict(page: Page, patientName: string): Promise<Visit> {
+async function plantLostSlotConflict(page: Page, patientName: string): Promise<{ visit: Visit; plantedOpId: string }> {
   await emptySlotTiles(page).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(patientName);
@@ -131,7 +131,7 @@ async function plantLostSlotConflict(page: Page, patientName: string): Promise<V
   await selectPractitioner(page, SLOTS_DR);
 
   await expect(page.getByRole("button", { name: S.syncNeedsReview, exact: true })).toBeVisible({ timeout: 10_000 });
-  return myVisit;
+  return { visit: myVisit, plantedOpId: opId };
 }
 
 test("a lost slot conflict shows up in review with no server row to compare against, and 'خليها كده' keeps the patient while freeing the slot", async ({
@@ -140,7 +140,7 @@ test("a lost slot conflict shows up in review with no server row to compare agai
   await gotoSeededDay(page);
   await selectPractitioner(page, SLOTS_DR);
 
-  const myVisit = await plantLostSlotConflict(page, PATIENTS.hoda);
+  const { visit: myVisit } = await plantLostSlotConflict(page, PATIENTS.hoda);
 
   await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
   const sheet = page.getByRole("dialog");
@@ -163,7 +163,7 @@ test("'شيلها' on a lost slot conflict removes the phantom local visit entir
   await gotoSeededDay(page);
   await selectPractitioner(page, SLOTS_DR);
 
-  const myVisit = await plantLostSlotConflict(page, PATIENTS.karim);
+  const { visit: myVisit, plantedOpId } = await plantLostSlotConflict(page, PATIENTS.karim);
 
   await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
   const sheet = page.getByRole("dialog");
@@ -174,6 +174,14 @@ test("'شيلها' on a lost slot conflict removes the phantom local visit entir
   const visitsAfter = await readIndexedDbStore<Visit>(page, "visits");
   expect(visitsAfter.find((visit) => visit.id === myVisit.id)).toBeUndefined();
 
+  // The planted (fake-rejected) op is gone, along with mutate()'s own
+  // follow-up delete op for the row it just removed — neither should ever
+  // be resent, since no server row under this id will ever exist to
+  // delete. The very first, ordinary booking op is a different, already
+  // *synced* row for the same entity_id from before the conflict was ever
+  // planted — legitimate history, correctly left untouched by discardMine,
+  // which only ever touches still-unsent ops.
   const opsAfter = await readIndexedDbStore<SyncOp>(page, "sync_ops");
-  expect(opsAfter.find((op) => op.entity_id === myVisit.id)).toBeUndefined();
+  expect(opsAfter.find((op) => op.op_id === plantedOpId)).toBeUndefined();
+  expect(opsAfter.some((op) => op.entity_id === myVisit.id && op.synced_at === null)).toBe(false);
 });
