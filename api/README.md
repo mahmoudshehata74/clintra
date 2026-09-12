@@ -43,6 +43,25 @@ GRANT clintra_provision TO clintra_owner;
 GRANT CREATE ON SCHEMA public TO clintra_provision;
 ```
 
+Two more, same reason, same pattern — one role per provisioning function,
+sized by exposure (`docs/rls.md`'s "One role per provisioning function"):
+`clintra_mint` owns `mint_activation_code(jsonb)` (CLI-only, same as
+`clintra_provision`); `clintra_register` owns `register_device(jsonb)` —
+the one callable by `clintra_app` itself, from a live unauthenticated HTTP
+request, so it's granted only the narrow, column-exact privileges that
+function's body actually uses. Needed in every environment including
+production, same as `clintra_provision`.
+
+```sql
+CREATE ROLE clintra_mint NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
+CREATE ROLE clintra_register NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
+GRANT clintra_mint TO clintra_owner;
+GRANT clintra_register TO clintra_owner;
+\c clintra
+GRANT CREATE ON SCHEMA public TO clintra_mint;
+GRANT CREATE ON SCHEMA public TO clintra_register;
+```
+
 A fourth role, **local and CI only**: the RLS isolation suite
 (`tests/Feature/Rls`) needs to insert fixture data (an organization, a
 membership, ...) without a membership already in place to grant RLS scope —
@@ -88,6 +107,8 @@ ALTER SCHEMA public OWNER TO clintra_owner;
 GRANT USAGE ON SCHEMA public TO clintra_app;
 GRANT CREATE ON SCHEMA public TO clintra_rls;
 GRANT CREATE ON SCHEMA public TO clintra_provision;
+GRANT CREATE ON SCHEMA public TO clintra_mint;
+GRANT CREATE ON SCHEMA public TO clintra_register;
 GRANT CONNECT ON DATABASE clintra_test TO clintra_app;
 GRANT CONNECT ON DATABASE clintra_test TO clintra_fixtures;
 GRANT USAGE ON SCHEMA public TO clintra_fixtures;

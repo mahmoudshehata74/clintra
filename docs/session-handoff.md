@@ -14,11 +14,11 @@ working policies. No real entity endpoints exist yet; the web app still
 ships against `FakeTransport`, untouched.
 
 ## Last commit
-`fix(api): harden registration and token verification` (this commit) —
-audited the two surfaces the previous session's registration feature
-opened: `register_device`'s own privileges and input validation, and
-`ApplyMembership`'s hand-rolled token verification. See "Known gaps" below
-for the full writeup.
+`fix(api): one role per provisioning function` (this commit) — the grants
+audit in the previous commit found that `register_device` (internet-facing)
+shared its owner role with two CLI-only functions, inheriting privileges
+it never needed. Split into three roles, one per function, sized by
+exposure. See "Known gaps" below for the full writeup.
 
 ## The three-role model
 `clintra_owner` owns every table and is the only role migrations run as
@@ -34,6 +34,13 @@ That's a real circular dependency; `clintra_rls` breaks it via
 `clintra_app` both stay fully RLS-bound for every direct query. Full
 model, the three RLS traps defended against, and the "add a new table"
 checklist: `api/docs/rls.md`.
+
+Since named "the three-role model," provisioning has grown three roles of
+its own — `clintra_provision`, `clintra_mint`, `clintra_register`, one per
+provisioning function, sized by exposure (see the "Known gaps" bullet
+below and `api/docs/rls.md`'s "One role per provisioning function") — plus
+`clintra_fixtures`, test-only. Seven roles total now; this section's name
+is legacy, not a claim about the current count.
 
 ## Open WIP / deferred
 - No entity endpoints (patients, visits, invoices, ...) — that's the next
@@ -333,6 +340,62 @@ checklist: `api/docs/rls.md`.
     that accumulated across a long test run until Postgres's
     `max_connections` was exhausted. `tests/Pest.php` now calls
     `DB::disconnect()` on all three named connections after every test.
+- **Provisioning role split: one role per function, sized by exposure.**
+  The grants audit above (`clintra_provision`'s footprint) surfaced a real
+  design flaw, not just an untidy one: `clintra_provision` was the shared
+  `SECURITY DEFINER` owner of three functions across two trust levels —
+  `provision_organization` and `mint_activation_code` (CLI-only) plus
+  `register_device` (internet-facing, callable by `clintra_app` from an
+  unauthenticated `POST /api/devices/register`). Postgres grants are
+  per-role, so a flaw in the internet-facing function would have inherited
+  the CLI-only ones' privileges too — `INSERT` on `organizations`,
+  `locations`, `practitioners`, `practitioner_locations`, `memberships` —
+  an org-and-membership forgery primitive, not just a device one.
+  `2026_09_12_000009_split_provisioning_roles.php` splits this into three
+  roles — `clintra_provision`, `clintra_mint` (new), `clintra_register`
+  (new) — each owning exactly one function, each granted exactly what that
+  function's current body reads or writes, nothing granted on the grounds
+  it might be needed later. Full grant tables and reasoning:
+  `api/docs/rls.md`'s "One role per provisioning function".
+  - Two real gaps surfaced while building the new allowlists, both from
+    checking function bodies directly rather than assuming from names:
+    `mint_activation_code` also needs `memberships` `SELECT` (to find the
+    org's active owner for the audit row) — an earlier draft had
+    `organizations` instead, which the function never actually reads.
+    Both `mint_activation_code` and `register_device` need `SELECT` on
+    `audit_log`, not just `INSERT` — every provisioning function computes
+    its own next `seq` via `SELECT MAX(seq)`, which is a genuine read even
+    though nothing ever `UPDATE`s or `DELETE`s an audit row.
+  - `clintra_register` — the new internet-facing role — is the narrowest
+    of the three by construction: read-only everywhere except `device`
+    (`INSERT`-only) and `activation_codes`, where the `UPDATE` is
+    column-restricted to exactly `used_at`/`used_by_device_id`. It also
+    lost four grants the shared role used to carry that `register_device`
+    never actually reads: `SELECT` on `device` itself, `specialty_templates`,
+    `form_definitions`, and `practitioner_locations`.
+  - `tests/Feature/Rls/ProvisioningRoleGrantsTest.php` reads
+    `information_schema.role_table_grants`/`role_column_grants` directly
+    and asserts each role's exact allowlist — it fails the moment a future
+    migration grants either new role anything beyond it, regardless of
+    that migration's own comment. `tests/Feature/Rls/MintActivationCodeTest.php`
+    is new too: `mint_activation_code` had no behavioral test at all before
+    this split (only `provision_organization`'s own first-code creation was
+    covered), so the split's correctness for that function was previously
+    unverified by anything.
+  - **Checked, not shipped**: the registration response
+    (`register_device`'s bootstrap payload) returns `organization`,
+    `locations`, `practitioners`, and `memberships`, but not
+    `practitioner_locations` — the practitioner-to-location link. Verified
+    this is not currently a gap: no screen in `web/src/` reads
+    `practitioner_locations` at all (`web/src/screens/day/DayScreen.tsx`
+    and the owner panels list practitioners filtered only by `is_active`,
+    never by location), so v1 already behaves as "every active
+    practitioner works at every location" regardless of what registration
+    returns. The local Dexie schema and `seed.ts` do model and write
+    `practitioner_locations`, just never read it back. If a future change
+    makes the web app actually location-scope its practitioner list, the
+    registration payload gap (and the `clintra_register` grant it would
+    need) is a separate, later step — deliberately not added here.
 
 ## Verify
 Web: `pnpm --dir web test` · `pnpm exec tsc -b --noEmit` · `pnpm --dir web

@@ -316,30 +316,28 @@ how a device gets its first credential. It runs `SECURITY DEFINER` as
 `clintra_provision`, a `BYPASSRLS` role, so it deserves the same scrutiny as
 `provision_organization`.
 
-**Grants audit.** Queried directly (`information_schema.role_table_grants`,
-not `\dp`, since no `psql` client was available in this environment —
-identical information): `clintra_provision` holds `INSERT`/`SELECT` on
+**Grants audit (as of the initial pass, before the role split below).**
+Queried directly (`information_schema.role_table_grants`, not `\dp`, since
+no `psql` client was available in this environment — identical
+information): `clintra_provision` held `INSERT`/`SELECT` on
 `activation_codes`, `audit_log`, `locations`, `memberships`,
 `organizations`, `practitioners`, `users`; `INSERT`-only on `device` and
 `practitioner_locations`; and `SELECT`-only on `specialty_templates`. It
-holds **zero privileges on `patients`, `visits`, `invoices`, or
-`payments`** — the specific hole this audit was checking for does not
-exist.
-
-The footprint is wider than `register_device` itself needs (it only ever
-touches `activation_codes`, `device`, `memberships`, `users`, `audit_log`)
-because `clintra_provision` is the shared owner of three functions —
-`register_device`, `provision_organization`, and `mint_activation_code` —
-and Postgres grants are per-role, not per-function. `provision_organization`
-is what actually needs `organizations`/`locations`/`practitioners`/
-`practitioner_locations`/`specialty_templates`. Splitting this into
-per-function roles would shrink `register_device`'s blast radius further
-but is a structural change beyond this pass's scope — noted here for a
-future hardening step, not applied. `personal_access_tokens` was expected
-in this list but isn't: the Sanctum token row is written in PHP, on the
-`clintra_app` connection, *after* `register_device` returns (see
-`DeviceRegistrationController`) — `register_device` itself never touches
-that table.
+held **zero privileges on `patients`, `visits`, `invoices`, or
+`payments`** — the specific hole this audit was checking for did not
+exist. But the footprint was wider than `register_device` itself needed
+(it only ever touched `activation_codes`, `device`, `memberships`,
+`users`, `audit_log`) because `clintra_provision` was the shared owner of
+three functions, and Postgres grants are per-role, not per-function. A
+flaw in `register_device` — reachable from the internet — would have
+inherited `provision_organization`'s privileges too: `INSERT` on
+`organizations`, `locations`, `practitioners`, `practitioner_locations`,
+`memberships`. That's an org-and-membership forgery primitive, not just a
+device one. Resolved below, in "One role per provisioning function".
+`personal_access_tokens` was expected in this list but wasn't there: the
+Sanctum token row is written in PHP, on the `clintra_app` connection,
+*after* `register_device` returns (see `DeviceRegistrationController`) —
+`register_device` itself never touches that table.
 
 **Its own input validation** (`2026_09_12_000007_validate_register_device_payload.php`)
 mirrors `provision_organization`'s: required keys present, no unknown keys,
@@ -371,6 +369,77 @@ since nothing there depends on the device still existing. It's the same
 a `false` result as unauthenticated. `device` has no `is_active` column, so
 only "deleted" is representable, not "inactive"; a future `is_active`
 column would need this function (and this note) updated together.
+
+## One role per provisioning function
+
+The grants audit above found a real design flaw, not just an untidy
+footprint: sharing `clintra_provision` across three functions of two very
+different exposure levels — two CLI-only (`provision_organization`,
+`mint_activation_code`) and one internet-facing (`register_device`) — meant
+a flaw in the internet-facing one inherited the CLI-only ones' privileges
+too, because Postgres grants are per-role, never per-function. Fixed by
+`2026_09_12_000009_split_provisioning_roles.php`: three roles, each owning
+exactly one function, each granted exactly what that function's current
+body reads or writes — nothing granted on the grounds that it might be
+needed later, since that's what widened `clintra_provision` in the first
+place. Widening any of the three now means editing a migration, in a
+change that's reviewable on its own, not a side effect of some other
+function's grants.
+
+| Role | Owns | Callable by | Table privileges |
+|---|---|---|---|
+| `clintra_provision` | `provision_organization` | `clintra_owner` (CLI only) | `INSERT` on `organizations`, `locations`, `practitioners`, `practitioner_locations`, `memberships`, `activation_codes`; `INSERT`+`SELECT` on `users`, `audit_log`; `SELECT` on `specialty_templates` |
+| `clintra_mint` | `mint_activation_code` | `clintra_owner` (CLI only) | `SELECT` on `locations`, `memberships`; `INSERT` on `activation_codes`; `INSERT`+`SELECT` on `audit_log` |
+| `clintra_register` | `register_device` | `clintra_app` (the unauthenticated HTTP endpoint) | `SELECT` on `organizations`, `locations`, `practitioners`, `memberships`, `users`, `activation_codes`; `UPDATE` on `activation_codes` restricted to exactly two columns (`used_at`, `used_by_device_id`); `INSERT` on `device`; `INSERT`+`SELECT` on `audit_log` |
+
+`clintra_register` — the one reachable from the internet — is the
+narrowest by construction: read-only everywhere except the two tables
+`register_device` actually creates or updates rows in, and even that
+`UPDATE` is column-restricted (`GRANT UPDATE (used_at, used_by_device_id)
+ON activation_codes ...`), so it cannot touch `code_hash`, `expires_at`, or
+any other column on that table even by accident. It holds zero privileges
+of any kind on `patients`, `visits`, `invoices`, `payments`,
+`practitioner_locations`, `specialty_templates`, or `form_definitions` —
+confirmed by `tests/Feature/Rls/ProvisioningRoleGrantsTest.php`, which
+reads `information_schema.role_table_grants`/`role_column_grants` directly
+(the same source of truth this whole audit is built from) and fails the
+moment a future migration grants either new role anything outside this
+table, regardless of what that migration's own comment claims.
+
+**All three roles need `SELECT` on `audit_log`, not just `INSERT`** — an
+easy assumption to get wrong, since audit rows are otherwise append-only
+(nothing ever `UPDATE`s or `DELETE`s one). Every provisioning function
+computes its own next `audit_log.seq` via `SELECT COALESCE(MAX(seq), 0)
+FROM audit_log` — a genuine read, and the first draft of this split's
+allowlists (written before checking the function bodies directly) missed
+it for the two new roles. Caught before granting anything, not after: see
+the two corrections below, both found by reading `2026_09_12_000005_add_mint_activation_code_function.php`'s
+and `2026_09_12_000006_add_register_device_function.php`'s actual SQL
+rather than assuming from the function's name what it "should" need.
+
+- `mint_activation_code` also reads `memberships` (to find the org's
+  active owner and attribute the new code's audit row to them) — missing
+  from an earlier draft of `clintra_mint`'s allowlist, which had assumed
+  `organizations` instead. It was corrected to `memberships`;
+  `organizations` was dropped entirely — the function only ever checks
+  `locations.org_id`, never reads the `organizations` table itself.
+- `register_device` writes two `audit_log` rows per successful
+  registration (device creation, activation-code-used) — the same
+  audit-trail convention every other entity-creating function in this
+  schema follows. An earlier draft's allowlist had no `audit_log` entry at
+  all for `clintra_register`; granting only `INSERT`, matching every other
+  role's `audit_log` grant, keeps `register_device`'s audit trail intact
+  without granting `UPDATE`/`DELETE` on a table nothing should ever
+  modify or remove rows from.
+
+**Downgraded, not just added:** `clintra_register` used to hold (via the
+shared `clintra_provision`) `SELECT` on `device`, `specialty_templates`,
+`form_definitions`, and `practitioner_locations` — none of which
+`register_device`'s current body ever reads (no `RETURNING`, no query
+against any of those three others). All four were dropped. If a later
+change needs the registration response to include specialty/form/location
+data, that's a new migration granting exactly the new column or table
+access it needs — not a standing grant kept around in case.
 
 ## Hardening pass: hand-rolled token verification in ApplyMembership
 
