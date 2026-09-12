@@ -80,7 +80,14 @@ test('clintra_register holds no write of any kind outside its allowlist, and no 
     expect(collect($allUpdateColumns)->pluck('column_name')->all())->toBe(['used_at', 'used_by_device_id']);
 
     expect($grants['device'])->toBe(['INSERT']);
-    expect($grants['audit_log'])->toBe(['INSERT', 'SELECT']);
+
+    // audit_log.seq is a Postgres identity column now
+    // (2026_09_12_000010_sequence_backed_audit_seq.php) — SELECT MAX(seq)
+    // was the only reason this role ever needed SELECT here, and an
+    // identity column's underlying sequence needs no separate grant for a
+    // role that already has INSERT on the table. INSERT-only, never
+    // SELECT/UPDATE/DELETE, on an otherwise append-only table.
+    expect($grants['audit_log'])->toBe(['INSERT']);
 
     // The specific hole this whole exercise was checking for: zero
     // privileges of any kind on clinical data or the tables that would let
@@ -104,7 +111,7 @@ test('clintra_mint holds no write outside activation_codes and audit_log, and no
     expect($grants['locations'])->toBe(['SELECT']);
     expect($grants['memberships'])->toBe(['SELECT']);
     expect($grants['activation_codes'])->toBe(['INSERT']);
-    expect($grants['audit_log'])->toBe(['INSERT', 'SELECT']);
+    expect($grants['audit_log'])->toBe(['INSERT']);
 
     $mustNeverAppear = [
         'patients', 'visits', 'invoices', 'payments', 'organizations',
@@ -128,12 +135,31 @@ test('clintra_provision is left with exactly provision_organization\'s own footp
     foreach (['organizations', 'locations', 'practitioners', 'practitioner_locations', 'memberships', 'activation_codes'] as $table) {
         expect($grants[$table])->toBe(['INSERT']);
     }
-    expect($grants['audit_log'])->toBe(['INSERT', 'SELECT']);
+    expect($grants['audit_log'])->toBe(['INSERT']);
     expect($grants['users'])->toBe(['INSERT', 'SELECT']);
     expect($grants['specialty_templates'])->toBe(['SELECT']);
 
     foreach (['patients', 'visits', 'invoices', 'payments', 'device', 'form_definitions'] as $table) {
         expect($grants->has($table))->toBeFalse("clintra_provision must hold no privileges on {$table}");
+    }
+});
+
+test('none of the three provisioning roles can SELECT audit_log', function () {
+    // 2026_09_12_000010_sequence_backed_audit_seq.php: seq is a Postgres
+    // identity column now, so SELECT MAX(seq) is gone from every
+    // provisioning function — SELECT on audit_log was the only reason any
+    // of the three roles ever had it. This test fails the moment a future
+    // migration re-grants it for any other reason without a fresh review.
+    foreach (['clintra_provision', 'clintra_mint', 'clintra_register'] as $role) {
+        $rows = test()->asOwner()->select(<<<'SQL'
+            SELECT privilege_type
+            FROM information_schema.role_table_grants
+            WHERE grantee = ? AND table_name = 'audit_log'
+            ORDER BY privilege_type
+        SQL, [$role]);
+
+        expect(collect($rows)->pluck('privilege_type')->all())
+            ->toBe(['INSERT'], "{$role} must hold INSERT-only on audit_log, never SELECT/UPDATE/DELETE");
     }
 });
 

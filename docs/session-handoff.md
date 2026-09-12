@@ -14,11 +14,12 @@ working policies. No real entity endpoints exist yet; the web app still
 ships against `FakeTransport`, untouched.
 
 ## Last commit
-`fix(api): one role per provisioning function` (this commit) — the grants
-audit in the previous commit found that `register_device` (internet-facing)
-shared its owner role with two CLI-only functions, inheriting privileges
-it never needed. Split into three roles, one per function, sized by
-exposure. See "Known gaps" below for the full writeup.
+`fix(api): sequence-backed audit ordering` (this commit) — the previous
+commit's report flagged that every provisioning function computed
+`audit_log.seq` via `SELECT MAX(seq) + 1`, the same read-then-write race
+the web side already fixed for its own local counter (commit `236e2e2`).
+`seq` is now a real Postgres identity column. See "Known gaps" below for
+the full writeup.
 
 ## The three-role model
 `clintra_owner` owns every table and is the only role migrations run as
@@ -50,6 +51,26 @@ is legacy, not a claim about the current count.
   writeup). Web's existing Layer 1/Layer 2 auth is still local-only
   (IndexedDB); nothing on the web side calls this endpoint yet — that's
   the next task.
+- **`practitioner_locations` is written everywhere and read nowhere — a
+  real gap, not yet visible.** What exists: the API schema has the table,
+  `provision_organization` writes a row for the owner's first practitioner
+  at first setup, and the web app's local Dexie schema + `seed.ts` model
+  and write the same link. What's missing: nothing reads it, anywhere.
+  `web/src/screens/day/DayScreen.tsx` and the owner panels
+  (`StaffPanel.tsx`, `ServicesPanel.tsx`) list practitioners filtered only
+  by `is_active`, never by location — so v1 behaves as "every active
+  practitioner works at every location" regardless of what
+  `practitioner_locations` actually says. `register_device`'s bootstrap
+  response (`organization`, `locations`, `practitioners`, `memberships`)
+  doesn't include it either, consistent with nothing needing it yet. When
+  it bites: the first clinic with two locations and doctors who don't work
+  both — the day sheet will show every doctor at every branch, silently
+  wrong, with no error and no test currently catching it (single-location
+  v1 makes this invisible by construction). Fixing it means both a web
+  change (filter practitioners by location) and an API change
+  (`register_device` returning the link, `clintra_register` gaining a
+  narrow `SELECT` on it) — a real, if currently invisible, gap. Not
+  implemented here on purpose.
 - `contract/` now exists (`reference-data.json`, `pin-hash.json`,
   `phone-cases.json`). The visit status state machine still lives only in
   `web/src/domain/transitions.ts` — not yet duplicated/shared with the
@@ -382,20 +403,49 @@ is legacy, not a claim about the current count.
     this split (only `provision_organization`'s own first-code creation was
     covered), so the split's correctness for that function was previously
     unverified by anything.
-  - **Checked, not shipped**: the registration response
-    (`register_device`'s bootstrap payload) returns `organization`,
-    `locations`, `practitioners`, and `memberships`, but not
-    `practitioner_locations` — the practitioner-to-location link. Verified
-    this is not currently a gap: no screen in `web/src/` reads
-    `practitioner_locations` at all (`web/src/screens/day/DayScreen.tsx`
-    and the owner panels list practitioners filtered only by `is_active`,
-    never by location), so v1 already behaves as "every active
-    practitioner works at every location" regardless of what registration
-    returns. The local Dexie schema and `seed.ts` do model and write
-    `practitioner_locations`, just never read it back. If a future change
-    makes the web app actually location-scope its practitioner list, the
-    registration payload gap (and the `clintra_register` grant it would
-    need) is a separate, later step — deliberately not added here.
+  - **Checked, and it's a real gap, not a non-issue**: the registration
+    response (`register_device`'s bootstrap payload) returns
+    `organization`, `locations`, `practitioners`, and `memberships`, but
+    not `practitioner_locations` — see "Open WIP / deferred" above for the
+    full writeup (moved there since it's a gap to track, not settled).
+- **Sequence-backed audit ordering.** The previous bullet's own report
+  flagged that both `mint_activation_code` and `register_device` compute
+  `audit_log.seq` via `SELECT MAX(seq) + 1` — the same read-then-write race
+  the web side already fixed for its own local counter (commit `236e2e2`,
+  `docs/schema.md`'s new "v11 additions" section). `audit_log.seq` carries
+  a `UNIQUE` constraint, so the actual failure mode wasn't silent
+  ambiguity — two concurrent transactions reading the same `MAX` would
+  both try to insert the same value, and the second's unique-violation
+  rolled back its *entire* transaction, not just the audit row.
+  `2026_09_12_000010_sequence_backed_audit_seq.php` makes `seq` a real
+  Postgres identity column (`GENERATED BY DEFAULT AS IDENTITY`, started
+  one past the current max so an already-provisioned database's existing
+  rows never collide with a freshly-generated one), and removes the
+  now-dead `SELECT MAX(seq)` line from all three provisioning functions.
+  Full writeup: `api/docs/rls.md`'s "Sequence-backed audit ordering".
+  - This also let all three provisioning roles lose `SELECT` on
+    `audit_log` entirely — the only reason any of them had it. Checked
+    empirically first (not assumed): an identity column's underlying
+    sequence needs no separate `USAGE` grant for a role that already has
+    `INSERT` on the table, unlike a role calling `nextval()` directly.
+    `tests/Feature/Rls/ProvisioningRoleGrantsTest.php` gained a dedicated
+    test asserting all three are `INSERT`-only on `audit_log`.
+  - `tests/Feature/Rls/AuditLogSequenceTest.php` is new: one test races two
+    fully independent, valid `register_device` calls (different orgs,
+    different codes) via two real OS processes and confirms both succeed
+    with four pairwise-distinct, strictly increasing `seq` values — before
+    this fix, this exact scenario could fail one of the two calls outright
+    on the other's unrelated `MAX(seq)` collision. A second test reproduces
+    the migration's own logic against a throwaway table pre-seeded with
+    high `seq` values, confirming existing rows keep their values and a
+    fresh row lands strictly above the old max.
+  - **Explicitly not addressed**: the web app's local `audit_log.seq`
+    (per-device) and the API's new identity column (database-global) are
+    two unrelated counters — nothing today syncs a device's local audit
+    rows to the API at all, so there is no reconciliation to design yet,
+    only to anticipate. Confirmed nothing server-side currently assumes a
+    client-supplied `seq` means anything: no provisioning function accepts
+    one in its payload.
 
 ## Verify
 Web: `pnpm --dir web test` · `pnpm exec tsc -b --noEmit` · `pnpm --dir web

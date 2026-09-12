@@ -201,8 +201,11 @@ Rather than widen the grants past what provisioning actually writes, the
 function builds every audit "after" snapshot from the values it already
 has in hand (from its `jsonb` argument or fixed constants), so the grants
 stay exactly `INSERT` on the seven tables it writes, plus `SELECT` only
-where genuinely needed: `users` (the phone-reuse check) and `audit_log`
-(`MAX(seq)`).
+where genuinely needed: `users`, for the phone-reuse check.
+(`audit_log.seq` used to need a `SELECT MAX(seq)` here too — since
+"Sequence-backed audit ordering" below, it's a real identity column, and
+none of the three provisioning roles hold `SELECT` on `audit_log` at all
+any more.)
 
 **Every id is caller-supplied.** The function never calls
 `gen_random_uuid()` — `clintra:provision` generates every id itself, "the
@@ -388,9 +391,12 @@ function's grants.
 
 | Role | Owns | Callable by | Table privileges |
 |---|---|---|---|
-| `clintra_provision` | `provision_organization` | `clintra_owner` (CLI only) | `INSERT` on `organizations`, `locations`, `practitioners`, `practitioner_locations`, `memberships`, `activation_codes`; `INSERT`+`SELECT` on `users`, `audit_log`; `SELECT` on `specialty_templates` |
-| `clintra_mint` | `mint_activation_code` | `clintra_owner` (CLI only) | `SELECT` on `locations`, `memberships`; `INSERT` on `activation_codes`; `INSERT`+`SELECT` on `audit_log` |
-| `clintra_register` | `register_device` | `clintra_app` (the unauthenticated HTTP endpoint) | `SELECT` on `organizations`, `locations`, `practitioners`, `memberships`, `users`, `activation_codes`; `UPDATE` on `activation_codes` restricted to exactly two columns (`used_at`, `used_by_device_id`); `INSERT` on `device`; `INSERT`+`SELECT` on `audit_log` |
+| `clintra_provision` | `provision_organization` | `clintra_owner` (CLI only) | `INSERT` on `organizations`, `locations`, `practitioners`, `practitioner_locations`, `memberships`, `activation_codes`, `audit_log`; `INSERT`+`SELECT` on `users`; `SELECT` on `specialty_templates` |
+| `clintra_mint` | `mint_activation_code` | `clintra_owner` (CLI only) | `SELECT` on `locations`, `memberships`; `INSERT` on `activation_codes`, `audit_log` |
+| `clintra_register` | `register_device` | `clintra_app` (the unauthenticated HTTP endpoint) | `SELECT` on `organizations`, `locations`, `practitioners`, `memberships`, `users`, `activation_codes`; `UPDATE` on `activation_codes` restricted to exactly two columns (`used_at`, `used_by_device_id`); `INSERT` on `device`, `audit_log` |
+
+*(Table above reflects the state after "Sequence-backed audit ordering"
+below — none of the three hold `SELECT` on `audit_log` any more.)*
 
 `clintra_register` — the one reachable from the internet — is the
 narrowest by construction: read-only everywhere except the two tables
@@ -406,16 +412,21 @@ reads `information_schema.role_table_grants`/`role_column_grants` directly
 moment a future migration grants either new role anything outside this
 table, regardless of what that migration's own comment claims.
 
-**All three roles need `SELECT` on `audit_log`, not just `INSERT`** — an
-easy assumption to get wrong, since audit rows are otherwise append-only
-(nothing ever `UPDATE`s or `DELETE`s one). Every provisioning function
-computes its own next `audit_log.seq` via `SELECT COALESCE(MAX(seq), 0)
-FROM audit_log` — a genuine read, and the first draft of this split's
-allowlists (written before checking the function bodies directly) missed
-it for the two new roles. Caught before granting anything, not after: see
-the two corrections below, both found by reading `2026_09_12_000005_add_mint_activation_code_function.php`'s
-and `2026_09_12_000006_add_register_device_function.php`'s actual SQL
-rather than assuming from the function's name what it "should" need.
+**All three roles originally needed `SELECT` on `audit_log`, not just
+`INSERT`** — an easy assumption to get wrong, since audit rows are
+otherwise append-only (nothing ever `UPDATE`s or `DELETE`s one). Every
+provisioning function computed its own next `audit_log.seq` via `SELECT
+COALESCE(MAX(seq), 0) FROM audit_log` — a genuine read, and the first
+draft of this split's allowlists (written before checking the function
+bodies directly) missed it for the two new roles. Caught before granting
+anything, not after: see the two corrections below, both found by reading
+`2026_09_12_000005_add_mint_activation_code_function.php`'s and
+`2026_09_12_000006_add_register_device_function.php`'s actual SQL rather
+than assuming from the function's name what it "should" need. (This
+`SELECT` grant was itself removed shortly after, once `seq` became a real
+identity column — see "Sequence-backed audit ordering" below. Left as
+written here since it's what this pass actually found and granted at the
+time; the grants table above reflects the current, corrected state.)
 
 - `mint_activation_code` also reads `memberships` (to find the org's
   active owner and attribute the new code's audit row to them) — missing
@@ -440,6 +451,86 @@ against any of those three others). All four were dropped. If a later
 change needs the registration response to include specialty/form/location
 data, that's a new migration granting exactly the new column or table
 access it needs — not a standing grant kept around in case.
+
+## Sequence-backed audit ordering
+
+Every provisioning function computed `audit_log.seq` the same way: `SELECT
+COALESCE(MAX(seq), 0) + 1`, inside the same transaction as the audit row
+itself — the same pattern the web app's local IndexedDB store used for its
+own `seq` counter before commit `236e2e2` fixed it there. The two
+concurrency models are different, though, and the fix that worked for one
+didn't carry over: a single IndexedDB instance has one writer at a time,
+so "reserved inside the same transaction" is airtight there. A Postgres
+database has many concurrent connections, and two different transactions
+can both read the same `MAX(seq)` before either commits — "same
+transaction" guarantees nothing about a *different* transaction doing the
+same read concurrently.
+
+Checked first, since the failure mode depends on it:
+`audit_log.seq` carries a `UNIQUE` constraint
+(`2026_09_11_170021_create_audit_log_table.php`). So the actual bug wasn't
+silent ambiguity (two rows quietly sharing an order) — it was a
+unique-violation on the second transaction to commit, rolling back
+*everything else* in that transaction along with it. A rare, real
+concurrent registration or provisioning call could fail outright over an
+unrelated table's constraint, indistinguishable from any other generic
+failure to whoever was retrying it.
+
+Fixed by `2026_09_12_000010_sequence_backed_audit_seq.php`: `seq` is now a
+real Postgres identity column (`GENERATED BY DEFAULT AS IDENTITY`),
+started one past whatever the current max was at migration time (computed
+live in a `DO` block, not hardcoded — so an already-provisioned database's
+existing rows never collide with a freshly-generated one, and a
+migration run against an empty CI database starts at 1). `nextval()` is
+atomic under concurrency by construction; a read-then-write pair never is.
+Every `INSERT INTO audit_log` across all three provisioning functions now
+omits `seq` entirely, letting Postgres assign it.
+
+**This also meant revoking `SELECT` on `audit_log` from all three
+provisioning roles** — `SELECT MAX(seq)` was the only reason any of them
+had it (see "One role per provisioning function" above). Checked
+empirically before revoking anything, the same way the grants themselves
+were checked: does an identity column's underlying sequence need its own
+`USAGE` grant for a role that already has `INSERT` on the table? No —
+confirmed directly (a throwaway table, an identity column, a role granted
+`INSERT` only, no `USAGE` anywhere) that the `INSERT` succeeds without it.
+Postgres treats an identity column's sequence as an implicit part of the
+table for this purpose; `USAGE` only matters for a role calling
+`nextval()`/`currval()`/`setval()` directly, which nothing here does
+anymore. `clintra_app` needed nothing either — it holds no grant on
+`audit_log` at all today, since no entity endpoints exist yet that would
+write one from the ordinary request connection.
+`tests/Feature/Rls/ProvisioningRoleGrantsTest.php` now asserts all three
+roles hold `INSERT`-only on `audit_log`, failing if anything ever
+re-grants `SELECT` there without a fresh reason.
+
+**Concurrency proof**: `tests/Feature/Rls/AuditLogSequenceTest.php` runs
+two completely independent, valid `register_device` calls — different
+orgs, different codes, no shared row — via two genuinely separate OS
+processes (`tests/scripts/register_device_race.php`, the same
+`proc_open()` harness `RegisterDeviceValidationTest.php`'s single-use race
+test uses; `pcntl_fork()` isn't available on Windows). Before this fix,
+this exact scenario could make one of the two calls fail outright on the
+other's `MAX(seq)` collision, despite both codes and phones being
+perfectly valid. Now both always succeed, and all four resulting audit
+rows (two per registration) get pairwise-distinct, strictly increasing
+`seq` values. A second test reproduces the migration's own `DO` block
+against a throwaway table pre-seeded with "existing" high `seq` values,
+confirming those rows keep their exact values untouched and a fresh row
+lands strictly above the old max — the property that makes running this
+migration against an already-provisioned database safe.
+
+**Not addressed here, and explicitly out of scope for this step**: the
+web app's local `audit_log.seq` (per-device, Dexie-only) and the API's
+identity column (database-global) are two unrelated counters with no
+reconciliation between them — there is no sync mechanism yet that pushes a
+device's local audit rows to the API at all, so nothing today assumes a
+client-assigned `seq` value means anything on the server. Neither
+`register_device`'s bootstrap response nor any provisioning function
+accepts a caller-supplied `seq` — every `audit_log` row the server writes
+is server-created, for its own server-side actions, not a client's synced
+history. Designing that reconciliation is future work; see
+`docs/schema.md`'s new "v11 additions" section.
 
 ## Hardening pass: hand-rolled token verification in ApplyMembership
 
