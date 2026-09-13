@@ -237,16 +237,26 @@ abstractly:** if the app is ever directly reachable, a caller can send
 any `X-Forwarded-For` value it likes on every request. `$request->ip()`
 would then return whatever the caller claims, not their real address —
 and the `register` endpoint's activation-code rate limiter
-(`App\Http\Controllers\DeviceRegistrationController`) leans on IP for
-exactly the half of its protection that matters against a real attacker:
-its code-keyed half only ever limits repeated guesses at the *same*
-activation code, which nobody actually brute-forcing distinct codes
-would ever do — the IP-keyed half is what actually bounds "try many
-different codes," and forged headers defeat it completely, turning every
-guess into a fresh, unthrottled attempt. `App\Providers\AppServiceProvider`'s
-`sync` limiter is keyed by bearer token, not IP, so it's unaffected by
-this specific attack — but confirm that stays true if this limiter is
-ever changed.
+(`App\Http\Controllers\DeviceRegistrationController`) originally leaned
+on IP for exactly the half of its protection that mattered against a
+real attacker: its code-keyed half only ever limits repeated guesses at
+the *same* activation code, which nobody actually brute-forcing distinct
+codes would ever do — the IP-keyed half was what actually bounded "try
+many different codes," and forged headers defeated it completely,
+turning every guess into a fresh, unthrottled attempt.
+
+**This is why activation-code protection no longer rests entirely on IP
+identity.** A third layer — org-keyed, resolved from the phone or the
+code itself, never from anything the caller merely claims — now bounds
+"try many different codes against one org" independently of source IP
+(see "Rate limiting" below). Narrowing `trustProxies` is still a
+required step, not optional: a directly-reachable deployment still loses
+the *fast*, IP-keyed defense (5 failures/15 minutes) and falls back to
+the *coarser*, slower org-keyed one (30 failures/24 hours) — real
+degradation, just no longer a total loss of protection.
+`App\Providers\AppServiceProvider`'s `sync` limiter is keyed by bearer
+token, not IP, so it was never affected by this specific attack —
+confirm that stays true if that limiter is ever changed.
 
 **Not silent, but not a hard failure either.**
 `App\Support\TrustedProxyGuard`, called from `AppServiceProvider::boot()`,
@@ -263,12 +273,32 @@ the log staying quiet.
 ## Rate limiting
 
 - **`POST /api/devices/register`** (no auth — the phone + activation code
-  it verifies *is* the credential): rate-limited inside the controller
-  itself, dual-keyed by IP and by the submitted activation code, 5
-  failures per 15 minutes, cleared on success. Not a `throttle:`
-  middleware — see `routes/api.php`'s comment on that route for why
-  stacking one on top would risk shadowing this endpoint's own, more
-  specific `429` response.
+  it verifies *is* the credential): three independent layers inside the
+  controller itself, not a `throttle:` middleware (see `routes/api.php`'s
+  comment on that route for why stacking one on top would risk shadowing
+  this endpoint's own, more specific `429` response):
+  - IP-keyed and code-keyed, 5 failures per 15 minutes each, cleared on
+    success — the original two, both identity-dependent (IP) or
+    single-code-scoped.
+  - **Org-keyed, 30 failures per 24 hours, independent of source IP
+    entirely.** Resolved server-side from the submitted phone or
+    activation code (`resolve_registration_org(jsonb)`,
+    `2026_09_12_000022_add_resolve_registration_org_function.php`) —
+    never from anything the caller merely claims, so a forged
+    `X-Forwarded-For` cannot reset it the way it resets the IP-keyed
+    layer. 30/24h was sized against a real install day (several devices,
+    a couple of mistyped codes each, maybe a replacement device the same
+    week) staying nowhere close, while still bounding sustained guessing
+    against one specific, targeted org. Trips return the exact same
+    generic `429` body as the other two layers — never a distinct "this
+    org is locked" message, which would itself confirm the org exists.
+    Clears automatically after 24 hours (needs nobody), or immediately
+    via `php artisan clintra:clear-registration-lockout {org_id}` for
+    whoever operates the deployment, if a real install day ever hits it
+    and 24 hours is too long to wait. Tripping it logs a
+    `registration_org_rate_limited` warning with the org id and the
+    (possibly forged) source IP — deliberately never the phone or the
+    activation code.
 - **`POST /api/sync/push`, `GET /api/sync/pull`, `GET /api/sync/bootstrap`**
   (all authenticated): `throttle:sync`, 120 requests/minute, keyed by the
   bearer token — not IP, deliberately: a clinic's several tablets
