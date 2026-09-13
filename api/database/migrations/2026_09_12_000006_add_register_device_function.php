@@ -45,9 +45,16 @@ return new class extends Migration
         DB::statement('GRANT SELECT, UPDATE ON activation_codes TO clintra_provision');
         DB::statement('GRANT INSERT ON device TO clintra_provision');
 
-        DB::statement('SET ROLE clintra_provision');
-
+        // Dropped as clintra_owner, before any SET ROLE — see
+        // 2026_09_12_000005_add_mint_activation_code_function.php's
+        // identical comment: 2026_09_12_000009_split_provisioning_roles.php
+        // later moves this function to clintra_register, so a migrate:fresh
+        // replay against a server that already completed the full history
+        // once finds it already owned by clintra_register, not
+        // clintra_provision, by the time this migration runs again.
         DB::statement('DROP FUNCTION IF EXISTS register_device(jsonb)');
+
+        DB::statement('SET ROLE clintra_provision');
         DB::statement(<<<'SQL'
             CREATE FUNCTION register_device(payload jsonb) RETURNS jsonb
             LANGUAGE plpgsql

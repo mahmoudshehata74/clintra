@@ -48,6 +48,15 @@ return new class extends Migration
 
     public function up(): void
     {
+        // Owned directly by clintra_owner (no SET ROLE — this trigger
+        // function needs no elevated role), but still needs the drop:
+        // migrate:fresh drops tables, never standalone functions, so a
+        // leftover copy from a previous complete run makes a bare
+        // CREATE FUNCTION fail with "already exists" otherwise. This
+        // statement was missing from up() (only down() had it) until
+        // api/docs/rls.md's "migrate:fresh is idempotent, not just
+        // re-runnable" caught it.
+        DB::statement('DROP FUNCTION IF EXISTS enforce_row_rev()');
         DB::statement(<<<'SQL'
             CREATE FUNCTION enforce_row_rev() RETURNS trigger
             LANGUAGE plpgsql AS $$

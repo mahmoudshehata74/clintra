@@ -151,6 +151,9 @@ jobs:
       # (register_device — the one clintra_app itself can call, from a live
       # unauthenticated HTTP request). All three are needed in every
       # environment including production, unlike clintra_fixtures below.
+      # (Device revocation needs no fourth role at all — clintra:revoke-device
+      # runs as clintra_owner, using SET ROLE clintra_rls narrowly for one
+      # lookup, exactly as api/docs/rls.md's "Revoking a device" explains.)
       # clintra_fixtures is a test-only role (also BYPASSRLS) —
       # tests/Feature/Rls uses it to insert/clean up fixture data; it must
       # never exist outside CI and local dev (api/docs/rls.md). These
@@ -209,6 +212,23 @@ jobs:
         env:
           DB_DATABASE: clintra_test
         run: php artisan migrate --database=pgsql_owner --force
+
+      # CI's own Postgres container starts empty every run, which is
+      # exactly why this class of bug hid here: migrate:fresh drops tables
+      # but never standalone functions (api/docs/rls.md), so a function
+      # whose owning role changes partway through migration history (e.g.
+      # mint_activation_code: clintra_provision -> clintra_mint) only
+      # breaks on a *second* full replay against a server that already has
+      # it from the first — a step every CI run before this one skipped by
+      # construction. The dev database above already has every function
+      # from the ordinary `migrate` step just run; migrate:fresh here
+      # re-runs the entire history against that already-populated server
+      # twice in a row, on purpose — once wasn't proof it stayed fixed.
+      - name: Verify migrate:fresh is idempotent against an already-migrated server
+        working-directory: api
+        run: |
+          php artisan migrate:fresh --database=pgsql_owner --force
+          php artisan migrate:fresh --database=pgsql_owner --force
 
       - name: Run tests
         working-directory: api

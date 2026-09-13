@@ -1069,6 +1069,81 @@ exact setup SQL, and `config/database.php` — its credentials have no default,
 so an environment that never sets `DB_FIXTURES_USERNAME`/
 `DB_FIXTURES_PASSWORD` never has a working connection for it at all.
 
+## migrate:fresh is idempotent, not just re-runnable
+
+`migrate:fresh` drops every table and replays the full migration history
+from scratch — but it never drops standalone functions, only tables. On a
+server that has never run the full history before, that's invisible: every
+`DROP FUNCTION IF EXISTS` is a no-op the first time, and `CREATE FUNCTION`
+always succeeds. On a server that has **already completed the full
+history once** — any local dev machine, days into working on this
+schema — it broke outright: `2026_09_12_000005_add_mint_activation_code_function.php`
+ran `SET ROLE clintra_provision; DROP FUNCTION IF EXISTS mint_activation_code(jsonb)`,
+but by the second full replay, that function was already owned by
+`clintra_mint` (`2026_09_12_000009_split_provisioning_roles.php` moves it
+there, earlier in the *same* completed history) — `clintra_provision`
+doesn't own it, so the `DROP` fails with a permission error, not a silent
+no-op. `register_device` has the identical problem (`clintra_provision` →
+`clintra_register`). Separately, `2026_09_12_000012_add_row_versioning.php`
+and `2026_09_12_000018_lock_closed_day_state.php` were simply missing a
+`DROP FUNCTION IF EXISTS` in `up()` at all (only `down()` had one), so
+their plain `CREATE FUNCTION` failed with "already exists" on a second
+replay regardless of ownership.
+
+**Found by hand, not by CI** — CI's own Postgres container starts
+genuinely empty every run, so it never has a leftover function from an
+earlier complete history to collide with. This bites the first developer
+who runs `migrate:fresh` twice on the same machine, which is exactly what
+happened while building `clintra:revoke-device`.
+
+**The fix, and why this option over the alternatives weighed:**
+
+- *Rejected: a first migration that clears all custom functions.* Would
+  need to know the full function list up front and be kept in sync with
+  every later migration that ever adds one — a maintenance burden that
+  reintroduces this exact bug class the moment someone adds a function
+  and forgets to update it.
+- *Rejected: each function-owning migration looks up its function's
+  actual current owner and drops as that.* Correct, but needs a
+  `DO $$ ... EXECUTE format('SET ROLE %I', (SELECT rolname FROM pg_roles
+  JOIN pg_proc ...)) $$` block per function — real complexity for a
+  problem with a much simpler answer available.
+- **Chosen: every function-creating migration's `DROP FUNCTION IF EXISTS`
+  now runs as `clintra_owner`, unconditionally, before any `SET ROLE`.**
+  Confirmed empirically (not assumed): `clintra_owner` is a plain member
+  of `clintra_rls`/`clintra_provision`/`clintra_mint`/`clintra_register`,
+  and Postgres's ownership check for `DROP`/`ALTER` (`has_privs_of_role`)
+  passes for a role that is merely a *member* of the object's owner,
+  with no `SET ROLE` required at all — tested directly: `clintra_owner`
+  dropped a function actually owned by `clintra_mint` with a bare `DROP
+  FUNCTION`, no role switch. This makes the drop step correct regardless
+  of which of `clintra_owner`'s member roles currently owns the function,
+  permanently — not just for the two functions broken today, but for any
+  future one, as long as a new owning role is (as every one so far has
+  been) granted to `clintra_owner` when it's created. `SET ROLE` is still
+  used, unchanged, for the `CREATE FUNCTION` step itself — that's what
+  controls who owns the function afterward, and always did.
+- `2026_09_12_000005`/`2026_09_12_000006` moved their existing `DROP`
+  ahead of their `SET ROLE`; `2026_09_12_000012`/`2026_09_12_000018`
+  gained the `DROP` they were missing. Nothing about the resulting
+  schema changed — same functions, same final owners, same grants —
+  only the drop mechanism did. Environments that already ran these
+  migrations are unaffected (Laravel never re-runs a recorded migration);
+  this only changes what executes on a fresh or `--fresh` replay.
+
+**Proof, not just a fix:** `migrate:fresh --database=pgsql_owner` run
+twice in a row against `clintra_test`, back to back — both runs completed
+every migration with no failures. Once wasn't proof; twice is what
+actually reproduces "a server that already has these functions."
+
+**Caught going forward by CI, not just this write-up:** the `api` job now
+runs `migrate:fresh` twice in a row against the already-migrated dev
+database *after* the ordinary `migrate` step, specifically because CI's
+own fresh-container start would otherwise never exercise this path —
+every previous CI run only ever migrated an empty database once. See
+`.github/workflows/ci.yml`'s "Verify migrate:fresh is idempotent against
+an already-migrated server" step.
+
 ## How to add a new table
 
 1. Migration creates the table (uuid primary key, client-generated —

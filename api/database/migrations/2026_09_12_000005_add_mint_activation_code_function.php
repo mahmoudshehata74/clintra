@@ -28,9 +28,20 @@ return new class extends Migration
         // sensible actor.
         DB::statement('GRANT SELECT ON locations, memberships TO clintra_provision');
 
-        DB::statement('SET ROLE clintra_provision');
-
+        // Dropped as clintra_owner, before any SET ROLE — not as whatever
+        // role is about to create it. clintra_owner is a member of every
+        // function-owning role in this schema, so this succeeds regardless
+        // of which one currently owns the function; a later migration
+        // (2026_09_12_000009_split_provisioning_roles.php) moves this
+        // function to clintra_mint, so on a migrate:fresh replay against a
+        // server that already completed the full history once, this
+        // function is *already* owned by clintra_mint by the time this
+        // migration runs again — dropping "as clintra_provision" would fail
+        // with a permission error. See api/docs/rls.md's "migrate:fresh is
+        // idempotent, not just re-runnable" for the full write-up.
         DB::statement('DROP FUNCTION IF EXISTS mint_activation_code(jsonb)');
+
+        DB::statement('SET ROLE clintra_provision');
         DB::statement(<<<'SQL'
             CREATE FUNCTION mint_activation_code(payload jsonb) RETURNS jsonb
             LANGUAGE plpgsql

@@ -33,6 +33,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // See 2026_09_12_000012_add_row_versioning.php's identical comment:
+        // owned directly by clintra_owner, but still needs an explicit drop
+        // — migrate:fresh never drops standalone functions, only tables.
+        DB::statement('DROP FUNCTION IF EXISTS prevent_closed_day_state_mutation()');
         DB::statement(<<<'SQL'
             CREATE FUNCTION prevent_closed_day_state_mutation() RETURNS trigger
             LANGUAGE plpgsql AS $$
