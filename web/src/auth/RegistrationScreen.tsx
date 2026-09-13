@@ -72,7 +72,7 @@ export default function RegistrationScreen({ onRegistered }: RegistrationScreenP
         aria-modal="true"
         aria-label={S.formAria}
       >
-        <h1 className="font-display text-3xl font-semibold text-green">Clintra</h1>
+        <img src="/brand/clintra-wordmark.png" alt="Clintra" className="h-9 w-auto" />
         <div className="mt-8 w-full max-w-[360px] rounded-[--radius-el] border border-line bg-paper p-6 text-center">
           <p className="font-display text-lg font-medium text-ink">{S.successTitle}</p>
           {state.locations.length > 1 && servingLocation && (
@@ -99,7 +99,7 @@ export default function RegistrationScreen({ onRegistered }: RegistrationScreenP
       aria-modal="true"
       aria-label={S.formAria}
     >
-      <h1 className="font-display text-3xl font-semibold text-green">Clintra</h1>
+      <img src="/brand/clintra-wordmark.png" alt="Clintra" className="h-9 w-auto" />
       <p className="mb-6 mt-1 text-center text-sm text-muted">{S.title}</p>
 
       <form onSubmit={handleSubmit} className="flex w-full max-w-[360px] flex-col gap-1">

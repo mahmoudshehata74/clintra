@@ -138,7 +138,7 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
       aria-modal="true"
       aria-label={authStrings.lockOverlayAria}
     >
-      <h1 className="font-display text-3xl font-semibold text-green">Clintra</h1>
+      <img src="/brand/clintra-wordmark.png" alt="Clintra" className="h-9 w-auto" />
 
       {!picked ? (
         <div className="mt-8 flex w-full max-w-xs flex-col gap-2">

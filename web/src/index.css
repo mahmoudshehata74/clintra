@@ -19,6 +19,11 @@
   --color-line-soft: #edeee8;
   --color-muted: #6e7370;
 
+  /* Brand tokens for logo surfaces only (wordmark/icon) — not part of the
+     app's own UI palette above, and not meant to retheme it. */
+  --color-brand-teal: #1a957d;
+  --color-brand-ink: #0e1814;
+
   --radius-el: 8px;
   --radius-frame: 12px;
 }

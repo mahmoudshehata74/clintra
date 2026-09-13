@@ -50,6 +50,10 @@ export default function SettingsSheet({ practitionerId, locationId, orgId, onDis
         {panel === "hours" && <WorkingHoursPanel practitionerId={practitionerId} locationId={locationId} />}
         {panel === "services" && <ServicesPanel orgId={orgId} />}
         {panel === "staff" && <StaffPanel orgId={orgId} />}
+
+        <div className="mt-6 flex justify-center border-t border-line pt-4">
+          <img src="/brand/clintra-wordmark.png" alt="Clintra" className="h-4 w-auto opacity-70" />
+        </div>
       </div>
     </Sheet>
   );
