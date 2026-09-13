@@ -166,6 +166,18 @@ Devices get replaced — mint a fresh code for an existing org with:
 php artisan clintra:mint-activation-code {org_id} {location_id}
 ```
 
+A device that's lost or stolen must stop reading the clinic's data —
+revoke it with:
+
+```
+php artisan clintra:revoke-device {device_id}
+```
+
+Deletes the device's Sanctum token(s) and marks it permanently unusable;
+its very next request fails authentication regardless of whether it still
+holds the plaintext token. Safe to re-run against an already-revoked
+device — it reports the existing revocation rather than erroring.
+
 ## Conventions
 - IDs are UUID v4, always generated on the client — Laravel never generates
   its own (`config('app.client_generated_ids')`).

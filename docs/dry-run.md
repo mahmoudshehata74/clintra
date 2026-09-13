@@ -573,37 +573,49 @@ missing or wrong.
   history, not yet visible) — the former is a real defect; the latter is
   the documented, bounded scope of this fix.
 
-### Scenario 18 — Try to kill the lost device's token
+### Scenario 18 — Kill the lost device's token
 
+**Fixed since this document was first written.** There is now a real
+revoke path: `php artisan clintra:revoke-device {device_id}`
+(`App\Console\Commands\RevokeDevice`), run by whoever has CLI access to
+the API host — the same operator who already runs `clintra:provision`/
+`clintra:mint-activation-code`. No new database role was needed for
+this (an earlier draft of the fix added one; it turned out unnecessary —
+see `api/docs/rls.md`'s "Revoking a device" for why).
+
+**Steps:**
 1. With Device 3 successfully registered and Device 2 treated as
-   permanently lost, attempt to revoke Device 2's access through any
-   supported path: look for a "remove device" or "revoke" action in
-   Settings, and check whether the API has any endpoint for it.
+   permanently lost, run:
+   ```
+   php artisan clintra:revoke-device <Device 2's device id>
+   ```
+2. Confirm the command reports the device id, its org, and how many
+   tokens it deleted (normally 1).
+3. On Device 2 (leave it running, don't touch it), wait for its next
+   sync cycle — no action needed on that device itself.
 
-**Expected finding, confirmed by reading the code, not guessed:** there
-is **no revoke mechanism today**. `routes/api.php` defines exactly three
-routes touching devices/tokens (`POST /api/devices/register`,
-`POST /api/sync/push`, `GET /api/sync/pull`) and nothing else; no
-controller, command, or route deletes a `personal_access_tokens` row or a
-`device` row. **This is a real finding — write it down as a hard stop or
-an accepted risk, not something to "test."** The only way to actually
-kill Device 2's access today is manual, direct database surgery, done by
-whoever has Postgres access:
+**Expected:**
+- Device 2's next request of any kind gets a 401, identical in shape to
+  a request with no credential at all (`{"error": "unauthenticated"}`) —
+  it cannot tell "revoked" apart from "never registered."
+- Per `App.tsx`'s `SYNC_AUTH_ERROR_EVENT_NAME` handling (already covered
+  by scenario 13's chip states), Device 2 shows its re-authentication
+  banner rather than silently failing — confirm this still holds; it was
+  already true before this fix and should not have changed.
+- **Device 2's local data is not wiped.** Revocation kills the
+  *credential*, not the device's own IndexedDB — the assistant's booking
+  history up to that point stays on the tablet even though it can no
+  longer sync. Confirm this explicitly: open Device 2's DevTools →
+  Application → IndexedDB after revoking and see the data still there.
+- Running the same command again against the same device id is safe —
+  it reports the existing revocation rather than erroring or writing a
+  second audit entry.
 
-```sql
-DELETE FROM personal_access_tokens WHERE tokenable_id = '<Device 2's device id>' AND tokenable_type = 'App\\Models\\Device';
-```
-
-`ApplyMembership`'s `device_exists()` check also treats a deleted
-`device` row as unauthenticated, so deleting the corresponding row from
-`device` achieves the same thing:
-
-```sql
-BEGIN;
-SELECT set_config('app.membership_id', '<membership_id>', true);
-DELETE FROM device WHERE id = '<Device 2's device id>';
-COMMIT;
-```
+**Record if it doesn't:** any request from Device 2 succeeding after
+revocation (hard stop); Device 2's local data disappearing on its own as
+a side effect of the 401 (hard stop — a clinic must never lose a day's
+work because a *different* device was revoked); the re-run not being
+idempotent.
 
 2. After running one of the above, confirm Device 2 (if it ever comes
    back online) gets a 401 on its next sync attempt and — per
@@ -668,9 +680,9 @@ something scenario 18 can "pass."
   background — see the estimate below for what that still costs a
   mature clinic, now as a background-latency concern rather than a
   today's-schedule-blocking one.
-- Scenario 18's missing revoke mechanism — a real operational gap for
-  any clinic that will eventually lose a device, but not something that
-  makes day-to-day use unsafe before it happens.
+- Scenario 18's missing revoke mechanism — **fixed** (`php artisan
+  clintra:revoke-device`); confirm the idempotency and no-data-wipe
+  behavior still hold, but this is no longer an open gap to plan around.
 
 ### The unwindowed pull: what it means for a clinic six months in
 

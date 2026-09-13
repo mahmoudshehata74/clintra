@@ -381,9 +381,36 @@ closes a gap `ApplyMembership` had: a token survives in
 since nothing there depends on the device still existing. It's the same
 `SECURITY DEFINER`-owned-by-`clintra_rls` pattern as `current_org()` —
 `ApplyMembership` calls it on every token-authenticated request and treats
-a `false` result as unauthenticated. `device` has no `is_active` column, so
-only "deleted" is representable, not "inactive"; a future `is_active`
-column would need this function (and this note) updated together.
+a `false` result as unauthenticated.
+
+**The anticipated `is_active`/`revoked` column now exists**
+(`device.revoked_at`, `2026_09_12_000020_add_revoked_at_to_device_table.php`)
+— `App\Console\Commands\RevokeDevice` is what sets it, and
+`2026_09_12_000021_device_exists_checks_revoked_at.php` updated this
+function to `SELECT EXISTS (... WHERE id = p_device_id AND revoked_at IS
+NULL)`, exactly as this note said it would need to. Two things confirmed
+about this change before it shipped, on a hot path every authenticated
+request runs through:
+
+- **Same short-circuit, same failure shape.** `EXISTS(...)` still returns
+  one boolean; `ApplyMembership` still treats `false` as unauthenticated,
+  unconditionally. A revoked device and a deleted device produce the
+  identical `false` — the caller (and the generic 401 body it triggers)
+  cannot tell them apart, same as before this column existed.
+- **No new index needed, confirmed by `EXPLAIN`, not assumed.** The added
+  `revoked_at IS NULL` is evaluated against the one row `id = p_device_id`
+  already locates via `device_pkey` (a primary-key equality can only ever
+  match zero or one row) — there is no multi-row scan for a `revoked_at`
+  index to speed up. Forcing an index-scan plan (`SET enable_seqscan =
+  off`) against `clintra_test` shows exactly this: `Index Scan using
+  device_pkey ... Index Cond: (id = ...) Filter: (revoked_at IS NULL)` —
+  the primary key does the real narrowing; the new condition is a
+  same-row filter with no separate access path to optimize. (The
+  planner's default choice on a near-empty test table is a sequential
+  scan instead, which is correct, cost-based behavior for a handful of
+  rows, not evidence of anything missing — `device` stays a small table
+  by nature, one row per physical device a clinic owns, never approaching
+  a size where this decision matters in practice.)
 
 ## One role per provisioning function
 
