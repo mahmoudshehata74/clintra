@@ -55,6 +55,19 @@ export interface SyncTransport {
   pushOps(ops: readonly SyncOp[]): Promise<PushOpResult[]>;
   /** Pulls one page of changes recorded since cursor (null for everything). */
   pullSince(cursor: string | null): Promise<PullSinceResult>;
+  /**
+   * Pulls one page of the brief's 60-day-back/60-day-forward window's
+   * *current* state — today's schedule, fast — called once, in a loop
+   * until hasMore is false, only before a device's very first ever
+   * pullSince (sync/engine.ts's runPullCycle gates this on
+   * device.pull_cursor being null). Never touches pullSince's own cursor;
+   * whatever this returns is re-delivered, harmlessly, by the ordinary
+   * pullSince backfill that always follows it. See
+   * api/app/Support/Sync/SyncBootstrapPuller.php's doc comment for the
+   * full design and docs/dry-run.md's scenario 17 for the problem this
+   * solves.
+   */
+  pullBootstrap(cursor: string | null): Promise<PullSinceResult>;
 }
 
 /**

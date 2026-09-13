@@ -98,6 +98,26 @@ export class HttpTransport implements SyncTransport {
     };
   }
 
+  async pullBootstrap(cursor: string | null): Promise<PullSinceResult> {
+    const query = cursor === null ? "" : `?cursor=${encodeURIComponent(cursor)}`;
+    const body = (await this.request(`/sync/bootstrap${query}`, { method: "GET" })) as {
+      cursor: string;
+      has_more: boolean;
+      rows: Array<{ entity: string; entity_id: string; rev: number; payload: Record<string, unknown> | null }>;
+    };
+
+    return {
+      cursor: body.cursor,
+      hasMore: body.has_more,
+      changes: body.rows.map((row) => ({
+        entity: row.entity,
+        entity_id: row.entity_id,
+        rev: row.rev,
+        payload: row.payload,
+      })),
+    };
+  }
+
   private async request(path: string, init: { method: string; body?: string }): Promise<unknown> {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method: init.method,

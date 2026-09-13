@@ -521,35 +521,57 @@ statuses, at least one invoice, one payment). Treat Device 2 as "lost."
    **today's already-booked schedule correctly** — every visit Device 1
    and Device 2 already created, with their current statuses.
 5. Open DevTools → Network on Device 3 while this happens. Filter for
-   `/api/sync/pull`. Record: how many separate pull requests fired, and
-   the total response size summed across all of them.
+   `/api/sync/bootstrap` and `/api/sync/pull` **separately**. Record, for
+   each: how many requests fired, and the total response size summed
+   across them.
 
-**Important, and likely to surprise you:** the pull endpoint pages
-strictly in ascending `sync_ledger.seq` order, starting from the
-beginning of the org's history (`api/app/Support/Sync/SyncPuller.php`:
-`->orderBy('seq')`, cursor starts at 0 for a device with no prior
-cursor). It does **not** prioritize recent data. A replacement device
-therefore pulls the org's *oldest* history first and only reaches
-*today's* bookings on the last page. **Registration's own bootstrap
-response already includes the org, its locations, practitioners,
-memberships and users directly** (not via the ledger) — so Device 3 will
-correctly show the practitioner list and today's empty grid immediately.
-But `patients`, `visits`, `invoices`, `payments`, and `day_state` only
-arrive via the paginated pull, oldest-first. **Expect Device 3's grid to
-look wrong or incomplete for a real, measurable stretch of time** — not
-because sync is broken, but because it's still working through history
-it doesn't actually need yet in order to reach the part it does.
+**Fixed since this document was first written — verify the fix, don't
+just assume it.** `GET /api/sync/pull` still pages strictly in ascending
+`sync_ledger.seq` order, oldest first
+(`api/app/Support/Sync/SyncPuller.php`), and that is unchanged and
+unchangeable without breaking its cursor's monotonic guarantee for every
+already-synced device. What changed is that a device with no prior
+cursor now calls a second, separate endpoint first —
+`GET /api/sync/bootstrap` (`App\Support\Sync\SyncBootstrapPuller`) —
+before it ever starts that historical walk. Registration's own bootstrap
+response already gave Device 3 the org, its locations, practitioners,
+memberships and users directly; `GET /api/sync/bootstrap` now also gives
+it, fast, the current state of every `day_state` and `visits` row inside
+the brief's own 60-day-back/60-day-forward window, plus the `patients`
+those windowed visits reference — in practice, today's grid, correctly
+occupied, within a page or two, before the oldest-first `/api/sync/pull`
+backfill has made any progress at all. `GET /api/sync/pull` then runs
+immediately afterward exactly as before, unpaginated-by-date, walking the
+*entire* history from the beginning — re-delivering what bootstrap just
+sent (harmless: an upsert by id) and eventually reaching everything
+bootstrap's window didn't cover.
+
+**What bootstrap deliberately does not cover — confirm this is what you
+actually see, not a regression:** invoices, payments, and any patient
+with no visit inside the 60-day window are **not** part of the fast
+path — they still arrive only once `/api/sync/pull`'s oldest-first
+backfill reaches them. So the honest expectation is: today's slots,
+statuses, and the names of patients seen today should be correct almost
+immediately; a completed visit's invoice/payment amounts, and the wider
+patient list, may still lag behind for a while. That split is a
+deliberate, bounded scope decision (`docs/sync-plan.md`'s Q9 addendum),
+not a partial fix — record it as a **note**, not a **fail**, unless
+today's grid itself (slots/statuses/today's patient names) is what's
+missing or wrong.
 
 **Record:**
 - Wall-clock time from token issuance to a *fully correct* today's
-  schedule on Device 3.
-- Number of `/api/sync/pull` requests and total bytes transferred.
-- Whether Device 3's screen showed anything actively *wrong* during the
-  gap (a slot showing empty when it's actually booked) versus merely
-  *incomplete* (patient history not yet visible, but today's grid
-  already correct) — the first is a real defect if it happens after the
-  pull has already finished; the second is the expected, if
-  uncomfortable, behavior described above while pull is still running.
+  schedule (slots, statuses, today's patient names) on Device 3 — this
+  should now be seconds, not minutes.
+- Number of `/api/sync/bootstrap` requests and bytes, separately from
+  `/api/sync/pull`'s — bootstrap should be a handful of small requests;
+  pull's own count/size is whatever the org's full history still is
+  (see the finding below).
+- Whether today's grid itself ever showed anything actively *wrong* (a
+  slot showing empty when it's actually booked) rather than merely
+  *incomplete elsewhere* (an invoice amount, or an older patient's
+  history, not yet visible) — the former is a real defect; the latter is
+  the documented, bounded scope of this fix.
 
 ### Scenario 18 — Try to kill the lost device's token
 
@@ -639,21 +661,35 @@ something scenario 18 can "pass."
 - Scenario 15's chronologically-older-loses outcome (already a known,
   documented, deliberate trade-off — confirm it, don't "fix" it here).
 - Scenario 17's pull-orders-oldest-first delay on device replacement —
-  real and worth planning around (see below), but the app never shows
-  actively wrong data once pull completes, only a temporary incomplete
-  view.
+  **fixed** for the part that matters most (today's schedule now arrives
+  via `GET /api/sync/bootstrap` in seconds, verify this is what you
+  actually see); the underlying full-history backfill (`GET /api/sync/pull`)
+  is unchanged and still downloads everything, oldest-first, in the
+  background — see the estimate below for what that still costs a
+  mature clinic, now as a background-latency concern rather than a
+  today's-schedule-blocking one.
 - Scenario 18's missing revoke mechanism — a real operational gap for
   any clinic that will eventually lose a device, but not something that
   makes day-to-day use unsafe before it happens.
 
 ### The unwindowed pull: what it means for a clinic six months in
 
-Confirmed in code, not assumed: `GET /api/sync/pull` has no age cutoff at
-all (`api/app/Support/Sync/SyncPuller.php`; `api/docs/rls.md`'s "The sync
-pull endpoint" names this explicitly as an open item). A replacement
-device's first sync downloads the organization's **entire** history, not
-a 60-day window — and, per scenario 17's finding, it does so
-oldest-record-first, so today's data is the very last thing to arrive.
+**Update: the today's-schedule-latency half of this finding is fixed
+(see scenario 17) — the total-history-size half is not, and was never
+meant to be by that fix.** `GET /api/sync/bootstrap` means a replacement
+device no longer has to wait for its history backfill to reach today's
+data — but `GET /api/sync/pull` itself still has no age cutoff at all
+(`api/app/Support/Sync/SyncPuller.php`; `api/docs/rls.md`'s "The sync
+pull endpoint" names this explicitly as an open item) and still
+downloads the organization's **entire** history, oldest-record-first,
+exactly as before. The difference is that this now happens *after* the
+device is already usable, in the background, rather than *before* — a
+latency-to-usability problem turned into a bandwidth/background-sync-time
+problem. The estimate below is unchanged and still worth reading: it's
+no longer "how long until today's schedule shows up," but it is still
+"how long until this device's local history is actually complete, and
+how much data that costs on a bad connection" — both real questions for
+a mature clinic.
 
 **A rough estimate**, stated with its assumptions so it can be
 re-checked against a real clinic's actual volume: a small single-location
@@ -680,23 +716,25 @@ MB at a sustained 150 kbps is itself several minutes, and 90 sequential
 round trips at even 500ms-1s of latency each adds another minute or two
 on top, with no parallelism to hide it. **The practical number to expect
 for a replacement device at a six-month-old clinic, on a bad connection,
-is "several minutes before today's schedule is fully and correctly
-visible,"** not seconds — and per scenario 17, some of that time is spent
-looking actively incomplete rather than obviously "still loading."
+is "several minutes before this device's local history is actually
+complete,"** not seconds — but, since the bootstrap fix, that time no
+longer stands between the assistant and a working, correctly-populated
+day screen; it's happening underneath her, same as any other background
+backfill.
 
 **Whether this changes the retention decision:** the brief's own 60-day
-local-storage window was written for *device storage size*, but this
-finding is really about *replacement-device latency*, a different
-problem the same number happens to bound. If a real windowing rule is
-ever implemented for the pull endpoint (the same open item
+local-storage window was written for *device storage size*, and that
+question is untouched by the bootstrap fix — bootstrap only changes
+*ordering/latency for a fresh device*, not how much history a device
+that's been running for months eventually accumulates and stores
+locally forever (the same client-side pruning gap `docs/session-handoff.md`
+already names as its own open item). If a real windowing rule is ever
+implemented for `GET /api/sync/pull` itself (the same open item
 `docs/sync-plan.md`'s Q9 already flags — no principled date exists for
 `patients`/`services`/`memberships`, only for `visits`/`day_state`), it
-would need to solve both problems at once: cap what a replacement device
-downloads, and, just as importantly given scenario 17's finding, change
-the pull order so *recent* data arrives before *old* data — a plain
-"only last 60 days" filter wouldn't need to also flip the sort order, but
-without flipping it, a replacement device still can't show today's
-schedule until its now-smaller-but-still-sequential history finishes
-paging through. This document does not decide or implement either
-change; it only confirms the size and ordering problem is real and
+would shrink this section's estimate directly; it is no longer needed to
+fix the ordering problem specifically, since bootstrap already solved
+that half independently, ahead of and without depending on a pull-side
+windowing decision. This document does not decide or implement a pull
+windowing rule; it only confirms the remaining size problem is real and
 roughly quantifies it.

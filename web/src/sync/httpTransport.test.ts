@@ -152,14 +152,57 @@ describe("HttpTransport.pullSince", () => {
   });
 });
 
+describe("HttpTransport.pullBootstrap", () => {
+  it("omits the cursor query param when null, and maps has_more/rows to hasMore/changes", async () => {
+    const fetchImpl = fetchMock();
+    fetchImpl.mockImplementation(async () =>
+      jsonResponse(200, {
+        cursor: "1:",
+        has_more: true,
+        rows: [{ entity: "day_state", entity_id: "d1", rev: 1, payload: { id: "d1", date: "2026-09-13" } }],
+      }),
+    );
+    const transport = new HttpTransport({ token: "test-token", fetchImpl });
+
+    const result = await transport.pullBootstrap(null);
+
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe("/api/sync/bootstrap");
+    expect(init?.method).toBe("GET");
+    expect(result).toEqual({
+      cursor: "1:",
+      hasMore: true,
+      changes: [{ entity: "day_state", entity_id: "d1", rev: 1, payload: { id: "d1", date: "2026-09-13" } }],
+    });
+  });
+
+  it("includes the cursor query param when given one", async () => {
+    const fetchImpl = fetchMock();
+    fetchImpl.mockImplementation(async () => jsonResponse(200, { cursor: "3:", has_more: false, rows: [] }));
+    const transport = new HttpTransport({ token: "test-token", fetchImpl });
+
+    await transport.pullBootstrap("1:abc");
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/sync/bootstrap?cursor=1%3Aabc");
+  });
+
+  it("throws SyncAuthError on a 401", async () => {
+    const fetchImpl = fetchMock();
+    fetchImpl.mockImplementation(async () => jsonResponse(401, { error: "unauthenticated" }));
+    const transport = new HttpTransport({ token: "expired-token", fetchImpl });
+
+    await expect(transport.pullBootstrap(null)).rejects.toBeInstanceOf(SyncAuthError);
+  });
+});
+
 describe("selectSyncTransport", () => {
   it("returns the given fallback (Fake) when no token is available", () => {
-    const fallback = { pushOps: vi.fn(), pullSince: vi.fn() };
+    const fallback = { pushOps: vi.fn(), pullSince: vi.fn(), pullBootstrap: vi.fn() };
     expect(selectSyncTransport(null, fallback)).toBe(fallback);
   });
 
   it("returns an HttpTransport when a token is available", () => {
-    const fallback = { pushOps: vi.fn(), pullSince: vi.fn() };
+    const fallback = { pushOps: vi.fn(), pullSince: vi.fn(), pullBootstrap: vi.fn() };
     const selected = selectSyncTransport("real-token", fallback);
     expect(selected).toBeInstanceOf(HttpTransport);
   });

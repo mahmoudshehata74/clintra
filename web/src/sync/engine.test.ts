@@ -74,6 +74,13 @@ class StubTransport implements SyncTransport {
     hasMore: false,
     changes: [],
   });
+  bootstrapCalls: (string | null)[] = [];
+  /** Immediately-done by default: most tests don't care about bootstrap at all, only runPullCycle's own pullSince loop. */
+  pullBootstrapOutcomeFor: (cursor: string | null) => PullSinceResult | Promise<PullSinceResult> = () => ({
+    cursor: "3:",
+    hasMore: false,
+    changes: [],
+  });
   private readonly outcomeFor: (op: SyncOp) => PushOpResult;
 
   constructor(outcomeFor: (op: SyncOp) => PushOpResult) {
@@ -88,6 +95,11 @@ class StubTransport implements SyncTransport {
   async pullSince(cursor: string | null): Promise<PullSinceResult> {
     this.pullCalls.push(cursor);
     return this.pullOutcomeFor(cursor);
+  }
+
+  async pullBootstrap(cursor: string | null): Promise<PullSinceResult> {
+    this.bootstrapCalls.push(cursor);
+    return this.pullBootstrapOutcomeFor(cursor);
   }
 }
 
@@ -483,6 +495,87 @@ describe("runPullCycle", () => {
   });
 });
 
+describe("runPullCycle: bootstrap gating (docs/dry-run.md's scenario 17)", () => {
+  it("drains pullBootstrap fully, applying its changes, before ever calling pullSince — only when pull_cursor is null", async () => {
+    await db.device.add({
+      id: getDeviceId(),
+      org_id: "org-1",
+      location_id: "location-1",
+      registered_at: new Date().toISOString(),
+      pull_cursor: null,
+      membership_id: null,
+      token: null,
+    });
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    const bootstrapPages: Record<string, PullSinceResult> = {
+      null: {
+        cursor: "1:",
+        hasMore: true,
+        changes: [{ entity: "day_state", entity_id: "day-1", rev: 1, payload: { id: "day-1", date: "2026-09-13" } }],
+      },
+      "1:": {
+        cursor: "3:",
+        hasMore: false,
+        changes: [{ entity: "visits", entity_id: "visit-today", rev: 1, payload: { id: "visit-today" } }],
+      },
+    };
+    transport.pullBootstrapOutcomeFor = (cursor) => bootstrapPages[cursor === null ? "null" : cursor];
+    transport.pullOutcomeFor = () => ({ cursor: "0", hasMore: false, changes: [] });
+
+    await runPullCycle(db, transport);
+
+    expect(transport.bootstrapCalls).toEqual([null, "1:"]);
+    // Bootstrap ran to completion strictly before the ordinary backfill started.
+    expect(transport.pullCalls).toEqual([null]);
+    expect(await db.day_state.get("day-1")).toMatchObject({ id: "day-1" });
+    expect(await db.visits.get("visit-today")).toMatchObject({ id: "visit-today" });
+    // Only the ordinary loop ever persists pull_cursor — bootstrap never does.
+    expect((await db.device.get(getDeviceId()))?.pull_cursor).toBe("0");
+  });
+
+  it("never calls pullBootstrap once the device has completed a pull cycle before (pull_cursor is non-null)", async () => {
+    await db.device.add({
+      id: getDeviceId(),
+      org_id: "org-1",
+      location_id: "location-1",
+      registered_at: new Date().toISOString(),
+      pull_cursor: "5",
+      membership_id: null,
+      token: null,
+    });
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    transport.pullOutcomeFor = () => ({ cursor: "5", hasMore: false, changes: [] });
+
+    await runPullCycle(db, transport);
+
+    expect(transport.bootstrapCalls).toEqual([]);
+    expect(transport.pullCalls).toEqual(["5"]);
+  });
+
+  it("a bootstrap transport failure does not prevent the ordinary backfill from still running", async () => {
+    await db.device.add({
+      id: getDeviceId(),
+      org_id: "org-1",
+      location_id: "location-1",
+      registered_at: new Date().toISOString(),
+      pull_cursor: null,
+      membership_id: null,
+      token: null,
+    });
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    transport.pullBootstrapOutcomeFor = () => {
+      throw new Error("network down mid-bootstrap");
+    };
+    transport.pullOutcomeFor = () => ({ cursor: "0", hasMore: false, changes: [] });
+
+    await expect(runPullCycle(db, transport)).resolves.toBeUndefined();
+
+    expect(transport.bootstrapCalls).toEqual([null]);
+    expect(transport.pullCalls).toEqual([null]);
+    expect((await db.device.get(getDeviceId()))?.pull_cursor).toBe("0");
+  });
+});
+
 describe("SyncAuthError: a 401 is surfaced, never left to throw uncaught into a bare console.error", () => {
   // This suite runs without a DOM (no jsdom — see vitest.config.ts), so
   // SYNC_AUTH_ERROR_EVENT_NAME's actual window dispatch is untestable here,
@@ -500,6 +593,7 @@ describe("SyncAuthError: a 401 is surfaced, never left to throw uncaught into a 
         throw new SyncAuthError();
       },
       pullSince: async () => ({ cursor: "", hasMore: false, changes: [] }),
+      pullBootstrap: async () => ({ cursor: "3:", hasMore: false, changes: [] }),
     };
 
     await expect(runSyncCycle(db, transport)).resolves.toBeUndefined();
@@ -520,6 +614,7 @@ describe("SyncAuthError: a 401 is surfaced, never left to throw uncaught into a 
       pullSince: () => {
         throw new SyncAuthError();
       },
+      pullBootstrap: async () => ({ cursor: "3:", hasMore: false, changes: [] }),
     };
 
     await expect(runPullCycle(db, transport)).resolves.toBeUndefined();
@@ -527,13 +622,18 @@ describe("SyncAuthError: a 401 is surfaced, never left to throw uncaught into a 
 });
 
 describe("isServerUnreachable: the sync chip's fourth state (docs/sync-plan.md's Q10)", () => {
+  // pull_cursor "0", not null: this describe block models a device that
+  // has already completed one pull cycle and is now experiencing an
+  // outage — "merely behind," the case runBootstrapWindow must never run
+  // for (engine.ts's own doc comment on runPullCycle). A literally never-
+  // synced device is exercised separately, in the sync bootstrap tests.
   async function registerDevice() {
     await db.device.add({
       id: getDeviceId(),
       org_id: "org-1",
       location_id: "location-1",
       registered_at: new Date().toISOString(),
-      pull_cursor: null,
+      pull_cursor: "0",
       membership_id: null,
       token: null,
     });
@@ -547,6 +647,7 @@ describe("isServerUnreachable: the sync chip's fourth state (docs/sync-plan.md's
       pullSince: async () => {
         throw new Error("network down");
       },
+      pullBootstrap: async () => ({ cursor: "3:", hasMore: false, changes: [] }),
     };
   }
 
@@ -580,6 +681,7 @@ describe("isServerUnreachable: the sync chip's fourth state (docs/sync-plan.md's
     const recovered: SyncTransport = {
       pushOps: async () => [],
       pullSince: async () => ({ cursor: "", hasMore: false, changes: [] }),
+      pullBootstrap: async () => ({ cursor: "3:", hasMore: false, changes: [] }),
     };
     await runPullCycle(db, recovered);
 
@@ -593,6 +695,7 @@ describe("isServerUnreachable: the sync chip's fourth state (docs/sync-plan.md's
       pullSince: async () => {
         throw new SyncAuthError();
       },
+      pullBootstrap: async () => ({ cursor: "3:", hasMore: false, changes: [] }),
     };
 
     await runPullCycle(db, authFailing);

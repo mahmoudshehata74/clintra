@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DeviceRegistrationController;
+use App\Http\Controllers\SyncBootstrapController;
 use App\Http\Controllers\SyncPullController;
 use App\Http\Controllers\SyncPushController;
 use Illuminate\Http\Request;
@@ -16,6 +17,11 @@ Route::post('/devices/register', [DeviceRegistrationController::class, 'register
 // Both behind `membership`, on the ordinary RLS-bound connection.
 Route::middleware('membership')->post('/sync/push', [SyncPushController::class, 'push']);
 Route::middleware('membership')->get('/sync/pull', [SyncPullController::class, 'pull']);
+
+// A fresh device's fast path to a usable day screen — see
+// App\Support\Sync\SyncBootstrapPuller's own doc comment. Additive only:
+// GET /sync/pull above is completely unchanged by this route's existence.
+Route::middleware('membership')->get('/sync/bootstrap', [SyncBootstrapController::class, 'bootstrap']);
 
 Route::get('/health', function () {
     $composer = json_decode(file_get_contents(base_path('composer.json')), true);

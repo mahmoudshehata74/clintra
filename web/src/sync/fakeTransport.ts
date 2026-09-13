@@ -119,4 +119,18 @@ export class FakeTransport implements SyncTransport {
     }));
     return { cursor: newCursor, hasMore: false, changes };
   }
+
+  /**
+   * Fake stands in for a single-process test server whose own pullSince
+   * already returns everything, unpaginated (no real ledger to page
+   * through in the first place) — a separate windowed prefetch would have
+   * nothing to usefully shortcut here. Always empty and immediately done,
+   * so a test using Fake exercises the client's bootstrap-then-backfill
+   * *sequencing* (it always runs, always completes instantly) without
+   * Fake needing to model the windowing itself — that's HttpTransport's
+   * job, tested against the real endpoint's behavior.
+   */
+  async pullBootstrap(_cursor: string | null): Promise<PullSinceResult> {
+    return { cursor: "3:", hasMore: false, changes: [] };
+  }
 }

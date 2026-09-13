@@ -554,6 +554,34 @@ them as one rule would be wrong:
     have no way to ever learn the `rev` it needs for `base_rev` on its
     next edit. Pull is the only channel that guarantees it eventually
     hears its own outcome, so it always can.
+- **Addendum — the ordering half of "no windowing," found and fixed
+  separately.** `docs/dry-run.md`'s manual scenario 17 surfaced a sharper
+  problem than raw history size: `GET /api/sync/pull` pages
+  oldest-`seq`-first, so a replacement device used to see the org's
+  *oldest* history before today's already-booked schedule — exactly
+  backwards for the scenario a replacement device exists to serve.
+  Three designs were weighed: a bootstrap *mode* on `pull` itself, the
+  client reversing only its first page, or a wholly separate endpoint.
+  The separate endpoint won, specifically because it sidesteps the
+  tension the task named up front — reordering `pull`'s own cursor
+  would either break its monotonic `seq` guarantee for every
+  already-synced device, or need a second cursor space bolted onto the
+  same endpoint's contract, for no benefit to a device that isn't fresh.
+  `GET /api/sync/bootstrap` (`App\Support\Sync\SyncBootstrapPuller`)
+  instead reads the *current state* of `day_state`/`visits` inside the
+  brief's own 60-day window directly, plus the `patients` those visits
+  reference, and is called once, only when `device.pull_cursor` is still
+  `null` (`web/src/sync/engine.ts`'s `runPullCycle`) — a device merely
+  behind by a few minutes never calls it, so `pull`'s own behavior for
+  that case is untouched. Completeness still comes from `pull`'s
+  existing, unmodified full-history walk, which always runs immediately
+  afterward regardless of what bootstrap found — see `api/docs/rls.md`'s
+  "The sync bootstrap endpoint" for the full design and its named costs
+  (redundant transfer, and a fast path scoped to `day_state`/`visits`/
+  referenced `patients` only — `invoices`/`payments`/unreferenced
+  `patients` still wait for the ordinary backfill). The raw-history-size
+  half of this section's own finding is unchanged by this fix — it was
+  never trying to fix that half, only the ordering.
 
 ### 10. What does the assistant see while sync is down, and what is she blocked from doing, if anything?
 

@@ -224,6 +224,63 @@ export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport
 }
 
 /**
+ * Applies one pulled/bootstrapped change to its entity's local table — a
+ * plain upsert by id, or a delete when payload is null. Shared by
+ * runBootstrapWindow and runPullCycle's own loop below: both receive the
+ * identical PulledChange shape, and both apply it the same way.
+ */
+async function applyChange(db: ClintraDatabase, change: { entity: string; entity_id: string; payload: Record<string, unknown> | null }): Promise<void> {
+  const table = resolveTable(db, change.entity);
+  if (change.payload === null) {
+    await table.delete(change.entity_id);
+  } else {
+    await table.put(change.payload);
+  }
+}
+
+/**
+ * Drains GET /api/sync/bootstrap before this device's very first ever
+ * pullSince — see SyncTransport.pullBootstrap's own doc comment for the
+ * full design (docs/dry-run.md's scenario 17: a replacement device used to
+ * see the org's *oldest* history before today's schedule, since pullSince
+ * pages strictly oldest-first). Deliberately does not touch
+ * device.pull_cursor — that field's only writer remains runPullCycle's own
+ * loop below, so this function's success or failure can never change what
+ * "has this device ever completed a pull cycle" means. A transport failure
+ * here is swallowed, not rethrown: runPullCycle's ordinary backfill still
+ * runs immediately afterward regardless, and since pull_cursor is still
+ * null, the very next cycle retries bootstrap from the start — safe and
+ * idempotent, since every row it delivers is also reachable by the
+ * ordinary backfill that always follows it.
+ */
+async function runBootstrapWindow(db: ClintraDatabase, transport: SyncTransport): Promise<void> {
+  let cursor: string | null = null;
+  let hasMore = true;
+
+  while (hasMore) {
+    let result;
+    try {
+      result = await transport.pullBootstrap(cursor);
+      recordTransportSuccess();
+    } catch (error) {
+      if (error instanceof SyncAuthError) {
+        notifySyncAuthError();
+      } else {
+        recordTransportFailure();
+      }
+      return;
+    }
+
+    for (const change of result.changes) {
+      await applyChange(db, change);
+    }
+
+    cursor = result.cursor;
+    hasMore = result.hasMore;
+  }
+}
+
+/**
  * One pull cycle: resumes from this device's own persisted cursor
  * (device.pull_cursor — never localStorage, same reasoning as the device id
  * itself, db/deviceRegistration.ts), applies every returned change to its
@@ -234,12 +291,24 @@ export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport
  * "done" (docs/sync-plan.md's Q9; api/docs/rls.md's "The sync pull
  * endpoint"). Requires a registered device — the same standing assumption
  * every other sync entry point makes.
+ *
+ * device.pull_cursor being null means this device has never completed a
+ * pull cycle at all (it starts null at registration and becomes a real
+ * string, "0" or higher, the moment the loop below writes it even once) —
+ * exactly the signal that distinguishes a genuinely fresh/replacement
+ * device from one merely behind by a few minutes. Only that first case
+ * ever runs runBootstrapWindow; every other call to this function skips it
+ * entirely, unchanged from before that function existed.
  */
 export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport): Promise<void> {
   const deviceId = getDeviceId();
   const device = await db.device.get(deviceId);
   if (!device) {
     throw new Error("pull_requires_registered_device");
+  }
+
+  if (device.pull_cursor === null) {
+    await runBootstrapWindow(db, transport);
   }
 
   let cursor = device.pull_cursor;
@@ -260,12 +329,7 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
     }
 
     for (const change of result.changes) {
-      const table = resolveTable(db, change.entity);
-      if (change.payload === null) {
-        await table.delete(change.entity_id);
-      } else {
-        await table.put(change.payload);
-      }
+      await applyChange(db, change);
     }
 
     cursor = result.cursor;

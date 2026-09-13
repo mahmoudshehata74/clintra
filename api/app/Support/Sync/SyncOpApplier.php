@@ -25,17 +25,6 @@ use Throwable;
 class SyncOpApplier
 {
     /**
-     * docs/reference/clintra-cli-brief.md, section 8: "Local storage
-     * covers the last 60 days and the next 60 days." An op whose
-     * client-claimed created_at falls further in the past than this is
-     * treated the same as a future-dated one — both mean the timestamp
-     * this endpoint would otherwise trust to resolve a slot conflict
-     * (docs/sync-plan.md's Q5) is outside the range that trust was ever
-     * meant to cover.
-     */
-    private const CLOCK_WINDOW_DAYS = 60;
-
-    /**
      * @param  array{op_id: string, entity: string, entity_id: string, action: string, payload: ?array, created_at: string, base_rev: ?int}  $op
      * @return array{op_id: string, status: string, rev?: int, reason?: string}
      */
@@ -120,7 +109,7 @@ class SyncOpApplier
             return $this->failed($op, 'future_dated_created_at');
         }
 
-        if ($clientCreatedAt->lessThan($serverNow->copy()->subDays(self::CLOCK_WINDOW_DAYS))) {
+        if ($clientCreatedAt->lessThan($serverNow->copy()->subDays(SyncWindow::DAYS))) {
             return $this->failed($op, 'created_at_outside_window');
         }
 

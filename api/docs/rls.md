@@ -866,6 +866,72 @@ guessed at** — both spelled out in `docs/sync-plan.md`'s Q9:
   every row it's entitled to see through RLS is included regardless of
   which device wrote it.
 
+## The sync bootstrap endpoint
+
+`GET /api/sync/bootstrap` (`App\Http\Controllers\SyncBootstrapController`,
+`App\Support\Sync\SyncBootstrapPuller`) exists because `GET /api/sync/pull`'s
+own ordering — strictly ascending `sync_ledger.seq`, oldest first — is
+exactly backwards for the one scenario a *replacement* device actually
+needs fast: a live clinic, mid-day, with today's schedule already
+booked, and a fresh device that has to become useful before its owner's
+patience runs out. `docs/dry-run.md`'s scenario 17 found this by running
+it: a device with months of ledger history ahead of it would see the
+org's *oldest* rows first and today's booked slots dead last.
+
+**The fix is additive, not a change to `pull`'s own contract.** This
+endpoint reads the *current state* of `day_state` and `visits` —
+the two tables with a principled date — directly from those tables,
+filtered to the brief's own 60-day-back/60-day-forward window
+(`App\Support\Sync\SyncWindow::DAYS`, the same constant
+`SyncOpApplier`'s clock-skew check uses), plus the `patients` those
+windowed visits reference, so a name renders instead of a bare id. It
+never touches `sync_ledger`, never computes or returns a `seq`, and
+never writes `device.pull_cursor` — `GET /api/sync/pull`'s own SQL,
+cursor format, and monotonic-`seq` guarantee are completely untouched by
+this endpoint's existence. A device that has already synced before never
+calls it at all (see the client-side gate below), so nothing about
+*this* endpoint can regress the ordinary "merely behind by a few
+minutes" case.
+
+**Completeness comes from a different mechanism than pagination within
+this endpoint: redundancy, not exclusivity.** Once a device drains this
+endpoint, it still runs `GET /api/sync/pull` from cursor 0 exactly as
+before — the *entire* ledger, unchanged, oldest first. That backfill
+re-delivers whatever bootstrap already sent (harmless: an entity-table
+upsert by id) and eventually reaches everything bootstrap's window
+excluded: older visits, invoices, payments, and every table with no
+principled date to window by at all. No row this schema tracks is
+reachable *only* through bootstrap — `tests/Feature/Rls/SyncBootstrapTest.php`'s
+own completeness test proves this directly: a visit outside the window,
+pushed through the ordinary path, is absent from bootstrap's output and
+present in the very next ordinary pull.
+
+**The client-side gate is `device.pull_cursor === null`**
+(`web/src/sync/engine.ts`'s `runPullCycle`) — the exact signal that
+already meant "this device has never completed a pull cycle," since that
+field starts `null` at registration and becomes a real string (`"0"` or
+higher) the moment the ordinary loop persists it even once, including
+after a page with zero rows. No new device field was needed to
+distinguish "genuinely fresh" from "merely behind."
+
+**Cost, named rather than hidden:**
+- One or more extra round trips before a fresh device's very first
+  ordinary pull cycle — never for any other device.
+- Real, deliberate redundancy: every row bootstrap delivers is
+  transferred again by the backfill that always follows it.
+- Narrower scope than "everything a clinic might want fast": `invoices`,
+  `payments`, and any patient with no visit inside the window are not
+  part of this endpoint at all — they still arrive only once the
+  ordinary backfill reaches them. Extending coverage to those tables
+  would mean more joins and more stages, a larger, separate change from
+  this one.
+- Same-shape query complexity trade: three keyset-paginated stages
+  (`day_state`, `visits`, `patients`) stitched by one small opaque
+  cursor (`"{stage}:{last id}"`), rather than pull's single `seq`-ordered
+  query — more moving parts, in exchange for windowing by each entity's
+  own business date instead of an arrival-time proxy that wouldn't
+  reliably mean "today's schedule" at all.
+
 ## The sync endpoint is accept-or-reject only
 
 **Standing rule**: the sync push endpoint accepts or rejects the op in

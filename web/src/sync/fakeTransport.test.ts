@@ -204,4 +204,15 @@ describe("FakeTransport", () => {
       expect(result.status).toBe("accepted");
     });
   });
+
+  describe("pullBootstrap", () => {
+    it("is always immediately done, with nothing to apply — Fake's own pullSince already returns everything unpaginated", async () => {
+      const transport = new FakeTransport(serverDbName);
+
+      const result = await transport.pullBootstrap(null);
+
+      expect(result.hasMore).toBe(false);
+      expect(result.changes).toEqual([]);
+    });
+  });
 });

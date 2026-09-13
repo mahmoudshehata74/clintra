@@ -236,6 +236,7 @@ describe("keepMine / discardMine: an edit conflict (conflict_stale_rev)", () => 
       pushOps: async (ops): Promise<PushOpResult[]> =>
         ops.map((op) => (op.base_rev === 2 ? { op_id: op.op_id, status: "accepted", rev: 3 } : { op_id: op.op_id, status: "rejected", reason: "conflict_stale_rev" })),
       pullSince: async (): Promise<PullSinceResult> => ({ cursor: "", hasMore: false, changes: [] }),
+      pullBootstrap: async (): Promise<PullSinceResult> => ({ cursor: "3:", hasMore: false, changes: [] }),
     };
 
     await runSyncCycle(db, transport);
