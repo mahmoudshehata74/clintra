@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Support\TrustedProxyGuard;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -47,5 +48,11 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('sync', function (Request $request) {
             return Limit::perMinute(120)->by($request->bearerToken() ?? $request->ip());
         });
+
+        // See App\Support\TrustedProxyGuard's own doc comment — a
+        // once-a-day diagnostic warning, never a failure, if this app is
+        // running in production with bootstrap/app.php's trustProxies
+        // still set to '*'.
+        TrustedProxyGuard::warnIfNeeded();
     }
 }
