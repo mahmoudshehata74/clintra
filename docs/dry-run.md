@@ -1,42 +1,70 @@
-# Manual dry run — two real devices, one real deployed API
+# Manual dry run — two real devices, one real API
 
 This is the acceptance gate before any clinic uses the system. Nothing
 here is automated: no test runner, no CI job, no fixtures. You run every
-scenario by hand, against a real deployed instance of `api/` (real
-Postgres, real network), from two real devices (two phones, two tablets,
-or two separate browser profiles on two separate machines — anything that
-gives each device its own IndexedDB and its own network connection you
-can control independently).
+scenario by hand, against a real instance of `api/` (real Postgres, real
+network), from two real devices (two phones, two tablets, or two separate
+browser profiles on two separate machines — anything that gives each
+device its own IndexedDB and its own network connection you can control
+independently).
 
-It is written so someone who did not build this system can run it. Where
-a step needs a database query, the exact query is given. Where a step
-needs a UI action, the exact button label (Arabic, as it appears on
-screen) is given.
+**Running locally for now, not against a deployed host.** No hosting
+provider is chosen yet — `docs/deployment.md` describes the eventual real
+deployment but is unused today. This run is API-on-laptop,
+devices-on-the-same-wifi: see `docs/local-network.md` for the exact setup
+(finding your LAN IP, binding the API past `127.0.0.1`, building the web
+app against that IP, the one Windows Firewall rule needed, CORS for a LAN
+origin). Read that document and get through its own step 6 (the phone
+successfully loading `/api/health`) before starting scenario 1 below. A
+few things only make sense once you have: everything that says "the API
+host" below means your own laptop; there is no separate deploy target to
+SSH into.
 
-## Before you start
-
-**The `/api` path gap.** Every fetch in the web app calls a relative path
-(`/api/devices/register`, `/api/sync/push`, `/api/sync/pull`) — same
-origin as whatever served the page. In local dev, Vite's dev-server proxy
-sends `/api/*` to `http://127.0.0.1:8000` (`web/vite.config.ts`); that
-proxy **does not exist in the production build**. Vercel serves the built
-web app as static files, and `api/` is deployed separately
-(`web/vercel.json` has no rewrite to an API origin at all). If you deploy
-the two independently with nothing bridging `/api/*` to the real API's
-host, every scenario below fails at step zero with a network error
-indistinguishable from a real outage. Resolve this before scenario 1 —
-put both behind one origin, or add a platform-level rewrite/reverse proxy
-from the web deployment's `/api/*` to the API deployment's real URL. This
-document does not implement that; it only flags that you need it in place
-first.
+**What running locally changes about the scenarios below, and what it
+can't test at all — read this before you start, not after something
+looks wrong:**
+- Killing/restarting the API (scenario 11) is simpler than described:
+  it's `Ctrl+C` and re-running the `php artisan serve` command from
+  `docs/local-network.md`, right in front of you — not a remote restart.
+- There is no reverse proxy in this setup at all — the phone talks
+  directly to your laptop's IP:port. `docs/deployment.md`'s
+  `trustProxies`/CORS-behind-a-load-balancer considerations exist for the
+  eventual real deployment and are **not exercised by this run in any
+  way** — don't read a clean result here as having validated that part.
+- The rate limiters (registration's IP/code/org layers, sync's
+  token-keyed one — `docs/deployment.md`'s "Rate limiting") all still
+  function, but only in their ordinary, non-adversarial mode: your
+  laptop's LAN sees the phone's real IP directly, with nothing to forge
+  and no reason to. This run doesn't test the security boundary those
+  layers exist for, only that they don't misfire during ordinary use.
+- **Cannot be tested this way, at all — genuinely deferred to a real
+  deployment, not quietly dropped:**
+  - Real mobile-network conditions: carrier NAT, cellular flakiness, the
+    kind of connection quality the offline-first design actually exists
+    for. A home/clinic wifi LAN is fast and low-latency by comparison.
+    DevTools' network throttling (used in scenario 12) simulates *some*
+    of this, but simulated is not the same as a real bad connection.
+  - Real geographic round-trip latency. The API is on the same LAN as the
+    devices here — effectively zero network latency, nothing like the
+    Egypt-to-hosting-region cost `docs/deployment.md`'s "Region" section
+    describes. That consideration can only be validated once a real
+    region is chosen and deployed to.
+  - The service worker / PWA installability / a cold app start with zero
+    network at all. `docs/local-network.md`'s own "Before you start"
+    explains why (a LAN IP over plain HTTP isn't a secure context) and
+    confirms this doesn't block anything scenario 1 onward actually
+    tests — but it does mean "the app installs as a PWA and opens with
+    literally no network" stays unverified until a real HTTPS deployment
+    exists.
 
 **What you need on hand:**
-- A `psql` connection (or equivalent SQL client) to the deployed Postgres
+- A `psql` connection (or equivalent SQL client) to the local Postgres
   database, authenticated as `clintra_owner` (or another non-`BYPASSRLS`
   role — never `clintra_fixtures`, which must not exist in a production
-  database at all — see `api/docs/rls.md`).
-- Shell/SSH access to the machine running the API, so you can stop and
-  restart it.
+  database, though it's fine for this local/disposable one — see
+  `api/docs/rls.md`).
+- Your own laptop's terminal, to stop and restart the API process
+  directly (`docs/local-network.md`'s step 2).
 - Two devices, each with browser DevTools available (Network tab,
   Application/IndexedDB tab), and an independent way to cut each one's
   network connection (Wi-Fi toggle, airplane mode, or DevTools' "Offline"
@@ -62,8 +90,9 @@ device into a different membership's PIN at the lock screen from then on.
 
 ### Scenario 1 — Provision the organization, and hit the RLS trap on purpose
 
-**Setup:** a freshly deployed API, pointed at an empty database that has
-already been migrated (`php artisan migrate --database=pgsql_owner`).
+**Setup:** a freshly running API (`docs/local-network.md`), pointed at an
+empty database that has already been migrated
+(`php artisan migrate --database=pgsql_owner`).
 
 **Steps:**
 1. On the API host, run `php artisan clintra:provision`.
@@ -121,7 +150,7 @@ likely means `membership_id` was mistyped or the membership isn't
 ### Scenario 2 — Register Device 1
 
 **Setup:** Device 1, a fresh browser profile with no prior IndexedDB for
-this app, pointed at the deployed web app.
+this app, pointed at `http://<LAN_IP>:4173` (`docs/local-network.md`).
 
 **Steps:**
 1. Open the app. It should show the registration screen (screen 1) — a
@@ -168,7 +197,7 @@ you're checking).
 
 ### Scenario 3 — Mint a second activation code
 
-**Setup:** the same deployed API and database as scenario 1/2.
+**Setup:** the same running API and database as scenario 1/2.
 
 **Steps:** on the API host, run:
 ```
@@ -666,8 +695,8 @@ something scenario 18 can "pass."
   the brief's core "always works, network or not" guarantee.
 - Either review action in scenario 14/16 leaving data matching neither
   device's version, or silently discarding data with no review at all.
-- The `/api` origin gap ("Before you start") not resolved — nothing else
-  in this document can even run.
+- `docs/local-network.md`'s own step 6 (the phone loading `/api/health`)
+  not working yet — nothing else in this document can even run.
 
 **Note for later — real, but doesn't block launch on its own:**
 - Scenario 15's chronologically-older-loses outcome (already a known,
