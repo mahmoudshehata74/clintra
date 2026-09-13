@@ -130,7 +130,7 @@ export class FakeTransport implements SyncTransport {
    * Fake needing to model the windowing itself — that's HttpTransport's
    * job, tested against the real endpoint's behavior.
    */
-  async pullBootstrap(_cursor: string | null): Promise<PullSinceResult> {
+  async pullBootstrap(): Promise<PullSinceResult> {
     return { cursor: "3:", hasMore: false, changes: [] };
   }
 }
