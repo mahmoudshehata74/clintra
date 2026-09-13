@@ -1,9 +1,8 @@
+import { getApiBaseUrl } from "../config/apiBaseUrl";
 import { normalizeEgyptianPhone } from "../domain/phone";
 import type { ClintraDatabase } from "./database";
 import { getDeviceId } from "./deviceRegistration";
 import type { Location, Membership, Organization, Practitioner, User } from "./types";
-
-const REGISTER_ENDPOINT = "/api/devices/register";
 
 /** Matches POST /api/devices/register's response exactly (DeviceRegistrationController::register). */
 interface RegisterDeviceResponseBody {
@@ -67,7 +66,7 @@ export async function registerDevice(
 
   let response: Response;
   try {
-    response = await fetchImpl(REGISTER_ENDPOINT, {
+    response = await fetchImpl(`${getApiBaseUrl()}/devices/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({

@@ -186,6 +186,17 @@ device — it reports the existing revocation rather than erroring.
 - Auth is Sanctum device tokens, not sessions.
 - Every response is JSON — there are no HTML error pages.
 
+## Cross-origin access
+
+The web app is a separate deployment from this API — set
+`CORS_ALLOWED_ORIGINS` (`.env`, comma-separated) to its real origin(s).
+`http://localhost:5173`/`http://127.0.0.1:5173` (Vite's dev server) are
+always allowed on top of that. See `config/cors.php` for why
+`allowed_headers` lists `Authorization` explicitly rather than `*` — the
+CORS spec's wildcard never covers that header. Full deployment picture,
+including running this behind a reverse proxy, is in
+`docs/deployment.md`.
+
 ## Tests
 
 ```

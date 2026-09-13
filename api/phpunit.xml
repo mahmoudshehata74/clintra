@@ -19,6 +19,12 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <!-- A fixed, real value — not mutated at runtime via Config::set()
+             inside a test, which does not reliably affect the CORS
+             middleware's already-constructed CorsService (see
+             tests/Feature/Cors/CrossOriginTest.php). Exercises the exact
+             env-driven path config/cors.php actually documents. -->
+        <env name="CORS_ALLOWED_ORIGINS" value="https://clintra-web.example.com"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>

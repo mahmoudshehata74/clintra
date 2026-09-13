@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from "../config/apiBaseUrl";
 import type { SyncOp } from "../db/types";
 import { SyncAuthError, type PullSinceResult, type PushOpResult, type SyncTransport } from "./transport";
 
@@ -33,31 +34,23 @@ export interface HttpTransportOptions {
    * (a future registration flow, or a test) passes it in directly.
    */
   token: string;
-  /** Defaults to "/api" — same-origin, matching how the Laravel app is deployed alongside this one. */
+  /** Defaults to config/apiBaseUrl.ts's getApiBaseUrl() — the build-time VITE_API_BASE_URL, or "/api" if unset. */
   baseUrl?: string;
   /** Overridable for tests; defaults to the global fetch. */
   fetchImpl?: typeof fetch;
 }
 
 /**
- * Implements SyncTransport against the real POST /api/sync/push and
- * GET /api/sync/pull (api/docs/rls.md's "The sync push endpoint" / "The
- * sync pull endpoint"). FakeTransport remains the app's only wired-up
- * transport today (App.tsx) — this class exists and is fully tested against
- * a mocked fetch, but nothing in web/ can construct it with a real token
- * yet:
- *
- * db/deviceRegistration.ts's `ensureDeviceRegistration` binds a device to a
- * *locally seeded* org+location and has never called
- * POST /api/devices/register or stored a Sanctum token anywhere — there is
- * currently no field, table, or in-memory value in this app that holds one.
- * Wiring HttpTransportOptions.token up to a real credential is therefore a
- * separate, unbuilt task (the actual device-registration HTTP integration),
- * not something this class can paper over by inventing a storage location
- * that would need to be redone once that task lands. Until then, selecting
- * this transport is only ever done explicitly by a caller that already has
- * a token in hand (e.g. a test) — see selectSyncTransport in this same
- * file for the one seam that will switch over once that token exists.
+ * Implements SyncTransport against the real POST /api/sync/push,
+ * GET /api/sync/pull, and GET /api/sync/bootstrap (api/docs/rls.md's "The
+ * sync push endpoint" / "The sync pull endpoint" / "The sync bootstrap
+ * endpoint"). Wired up in the running app by `selectSyncTransport` below,
+ * whenever a device holds a real token — `db/registration.ts`'s
+ * `registerDevice` is what stores one, on every real
+ * `POST /api/devices/register` success. `App.tsx` reads it back
+ * (`db.device.toArray()`, the row whose `token` is non-null) and passes it
+ * here; `FakeTransport` is only ever selected for a device with no real
+ * token (demo mode's seed-bound device row).
  */
 export class HttpTransport implements SyncTransport {
   private readonly token: string;
@@ -66,7 +59,7 @@ export class HttpTransport implements SyncTransport {
 
   constructor(options: HttpTransportOptions) {
     this.token = options.token;
-    this.baseUrl = options.baseUrl ?? "/api";
+    this.baseUrl = options.baseUrl ?? getApiBaseUrl();
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
@@ -146,11 +139,10 @@ export class HttpTransport implements SyncTransport {
 }
 
 /**
- * The one seam that decides Fake vs. Http, per this task's own requirement
- * that the choice be explicit and default safe. Returns FakeTransport
- * whenever no token is available — which, per HttpTransport's own doc
- * comment, is every real call site in this app today — so nothing switches
- * over until a real device credential exists to pass in deliberately.
+ * The one seam that decides Fake vs. Http, kept explicit and default-safe:
+ * returns FakeTransport whenever no token is available (demo mode; a
+ * device row that was never really registered), and a real HttpTransport
+ * — pointed at getApiBaseUrl() — the moment one is.
  */
 export function selectSyncTransport(token: string | null, fakeTransport: SyncTransport): SyncTransport {
   return token === null ? fakeTransport : new HttpTransport({ token });

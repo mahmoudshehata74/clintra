@@ -10,18 +10,27 @@ use Illuminate\Support\Facades\Route;
 
 // No auth middleware: this endpoint IS how a device gets its first
 // credential — see App\Http\Controllers\DeviceRegistrationController.
+// Already rate-limited inside the controller itself (dual-keyed by IP and
+// by the submitted activation code, 5 failures/15 minutes, cleared on
+// success) — deliberately not also wrapped in a throttle: middleware
+// here, which would be a second, cruder limiter stacked in front of a
+// more specific one, and could shadow its distinct
+// {"error":"too_many_attempts",...} response with Laravel's own generic
+// 429 shape the moment the blunter counter tripped first.
 Route::post('/devices/register', [DeviceRegistrationController::class, 'register']);
 
 // Matches SyncTransport.pushOps/pullSince (web/src/sync/transport.ts)
 // exactly — see App\Http\Controllers\SyncPushController/SyncPullController.
 // Both behind `membership`, on the ordinary RLS-bound connection.
-Route::middleware('membership')->post('/sync/push', [SyncPushController::class, 'push']);
-Route::middleware('membership')->get('/sync/pull', [SyncPullController::class, 'pull']);
+// throttle:sync is token-keyed, not IP-keyed — see
+// App\Providers\AppServiceProvider's own comment for why.
+Route::middleware(['membership', 'throttle:sync'])->post('/sync/push', [SyncPushController::class, 'push']);
+Route::middleware(['membership', 'throttle:sync'])->get('/sync/pull', [SyncPullController::class, 'pull']);
 
 // A fresh device's fast path to a usable day screen — see
 // App\Support\Sync\SyncBootstrapPuller's own doc comment. Additive only:
 // GET /sync/pull above is completely unchanged by this route's existence.
-Route::middleware('membership')->get('/sync/bootstrap', [SyncBootstrapController::class, 'bootstrap']);
+Route::middleware(['membership', 'throttle:sync'])->get('/sync/bootstrap', [SyncBootstrapController::class, 'bootstrap']);
 
 Route::get('/health', function () {
     $composer = json_decode(file_get_contents(base_path('composer.json')), true);

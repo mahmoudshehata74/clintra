@@ -1,3 +1,17 @@
+# Clintra web
+
+React + TypeScript + Vite PWA. See `../docs/` for the actual product/architecture
+docs; this file only covers this package's own tooling.
+
+## Environment
+
+Copy `.env.example` to `.env.local` and fill in `VITE_API_BASE_URL` once a
+real API deployment exists — see that file's own comment for what happens
+when it's left unset (nothing; local dev and every existing test are
+unaffected). This is a **build-time** variable: it's baked into the built
+bundle at `pnpm build` time, not read at runtime, so a single build only
+ever points at one API.
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
