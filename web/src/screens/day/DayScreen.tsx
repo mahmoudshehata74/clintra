@@ -171,7 +171,7 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
     let cancelled = false;
 
     async function load() {
-      await seedDatabase(db, { includeQueueDemo: true });
+      await seedDatabase(db, { includeQueueDemo: true, realPinHash: true });
       // Registration is transparent (Layer 1): right after the seed, this
       // writes the device row (migrating any pre-v8 localStorage id) and primes
       // the synchronous device-id cache the write path reads. It also yields

@@ -1,5 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
-import { gotoRealDay, gotoSeededDay, openBookingSheet, PATIENTS, rowFor, S, selectPractitioner, SLOTS_DR } from "./support";
+import {
+  gotoRealDay,
+  gotoSeededDay,
+  openBookingSheet,
+  PATIENTS,
+  pickSearchResult,
+  rowFor,
+  S,
+  selectPractitioner,
+  SLOTS_DR,
+} from "./support";
 
 test.beforeEach(async ({ page }) => {
   await gotoSeededDay(page);
@@ -92,7 +102,7 @@ test("autosave creates then updates the same row, and the audit sheet shows the 
   await openBookingSheet(page);
   const booking = page.getByRole("dialog");
   await booking.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.mona);
-  await booking.getByRole("button").filter({ hasText: PATIENTS.mona }).first().click();
+  await pickSearchResult(booking, PATIENTS.mona);
   await booking.getByRole("button", { name: /^\d{1,2}:\d{2}$/ }).first().click();
   await booking.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
   await expect(page.getByText(S.visitBooked)).toBeVisible();

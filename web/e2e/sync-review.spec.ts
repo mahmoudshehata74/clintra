@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { Patient, SyncOp, SyncReview, Visit } from "../src/db/types";
-import { emptySlotTiles, gotoSeededDay, login, PATIENTS, S, selectPractitioner, SLOTS_DR } from "./support";
+import { emptySlotTiles, gotoSeededDay, login, PATIENTS, pickSearchResult, S, selectPractitioner, SLOTS_DR } from "./support";
 
 /** Reads every row from an object store in the app's own "clintra" database, straight out of IndexedDB. */
 async function readIndexedDbStore<T>(page: Page, storeName: string): Promise<T[]> {
@@ -67,7 +67,7 @@ async function plantLostSlotConflict(page: Page, patientName: string): Promise<{
   await emptySlotTiles(page).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(patientName);
-  await dialog.getByRole("button").filter({ hasText: patientName }).first().click();
+  await pickSearchResult(dialog, patientName);
   await dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
   await expect(page.getByText(S.visitBooked)).toBeVisible();
 

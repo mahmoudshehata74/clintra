@@ -8,6 +8,7 @@ import {
   OWNER_NAME,
   OWNER_PIN,
   PATIENTS,
+  pickSearchResult,
   rowFor,
   S,
   selectPractitioner,
@@ -113,7 +114,7 @@ test("deactivating a service hides it from the booking picker but keeps a comple
   await emptySlotTiles(page).first().click();
   const booking = page.getByRole("dialog");
   await booking.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.mona);
-  await booking.getByRole("button").filter({ hasText: PATIENTS.mona }).first().click();
+  await pickSearchResult(booking, PATIENTS.mona);
   await expect(booking.getByRole("button", { name: S.bookingConfirmButton, exact: true })).toBeVisible();
   await expect(booking.getByRole("button", { name: "كشف عام", exact: true })).toBeVisible();
   await expect(booking.getByRole("button", { name: "استشارة متابعة", exact: true })).toHaveCount(0);
@@ -169,7 +170,7 @@ test("a new assistant added in settings can log in and their bookings record the
   await emptySlotTiles(page).first().click();
   const booking = page.getByRole("dialog");
   await booking.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.omar);
-  await booking.getByRole("button").filter({ hasText: PATIENTS.omar }).first().click();
+  await pickSearchResult(booking, PATIENTS.omar);
   await booking.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
   await expect(page.getByText(S.visitBooked)).toBeVisible();
 

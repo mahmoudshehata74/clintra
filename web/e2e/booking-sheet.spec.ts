@@ -4,6 +4,7 @@ import {
   gotoSeededDay,
   openBookingSheet,
   PATIENTS,
+  pickSearchResult,
   readClockTime,
   rowFor,
   S,
@@ -38,7 +39,7 @@ test("an existing patient is booked into a specific empty slot in exactly 3 taps
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.hoda); // typing, not a tap
 
   taps++;
-  await dialog.getByRole("button").filter({ hasText: PATIENTS.hoda }).first().click(); // tap 2 — choose patient
+  await pickSearchResult(dialog, PATIENTS.hoda); // tap 2 — choose patient
 
   // The pre-filled time took us straight to confirm; the default service needs
   // no tap, so the common path never grew past three.
@@ -72,7 +73,7 @@ test("the service picker pre-selects the first service and updates when another 
   await firstTile.click();
   const dialog = page.getByRole("dialog");
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.mona);
-  await dialog.getByRole("button").filter({ hasText: PATIENTS.mona }).first().click();
+  await pickSearchResult(dialog, PATIENTS.mona);
 
   // Service order in the DB is UUID-ordered, so which pill is pre-selected is
   // not fixed — assert the behaviour structurally: exactly one pill selected,
@@ -119,7 +120,7 @@ test("the overbook flow appears only once the day is full and writes an over-cap
   for (let i = 0; i < 12; i++) {
     await openBookingSheet(page);
     await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(cycle[i % cycle.length]);
-    await dialog.getByRole("button").filter({ hasText: cycle[i % cycle.length] }).first().click();
+    await pickSearchResult(dialog, cycle[i % cycle.length]);
     await expect(dialog.getByRole("button", { name: S.bookingBackAction, exact: true })).toBeVisible();
     // Wait for the slots step to settle into EITHER a tile or the overbook
     // button, so the loop never reads a transient (re-render lag) count.

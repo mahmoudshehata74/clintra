@@ -7,6 +7,7 @@ import {
   gotoSeededDay,
   openBookingSheet,
   PATIENTS,
+  pickSearchResult,
   readClockTime,
   rowFor,
   S,
@@ -122,7 +123,7 @@ test("existing patient booking: 3 taps, under 3 seconds", async ({ page }) => {
   const start = Date.now();
   await firstTile.click(); // tap 1 — the empty slot pre-fills its time
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.hoda); // typing, not a tap
-  await dialog.getByRole("button").filter({ hasText: PATIENTS.hoda }).first().click(); // tap 2 — choose patient
+  await pickSearchResult(dialog, PATIENTS.hoda); // tap 2 — choose patient
   await expect(dialog.getByText(time)).toBeVisible();
   await dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click(); // tap 3 — confirm
   await expect(page.getByText(S.visitBooked)).toBeVisible();
@@ -296,7 +297,7 @@ test("offline work is never lost locally, and a resend after reconnecting does n
   await openBookingSheet(page);
   const dialog = page.getByRole("dialog");
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.hoda);
-  await dialog.getByRole("button").filter({ hasText: PATIENTS.hoda }).first().click();
+  await pickSearchResult(dialog, PATIENTS.hoda);
   await dialog.getByRole("button", { name: /^\d{1,2}:\d{2}$/ }).first().click();
   await dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
   await expect(page.getByText(S.visitBooked)).toBeVisible();

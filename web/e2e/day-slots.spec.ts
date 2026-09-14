@@ -1,5 +1,16 @@
 import { expect, test } from "@playwright/test";
-import { emptySlotTiles, gotoSeededDay, PATIENTS, readClockTime, rowFor, S, selectPractitioner, SLOTS_DR, QUEUE_DR } from "./support";
+import {
+  emptySlotTiles,
+  gotoSeededDay,
+  PATIENTS,
+  pickSearchResult,
+  readClockTime,
+  rowFor,
+  S,
+  selectPractitioner,
+  SLOTS_DR,
+  QUEUE_DR,
+} from "./support";
 
 test.beforeEach(async ({ page }) => {
   await gotoSeededDay(page);
@@ -75,7 +86,7 @@ test("empty-slot plus tile opens the booking sheet with the slot's time pre-fill
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.mona);
-  await dialog.getByRole("button").filter({ hasText: PATIENTS.mona }).first().click();
+  await pickSearchResult(dialog, PATIENTS.mona);
 
   // Jumped straight to confirm for the pre-filled time (the slots step was skipped).
   await expect(dialog.getByText(time)).toBeVisible();

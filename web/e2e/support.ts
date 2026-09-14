@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 // The real UI strings, imported rather than duplicated so a wording change in
 // the app can never silently drift from the tests. These modules have no
 // imports of their own, so pulling them into the Playwright bundle is cheap.
@@ -127,6 +127,27 @@ export async function openBookingSheet(page: Page, label: string = S.bookingButt
 /** The day grid's empty-slot plus tiles (SlotRow with aria-label "الموعد فاضي"). */
 export function emptySlotTiles(page: Page) {
   return page.getByRole("button", { name: S.emptySlot, exact: true });
+}
+
+/**
+ * Clicks a patient's row in a booking-sheet search-results list. The
+ * "+ مريض جديد باسم «query»" row echoes the typed query back into its own
+ * label, so once the query exactly matches a patient's name, a plain
+ * `filter({ hasText: name })` matches that row too — and since the real
+ * results come from a debounced, async Dexie query while the "add new"
+ * row appears on the debounce alone, a click landing before the query
+ * settles hits the wrong row instead of failing outright. Excluding the
+ * "add new" row's own label removes the ambiguity, so Playwright's normal
+ * actionability wait does the rest: it keeps retrying until the real row
+ * — the only one left that can match — actually renders.
+ */
+export async function pickSearchResult(scope: Locator, patientName: string): Promise<void> {
+  await scope
+    .getByRole("button")
+    .filter({ hasText: patientName })
+    .filter({ hasNotText: S.newPatientButtonPrefix })
+    .first()
+    .click();
 }
 
 /** Pull the "HH:MM" clock time rendered inside a grid row or tile. */

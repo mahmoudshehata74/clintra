@@ -9,6 +9,7 @@ import {
   OWNER_NAME,
   OWNER_PIN,
   PATIENTS,
+  pickSearchResult,
   rowFor,
   S,
   selectPractitioner,
@@ -110,7 +111,7 @@ test("@screenshot day-slots-with-overbook", async ({ page }) => {
   for (let i = 0; i < 12; i++) {
     await openBookingSheet(page);
     await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(cycle[i % cycle.length]);
-    await dialog.getByRole("button").filter({ hasText: cycle[i % cycle.length] }).first().click();
+    await pickSearchResult(dialog, cycle[i % cycle.length]);
     await expect(dialog.getByRole("button", { name: S.bookingBackAction, exact: true })).toBeVisible();
     await expect(slotTiles.first().or(overbookButton)).toBeVisible();
     if (await overbookButton.isVisible()) break;
@@ -168,7 +169,7 @@ test("@screenshot booking-sheet-service-picker", async ({ page }) => {
   await emptySlotTiles(page).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.mona);
-  await dialog.getByRole("button").filter({ hasText: PATIENTS.mona }).first().click();
+  await pickSearchResult(dialog, PATIENTS.mona);
   await expect(dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true })).toBeVisible();
   await shoot(page, "booking-sheet-service-picker", false);
 });

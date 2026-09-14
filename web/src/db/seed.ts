@@ -90,6 +90,23 @@ export interface SeedOptions {
    * this.
    */
   includeQueueDemo?: boolean;
+
+  /**
+   * Hashes the two seeded memberships' dev PINs (see DEV_SEED_PINS) with the
+   * real Argon2id implementation instead of a fixed placeholder. Off by
+   * default: nothing in the vitest suite ever verifies a PIN against these
+   * two memberships' own hash (each test that checks a hash — staffSettings
+   * .test.ts — checks one freshly produced by createStaffMembership or
+   * updateMembership, which always hash for real regardless of this flag).
+   * Paying Argon2id's cost (~250ms each, by design — see pinHashParams.ts)
+   * twice per call for a value nothing reads was previously stacking with
+   * that same test's own real hash into 3 real hashes in one test, which
+   * measurably pushed it over vitest's default per-test timeout under the
+   * CPU contention of a full parallel run. Only the real running app (the
+   * day screen's ?seedDay=1 / ?demo=1 bootstrap) needs a real, loggable-in
+   * PIN, so only it passes this.
+   */
+  realPinHash?: boolean;
 }
 
 /**
@@ -242,11 +259,13 @@ async function writeSeedData(
     is_active: true,
   };
 
-  // Real Argon2id hashes of the dev-only seed PINs (see auth/devPins.ts). This
-  // synchronous hashing runs only when the database is empty (this function is
-  // only reached then), and only before the first `await` below, so the
+  // Real Argon2id hashes of the dev-only seed PINs (see auth/devPins.ts),
+  // only when a caller actually needs to log in with them (see SeedOptions
+  // .realPinHash) — otherwise a fixed placeholder, since nothing else reads
+  // these two memberships' own hash. Real hashing, when it happens, stays
+  // synchronous and runs only before the first `await` below, so the
   // enclosing Dexie transaction stays open. Each membership gets its own salt.
-  const assistantPinSalt = generatePinSalt();
+  const assistantPinSalt = options.realPinHash ? generatePinSalt() : "seed-salt-assistant";
   const assistantMembership: Membership = {
     id: id(),
     user_id: assistantUser.id,
@@ -256,7 +275,7 @@ async function writeSeedData(
     practitioner_scope: PractitionerScope.All,
     practitioner_id: null,
     pin_salt: assistantPinSalt,
-    pin_hash: hashPin(DEV_SEED_PINS.assistant, assistantPinSalt),
+    pin_hash: options.realPinHash ? hashPin(DEV_SEED_PINS.assistant, assistantPinSalt) : "seed-hash-assistant",
     is_active: true,
     rev: 1,
   };
@@ -273,7 +292,7 @@ async function writeSeedData(
     is_active: true,
   };
 
-  const practitionerPinSalt = generatePinSalt();
+  const practitionerPinSalt = options.realPinHash ? generatePinSalt() : "seed-salt-practitioner";
   const practitionerMembership: Membership = {
     id: id(),
     user_id: practitionerUser.id,
@@ -283,7 +302,9 @@ async function writeSeedData(
     practitioner_scope: PractitionerScope.Self,
     practitioner_id: practitioner.id,
     pin_salt: practitionerPinSalt,
-    pin_hash: hashPin(DEV_SEED_PINS.practitioner, practitionerPinSalt),
+    pin_hash: options.realPinHash
+      ? hashPin(DEV_SEED_PINS.practitioner, practitionerPinSalt)
+      : "seed-hash-practitioner",
     is_active: true,
     rev: 1,
   };

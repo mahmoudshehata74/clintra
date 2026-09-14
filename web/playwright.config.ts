@@ -32,7 +32,11 @@ export default defineConfig({
   workers: process.env.CI ? 2 : 3,
   timeout: 60_000,
   expect: { timeout: 10_000 },
-  reporter: "list",
+  // "list" is the normal human-readable console output; retrySummaryReporter
+  // adds nothing on an ordinary all-first-try-green run, and exactly one
+  // visible marker when a retry masked a first-attempt failure — see its
+  // own doc comment.
+  reporter: [["list"], ["./e2e/retrySummaryReporter.ts"]],
   use: {
     baseURL: BASE_URL,
     // Interaction tests keep a screenshot and a trace only when something

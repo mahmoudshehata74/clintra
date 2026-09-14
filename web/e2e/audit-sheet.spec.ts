@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { gotoRealDay, openBookingSheet, PATIENTS, rowFor, S, selectPractitioner, SLOTS_DR } from "./support";
+import { gotoRealDay, openBookingSheet, PATIENTS, pickSearchResult, rowFor, S, selectPractitioner, SLOTS_DR } from "./support";
 
 // The audit sheet filters rows by the screen's day, and audit rows are
 // timestamped "now" — so these run on the REAL day (no ?seedDay), where a
@@ -19,7 +19,7 @@ async function bookExisting(page: Page, name: string) {
   await openBookingSheet(page);
   const dialog = page.getByRole("dialog");
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(name);
-  await dialog.getByRole("button").filter({ hasText: name }).first().click();
+  await pickSearchResult(dialog, name);
   await dialog.getByRole("button", { name: /^\d{1,2}:\d{2}$/ }).first().click();
   await dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
   await expect(page.getByText(S.visitBooked)).toBeVisible();
