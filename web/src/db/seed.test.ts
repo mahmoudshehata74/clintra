@@ -74,6 +74,18 @@ describe("seedDatabase", () => {
     }
   });
 
+  it("seededVisitsDate() never lands on referenceDay itself, even when referenceDay is a Monday", () => {
+    // 2026-09-14 is itself a Monday — the exact collision that broke
+    // gotoRealDay()'s "today starts empty of seeded visits" assumption once
+    // every seven days, before this was pinned to strictly before referenceDay.
+    expect(seededVisitsDate("2026-09-14")).toBe("2026-09-07");
+  });
+
+  it("seededVisitsDate() is unchanged for a referenceDay that isn't a Monday", () => {
+    // 2026-09-16 is a Wednesday; its most recent Monday is the same week's.
+    expect(seededVisitsDate("2026-09-16")).toBe("2026-09-14");
+  });
+
   it("does not create duplicate data when two connections seed the same empty database concurrently", async () => {
     // Regression test: this reproduces two tabs (or a double effect
     // invocation) both loading the app for the first time against an empty

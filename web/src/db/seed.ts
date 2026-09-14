@@ -6,7 +6,7 @@ import { Role } from "../domain/role";
 import { LocationScope, PractitionerScope } from "../domain/scope";
 import { ScheduleMode } from "../domain/scheduleMode";
 import { GENERAL_SPECIALTY_KEY } from "../domain/specialtyTemplate";
-import { cairoInstant, mostRecentWeekdayOnOrBefore, todayInCairo, type ClinicDay } from "../domain/time";
+import { addDaysToClinicDay, cairoInstant, mostRecentWeekdayOnOrBefore, todayInCairo, type ClinicDay } from "../domain/time";
 import { CancelReason, VisitStatus } from "../domain/visitStatus";
 import { VisitSource } from "../domain/visitSource";
 import { generateSlotTimes } from "../domain/schedule";
@@ -32,21 +32,29 @@ import {
   type Visit,
 } from "./types";
 
-// The seed always places its five demo visits on the most recent Monday, not
-// on whichever day the seed happens to run — otherwise a database seeded on,
-// say, a Tuesday would show a populated Tuesday and an empty day for the rest
-// of the week. The schedule itself is written for every weekday (see below),
-// so today's grid always renders regardless of which day this is.
+// The seed always places its five demo visits on the most recent Monday
+// strictly before whichever day the seed happens to run — never that day
+// itself, even when it's a Monday (see seededVisitsDate()) — otherwise a
+// database seeded on, say, a Tuesday would show a populated Tuesday and an
+// empty day for the rest of the week. The schedule itself is written for
+// every weekday (see below), so today's grid always renders regardless of
+// which day this is.
 const SEEDED_VISITS_WEEKDAY = 1; // Monday
 
 /**
  * The clinic day the seed's demo visits are pinned to: the most recent Monday
- * on or before referenceDay. Exposed so a caller that cannot read it back
- * from actual seeded rows (e.g. before any exist) can still derive the same
- * date the seed would choose today.
+ * strictly before referenceDay — never referenceDay itself, even when
+ * referenceDay falls on a Monday. The demo data represents a closed-out
+ * example day, not something that can collide with "today": a real ?demo=1
+ * walkthrough (and e2e's gotoRealDay()) both depend on today's own grid
+ * starting empty of seeded visits, which broke outright every time
+ * referenceDay itself was a Monday, once every seven days. Exposed so a
+ * caller that cannot read it back from actual seeded rows (e.g. before any
+ * exist) can still derive the same date the seed would choose today.
  */
 export function seededVisitsDate(referenceDay: ClinicDay = todayInCairo()): ClinicDay {
-  return mostRecentWeekdayOnOrBefore(referenceDay, SEEDED_VISITS_WEEKDAY);
+  const priorDay = addDaysToClinicDay(referenceDay, -1);
+  return mostRecentWeekdayOnOrBefore(priorDay, SEEDED_VISITS_WEEKDAY);
 }
 
 /**
