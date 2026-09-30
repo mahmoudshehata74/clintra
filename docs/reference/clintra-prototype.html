@@ -1,0 +1,2236 @@
+<title>Clintra v1 — Solo Clinic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap">
+<style>
+:root{
+  --paper:#EFF3F1;--paper-2:#F7FAF8;--card:#FFFFFF;
+  --ink:#0B211D;--ink-2:#14332C;--ink-3:#1a3e35;
+  --green:#1D5B4A;--green-2:#2E7A63;--green-wash:#E8F0EC;--green-line:#BFDBD0;
+  --copper:#A8742A;--copper-2:#C68A38;--copper-wash:#F7EFE2;--copper-line:#E2CDA6;
+  --rule:#D9E0DD;--hair:#E7ECEA;
+  --text:#0B211D;--muted:#55665F;--faint:#8A9B95;
+  --danger:#A32A21;--danger-wash:#F7E3E0;--danger-line:#E4B9B4;
+  --warning:#96620B;--warning-wash:#F7EEDA;--eligible:#186B4B;
+  --on-dark:#F2F7F5;--on-dark-dim:#87A29A;--field:#F6F9F7;
+  --shadow-s:0 1px 2px rgba(11,33,29,.05);
+  --shadow-m:0 2px 4px rgba(11,33,29,.05), 0 12px 28px -18px rgba(11,33,29,.30);
+  --shadow-l:0 24px 50px -30px rgba(11,33,29,.55);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#081311;--paper-2:#0B1815;--card:#0F1D1A;
+  --ink:#040E0C;--ink-2:#0F2722;--ink-3:#183930;
+  --green:#2E9C7C;--green-2:#37B894;--green-wash:#102520;--green-line:#26463D;
+  --copper:#C79247;--copper-2:#DBA35A;--copper-wash:#241C0F;--copper-line:#4A3820;
+  --rule:#22332E;--hair:#192824;
+  --text:#E7EFEC;--muted:#9AADA7;--faint:#6C807A;
+  --danger:#DE6055;--danger-wash:#2E1614;--danger-line:#552420;
+  --warning:#D7A13A;--warning-wash:#2A2010;--eligible:#47B187;
+  --on-dark:#EAF3F0;--on-dark-dim:#7A948D;--field:#132320;
+  --shadow-s:0 1px 2px rgba(0,0,0,.4);
+  --shadow-m:0 2px 4px rgba(0,0,0,.4), 0 12px 28px -18px rgba(0,0,0,.8);
+  --shadow-l:0 24px 50px -30px rgba(0,0,0,.9);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --paper:#081311;--paper-2:#0B1815;--card:#0F1D1A;
+  --ink:#040E0C;--ink-2:#0F2722;--ink-3:#183930;
+  --green:#2E9C7C;--green-2:#37B894;--green-wash:#102520;--green-line:#26463D;
+  --copper:#C79247;--copper-2:#DBA35A;--copper-wash:#241C0F;--copper-line:#4A3820;
+  --rule:#22332E;--hair:#192824;
+  --text:#E7EFEC;--muted:#9AADA7;--faint:#6C807A;
+  --danger:#DE6055;--danger-wash:#2E1614;--danger-line:#552420;
+  --warning:#D7A13A;--warning-wash:#2A2010;--eligible:#47B187;
+  --on-dark:#EAF3F0;--on-dark-dim:#7A948D;--field:#132320;
+  --shadow-s:0 1px 2px rgba(0,0,0,.4);
+  --shadow-m:0 2px 4px rgba(0,0,0,.4), 0 12px 28px -18px rgba(0,0,0,.8);
+  --shadow-l:0 24px 50px -30px rgba(0,0,0,.9);
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{margin:0;color:var(--text);
+  background:linear-gradient(180deg,var(--paper-2) 0%,var(--paper) 340px) fixed;
+  font-family:"IBM Plex Sans Arabic","Segoe UI",system-ui,sans-serif;
+  font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;direction:rtl;
+}
+
+/* ═══════════ TOP NAV BAR ═══════════ */
+.topbar{
+  position:sticky;top:env(safe-area-inset-top,0px);z-index:50;
+  background:linear-gradient(135deg,var(--ink) 0%,var(--ink-2) 100%);
+  color:var(--on-dark);
+  border-bottom:2px solid var(--copper);
+  box-shadow:var(--shadow-m);
+}
+.tb-in{max-width:1200px;margin:0 auto;padding:10px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.tb-title{
+  font-size:14px;font-weight:600;color:var(--on-dark);
+  display:flex;align-items:baseline;gap:8px;margin-inline-end:auto;
+}
+.tb-title .v{
+  font-size:10.5px;font-weight:700;color:var(--copper-2);letter-spacing:.1em;
+  padding:2px 8px;background:color-mix(in srgb,var(--copper) 18%,transparent);
+  border:1px solid var(--copper-line);border-radius:5px;text-transform:uppercase;
+}
+.tb-nav{
+  display:flex;gap:4px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.13);border-radius:9px;padding:3px;
+  overflow-x:auto;max-width:100%;
+}
+.tb-nav button{
+  appearance:none;cursor:pointer;font:inherit;font-size:12px;font-weight:500;
+  color:var(--on-dark-dim);background:transparent;border:0;border-radius:6px;padding:6px 12px;white-space:nowrap;
+  transition:background .15s,color .15s;
+}
+.tb-nav button:hover{color:var(--on-dark);background:rgba(255,255,255,.10)}
+
+/* ═══════════ ROLE DIVIDER ═══════════ */
+.role-div{
+  max-width:1160px;margin:32px auto 12px;padding:0 22px;
+  display:flex;align-items:center;gap:16px;
+}
+.role-div .name{
+  font-size:12.5px;font-weight:700;color:var(--copper);letter-spacing:.08em;
+  padding:6px 14px;background:var(--copper-wash);border:1px solid var(--copper-line);
+  border-radius:8px;text-transform:uppercase;
+}
+.role-div .sep{flex:1;height:1px;background:linear-gradient(to left,transparent 0%,var(--rule) 30%,var(--rule) 100%)}
+.role-div .count{font-size:11.5px;color:var(--muted);font-weight:500}
+
+/* ═══════════ SCREEN CONTAINER ═══════════ */
+.screen{max-width:1160px;margin:16px auto;padding:0 22px;scroll-margin-top:70px}
+.screen-head{
+  display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap;
+  padding-bottom:10px;border-bottom:1px dashed var(--rule);
+}
+.screen-num{
+  font-size:10.5px;font-weight:700;letter-spacing:.1em;color:var(--copper);
+  padding:3px 9px;background:var(--copper-wash);border:1px solid var(--copper-line);
+  border-radius:6px;text-transform:uppercase;font-variant-numeric:tabular-nums;
+}
+.screen-title{font-size:16.5px;font-weight:600;color:var(--text);letter-spacing:-.01em}
+.screen-sub{font-size:12px;color:var(--muted);margin-inline-start:auto}
+.screen-sub b{color:var(--text);font-weight:600}
+
+/* ═══════════ APP CHROME ═══════════ */
+.app{background:var(--card);border:1px solid var(--rule);border-radius:16px;box-shadow:var(--shadow-m);overflow:hidden}
+.appbar{
+  background:linear-gradient(135deg,var(--ink) 0%,var(--ink-2) 100%);color:var(--on-dark);
+  padding:11px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+}
+.brand{display:flex;align-items:center;gap:10px;margin-inline-end:auto}
+.brand .logo{width:32px;height:32px;border-radius:9px;flex:none;
+  background:linear-gradient(135deg,var(--green-2) 0%,var(--green) 100%);
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;
+  box-shadow:0 2px 8px rgba(0,0,0,.35);
+}
+.brand-t{font-size:16px;font-weight:600;line-height:1.15;letter-spacing:-.01em}
+.brand-s{font-size:10px;color:var(--on-dark-dim);letter-spacing:.06em}
+.appbar .who{
+  display:flex;align-items:center;gap:8px;
+  padding:5px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:9px;
+  font-size:12px;color:var(--on-dark);
+}
+.appbar .who .avatar{
+  width:22px;height:22px;border-radius:999px;background:linear-gradient(135deg,var(--copper) 0%,var(--copper-2) 100%);
+  display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;
+}
+.appbar .date{
+  display:flex;flex-direction:column;gap:1px;text-align:end;
+  padding-inline-start:12px;border-inline-start:1px solid rgba(255,255,255,.13);
+}
+.appbar .date .a{font-size:12.5px;font-weight:600;color:var(--on-dark);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.appbar .date .b{font-size:10px;color:var(--on-dark-dim);letter-spacing:.04em}
+.app-btn{appearance:none;cursor:pointer;font:inherit;font-size:11.5px;font-weight:500;
+  color:var(--on-dark);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:7px;padding:5px 11px}
+.app-btn:hover{background:rgba(255,255,255,.16)}
+
+.content{padding:18px 20px 20px;display:flex;flex-direction:column;gap:14px;background:var(--paper-2)}
+@media (max-width:600px){.content{padding:12px}}
+
+/* ═══════════ SLAB ═══════════ */
+.slab{position:relative;overflow:hidden;
+  background:radial-gradient(130% 150% at 90% -10%,var(--ink-3) 0%,transparent 60%),
+             linear-gradient(115deg,var(--ink) 0%,#0D2621 100%);
+  color:var(--on-dark);box-shadow:var(--shadow-l);border-radius:14px;
+}
+.slab::before{content:"";position:absolute;inset-inline:0;top:0;height:3px;
+  background:linear-gradient(to left,var(--copper) 0%,var(--green-2) 45%,transparent 85%)}
+.slab-in{position:relative;display:flex;flex-wrap:wrap;align-items:stretch}
+.hero{padding:22px 24px;min-width:200px;flex:none}
+.hero .k{display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;letter-spacing:.1em;color:var(--on-dark-dim);margin-bottom:7px;text-transform:uppercase}
+.hero .v{font-size:46px;font-weight:700;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:8px}
+.hero .v i{font-size:13px;font-style:normal;font-weight:600;color:var(--copper-2)}
+.hero .cap{margin-top:8px;font-size:11.5px;color:var(--on-dark-dim)}
+.hero .cap b{color:var(--on-dark);font-weight:600;font-variant-numeric:tabular-nums}
+.side{flex:1;display:flex;flex-wrap:wrap;border-inline-start:1px solid rgba(255,255,255,.10)}
+.cell{flex:1;min-width:110px;padding:22px 20px;display:flex;flex-direction:column;justify-content:center;gap:4px;border-inline-start:1px solid rgba(255,255,255,.07)}
+.cell:first-child{border-inline-start:0}
+.cell .k{font-size:10.5px;font-weight:600;letter-spacing:.05em;color:var(--on-dark-dim)}
+.cell .v{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.cell.arrived .v{color:var(--green-2)} .cell.miss .v{color:var(--danger)} .cell.copper .v{color:var(--copper-2)}
+.split{padding:0 24px 20px;position:relative}
+.split-bar{display:flex;height:6px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.10)}
+.split-bar span{display:block}
+.split-bar .filled{background:linear-gradient(90deg,var(--green) 0%,var(--green-2) 100%)}
+.split-leg{display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;font-size:11px;color:var(--on-dark-dim)}
+.split-leg span{display:flex;align-items:center;gap:5px}
+.split-leg b{font-weight:700;color:var(--on-dark);font-variant-numeric:tabular-nums}
+.sw{width:8px;height:8px;border-radius:2.5px;flex:none;display:block}
+.sw.done{background:linear-gradient(90deg,var(--green) 0%,var(--green-2) 100%)} .sw.left{background:rgba(255,255,255,.24)}
+.slab-act{display:flex;gap:8px;align-items:center;padding:0 24px 18px;flex-wrap:wrap}
+.sb{appearance:none;cursor:pointer;font:inherit;font-size:12px;font-weight:600;
+  color:var(--on-dark);background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:6px 13px;
+  display:flex;align-items:center;gap:7px}
+.sb.copper{background:color-mix(in srgb,var(--copper) 22%,transparent);border-color:var(--copper-line);color:var(--copper-2)}
+.sb .who{font-weight:700}
+.slab-act .kbd{margin-inline-start:auto;font-size:11px;color:var(--on-dark-dim)}
+
+/* ═══════════ TILES ═══════════ */
+.tiles{display:flex;flex-wrap:wrap;gap:10px}
+.tile{flex:1 1 170px;position:relative;background:var(--card);border:1px solid var(--rule);border-radius:12px;
+  padding:12px 16px;display:flex;flex-direction:column;gap:3px;overflow:hidden;box-shadow:var(--shadow-s)}
+.tile::before{content:"";position:absolute;inset-block:0;inset-inline-start:0;width:3px;background:var(--rule)}
+.tile .k{font-size:11px;font-weight:600;color:var(--muted)}
+.tile .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;letter-spacing:-.01em}
+.tile .v i{font-size:11.5px;font-style:normal;font-weight:600;color:var(--faint);margin-inline-start:4px}
+.tile .q{font-size:10.5px;color:var(--faint);margin-top:1px}
+.tile.ok::before{background:var(--eligible)} .tile.ok .v{color:var(--eligible)}
+.tile.copper::before{background:var(--copper)} .tile.copper .v{color:var(--copper)}
+.tile.warn::before{background:var(--warning)} .tile.warn .v{color:var(--warning)}
+.tile.danger::before{background:var(--danger)} .tile.danger .v{color:var(--danger)}
+
+/* ═══════════ GENERIC CARD ═══════════ */
+.c-card{background:var(--card);border:1px solid var(--rule);border-radius:14px;box-shadow:var(--shadow-s);overflow:hidden}
+.c-head{display:flex;align-items:center;gap:12px;padding:12px 18px;background:linear-gradient(135deg,var(--ink) 0%,var(--ink-2) 120%);color:var(--on-dark)}
+.c-head .badge{padding:3px 9px;border-radius:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);font-size:10.5px;font-weight:600;letter-spacing:.05em;color:var(--on-dark-dim)}
+.c-head h3{margin:0;font-size:14px;font-weight:600;letter-spacing:-.005em}
+.c-head .sub{font-size:11px;color:var(--on-dark-dim);margin-top:-1px}
+.c-head .sp{margin-inline-end:auto}
+.c-body{padding:16px 18px}
+
+/* ═══════════ SCHEDULE ROWS ═══════════ */
+.slot{position:relative;display:grid;grid-template-columns:60px 1fr auto;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid var(--hair);transition:background .12s}
+.slot:last-child{border-bottom:0}
+.slot::before{content:"";position:absolute;inset-block:0;inset-inline-start:0;width:3px;background:transparent}
+.slot:hover{background:var(--field)}
+.slot .time{font-size:14px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1}
+.slot .time .until{display:block;margin-top:3px;font-size:10px;font-weight:500;color:var(--faint)}
+.slot .who{display:flex;flex-direction:column;gap:1px;min-width:0}
+.slot .who .name{font-size:14px;font-weight:600;color:var(--text);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.005em}
+.slot .meta{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--muted);flex-wrap:wrap}
+.slot .meta .dot{width:3px;height:3px;border-radius:999px;background:var(--faint);flex:none}
+.slot .meta .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.slot .actor{font-size:10px;color:var(--faint);margin-top:2px}
+.slot .state{font-size:11px;font-weight:700;padding:4px 11px;border-radius:999px;white-space:nowrap;letter-spacing:.02em}
+.slot.arrived::before{background:var(--eligible)}
+.slot.arrived .state{color:#fff;background:linear-gradient(135deg,var(--eligible) 0%,var(--green-2) 100%)}
+.slot.in-room::before{background:var(--copper)}
+.slot.in-room{background:linear-gradient(90deg,color-mix(in srgb,var(--copper-wash) 65%,transparent) 0%,transparent 40%)}
+.slot.in-room .name{color:var(--copper)}
+.slot.in-room .state{color:#fff;background:linear-gradient(135deg,var(--copper) 0%,var(--copper-2) 100%)}
+.slot.in-room .time .until{color:var(--copper-2);font-weight:600}
+.slot.done::before{background:var(--rule)}
+.slot.done .time,.slot.done .name{color:var(--muted)}
+.slot.done .meta,.slot.done .actor{color:var(--faint)}
+.slot.done .state{color:var(--muted);background:var(--field);border:1px solid var(--rule)}
+.slot.no-show::before{background:var(--danger)}
+.slot.no-show{background:linear-gradient(90deg,color-mix(in srgb,var(--danger-wash) 55%,transparent) 0%,transparent 40%)}
+.slot.no-show .name{color:var(--danger)}
+.slot.no-show .state{color:#fff;background:var(--danger)}
+.slot.cancelled::before{background:var(--faint);opacity:.4}
+.slot.cancelled .name{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--faint)}
+.slot.cancelled .time,.slot.cancelled .meta{color:var(--faint)}
+.slot.cancelled .state{color:var(--danger);background:transparent;border:1px dashed var(--danger-line)}
+.slot.empty{padding-block:10px}
+.slot.empty::before{background:transparent}
+.slot.empty .time{font-weight:500;color:var(--faint)}
+.slot.empty .free{color:var(--faint);font-size:12px}
+.slot.empty .quick{appearance:none;border:1.5px dashed var(--rule);background:transparent;border-radius:8px;
+  padding:5px 11px;font:inherit;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;
+  display:flex;align-items:center;gap:5px;transition:all .12s}
+.slot.empty .quick:hover{border-color:var(--green);background:var(--green-wash);color:var(--green);border-style:solid}
+
+.runrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 18px;background:var(--field);border-top:1px solid var(--hair)}
+.run{appearance:none;border:0;cursor:pointer;font:inherit;font-size:13.5px;font-weight:600;color:#fff;
+  background:linear-gradient(135deg,var(--green) 0%,var(--green-2) 130%);
+  padding:10px 22px;border-radius:10px;display:inline-flex;align-items:center;gap:8px;
+  box-shadow:0 2px 6px color-mix(in srgb,var(--green) 30%,transparent)}
+.pill{appearance:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;
+  color:var(--green);background:var(--green-wash);
+  border:1.5px solid var(--green-line);border-radius:9px;padding:8px 14px}
+.pill.danger{color:var(--danger);background:var(--danger-wash);border-color:var(--danger-line)}
+.runrow .count{margin-inline-start:auto;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.runrow .count b{color:var(--text);font-weight:700}
+
+/* ═══════════ QUEUE ═══════════ */
+.q-list{display:flex;flex-direction:column}
+.qrow{display:grid;grid-template-columns:52px 1fr auto;gap:14px;align-items:center;padding:13px 18px;border-bottom:1px solid var(--hair)}
+.qrow:last-child{border-bottom:0}
+.qnum{width:38px;height:38px;border-radius:10px;background:var(--field);border:1.5px solid var(--rule);color:var(--muted);
+  display:flex;align-items:center;justify-content:center;font-family:"IBM Plex Sans Arabic";font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.qrow.current .qnum{background:linear-gradient(135deg,var(--copper) 0%,var(--copper-2) 100%);border-color:transparent;color:#fff;box-shadow:0 3px 10px color-mix(in srgb,var(--copper) 40%,transparent)}
+.qrow.next .qnum{background:var(--green-wash);border-color:var(--green-line);color:var(--green)}
+.qrow.done .qnum{background:var(--field);color:var(--faint);border-color:var(--rule)}
+.qwho .name{font-size:14px;font-weight:600;color:var(--text)}
+.qwho .meta{font-size:11.5px;color:var(--muted);margin-top:1px}
+.qwho .actor{font-size:10px;color:var(--faint);margin-top:2px}
+.qrow.done .name{color:var(--muted)}
+.qwait{text-align:end;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;display:flex;flex-direction:column;gap:2px}
+.qwait b{font-size:13.5px;font-weight:700;color:var(--text);letter-spacing:-.01em}
+.qrow.current .qwait b{color:var(--copper)}
+
+/* ═══════════ BOOKING SHEET ═══════════ */
+.book{background:var(--card);border:1px solid var(--rule);border-radius:14px;box-shadow:var(--shadow-l);overflow:hidden;max-width:520px;margin:0 auto}
+.book-head{display:flex;align-items:center;padding:14px 20px;background:linear-gradient(135deg,var(--ink) 0%,var(--ink-2) 100%);color:var(--on-dark)}
+.book-head h3{margin:0;font-size:15px;font-weight:600;flex:1;letter-spacing:-.005em}
+.book-head .x{appearance:none;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:var(--on-dark);width:28px;height:28px;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;font-family:inherit;padding:0;display:flex;align-items:center;justify-content:center}
+.book-body{padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.02em}
+.field .in{font:inherit;font-size:15px;font-weight:600;color:var(--text);background:var(--field);border:1.5px solid var(--rule);border-radius:10px;padding:10px 13px;transition:border-color .15s,background .15s,box-shadow .15s}
+.field .in:focus{outline:none;background:var(--card);border-color:var(--green);box-shadow:0 0 0 3.5px color-mix(in srgb,var(--green) 16%,transparent)}
+.field .in.filled{background:var(--card);border-color:var(--green);color:var(--green);font-weight:700}
+.field textarea.in{resize:vertical;min-height:80px;line-height:1.7}
+.field .hint{font-size:10.5px;color:var(--faint);margin-top:2px}
+.results{border:1.5px solid var(--rule);border-radius:11px;overflow:hidden;background:var(--card)}
+.rr{display:flex;flex-direction:column;padding:10px 13px;border-bottom:1px solid var(--hair);cursor:pointer;transition:background .12s}
+.rr:last-child{border-bottom:0}
+.rr:hover{background:var(--green-wash)}
+.rr.sel{background:var(--green-wash);border-inline-start:3px solid var(--green);padding-inline-start:10px}
+.rr .n{font-size:13.5px;font-weight:600;color:var(--text)}
+.rr .m{font-size:11px;color:var(--muted);margin-top:1px}
+.rr .m .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;color:var(--muted)}
+.rr.new{color:var(--green);background:color-mix(in srgb,var(--green-wash) 60%,transparent)}
+.rr.new .n{color:var(--green)}
+.svc-row{display:flex;gap:6px;flex-wrap:wrap}
+.svc-row .svc{appearance:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);background:var(--field);border:1.5px solid var(--rule);border-radius:9px;padding:7px 14px;transition:all .12s}
+.svc-row .svc[aria-pressed="true"]{color:var(--green);background:var(--green-wash);border-color:var(--green)}
+.book-foot{display:flex;gap:8px;padding:14px 20px;background:var(--field);border-top:1px solid var(--hair)}
+.book-foot .run{flex:1}
+
+/* ═══════════ INVOICE / PAYMENT ═══════════ */
+.inv-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;background:linear-gradient(135deg,var(--ink) 0%,var(--ink-2) 100%);color:var(--on-dark)}
+.inv-num{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:14px;font-weight:700;color:var(--on-dark);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.inv-status{padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:.05em;background:color-mix(in srgb,var(--warning) 22%,transparent);color:var(--warning);border:1px solid var(--warning)}
+.inv-status.paid{background:color-mix(in srgb,var(--eligible) 22%,transparent);color:var(--eligible);border-color:var(--eligible)}
+.inv-body{padding:18px}
+.tab{width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
+.tab th,.tab td{padding:9px 12px;text-align:start;border-bottom:1px solid var(--hair)}
+.tab thead th{background:var(--field);font-size:11px;font-weight:700;color:var(--muted);border-bottom:1.5px solid var(--rule);letter-spacing:.05em;text-transform:uppercase}
+.tab td{font-size:13px;font-weight:600}
+.tab .amt{font-weight:700;text-align:end}
+.tab tr:last-child td{border-bottom:0}
+.totals{margin-top:14px;padding:14px 16px;background:var(--field);border:1px solid var(--rule);border-radius:12px;display:flex;flex-direction:column;gap:8px}
+.totals .row{display:flex;justify-content:space-between;align-items:center;font-size:13.5px}
+.totals .row .k{color:var(--muted);font-weight:600}
+.totals .row .v{font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.totals .row.grand{padding-top:8px;border-top:1px solid var(--rule);font-size:15px}
+.totals .row.grand .v{color:var(--copper);font-size:20px}
+.totals .row.grand .v i{font-style:normal;font-size:12px;color:var(--copper-2);margin-inline-start:4px}
+.totals .row.remain .v{color:var(--warning)}
+.pays{margin-top:14px}
+.pays-h{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
+.pay{display:flex;align-items:center;gap:12px;padding:10px 13px;background:var(--card);border:1px solid var(--rule);border-radius:10px;margin-bottom:6px}
+.pay .amt{font-size:14.5px;font-weight:700;color:var(--eligible);font-variant-numeric:tabular-nums;margin-inline-end:auto}
+.pay .method{font-size:11.5px;color:var(--muted);padding:3px 9px;background:var(--field);border:1px solid var(--rule);border-radius:6px;font-weight:600}
+.pay .rcp{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums}
+
+/* ═══════════ AUDIT ═══════════ */
+.filts{display:flex;gap:6px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--hair);background:var(--field)}
+.filt{appearance:none;cursor:pointer;font:inherit;font-size:11.5px;font-weight:600;color:var(--muted);background:var(--card);border:1.5px solid var(--rule);border-radius:9px;padding:5px 12px}
+.filt[aria-pressed="true"]{color:var(--green);background:var(--green-wash);border-color:var(--green)}
+.audit{display:flex;flex-direction:column}
+.aud-row{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--hair)}
+.aud-row:last-child{border-bottom:0}
+.aud-dot{width:9px;height:9px;border-radius:999px;background:var(--green);flex:none;box-shadow:0 0 0 3px var(--green-wash)}
+.aud-dot.warn{background:var(--warning);box-shadow:0 0 0 3px var(--warning-wash)}
+.aud-dot.danger{background:var(--danger);box-shadow:0 0 0 3px var(--danger-wash)}
+.aud-txt .verb{font-size:13.5px;font-weight:600;color:var(--text)}
+.aud-txt .who{font-size:11.5px;color:var(--muted);margin-top:1px}
+.aud-txt .who b{color:var(--text);font-weight:600}
+.aud-time{font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums;text-align:end;white-space:nowrap}
+
+/* ═══════════ SETTINGS ═══════════ */
+.set-tabs{display:flex;gap:4px;padding:10px 18px;background:var(--field);border-bottom:1px solid var(--hair)}
+.set-tab{appearance:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);background:transparent;border:0;border-radius:8px;padding:8px 16px}
+.set-tab[aria-pressed="true"]{color:var(--green);background:var(--green-wash);box-shadow:inset 0 0 0 1.5px var(--green-line)}
+.set-body{padding:16px 18px}
+.set-list{display:flex;flex-direction:column;gap:8px}
+.set-row{display:grid;grid-template-columns:110px 1fr auto;align-items:center;gap:12px;padding:12px 14px;background:var(--card);border:1px solid var(--rule);border-radius:10px}
+.set-row .day{font-size:12.5px;font-weight:700;color:var(--text)}
+.set-row .hours{font-size:13.5px;color:var(--text);font-variant-numeric:tabular-nums;font-weight:600}
+.set-row .mode{font-size:11px;color:var(--muted);padding:3px 8px;background:var(--field);border:1px solid var(--rule);border-radius:5px;font-weight:600;margin-inline-end:6px}
+.set-row .edit{appearance:none;cursor:pointer;font:inherit;font-size:11.5px;font-weight:600;color:var(--green);background:transparent;border:1.5px solid var(--green-line);border-radius:8px;padding:5px 10px}
+.set-row.svc{grid-template-columns:1fr auto auto auto auto}
+.set-row .svc-name{font-size:13.5px;font-weight:600;color:var(--text)}
+.set-row .svc-dur{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;padding:3px 8px;background:var(--field);border:1px solid var(--rule);border-radius:5px}
+.set-row .svc-price{font-size:14px;font-weight:700;color:var(--copper);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.set-row .svc-price i{font-size:11px;color:var(--copper-2);font-style:normal;font-weight:600;margin-inline-start:3px}
+.set-row .toggle{width:36px;height:20px;background:var(--eligible);border-radius:999px;position:relative;cursor:pointer;flex:none}
+.set-row .toggle::after{content:"";position:absolute;top:2px;inset-inline-end:2px;width:16px;height:16px;background:#fff;border-radius:999px}
+.set-row .toggle.off{background:var(--rule)}
+.set-row .toggle.off::after{inset-inline-end:auto;inset-inline-start:2px}
+.set-row.staff{grid-template-columns:1fr auto auto auto}
+.set-row .staff-name{font-size:13.5px;font-weight:600;color:var(--text)}
+.set-row .staff-name .role{font-size:11px;color:var(--muted);font-weight:500;margin-inline-start:6px}
+.set-row .staff-pin{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;color:var(--faint);letter-spacing:.15em}
+
+/* ═══════════ PIN LOCK ═══════════ */
+.pin-scr{background:linear-gradient(135deg,var(--ink) 0%,var(--ink-2) 100%);padding:44px 24px;text-align:center;color:var(--on-dark);border-radius:14px}
+.pin-brand{font-size:22px;font-weight:700;color:#fff;letter-spacing:-.02em}
+.pin-brand span{color:var(--copper-2)}
+.pin-who{font-size:12px;color:var(--on-dark-dim);margin-top:6px;letter-spacing:.02em}
+.pin-title{margin-top:22px;font-size:14px;font-weight:600;color:var(--on-dark);letter-spacing:.02em}
+.pin-dots{display:flex;gap:10px;justify-content:center;margin-top:14px}
+.pin-dots i{width:12px;height:12px;border-radius:999px;background:rgba(255,255,255,.15)}
+.pin-dots i.f{background:var(--copper);box-shadow:0 0 0 3px color-mix(in srgb,var(--copper) 25%,transparent)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:240px;margin:22px auto 0}
+.pad button{appearance:none;cursor:pointer;font:inherit;font-size:20px;font-weight:600;color:var(--on-dark);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.13);border-radius:12px;padding:14px 0;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.pad button:hover{background:rgba(255,255,255,.14)}
+
+/* ═══════════ DOCTOR VIEW ═══════════ */
+.doc-hero{
+  padding:20px 24px;border-radius:14px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--copper) 14%,var(--card)) 0%,var(--card) 60%);
+  border:1px solid var(--copper-line);
+  display:flex;flex-direction:column;gap:16px;
+}
+.doc-hero .top{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.doc-hero .avatar{width:52px;height:52px;border-radius:13px;
+  background:linear-gradient(135deg,var(--copper) 0%,var(--copper-2) 100%);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex:none}
+.doc-hero .info{flex:1;min-width:200px}
+.doc-hero .label{font-size:10.5px;font-weight:700;letter-spacing:.1em;color:var(--copper);text-transform:uppercase}
+.doc-hero .name{font-size:22px;font-weight:700;color:var(--text);margin-top:3px;letter-spacing:-.01em}
+.doc-hero .name .age{font-size:14px;color:var(--muted);font-weight:500;margin-inline-start:8px}
+.doc-hero .meta{font-size:12px;color:var(--muted);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.doc-hero .meta b{color:var(--text);font-weight:600}
+.doc-hero .meta .sep{width:3px;height:3px;border-radius:999px;background:var(--faint);display:inline-block}
+.doc-hero .acts{display:flex;gap:8px;flex-wrap:wrap;margin-inline-start:auto}
+.doc-hero .last-visit{
+  padding:10px 14px;background:color-mix(in srgb,var(--copper-wash) 60%,transparent);
+  border:1px solid var(--copper-line);border-radius:10px;font-size:12px;color:var(--text);
+}
+.doc-hero .last-visit .lv-h{font-size:10px;font-weight:700;color:var(--copper);letter-spacing:.05em;text-transform:uppercase;margin-bottom:3px}
+.doc-hero .last-visit b{color:var(--text);font-weight:600}
+.doc-hero .last-visit .lv-dx{color:var(--copper);font-weight:600}
+
+/* Momentum bar */
+.momentum{
+  display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;
+  padding:14px 20px;border-radius:12px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--warning) 8%,var(--card)) 0%,var(--card) 60%);
+  border:1px solid color-mix(in srgb,var(--warning) 30%,var(--rule));
+  box-shadow:var(--shadow-s);
+}
+.momentum.ok{background:linear-gradient(135deg,color-mix(in srgb,var(--eligible) 8%,var(--card)) 0%,var(--card) 60%);border-color:color-mix(in srgb,var(--eligible) 30%,var(--rule))}
+.momentum-icon{
+  width:44px;height:44px;border-radius:11px;flex:none;
+  background:color-mix(in srgb,var(--warning) 15%,transparent);color:var(--warning);
+  display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;
+}
+.momentum.ok .momentum-icon{background:color-mix(in srgb,var(--eligible) 15%,transparent);color:var(--eligible)}
+.momentum-txt .status{font-size:15px;font-weight:700;color:var(--warning);letter-spacing:-.01em}
+.momentum.ok .momentum-txt .status{color:var(--eligible)}
+.momentum-txt .detail{font-size:11.5px;color:var(--muted);margin-top:1px}
+.momentum-txt .detail b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.momentum-eta{text-align:end;font-size:11px;color:var(--muted)}
+.momentum-eta b{font-size:17px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;letter-spacing:-.02em;display:block;margin-top:2px}
+
+/* Quick clinical note */
+.quick-note{
+  border-top:1px dashed var(--copper-line);padding-top:12px;
+  display:flex;gap:10px;align-items:center;
+}
+.quick-note label{font-size:11px;font-weight:700;color:var(--copper);letter-spacing:.05em;text-transform:uppercase;flex:none}
+.quick-note input{
+  flex:1;font:inherit;font-size:13px;color:var(--text);
+  background:var(--card);border:1.5px solid var(--rule);border-radius:8px;padding:7px 12px;
+}
+.quick-note input:focus{outline:none;border-color:var(--copper);box-shadow:0 0 0 3px color-mix(in srgb,var(--copper) 15%,transparent)}
+.quick-note .save{
+  appearance:none;cursor:pointer;font:inherit;font-size:11px;font-weight:600;
+  color:var(--copper);background:transparent;border:1px solid var(--copper-line);border-radius:7px;padding:6px 12px;flex:none;
+}
+
+/* Two-column briefing + waiting */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:720px){.two-col{grid-template-columns:1fr}}
+
+.brief{
+  background:var(--card);border:1px solid var(--rule);border-radius:12px;overflow:hidden;box-shadow:var(--shadow-s);
+}
+.brief-h{
+  padding:10px 14px;background:var(--field);border-bottom:1px solid var(--rule);
+  display:flex;align-items:center;gap:8px;
+}
+.brief-h .b{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+.brief-h .tag{margin-inline-start:auto;font-size:10.5px;color:var(--green);background:var(--green-wash);padding:2px 8px;border-radius:5px;font-weight:600;border:1px solid var(--green-line)}
+.brief-h .tag.warn{color:var(--warning);background:var(--warning-wash);border-color:color-mix(in srgb,var(--warning) 40%,transparent)}
+.brief-b{padding:14px}
+.brief-name{font-size:17px;font-weight:700;color:var(--text);letter-spacing:-.01em;display:flex;align-items:baseline;gap:8px}
+.brief-name .age{font-size:12.5px;color:var(--muted);font-weight:500}
+.brief-svc{font-size:12px;color:var(--muted);margin-top:2px}
+.brief-svc b{color:var(--text);font-weight:600}
+.brief-hist{
+  margin-top:12px;padding:10px 12px;background:var(--field);border:1px solid var(--rule);border-radius:9px;
+  font-size:12px;color:var(--muted);
+}
+.brief-hist .h{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px}
+.brief-hist .last{color:var(--text)}
+.brief-hist .last b{font-weight:600;color:var(--text)}
+.brief-hist .last .dx{color:var(--copper);font-weight:600}
+.brief-hist .count{font-size:11px;color:var(--muted);margin-top:4px}
+.brief-hist .count b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+.brief-act{margin-top:12px;display:flex;gap:6px}
+.brief-act .run{padding:8px 14px;font-size:12.5px;flex:1}
+.brief-act .pill{padding:8px 12px;font-size:11.5px}
+
+/* Waiting room */
+.wait-item{
+  display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;
+  padding:9px 14px;border-bottom:1px solid var(--hair);
+}
+.wait-item:last-child{border-bottom:0}
+.wait-item .dot{width:8px;height:8px;border-radius:999px;background:var(--eligible);flex:none}
+.wait-item.long .dot{background:var(--warning);box-shadow:0 0 0 3px var(--warning-wash)}
+.wait-item .n{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wait-item .n .svc{font-size:10.5px;color:var(--muted);font-weight:400;margin-inline-start:6px}
+.wait-item .w{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:end;white-space:nowrap}
+.wait-item.long .w{color:var(--warning);font-weight:700}
+.wait-item .w b{font-size:12.5px;color:var(--text);font-weight:700}
+.wait-item.long .w b{color:var(--warning)}
+.wait-empty{padding:20px;text-align:center;color:var(--faint);font-size:12px}
+
+/* Attention alerts */
+.attn{
+  padding:14px 16px;border-radius:12px;
+  background:color-mix(in srgb,var(--warning) 8%,var(--card));
+  border:1px solid color-mix(in srgb,var(--warning) 35%,var(--rule));
+  display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow-s);
+}
+.attn-h{display:flex;align-items:center;gap:8px}
+.attn-h .icn{width:28px;height:28px;border-radius:8px;background:color-mix(in srgb,var(--warning) 20%,transparent);color:var(--warning);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:none}
+.attn-h .t{font-size:12.5px;font-weight:700;color:var(--warning);letter-spacing:.02em}
+.attn-h .c{margin-inline-start:auto;font-size:11px;font-weight:700;color:var(--warning);background:color-mix(in srgb,var(--warning) 15%,transparent);padding:2px 8px;border-radius:5px}
+.attn-item{
+  display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;
+  padding:9px 12px;background:var(--card);border:1px solid color-mix(in srgb,var(--warning) 20%,var(--rule));border-radius:9px;
+}
+.attn-item .t{font-size:12.5px;font-weight:600;color:var(--text)}
+.attn-item .s{font-size:10.5px;color:var(--muted);margin-top:1px}
+.attn-item .a{appearance:none;cursor:pointer;font:inherit;font-size:11px;font-weight:600;color:var(--warning);background:transparent;border:1px solid color-mix(in srgb,var(--warning) 40%,transparent);border-radius:7px;padding:4px 10px}
+
+.doc-list{display:flex;flex-direction:column}
+.doc-item{
+  display:grid;grid-template-columns:56px 1fr auto;align-items:center;gap:14px;
+  padding:12px 18px;border-bottom:1px solid var(--hair);
+}
+.doc-item:last-child{border-bottom:0}
+.doc-item .num{width:34px;height:34px;border-radius:9px;background:var(--field);color:var(--muted);
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;border:1.5px solid var(--rule)}
+.doc-item.current .num{background:linear-gradient(135deg,var(--copper) 0%,var(--copper-2) 100%);color:#fff;border-color:transparent;box-shadow:0 3px 10px color-mix(in srgb,var(--copper) 30%,transparent)}
+.doc-item.done .num{background:var(--eligible);color:#fff;border-color:transparent}
+.doc-item .name{font-size:14px;font-weight:600;color:var(--text)}
+.doc-item .meta{font-size:11.5px;color:var(--muted);margin-top:1px}
+.doc-item.done .name{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--faint)}
+.doc-item .go{appearance:none;cursor:pointer;font:inherit;font-size:11.5px;font-weight:600;color:var(--green);background:var(--green-wash);border:1.5px solid var(--green-line);border-radius:8px;padding:5px 12px}
+.doc-item.done .go{color:var(--muted);background:var(--field);border-color:var(--rule)}
+
+/* ═══════════ VISIT FORM ═══════════ */
+.pt-summary{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:16px 20px;background:linear-gradient(135deg,color-mix(in srgb,var(--copper) 10%,var(--card)) 0%,var(--card) 100%);
+  border-bottom:1px solid var(--copper-line);
+}
+.pt-summary .avatar{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--copper) 0%,var(--copper-2) 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex:none}
+.pt-summary .info{flex:1;min-width:180px}
+.pt-summary .name{font-size:16px;font-weight:700;color:var(--text);letter-spacing:-.01em}
+.pt-summary .meta{font-size:11.5px;color:var(--muted);margin-top:1px}
+.pt-summary .meta .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;color:var(--muted)}
+.pt-summary .quick{display:flex;gap:6px}
+.pt-summary .qbtn{
+  appearance:none;cursor:pointer;font:inherit;font-size:11px;font-weight:600;
+  color:var(--muted);background:var(--card);border:1.5px solid var(--rule);border-radius:8px;padding:5px 10px;
+}
+.visit-body{padding:20px}
+.visit-history{padding:12px 16px;background:var(--field);border:1px solid var(--rule);border-radius:10px;margin-bottom:16px}
+.visit-history-h{font-size:10.5px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px}
+.visit-history-item{font-size:12.5px;color:var(--text);padding:5px 0;border-bottom:1px dashed var(--hair)}
+.visit-history-item:last-child{border-bottom:0}
+.visit-history-item .date{font-family:ui-monospace,"SF Mono",Menlo,monospace;color:var(--muted);font-size:11px;margin-inline-end:8px;font-variant-numeric:tabular-nums}
+.visit-history-item .dx{font-weight:600;color:var(--text)}
+
+/* ═══════════ DAY CLOSE ═══════════ */
+.close-summary{padding:20px;background:var(--field);border-radius:12px;margin-bottom:16px}
+.close-summary .h{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px}
+.close-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.close-cell{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:12px 14px}
+.close-cell .k{font-size:11px;font-weight:600;color:var(--muted)}
+.close-cell .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em;margin-top:2px}
+.close-cell .v i{font-size:11px;font-weight:600;color:var(--faint);font-style:normal;margin-inline-start:4px}
+.close-cell.match .v{color:var(--eligible)}
+.close-cell.diff .v{color:var(--warning)}
+
+/* ═══════════ PRINT SHEET ═══════════ */
+.print-page{
+  background:#fff;color:#111;padding:32px;border-radius:12px;
+  border:1px solid var(--rule);box-shadow:var(--shadow-l);max-width:600px;margin:0 auto;
+}
+.print-header{
+  padding:12px 14px;background:#fff8e1;border:1.5px dashed #d4a017;border-radius:8px;
+  font-size:12.5px;color:#856d00;text-align:center;margin-bottom:20px;font-weight:600;
+}
+.print-clinic{text-align:center;margin-bottom:22px}
+.print-clinic .n{font-size:19px;font-weight:700;color:#111;letter-spacing:-.01em}
+.print-clinic .a{font-size:12px;color:#666;margin-top:2px}
+.print-day{text-align:center;font-size:14.5px;font-weight:600;color:#111;padding:12px 0;border-block:1.5px solid #111;margin-bottom:14px}
+.print-tbl{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.print-tbl th,.print-tbl td{padding:9px 10px;text-align:start;border-bottom:1px solid #ddd}
+.print-tbl th{font-size:11.5px;font-weight:700;color:#666;background:#f4f4f2;text-transform:uppercase;letter-spacing:.05em}
+.print-tbl td{font-size:13px;color:#111}
+.print-tbl td .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11.5px;color:#555}
+.print-foot{margin-top:20px;padding-top:12px;border-top:1px dashed #ccc;display:flex;justify-content:space-between;font-size:11px;color:#666}
+
+/* ═══════════ DEVICE INSTALL ═══════════ */
+.install-scr{
+  max-width:440px;margin:0 auto;background:var(--card);border:1px solid var(--rule);
+  border-radius:16px;box-shadow:var(--shadow-l);overflow:hidden;
+}
+.install-hero{padding:36px 28px 22px;background:linear-gradient(135deg,var(--ink) 0%,var(--ink-2) 100%);color:var(--on-dark);text-align:center;position:relative;overflow:hidden}
+.install-hero::before{content:"";position:absolute;inset-inline:0;top:0;height:3px;background:linear-gradient(to left,var(--copper) 0%,var(--green-2) 45%,transparent 85%)}
+.install-hero .logo{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,var(--green-2) 0%,var(--green) 100%);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:26px;margin:0 auto 12px;box-shadow:0 8px 20px rgba(0,0,0,.35)}
+.install-hero .t{font-size:22px;font-weight:700;color:#fff;letter-spacing:-.01em}
+.install-hero .s{font-size:12px;color:var(--on-dark-dim);margin-top:5px}
+.install-body{padding:22px 24px;display:flex;flex-direction:column;gap:14px}
+.install-foot{padding:16px 24px;background:var(--field);border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.install-note{font-size:11px;color:var(--faint);text-align:center}
+
+/* ═══════════ NOTES PANEL ═══════════ */
+.notes{max-width:1160px;margin:32px auto 40px;padding:18px 22px;background:var(--copper-wash);border:1px solid var(--copper-line);border-radius:14px;font-size:13px;color:var(--text);line-height:1.75}
+.notes h4{margin:0 0 8px 0;font-size:12px;font-weight:700;color:var(--copper);letter-spacing:.05em;text-transform:uppercase}
+.notes ul{padding-inline-start:20px;margin:4px 0}
+.notes li{margin-bottom:4px}
+.notes b{color:var(--text);font-weight:700}
+
+/* ═══════════ VISIT FORM v2 (AI + Rx + Care Plan) ═══════════ */
+.visit-layout{display:grid;grid-template-columns:1fr 300px;gap:0}
+@media (max-width:900px){.visit-layout{grid-template-columns:1fr}}
+.visit-main{padding:20px;border-inline-end:1px solid var(--rule)}
+@media (max-width:900px){.visit-main{border-inline-end:0;border-bottom:1px solid var(--rule)}}
+.visit-aside{padding:16px;background:linear-gradient(180deg,color-mix(in srgb,var(--copper) 6%,var(--paper-2)) 0%,var(--paper-2) 100%)}
+
+/* AI suggestions panel */
+.ai-h{
+  display:flex;align-items:center;gap:8px;margin-bottom:12px;
+  padding-bottom:10px;border-bottom:1px dashed var(--copper-line);
+}
+.ai-h .ic{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--copper) 0%,var(--copper-2) 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none}
+.ai-h .t{font-size:12px;font-weight:700;color:var(--text);letter-spacing:-.005em}
+.ai-h .s{font-size:10px;color:var(--muted);margin-top:1px}
+.ai-hint{
+  padding:10px 12px;background:var(--card);border:1px solid var(--copper-line);border-radius:9px;
+  margin-bottom:8px;
+}
+.ai-hint .row{display:flex;align-items:baseline;gap:6px;margin-bottom:4px}
+.ai-hint .dx{font-size:13px;font-weight:700;color:var(--copper);letter-spacing:-.005em}
+.ai-hint .conf{
+  margin-inline-start:auto;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  padding:2px 7px;border-radius:5px;background:var(--copper-wash);color:var(--copper);
+}
+.ai-hint .conf.mid{background:var(--warning-wash);color:var(--warning)}
+.ai-hint .conf.low{background:var(--field);color:var(--faint)}
+.ai-hint .why{font-size:11px;color:var(--muted);line-height:1.6}
+.ai-hint .why b{color:var(--text);font-weight:600}
+.ai-hint .acts{display:flex;gap:5px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--hair)}
+.ai-hint .acc{appearance:none;cursor:pointer;font:inherit;font-size:10.5px;font-weight:700;color:#fff;background:var(--copper);border:0;border-radius:6px;padding:5px 10px}
+.ai-hint .dis{appearance:none;cursor:pointer;font:inherit;font-size:10.5px;font-weight:600;color:var(--muted);background:transparent;border:1px solid var(--rule);border-radius:6px;padding:5px 10px}
+.ai-disclaimer{
+  margin-top:10px;padding:9px 11px;background:color-mix(in srgb,var(--warning) 6%,transparent);
+  border:1px dashed var(--warning);border-radius:8px;
+  font-size:10.5px;color:var(--warning);line-height:1.55;
+}
+.ai-disclaimer b{font-weight:700}
+
+/* Prescription section */
+.rx-section{margin-top:16px;padding-top:16px;border-top:1px dashed var(--rule)}
+.rx-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.rx-head .t{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+.rx-head .c{
+  margin-inline-start:auto;font-size:11px;color:var(--copper);font-weight:600;
+  padding:2px 8px;background:var(--copper-wash);border:1px solid var(--copper-line);border-radius:5px;
+}
+.rx-list{display:flex;flex-direction:column;gap:6px}
+.rx-item{
+  display:grid;grid-template-columns:1fr auto;gap:10px;
+  padding:10px 12px;background:var(--field);border:1px solid var(--rule);border-radius:9px;
+}
+.rx-item .name{font-size:13px;font-weight:700;color:var(--text)}
+.rx-item .dose{font-size:11px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.rx-item .dose b{color:var(--text);font-weight:600}
+.rx-item .rm{appearance:none;cursor:pointer;font:inherit;font-size:11px;font-weight:600;color:var(--danger);background:transparent;border:1px solid var(--danger-line);border-radius:7px;padding:4px 10px}
+.rx-add{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  margin-top:8px;padding:9px 12px;
+  background:transparent;border:1.5px dashed var(--copper-line);border-radius:9px;
+  color:var(--copper);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;
+}
+.rx-add:hover{background:var(--copper-wash);border-style:solid}
+
+/* Care plan link */
+.plan-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:8px 12px;background:linear-gradient(135deg,color-mix(in srgb,var(--copper) 12%,var(--card)) 0%,var(--card) 100%);
+  border:1px solid var(--copper-line);border-radius:10px;font-size:12px;color:var(--text);
+  margin-bottom:14px;cursor:pointer;
+}
+.plan-badge:hover{border-color:var(--copper)}
+.plan-badge .ic{width:22px;height:22px;border-radius:6px;background:var(--copper);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex:none}
+.plan-badge .t{font-weight:600}
+.plan-badge .p{margin-inline-start:auto;font-size:11px;color:var(--copper);font-weight:700;font-variant-numeric:tabular-nums}
+
+/* ═══════════ CARE PLAN SCREEN ═══════════ */
+.plan-hero{
+  padding:20px 24px;border-radius:14px;
+  background:linear-gradient(135deg,var(--copper) 0%,color-mix(in srgb,var(--copper) 80%,var(--ink) 20%) 100%);
+  color:#fff;box-shadow:var(--shadow-l);
+  position:relative;overflow:hidden;
+}
+.plan-hero::before{content:"";position:absolute;inset-inline:0;top:0;height:3px;background:linear-gradient(to left,#fff 0%,transparent 60%);opacity:.4}
+.plan-hero .top{display:flex;align-items:flex-start;gap:14px;margin-bottom:16px}
+.plan-hero .avatar{width:48px;height:48px;border-radius:12px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;color:#fff;flex:none;border:1px solid rgba(255,255,255,.25)}
+.plan-hero .info{flex:1}
+.plan-hero .name{font-size:20px;font-weight:700;color:#fff;letter-spacing:-.01em}
+.plan-hero .goal{font-size:12.5px;color:rgba(255,255,255,.85);margin-top:3px}
+.plan-hero .goal b{color:#fff;font-weight:600}
+.plan-hero .kbd{margin-inline-start:auto;font-size:11px;color:rgba(255,255,255,.7);padding:4px 10px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:7px}
+.plan-progress{margin-top:8px}
+.plan-prog-h{display:flex;align-items:baseline;justify-content:space-between;font-size:11px;color:rgba(255,255,255,.85);margin-bottom:6px}
+.plan-prog-h b{color:#fff;font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.plan-bar{height:8px;border-radius:999px;background:rgba(255,255,255,.15);overflow:hidden}
+.plan-bar span{display:block;height:100%;background:#fff;border-radius:999px}
+.plan-legs{display:flex;gap:16px;margin-top:10px;font-size:11px;color:rgba(255,255,255,.85);flex-wrap:wrap}
+.plan-legs b{color:#fff;font-weight:700;font-variant-numeric:tabular-nums}
+
+.plan-sessions{display:flex;flex-direction:column}
+.plan-session{
+  display:grid;grid-template-columns:48px 1fr auto;gap:14px;align-items:center;
+  padding:13px 18px;border-bottom:1px solid var(--hair);
+}
+.plan-session:last-child{border-bottom:0}
+.plan-session .n{
+  width:34px;height:34px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;
+  border:1.5px solid var(--rule);background:var(--field);color:var(--muted);
+}
+.plan-session.done .n{background:var(--eligible);color:#fff;border-color:transparent}
+.plan-session.next .n{background:var(--copper-wash);color:var(--copper);border-color:var(--copper-line)}
+.plan-session .name{font-size:13.5px;font-weight:600;color:var(--text)}
+.plan-session .meta{font-size:11px;color:var(--muted);margin-top:1px}
+.plan-session.done .name{color:var(--muted)}
+.plan-session .st{font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px}
+.plan-session.done .st{background:color-mix(in srgb,var(--eligible) 18%,transparent);color:var(--eligible)}
+.plan-session.next .st{background:var(--copper-wash);color:var(--copper);border:1px solid var(--copper-line)}
+.plan-session .st.plan{background:var(--field);color:var(--muted);border:1px solid var(--rule)}
+
+/* ═══════════ PATIENT PROFILE ═══════════ */
+.pt-hero{
+  padding:22px 24px;background:linear-gradient(135deg,color-mix(in srgb,var(--copper) 10%,var(--card)) 0%,var(--card) 60%);
+  border-bottom:1px solid var(--copper-line);
+  display:flex;gap:18px;align-items:center;flex-wrap:wrap;
+}
+.pt-hero .avatar{width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,var(--copper) 0%,var(--copper-2) 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;flex:none}
+.pt-hero .info{flex:1;min-width:220px}
+.pt-hero .name{font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.01em}
+.pt-hero .name .age{font-size:14px;color:var(--muted);font-weight:500;margin-inline-start:8px}
+.pt-hero .meta{font-size:12px;color:var(--muted);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pt-hero .meta b{color:var(--text);font-weight:600}
+.pt-hero .meta .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;color:var(--muted)}
+.pt-hero .meta .sep{width:3px;height:3px;border-radius:999px;background:var(--faint)}
+.pt-hero .stat-row{display:flex;gap:8px;margin-inline-start:auto}
+.pt-stat{padding:8px 14px;background:var(--card);border:1px solid var(--rule);border-radius:10px;text-align:center;min-width:82px}
+.pt-stat .k{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+.pt-stat .v{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em;margin-top:2px}
+.pt-stat.balance .v{color:var(--warning)}
+.pt-stat.plan .v{color:var(--copper)}
+
+.pt-tabs{display:flex;gap:2px;padding:8px 18px;background:var(--field);border-bottom:1px solid var(--rule);overflow-x:auto}
+.pt-tab{appearance:none;cursor:pointer;font:inherit;font-size:12px;font-weight:600;color:var(--muted);background:transparent;border:0;border-radius:7px;padding:7px 14px;white-space:nowrap}
+.pt-tab[aria-pressed="true"]{color:var(--copper);background:var(--copper-wash)}
+.pt-tab .b{margin-inline-start:4px;font-size:10px;font-weight:700;padding:1px 6px;background:var(--card);border:1px solid var(--rule);border-radius:4px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pt-tab[aria-pressed="true"] .b{color:var(--copper);background:#fff;border-color:var(--copper-line)}
+
+.pt-timeline{padding:16px 18px}
+.pt-day{margin-bottom:16px}
+.pt-day:last-child{margin-bottom:0}
+.pt-day-h{
+  display:flex;align-items:center;gap:10px;margin-bottom:8px;
+  font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;
+}
+.pt-day-h::after{content:"";flex:1;height:1px;background:var(--hair)}
+.pt-event{
+  display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:flex-start;
+  padding:10px 12px;background:var(--card);border:1px solid var(--rule);border-radius:10px;margin-bottom:6px;
+}
+.pt-event .icn{width:30px;height:30px;border-radius:8px;background:var(--field);color:var(--muted);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none;border:1px solid var(--rule)}
+.pt-event.visit .icn{background:var(--green-wash);color:var(--green);border-color:var(--green-line)}
+.pt-event.rx .icn{background:var(--copper-wash);color:var(--copper);border-color:var(--copper-line)}
+.pt-event.msg .icn{background:var(--field);color:var(--text);border-color:var(--rule)}
+.pt-event.pay .icn{background:color-mix(in srgb,var(--eligible) 15%,transparent);color:var(--eligible);border-color:color-mix(in srgb,var(--eligible) 40%,transparent)}
+.pt-event .body .t{font-size:13px;font-weight:600;color:var(--text)}
+.pt-event .body .d{font-size:11.5px;color:var(--muted);margin-top:1px}
+.pt-event .body .d b{color:var(--text);font-weight:600}
+.pt-event .body .dx{color:var(--copper);font-weight:600}
+.pt-event .time{font-size:10.5px;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ═══════════ MESSAGES ═══════════ */
+.msg-layout{display:grid;grid-template-columns:280px 1fr;gap:0}
+@media (max-width:768px){.msg-layout{grid-template-columns:1fr}}
+.msg-side{background:var(--field);border-inline-end:1px solid var(--rule);padding:12px 0}
+@media (max-width:768px){.msg-side{border-inline-end:0;border-bottom:1px solid var(--rule)}}
+.msg-side-h{padding:0 16px 10px;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+.msg-tpl{
+  display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;
+  border-inline-start:3px solid transparent;
+}
+.msg-tpl:hover{background:var(--card)}
+.msg-tpl.active{background:var(--card);border-inline-start-color:var(--copper)}
+.msg-tpl .icn{width:30px;height:30px;border-radius:8px;background:var(--copper-wash);color:var(--copper);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:none;border:1px solid var(--copper-line)}
+.msg-tpl .body{flex:1;min-width:0}
+.msg-tpl .n{font-size:12.5px;font-weight:600;color:var(--text)}
+.msg-tpl .d{font-size:10.5px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-tpl .badge{font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--eligible);color:#fff;letter-spacing:.03em}
+.msg-tpl .badge.auto{background:var(--copper)}
+.msg-tpl .badge.manual{background:var(--muted)}
+
+.msg-main{padding:20px}
+.msg-preview{
+  padding:14px 16px;background:var(--field);border:1px solid var(--rule);border-radius:12px;margin-bottom:14px;
+}
+.msg-preview .h{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.msg-preview .h .t{font-size:12.5px;font-weight:700;color:var(--text)}
+.msg-preview .h .ch{margin-inline-start:auto;font-size:10.5px;color:var(--muted);padding:3px 9px;background:var(--card);border:1px solid var(--rule);border-radius:5px;font-weight:600}
+.msg-body{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--text);line-height:1.85}
+.msg-body .var{color:var(--copper);background:var(--copper-wash);padding:1px 6px;border-radius:4px;font-weight:600;font-size:11.5px}
+
+.msg-ch-toggle{display:flex;gap:4px;background:var(--field);border:1px solid var(--rule);border-radius:9px;padding:3px}
+.msg-ch-toggle button{appearance:none;cursor:pointer;font:inherit;font-size:11.5px;font-weight:600;color:var(--muted);background:transparent;border:0;border-radius:6px;padding:6px 12px}
+.msg-ch-toggle button[aria-pressed="true"]{background:var(--card);color:var(--text);box-shadow:var(--shadow-s)}
+.msg-ch-toggle button .wa{color:#25D366}
+
+.msg-sent{margin-top:16px}
+.msg-sent-h{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px;padding:0 4px}
+.msg-item{
+  display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
+  padding:10px 12px;background:var(--card);border:1px solid var(--rule);border-radius:9px;margin-bottom:6px;
+}
+.msg-item .icn{width:26px;height:26px;border-radius:7px;background:var(--field);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted);flex:none}
+.msg-item .icn.wa{color:#25D366;background:color-mix(in srgb,#25D366 12%,transparent)}
+.msg-item .icn.sms{color:var(--green);background:var(--green-wash)}
+.msg-item .to{font-size:12px;font-weight:600;color:var(--text)}
+.msg-item .snip{font-size:10.5px;color:var(--muted);margin-top:1px}
+.msg-item .st{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:color-mix(in srgb,var(--eligible) 15%,transparent);color:var(--eligible);white-space:nowrap}
+.msg-item .st.pending{background:var(--warning-wash);color:var(--warning)}
+
+/* ═══════════ RX PRINT ═══════════ */
+.rx-print-page{background:#fff;color:#111;padding:32px;border-radius:12px;border:1px solid var(--rule);box-shadow:var(--shadow-l);max-width:600px;margin:0 auto}
+.rx-print-header{padding:12px 14px;background:#fff8e1;border:1.5px dashed #d4a017;border-radius:8px;font-size:12px;color:#856d00;text-align:center;margin-bottom:20px;font-weight:600}
+.rx-doc{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:2px solid #111;margin-bottom:16px}
+.rx-doc .doc-name{font-size:17px;font-weight:700;color:#111;letter-spacing:-.01em}
+.rx-doc .doc-spec{font-size:11.5px;color:#555;margin-top:2px}
+.rx-doc .rx-num{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;color:#666;font-variant-numeric:tabular-nums;text-align:end}
+.rx-pt{background:#fafafa;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:12.5px;color:#111;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.rx-pt b{font-weight:600}
+.rx-title{font-size:15px;font-weight:700;color:#111;margin-bottom:10px;display:flex;align-items:baseline;gap:8px}
+.rx-title::after{content:"";flex:1;border-bottom:1.5px solid #111}
+.rx-drug{padding:12px 0;border-bottom:1px dashed #ccc;display:flex;gap:14px;align-items:flex-start}
+.rx-drug:last-child{border-bottom:0}
+.rx-drug .num{width:28px;height:28px;border-radius:7px;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:none}
+.rx-drug .body .n{font-size:14.5px;font-weight:700;color:#111;letter-spacing:-.005em}
+.rx-drug .body .dose{font-size:12px;color:#333;margin-top:3px;font-variant-numeric:tabular-nums}
+.rx-drug .body .note{font-size:11.5px;color:#666;margin-top:2px;font-style:italic}
+.rx-sig{margin-top:22px;padding-top:14px;border-top:1px dashed #ccc;display:flex;justify-content:space-between;font-size:11px;color:#666}
+.rx-sig .stamp{font-weight:700;color:#111}
+
+@media (max-width:900px){.hero .v{font-size:38px}.cell{padding:18px 16px;min-width:90px}.cell .v{font-size:20px}}
+@media (max-width:600px){
+  .tb-in{padding:10px 14px}.tb-nav{width:100%;margin-inline-start:0}
+  .screen,.role-div{padding:0 14px;margin:14px auto}.role-div{margin-top:24px}
+  .appbar{padding:10px 14px}.appbar .date{padding-inline-start:0;border-inline-start:0}
+  .hero{padding:18px 18px;min-width:0;flex:1}
+  .side{border-inline-start:0;border-top:1px solid rgba(255,255,255,.10);width:100%}
+  .split,.slab-act{padding-inline:18px}
+  .slot,.qrow,.aud-row,.doc-item{padding-inline:14px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<!-- ══════════ TOP BAR ══════════ -->
+<header class="topbar">
+  <div class="tb-in">
+    <div class="tb-title">
+      <span class="v">V1 · INTEGRATED</span>
+      <span>عيادة د. أحمد المصري · فرع المعادي · <b>19 شاشة</b></span>
+    </div>
+    <nav class="tb-nav">
+      <button onclick="document.getElementById('s1').scrollIntoView({behavior:'smooth'})">دخول</button>
+      <button onclick="document.getElementById('s2').scrollIntoView({behavior:'smooth'})">اليوم</button>
+      <button onclick="document.getElementById('s3').scrollIntoView({behavior:'smooth'})">طابور</button>
+      <button onclick="document.getElementById('s4').scrollIntoView({behavior:'smooth'})">حجز</button>
+      <button onclick="document.getElementById('s5').scrollIntoView({behavior:'smooth'})">فاتورة</button>
+      <button onclick="document.getElementById('s6').scrollIntoView({behavior:'smooth'})">دفعة</button>
+      <button onclick="document.getElementById('s7').scrollIntoView({behavior:'smooth'})">إقفال</button>
+      <button onclick="document.getElementById('s8').scrollIntoView({behavior:'smooth'})">طباعة</button>
+      <button onclick="document.getElementById('s9').scrollIntoView({behavior:'smooth'})">طبيب</button>
+      <button onclick="document.getElementById('s10').scrollIntoView({behavior:'smooth'})">زيارة</button>
+      <button onclick="document.getElementById('s16').scrollIntoView({behavior:'smooth'})">وصفة</button>
+      <button onclick="document.getElementById('s17').scrollIntoView({behavior:'smooth'})">خطة</button>
+      <button onclick="document.getElementById('s18').scrollIntoView({behavior:'smooth'})">ملف مريض</button>
+      <button onclick="document.getElementById('s11').scrollIntoView({behavior:'smooth'})">سجل</button>
+      <button onclick="document.getElementById('s19').scrollIntoView({behavior:'smooth'})">رسائل</button>
+      <button onclick="document.getElementById('s12').scrollIntoView({behavior:'smooth'})">مواعيد</button>
+      <button onclick="document.getElementById('s13').scrollIntoView({behavior:'smooth'})">خدمات</button>
+      <button onclick="document.getElementById('s14').scrollIntoView({behavior:'smooth'})">موظفين</button>
+      <button onclick="document.getElementById('s15').scrollIntoView({behavior:'smooth'})">تركيب</button>
+    </nav>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- ROLE: ASSISTANT (main daily user) -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="role-div">
+  <span class="name">دور المساعد</span>
+  <span class="sep"></span>
+  <span class="count">8 شاشات · الاستخدام اليومي الكامل</span>
+</div>
+
+<!-- ═════════ Screen 1: PIN Lock ═════════ -->
+<section class="screen" id="s1">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 1</span>
+    <span class="screen-title">قفل الرقم السري</span>
+    <span class="screen-sub">بداية الوردية · وبعد <b>10 دقايق</b> خمول</span>
+  </div>
+  <div class="pin-scr">
+    <div class="pin-brand">Clin<span>tra</span></div>
+    <div class="pin-who">دخول · سارة حسن (المساعد)</div>
+    <div class="pin-title">أدخلي الرقم السري</div>
+    <div class="pin-dots"><i class="f"></i><i class="f"></i><i></i><i></i></div>
+    <div class="pad">
+      <button>1</button><button>2</button><button>3</button>
+      <button>4</button><button>5</button><button>6</button>
+      <button>7</button><button>8</button><button>9</button>
+      <button style="background:transparent;border-color:transparent;visibility:hidden"></button>
+      <button>0</button><button style="font-size:14px">مسح</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 2: Day - Slots ═════════ -->
+<section class="screen" id="s2">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 2</span>
+    <span class="screen-title">يوم العيادة — نمط المواعيد</span>
+    <span class="screen-sub">الشاشة الرئيسية · <b>8 ساعات في اليوم</b></span>
+  </div>
+
+  <div class="app">
+    <div class="appbar">
+      <div class="brand">
+        <div class="logo">C</div>
+        <div><div class="brand-t">Clintra</div><div class="brand-s">يوم العيادة</div></div>
+      </div>
+      <div class="who"><span class="avatar">س</span><span>سارة حسن</span></div>
+      <div class="date"><span class="a">7 سبتمبر 2026</span><span class="b">الاثنين</span></div>
+    </div>
+
+    <div class="content">
+      <div class="slab">
+        <div class="slab-in">
+          <div class="hero">
+            <span class="k">متبقي في اليوم</span>
+            <span class="v">1<i>مريض</i></span>
+            <div class="cap">من إجمالي <b>5</b> حجوزات</div>
+          </div>
+          <div class="side">
+            <div class="cell arrived"><span class="k">حضروا</span><span class="v">3</span></div>
+            <div class="cell"><span class="k">خلصوا</span><span class="v">1</span></div>
+            <div class="cell miss"><span class="k">لم يحضر</span><span class="v">1</span></div>
+          </div>
+        </div>
+        <div class="split">
+          <div class="split-bar"><span class="filled" style="width:80%"></span></div>
+          <div class="split-leg"><span><i class="sw done"></i>اكتمل <b>4</b> من <b>5</b></span><span><i class="sw left"></i>باقي <b>1</b></span></div>
+        </div>
+        <div class="slab-act">
+          <button class="sb copper">التالي: <span class="who">كريم فتحي</span> · 09:30</button>
+          <button class="sb">تسجيل تأخير الطبيب</button>
+          <span class="kbd">إقفال 06:00 م</span>
+        </div>
+      </div>
+
+      <div class="tiles">
+        <div class="tile ok"><span class="k">محصّل اليوم</span><span class="v">1,200<i>ج.م</i></span><span class="q">3 فواتير</span></div>
+        <div class="tile copper"><span class="k">مستحق</span><span class="v">400<i>ج.م</i></span><span class="q">مدفوعة جزئيًا</span></div>
+        <div class="tile"><span class="k">متوسط الكشف</span><span class="v">18<i>دقيقة</i></span><span class="q">أطول 27د</span></div>
+      </div>
+
+      <div class="c-card">
+        <div class="c-head">
+          <span class="badge">اليوم</span>
+          <div class="sp"><h3>مواعيد اليوم</h3><div class="sub">5 حجوزات · 3 فاضية · 30 دقيقة</div></div>
+          <button class="app-btn">ورقة الغد</button>
+        </div>
+        <div>
+          <div class="slot arrived">
+            <div class="time">09:00<span class="until">وصلت 08:52</span></div>
+            <div class="who">
+              <div class="name">منى عبد الله</div>
+              <div class="meta"><span>كشف عام</span><span class="dot"></span><span class="mono">0100 123 4567</span></div>
+              <div class="actor">سجّله سارة حسن</div>
+            </div>
+            <span class="state">وصلت</span>
+          </div>
+          <div class="slot in-room">
+            <div class="time">09:30<span class="until">من 12د</span></div>
+            <div class="who">
+              <div class="name">كريم فتحي</div>
+              <div class="meta"><span>استشارة متابعة</span><span class="dot"></span><span class="mono">0111 234 5678</span></div>
+              <div class="actor">سجّله سارة حسن · أمس</div>
+            </div>
+            <span class="state">في الكشف</span>
+          </div>
+          <div class="slot done">
+            <div class="time">10:00<span class="until">28د</span></div>
+            <div class="who">
+              <div class="name">ياسمين توفيق</div>
+              <div class="meta"><span>فحص شامل</span><span class="dot"></span><span class="mono">0106 987 6543</span></div>
+              <div class="actor">سجّله سارة حسن</div>
+            </div>
+            <span class="state">اكتمل</span>
+          </div>
+          <div class="slot no-show">
+            <div class="time">10:30<span class="until">من 45د</span></div>
+            <div class="who">
+              <div class="name">عمر جمال</div>
+              <div class="meta"><span>كشف عام</span><span class="dot"></span><span>الميعاد فاضي تاني</span></div>
+              <div class="actor">سجّله سارة حسن</div>
+            </div>
+            <span class="state">لم يحضر</span>
+          </div>
+          <div class="slot cancelled">
+            <div class="time">11:00</div>
+            <div class="who">
+              <div class="name">هدى رجب</div>
+              <div class="meta"><span>ألغتها المريضة · فاضي تاني</span></div>
+            </div>
+            <span class="state">ملغي</span>
+          </div>
+          <div class="slot empty">
+            <div class="time">11:30</div><div class="who"><span class="free">موعد فاضي</span></div>
+            <button class="quick">＋ احجز هنا</button>
+          </div>
+          <div class="slot empty">
+            <div class="time">12:00</div><div class="who"><span class="free">موعد فاضي</span></div>
+            <button class="quick">＋ احجز هنا</button>
+          </div>
+        </div>
+        <div class="runrow">
+          <button class="run">احجز مريض جديد</button>
+          <button class="pill">مريض جه دلوقتي</button>
+          <span class="count"><b>7</b> ميعاد · <b>5</b> محجوز · <b>2</b> فاضي</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 3: Day - Queue ═════════ -->
+<section class="screen" id="s3">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 3</span>
+    <span class="screen-title">يوم العيادة — نمط الطابور</span>
+    <span class="screen-sub">لما الدكتور بيشتغل <b>بالنمرة</b> مش بميعاد</span>
+  </div>
+
+  <div class="app">
+    <div class="appbar">
+      <div class="brand"><div class="logo">C</div><div><div class="brand-t">Clintra</div><div class="brand-s">يوم العيادة — طابور</div></div></div>
+      <div class="who"><span class="avatar">س</span><span>سارة حسن</span></div>
+      <div class="date"><span class="a">7 سبتمبر 2026</span><span class="b">الاثنين</span></div>
+    </div>
+    <div class="content">
+      <div class="slab">
+        <div class="slab-in">
+          <div class="hero">
+            <span class="k">الدور دلوقتي</span>
+            <span class="v">4<i>من 8</i></span>
+            <div class="cap">متوسط الكشف <b>11د</b> · يتوقع خلاص <b>1:32 م</b></div>
+          </div>
+          <div class="side">
+            <div class="cell arrived"><span class="k">مستنيين</span><span class="v">3</span></div>
+            <div class="cell"><span class="k">خلصوا</span><span class="v">3</span></div>
+            <div class="cell copper"><span class="k">في الكشف</span><span class="v">1</span></div>
+          </div>
+        </div>
+        <div class="split">
+          <div class="split-bar"><span class="filled" style="width:50%"></span></div>
+          <div class="split-leg"><span><i class="sw done"></i>اكتمل <b>4</b></span><span><i class="sw left"></i>مستنيين <b>4</b></span></div>
+        </div>
+        <div class="slab-act">
+          <button class="sb copper">التالي: <span class="who">مريم حسن</span> · نمرة 5</button>
+          <button class="sb">إعادة ترتيب</button>
+        </div>
+      </div>
+
+      <div class="c-card">
+        <div class="c-head"><span class="badge">الطابور</span><div class="sp"><h3>الدور</h3><div class="sub">النمرة تلقائية للأقدم انتظار</div></div><button class="app-btn">استدعاء التالي</button></div>
+        <div class="q-list">
+          <div class="qrow done"><div class="qnum">1</div><div class="qwho"><div class="name">سعاد المصري</div><div class="meta">كشف عام · خلصت 12:04</div></div><div class="qwait">استغرقت<b>14د</b></div></div>
+          <div class="qrow done"><div class="qnum">2</div><div class="qwho"><div class="name">أحمد فؤاد</div><div class="meta">استشارة · خلص 12:18</div></div><div class="qwait">استغرق<b>14د</b></div></div>
+          <div class="qrow done"><div class="qnum">3</div><div class="qwho"><div class="name">نور سليم</div><div class="meta">فحص · خلصت 12:27</div></div><div class="qwait">استغرقت<b>9د</b></div></div>
+          <div class="qrow current"><div class="qnum">4</div><div class="qwho"><div class="name">خالد جمال</div><div class="meta">كشف عام · دخل من 7د</div><div class="actor">جه من غير حجز</div></div><div class="qwait">في الكشف<b>—</b></div></div>
+          <div class="qrow next"><div class="qnum">5</div><div class="qwho"><div class="name">مريم حسن</div><div class="meta">متابعة · وصلت 12:15</div></div><div class="qwait">متوقع<b>1:15 م</b></div></div>
+          <div class="qrow"><div class="qnum">6</div><div class="qwho"><div class="name">يوسف كامل</div><div class="meta">كشف عام · وصل 12:28</div></div><div class="qwait">متوقع<b>1:26 م</b></div></div>
+          <div class="qrow"><div class="qnum">7</div><div class="qwho"><div class="name">لينا رأفت</div><div class="meta">استشارة · جت من دقيقة</div></div><div class="qwait">متوقع<b>1:37 م</b></div></div>
+        </div>
+        <div class="runrow"><button class="run">إضافة للدور</button><span class="count"><b>7</b> في الطابور · <b>4</b> اكتملوا</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 4: Booking ═════════ -->
+<section class="screen" id="s4">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 4</span>
+    <span class="screen-title">حجز جديد</span>
+    <span class="screen-sub">هدف: <b>3 لمسات · 3 ثوان</b></span>
+  </div>
+  <div class="book">
+    <div class="book-head"><h3>حجز · 11:30 · د. أحمد المصري</h3><button class="x">×</button></div>
+    <div class="book-body">
+      <div class="field">
+        <label>ابحث بالاسم أو التليفون</label>
+        <input class="in filled" value="كريم" />
+      </div>
+      <div class="results">
+        <div class="rr sel"><div class="n">كريم فتحي</div><div class="m">آخر زيارة من 20 يوم · <span class="mono">0111 234 5678</span></div></div>
+        <div class="rr"><div class="n">كريم عبد الله</div><div class="m">أول زيارة · <span class="mono">0100 445 2211</span></div></div>
+        <div class="rr new"><div class="n">＋ إضافة مريض جديد باسم «كريم»</div></div>
+      </div>
+      <div class="field">
+        <label>الخدمة</label>
+        <div class="svc-row">
+          <button class="svc" aria-pressed="true">كشف عام · 400ج</button>
+          <button class="svc" aria-pressed="false">استشارة متابعة · 250ج</button>
+          <button class="svc" aria-pressed="false">فحص شامل · 600ج</button>
+        </div>
+      </div>
+    </div>
+    <div class="book-foot"><button class="run">تأكيد الحجز</button><button class="pill">من غير رقم</button></div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 5: Invoice ═════════ -->
+<section class="screen" id="s5">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 5</span>
+    <span class="screen-title">الفاتورة</span>
+    <span class="screen-sub">تلقائيًا عند اكتمال الزيارة · <b>مالها رجعة بعد أول دفعة</b></span>
+  </div>
+  <div class="c-card">
+    <div class="inv-head">
+      <span class="inv-num">INV-2026-0142</span>
+      <span class="inv-status">مدفوعة جزئيًا</span>
+      <div class="sp" style="margin-inline-end:auto;padding-inline-start:14px;border-inline-start:1px solid rgba(255,255,255,.14)">
+        <div style="font-size:13px;font-weight:600">أحمد علي</div>
+        <div class="sub">د. أحمد المصري · 7 سبتمبر 2026</div>
+      </div>
+      <button class="app-btn">طباعة</button>
+    </div>
+    <div class="inv-body">
+      <table class="tab">
+        <thead><tr><th>البند</th><th>الكمية</th><th class="amt">السعر</th><th class="amt">الإجمالي</th></tr></thead>
+        <tbody>
+          <tr><td>كشف عام</td><td>1</td><td class="amt">300</td><td class="amt">300</td></tr>
+          <tr><td>حقنة علاجية</td><td>1</td><td class="amt">100</td><td class="amt">100</td></tr>
+        </tbody>
+      </table>
+      <div class="totals">
+        <div class="row"><span class="k">الإجمالي</span><span class="v">400 ج.م</span></div>
+        <div class="row"><span class="k">المدفوع</span><span class="v">200 ج.م</span></div>
+        <div class="row remain grand"><span class="k">المتبقي</span><span class="v">200<i>ج.م</i></span></div>
+      </div>
+      <div class="pays">
+        <div class="pays-h">الدفعات</div>
+        <div class="pay"><span class="amt">200 ج.م</span><span class="method">نقدي</span><span class="rcp">RCP-1189 · 10:12 ص</span></div>
+      </div>
+    </div>
+    <div class="runrow">
+      <button class="run">تسجيل دفعة (200 ج.م)</button>
+      <button class="pill">تعديل بنود</button>
+      <span class="count">إنشاء <b>10:00 ص</b> · <b>سارة حسن</b></span>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 6: Payment ═════════ -->
+<section class="screen" id="s6">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 6</span>
+    <span class="screen-title">تسجيل دفعة وإيصال</span>
+    <span class="screen-sub">كل دفعة برقم إيصال <b>مستقل</b></span>
+  </div>
+  <div class="book">
+    <div class="book-head"><h3>دفعة · فاتورة INV-2026-0142</h3><button class="x">×</button></div>
+    <div class="book-body">
+      <div class="pt-summary" style="margin:-18px -20px 0;border-radius:0">
+        <div class="avatar">أ</div>
+        <div class="info">
+          <div class="name">أحمد علي</div>
+          <div class="meta">المتبقي <b style="color:var(--warning)">200 ج.م</b> من إجمالي 400 ج.م</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>المبلغ</label>
+        <input class="in filled" value="200" style="font-size:24px;text-align:center;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em" />
+        <span class="hint">اكتب رقم أقل عشان دفعة جزئية تانية</span>
+      </div>
+
+      <div class="field">
+        <label>طريقة الدفع</label>
+        <div class="svc-row">
+          <button class="svc" aria-pressed="true">نقدي</button>
+          <button class="svc" aria-pressed="false">فيزا</button>
+          <button class="svc" aria-pressed="false">محفظة</button>
+          <button class="svc" aria-pressed="false">تحويل</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>ملاحظة (اختيارية)</label>
+        <input class="in" placeholder="مثلًا: باقي المبلغ الأسبوع الجاي" />
+      </div>
+    </div>
+    <div class="book-foot"><button class="run">أكّد الدفعة وطبع إيصال</button></div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 7: Day Close ═════════ -->
+<section class="screen" id="s7">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 7</span>
+    <span class="screen-title">إقفال اليوم</span>
+    <span class="screen-sub">دقيقة آخر اليوم · <b>لا يتم صمتًا</b></span>
+  </div>
+
+  <div class="c-card">
+    <div class="c-head">
+      <span class="badge">آخر اليوم</span>
+      <div class="sp"><h3>إقفال يوم الاثنين 7 سبتمبر</h3><div class="sub">6:12 م · قبل ما تسيبي الاستقبال</div></div>
+    </div>
+    <div class="c-body">
+      <div class="close-summary">
+        <div class="h">ملخّص اليوم</div>
+        <div class="close-grid">
+          <div class="close-cell"><span class="k">إجمالي المتوقع</span><span class="v">1,600<i>ج.م</i></span></div>
+          <div class="close-cell match"><span class="k">المحصّل نقدي</span><span class="v">1,600<i>ج.م</i></span></div>
+          <div class="close-cell"><span class="k">فاتورة</span><span class="v">4<i>مدفوعة</i></span></div>
+          <div class="close-cell"><span class="k">لم يحضر</span><span class="v">1</span></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>الكاش الفعلي في الدرج</label>
+        <input class="in filled" value="1,600" style="font-size:20px;text-align:center;font-variant-numeric:tabular-nums;font-weight:700" />
+      </div>
+
+      <div style="padding:12px 14px;background:color-mix(in srgb,var(--eligible) 8%,transparent);border:1px solid var(--green-line);border-radius:10px;display:flex;align-items:center;gap:10px">
+        <span style="width:32px;height:32px;border-radius:8px;background:var(--eligible);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">✓</span>
+        <div>
+          <div style="font-size:13.5px;font-weight:700;color:var(--eligible)">مطابق تمامًا</div>
+          <div style="font-size:11.5px;color:var(--muted)">مفيش فرق بين المتوقع والمحصّل</div>
+        </div>
+      </div>
+    </div>
+    <div class="runrow">
+      <button class="run">قفل اليوم وطبع الملخّص</button>
+      <button class="pill">تصدير Excel</button>
+      <span class="count">هيقفله <b>سارة حسن</b></span>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 8: Print - Tomorrow ═════════ -->
+<section class="screen" id="s8">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 8</span>
+    <span class="screen-title">ورقة الغد للطباعة</span>
+    <span class="screen-sub">قبل ما تسيبي · <b>مواعيد بكرة</b> ورقة للدكتور</span>
+  </div>
+  <div class="print-page">
+    <div class="print-header">✎ ترويسة العيادة — تتضبط من الإعدادات</div>
+    <div class="print-clinic">
+      <div class="n">Clintra — عيادة د. أحمد المصري</div>
+      <div class="a">فرع المعادي · 22 شارع اللاسلكي · 0100 111 2233</div>
+    </div>
+    <div class="print-day">الثلاثاء 8 سبتمبر 2026 — 7 مرضى</div>
+    <table class="print-tbl">
+      <thead><tr><th>الوقت</th><th>المريض</th><th>الخدمة</th><th>التليفون</th></tr></thead>
+      <tbody>
+        <tr><td>09:00</td><td>محمود عبد الرحمن</td><td>كشف عام</td><td class="mono">0100 555 1122</td></tr>
+        <tr><td>09:30</td><td>سلمى الأحمد</td><td>متابعة</td><td class="mono">0111 333 4455</td></tr>
+        <tr><td>10:00</td><td>عبد الله كريم</td><td>كشف عام</td><td class="mono">0122 666 7788</td></tr>
+        <tr><td>10:30</td><td>نور محمد</td><td>فحص شامل</td><td class="mono">0106 999 0011</td></tr>
+        <tr><td>11:00</td><td>حسام رمضان</td><td>متابعة</td><td class="mono">0128 222 3344</td></tr>
+        <tr><td>12:00</td><td>ريم أحمد</td><td>كشف عام</td><td class="mono">0100 444 5566</td></tr>
+        <tr><td>12:30</td><td>مصطفى علي</td><td>استشارة</td><td class="mono">0111 777 8899</td></tr>
+      </tbody>
+    </table>
+    <div class="print-foot">
+      <span>طُبعت 7 سبتمبر 6:15 م</span>
+      <span>Clintra v1.0</span>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- ROLE: DOCTOR (medical work) -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="role-div">
+  <span class="name">دور الطبيب</span>
+  <span class="sep"></span>
+  <span class="count">7 شاشات · العمل الإكلينيكي الكامل — تشخيص، وصفة، خطة رعاية، سجل، تواصل</span>
+</div>
+
+<!-- ═════════ Screen 9: Doctor Day (ENHANCED) ═════════ -->
+<section class="screen" id="s9">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 9</span>
+    <span class="screen-title">شاشة الطبيب — قائمة اليوم</span>
+    <span class="screen-sub"><b>ما بتعرضش · بتساعد الدكتور يقرر</b></span>
+  </div>
+
+  <div class="app">
+    <div class="appbar">
+      <div class="brand"><div class="logo">C</div><div><div class="brand-t">Clintra</div><div class="brand-s">شاشة الطبيب</div></div></div>
+      <div class="who"><span class="avatar">أ</span><span>د. أحمد المصري</span></div>
+      <div class="date"><span class="a">7 سبتمبر 2026</span><span class="b">الاثنين</span></div>
+    </div>
+
+    <div class="content">
+
+      <!-- ✦ 1. MOMENTUM BAR — critical decision aid ✦ -->
+      <div class="momentum">
+        <div class="momentum-icon">⏱</div>
+        <div class="momentum-txt">
+          <div class="status">متأخر ١٥ دقيقة عن الخطة</div>
+          <div class="detail">متوسط الكشف اليوم <b>21د</b> · المخطط <b>18د</b> · لو مشيت بنفس السرعة، هتخلص متأخر</div>
+        </div>
+        <div class="momentum-eta">
+          الخلاص المتوقع
+          <b>2:14 م</b>
+        </div>
+      </div>
+
+      <!-- ✦ 2. CURRENT PATIENT — enhanced with clinical context ✦ -->
+      <div class="doc-hero">
+        <div class="top">
+          <div class="avatar">ك</div>
+          <div class="info">
+            <div class="label">في الكشف الآن</div>
+            <div class="name">كريم فتحي<span class="age">· 34 سنة</span></div>
+            <div class="meta">
+              <span>استشارة متابعة</span>
+              <span class="sep"></span>
+              <span>دخل من <b>12د</b></span>
+              <span class="sep"></span>
+              <span><b>4</b> زيارات سابقة</span>
+            </div>
+          </div>
+          <div class="acts">
+            <button class="run">افتح ملف الزيارة</button>
+            <button class="pill">قفل الزيارة</button>
+          </div>
+        </div>
+
+        <div class="last-visit">
+          <div class="lv-h">آخر زيارة · قبل 3 أسابيع</div>
+          شكوى: <b>آلام أسفل الظهر بعد رفع حاجات تقيلة</b> · التشخيص: <span class="lv-dx">شد عضلي حاد</span> · موصوف: مسكن + راحة أسبوع
+        </div>
+
+        <div class="quick-note">
+          <label>ملاحظة سريعة</label>
+          <input placeholder="اكتب ملاحظة بينك وبين نفسك عن المريض ده…" />
+          <button class="save">حفظ</button>
+        </div>
+      </div>
+
+      <!-- ✦ 3. TWO-COL: NEXT PATIENT BRIEFING + WAITING ROOM ✦ -->
+      <div class="two-col">
+
+        <!-- Next patient briefing -->
+        <div class="brief">
+          <div class="brief-h">
+            <span class="b">التالي في الكشف</span>
+            <span class="tag">مستني في الاستقبال</span>
+          </div>
+          <div class="brief-b">
+            <div class="brief-name">أحمد علي<span class="age">· 52 سنة</span></div>
+            <div class="brief-svc"><b>كشف عام</b> · متوقع 10:15 · وصل من 8 دقايق</div>
+
+            <div class="brief-hist">
+              <div class="h">آخر زيارة · من ٣ شهور</div>
+              <div class="last">شكوى: <b>ألم في الركبة اليمنى</b> · تشخيص: <span class="dx">التهاب أوتار</span></div>
+              <div class="count"><b>7</b> زيارات إجمالي عندك · آخر فاتورة <b>مدفوعة كاملة</b></div>
+            </div>
+
+            <div class="brief-act">
+              <button class="run">استدعِ للكشف</button>
+              <button class="pill">افتح الملف</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Waiting room -->
+        <div class="brief">
+          <div class="brief-h">
+            <span class="b">صالة الانتظار</span>
+            <span class="tag warn">أطول انتظار 34د</span>
+          </div>
+          <div>
+            <div class="wait-item">
+              <span class="dot"></span>
+              <span class="n">أحمد علي<span class="svc">· كشف عام · نمرة 3</span></span>
+              <span class="w">مستني<b> 8د</b></span>
+            </div>
+            <div class="wait-item long">
+              <span class="dot"></span>
+              <span class="n">مريم صابر<span class="svc">· متابعة · نمرة 4</span></span>
+              <span class="w">مستنية<b> 34د</b></span>
+            </div>
+            <div class="wait-item">
+              <span class="dot"></span>
+              <span class="n">حسام رمضان<span class="svc">· فحص · نمرة 5</span></span>
+              <span class="w">مستني<b> 12د</b></span>
+            </div>
+            <div style="padding:9px 14px;text-align:center;font-size:11px;color:var(--muted);background:var(--field);border-top:1px dashed var(--hair)">
+              <b style="color:var(--text);font-weight:700">3</b> مرضى في الصالة · <b style="color:var(--text);font-weight:700">1</b> مريم — <span style="color:var(--warning)">فوق حد التنبيه</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ✦ 4. ATTENTION — only shows when there are issues ✦ -->
+      <div class="attn">
+        <div class="attn-h">
+          <div class="icn">!</div>
+          <span class="t">يحتاج انتباه قبل نهاية اليوم</span>
+          <span class="c">3</span>
+        </div>
+        <div class="attn-item">
+          <div>
+            <div class="t">زيارة منى عبد الله — التشخيص فاضي</div>
+            <div class="s">اتقفلت الساعة 09:28 · مالهاش تشخيص مسجّل</div>
+          </div>
+          <button class="a">أكمل الآن</button>
+        </div>
+        <div class="attn-item">
+          <div>
+            <div class="t">فاتورة ياسمين توفيق — مش مدفوعة</div>
+            <div class="s">اتحصلت الزيارة · ما اتحصّلش المبلغ · قوللي المساعد</div>
+          </div>
+          <button class="a">تذكير للمساعد</button>
+        </div>
+        <div class="attn-item">
+          <div>
+            <div class="t">هدى رجب — تحويلة معمل</div>
+            <div class="s">من أسبوع · النتيجة ما رجعتش · اتصل بالمعمل؟</div>
+          </div>
+          <button class="a">عرض التفاصيل</button>
+        </div>
+      </div>
+
+      <!-- ✦ 5. FULL DAY LIST — compact chronological view ✦ -->
+      <div class="c-card">
+        <div class="c-head">
+          <span class="badge">التسلسل</span>
+          <div class="sp"><h3>كل اليوم</h3><div class="sub">اللي عدى واللي جاي</div></div>
+        </div>
+        <div class="doc-list">
+          <div class="doc-item done"><div class="num">1</div><div><div class="name">منى عبد الله</div><div class="meta">كشف عام · خلصت 09:28 · <span style="color:var(--warning);font-weight:600">تشخيص فاضي</span></div></div><button class="go">راجع</button></div>
+          <div class="doc-item current"><div class="num">2</div><div><div class="name">كريم فتحي</div><div class="meta">استشارة · في الكشف من 12د · الزيارة السابقة قبل 3 أسابيع</div></div><button class="go">افتح</button></div>
+          <div class="doc-item"><div class="num">3</div><div><div class="name">أحمد علي</div><div class="meta">كشف عام · مستني · متوقع 10:15</div></div><button class="go">استدعِ</button></div>
+          <div class="doc-item"><div class="num">4</div><div><div class="name">مريم صابر</div><div class="meta">متابعة · مستنية من 34د · متوقع 10:45</div></div><button class="go">استدعِ</button></div>
+          <div class="doc-item"><div class="num">5</div><div><div class="name">حسام رمضان</div><div class="meta">فحص · مستني من 12د · متوقع 11:15</div></div><button class="go">افتح ملف</button></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 10: Visit Form ═════════ -->
+<section class="screen" id="s10">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 10</span>
+    <span class="screen-title">الزيارة — النموذج المتكامل</span>
+    <span class="screen-sub">شكوى · <b>مساعد ذكي</b> · تشخيص · وصفة · خطة رعاية · حفظ تلقائي</span>
+  </div>
+
+  <div class="c-card">
+    <div class="pt-summary">
+      <div class="avatar">ك</div>
+      <div class="info">
+        <div class="name">كريم فتحي · 34 سنة</div>
+        <div class="meta"><span class="mono">0111 234 5678</span> · 4 زيارات · آخر زيارة قبل 3 أسابيع</div>
+      </div>
+      <div class="quick">
+        <button class="qbtn">التاريخ المرضي</button>
+        <button class="qbtn">الفواتير</button>
+      </div>
+    </div>
+
+    <div class="visit-layout">
+      <div class="visit-main">
+        <div class="plan-badge">
+          <span class="ic">۩</span>
+          <span class="t">خطة رعاية جارية: علاج طبيعي للركبة</span>
+          <span class="p">جلسة 5 من 10</span>
+        </div>
+
+        <div class="visit-history">
+          <div class="visit-history-h">آخر ٣ زيارات</div>
+          <div class="visit-history-item"><span class="date">15/8</span><span class="dx">آلام أسفل الظهر</span> — علاج طبيعي، مسكن</div>
+          <div class="visit-history-item"><span class="date">1/8</span><span class="dx">متابعة</span> — تحسن ملحوظ، الاستمرار على البرنامج</div>
+          <div class="visit-history-item"><span class="date">18/7</span><span class="dx">إلتهاب حاد</span> — مضاد التهاب أسبوع</div>
+        </div>
+
+        <div class="field">
+          <label>الشكوى الرئيسية</label>
+          <textarea class="in filled">ألم مستمر في الركبة اليمنى من ٥ أيام، يزيد مع الحركة، لا يوجد تورم واضح.</textarea>
+          <span class="hint">اتحفظ · قبل ثانيتين · المساعد قرأ النص</span>
+        </div>
+
+        <div class="field">
+          <label>التشخيص</label>
+          <textarea class="in filled">التهاب وتر الرضفة (Patellar Tendinitis) — حاد، مع تاريخ إجهاد ميكانيكي متكرر.</textarea>
+        </div>
+
+        <div class="rx-section">
+          <div class="rx-head">
+            <span class="t">الوصفة الطبية</span>
+            <span class="c">3 أدوية</span>
+          </div>
+          <div class="rx-list">
+            <div class="rx-item">
+              <div>
+                <div class="name">Diclofenac 50mg</div>
+                <div class="dose">قرص <b>مرتين</b> يومياً · بعد الأكل · لمدة <b>7 أيام</b></div>
+              </div>
+              <button class="rm">حذف</button>
+            </div>
+            <div class="rx-item">
+              <div>
+                <div class="name">Paracetamol 500mg</div>
+                <div class="dose">قرص عند الألم · بحد أقصى <b>4 مرات</b> يومياً</div>
+              </div>
+              <button class="rm">حذف</button>
+            </div>
+            <div class="rx-item">
+              <div>
+                <div class="name">Voltaren Gel</div>
+                <div class="dose">دهان موضعي · <b>3 مرات</b> يومياً على الركبة · لمدة أسبوعين</div>
+              </div>
+              <button class="rm">حذف</button>
+            </div>
+          </div>
+          <button class="rx-add">＋ أضف دواء</button>
+        </div>
+      </div>
+
+      <div class="visit-aside">
+        <div class="ai-h">
+          <span class="ic">✦</span>
+          <div>
+            <div class="t">المساعد الذكي</div>
+            <div class="s">اقتراحات مبنية على الشكوى والتاريخ</div>
+          </div>
+        </div>
+
+        <div class="ai-hint">
+          <div class="row">
+            <span class="dx">التهاب وتر الرضفة</span>
+            <span class="conf">احتمال عالي</span>
+          </div>
+          <div class="why"><b>لماذا:</b> الشكوى (ألم مع الحركة، ٥ أيام، بدون تورم) + عمر المريض + <b>سجل أسبق</b>: تكرار آلام مفصلية.</div>
+          <div class="acts">
+            <button class="acc">أضف للتشخيص</button>
+            <button class="dis">تجاهل</button>
+          </div>
+        </div>
+
+        <div class="ai-hint">
+          <div class="row">
+            <span class="dx">إجهاد رباط جانبي</span>
+            <span class="conf mid">احتمال متوسط</span>
+          </div>
+          <div class="why"><b>لماذا:</b> الحركة الميكانيكية بدون تورم واضح تدعم إصابة رباطية سطحية.</div>
+          <div class="acts">
+            <button class="acc">أضف للتشخيص</button>
+            <button class="dis">تجاهل</button>
+          </div>
+        </div>
+
+        <div class="ai-hint">
+          <div class="row">
+            <span class="dx">خشونة مبكرة</span>
+            <span class="conf low">أقل احتمال</span>
+          </div>
+          <div class="why"><b>لماذا:</b> العمر يجعلها أقل احتمالاً، بس التكرار في التاريخ يستحق أشعة لو استمر الألم.</div>
+          <div class="acts">
+            <button class="acc">أضف للتشخيص</button>
+            <button class="dis">تجاهل</button>
+          </div>
+        </div>
+
+        <div class="ai-disclaimer">
+          <b>ملاحظة:</b> دي مقترحات مبنية على النص فقط. <b>القرار النهائي للطبيب دائماً.</b> المساعد بيقرأ الشكوى والتاريخ ما بيقرأش الأشعة أو التحاليل.
+        </div>
+      </div>
+    </div>
+
+    <div class="runrow">
+      <button class="run">قفل الزيارة (يفتح الفاتورة)</button>
+      <button class="pill">حفظ ومتابعة لاحقًا</button>
+      <span class="count">مدة الجلسة: <b>14 دقيقة</b></span>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 11: Audit Log ═════════ -->
+<section class="screen" id="s11">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 11</span>
+    <span class="screen-title">السجل</span>
+    <span class="screen-sub">للطبيب · <b>تايم لاين</b> مش رقابة</span>
+  </div>
+
+  <div class="c-card">
+    <div class="c-head"><span class="badge">اليوم</span><div class="sp"><h3>سجل اليوم</h3><div class="sub">18 حدث</div></div></div>
+    <div class="filts">
+      <button class="filt" aria-pressed="true">الكل</button>
+      <button class="filt" aria-pressed="false">زيارات</button>
+      <button class="filt" aria-pressed="false">فواتير</button>
+      <button class="filt" aria-pressed="false">إعدادات</button>
+    </div>
+    <div class="audit">
+      <div class="aud-row"><span class="aud-dot"></span><div class="aud-txt"><div class="verb">علّم وصول · كريم فتحي</div><div class="who"><b>سارة حسن</b> · شاشة اليوم</div></div><div class="aud-time">12:18 · من 3د</div></div>
+      <div class="aud-row"><span class="aud-dot"></span><div class="aud-txt"><div class="verb">سجّل دفعة · 200 ج.م نقدي</div><div class="who"><b>سارة حسن</b> · فاتورة INV-2026-0142</div></div><div class="aud-time">10:12 ص</div></div>
+      <div class="aud-row"><span class="aud-dot"></span><div class="aud-txt"><div class="verb">قفل الزيارة · ياسمين توفيق</div><div class="who"><b>د. أحمد المصري</b> · فحص شامل</div></div><div class="aud-time">10:28 ص</div></div>
+      <div class="aud-row"><span class="aud-dot warn"></span><div class="aud-txt"><div class="verb">علّم لم يحضر · عمر جمال</div><div class="who"><b>سارة حسن</b> · موعد 10:30</div></div><div class="aud-time">11:15 ص</div></div>
+      <div class="aud-row"><span class="aud-dot danger"></span><div class="aud-txt"><div class="verb">ألغى الحجز · هدى رجب</div><div class="who"><b>سارة حسن</b> · «طلب المريضة»</div></div><div class="aud-time">10:55 ص</div></div>
+      <div class="aud-row"><span class="aud-dot"></span><div class="aud-txt"><div class="verb">أنشأ حجز · هدى رجب</div><div class="who"><b>سارة حسن</b> · من مكالمة</div></div><div class="aud-time">أمس 6:20 م</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 16: Prescription Print ═════════ -->
+<section class="screen" id="s16">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 16</span>
+    <span class="screen-title">الوصفة — للطباعة</span>
+    <span class="screen-sub">شكل الوصفة الأخيرة · <b>واضحة للصيدلي</b> · جاهزة للطباعة أو الحفظ PDF</span>
+  </div>
+
+  <div class="rx-print-page">
+    <div class="rx-print-header">هذه معاينة للطباعة · اضغط طباعة أو حفظ PDF لإرسالها للمريض</div>
+
+    <div class="rx-doc">
+      <div>
+        <div class="doc-name">د. أحمد المصري</div>
+        <div class="doc-spec">استشاري العلاج الطبيعي وإعادة التأهيل · نقابة الأطباء 12345</div>
+        <div class="doc-spec">فرع المعادي · شارع 9 · القاهرة · هاتف: 0100 000 0000</div>
+      </div>
+      <div class="rx-num">
+        <div>RX-2026-0287</div>
+        <div>30 / 9 / 2026</div>
+      </div>
+    </div>
+
+    <div class="rx-pt">
+      <div><b>المريض:</b> كريم فتحي</div>
+      <div><b>العمر:</b> 34 سنة</div>
+      <div><b>التشخيص:</b> التهاب وتر الرضفة</div>
+    </div>
+
+    <div class="rx-title">Rx</div>
+
+    <div class="rx-drug">
+      <div class="num">1</div>
+      <div class="body">
+        <div class="n">Diclofenac 50mg — Tablet</div>
+        <div class="dose">قرص × 2 يومياً · بعد الأكل · لمدة 7 أيام</div>
+        <div class="note">يُوقف مع أي ألم في المعدة</div>
+      </div>
+    </div>
+
+    <div class="rx-drug">
+      <div class="num">2</div>
+      <div class="body">
+        <div class="n">Paracetamol 500mg — Tablet</div>
+        <div class="dose">قرص عند الحاجة · لا يتجاوز 4 مرات يومياً</div>
+      </div>
+    </div>
+
+    <div class="rx-drug">
+      <div class="num">3</div>
+      <div class="body">
+        <div class="n">Voltaren Gel 1% — Topical</div>
+        <div class="dose">دهان على مكان الألم × 3 يومياً · لمدة 14 يوم</div>
+      </div>
+    </div>
+
+    <div class="rx-sig">
+      <div><span class="stamp">التوقيع</span> · د. أحمد المصري</div>
+      <div>الختم الرسمي</div>
+    </div>
+  </div>
+
+  <div class="c-card" style="margin-top:16px">
+    <div class="split">
+      <button class="run">طباعة</button>
+      <button class="pill">حفظ PDF</button>
+      <button class="pill">إرسال للمريض واتساب</button>
+      <button class="pill">إرسال SMS</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 17: Care Plan ═════════ -->
+<section class="screen" id="s17">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 17</span>
+    <span class="screen-title">خطة الرعاية</span>
+    <span class="screen-sub">للحالات المتكررة · جلسات مجدولة · متابعة تقدم · <b>تنبيه لو المريض توقف</b></span>
+  </div>
+
+  <div class="c-card" style="padding:16px">
+    <div class="plan-hero">
+      <div class="top">
+        <div class="avatar">ك</div>
+        <div class="info">
+          <div class="name">كريم فتحي</div>
+          <div class="goal"><b>الهدف:</b> استعادة كامل حركة الركبة اليمنى · <b>التشخيص:</b> التهاب وتر الرضفة</div>
+        </div>
+        <div class="kbd">10 جلسات</div>
+      </div>
+      <div class="plan-progress">
+        <div class="plan-prog-h"><span>التقدم</span><b>5 / 10 جلسة</b></div>
+        <div class="plan-bar"><span style="width:50%"></span></div>
+      </div>
+      <div class="plan-legs">
+        <div>بدأت: <b>15 / 8 / 2026</b></div>
+        <div>متوقع الانتهاء: <b>15 / 11 / 2026</b></div>
+        <div>الإجمالي: <b>2,500 ج.م</b></div>
+        <div>المدفوع: <b>1,250 ج.م</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="c-card" style="margin-top:14px">
+    <div class="c-head"><span class="badge">الجلسات</span><div class="sp"><h3>جدول الجلسات</h3><div class="sub">5 جلسات تمّت · 5 متبقية</div></div></div>
+    <div class="plan-sessions">
+      <div class="plan-session done">
+        <div class="n">1</div>
+        <div><div class="name">جلسة تقييم أولية</div><div class="meta">15 / 8 · <b>د. أحمد</b> · 45 دقيقة · تمّت</div></div>
+        <div class="st">تمّت</div>
+      </div>
+      <div class="plan-session done">
+        <div class="n">2</div>
+        <div><div class="name">علاج طبيعي · تمارين إطالة</div><div class="meta">22 / 8 · <b>د. أحمد</b> · 30 دقيقة</div></div>
+        <div class="st">تمّت</div>
+      </div>
+      <div class="plan-session done">
+        <div class="n">3</div>
+        <div><div class="name">علاج طبيعي · تقوية عضلية</div><div class="meta">29 / 8 · <b>د. أحمد</b> · 30 دقيقة</div></div>
+        <div class="st">تمّت</div>
+      </div>
+      <div class="plan-session done">
+        <div class="n">4</div>
+        <div><div class="name">متابعة تحسن · تعديل البرنامج</div><div class="meta">5 / 9 · <b>د. أحمد</b> · 30 دقيقة</div></div>
+        <div class="st">تمّت</div>
+      </div>
+      <div class="plan-session done">
+        <div class="n">5</div>
+        <div><div class="name">علاج طبيعي · تمارين اتزان</div><div class="meta">15 / 9 · <b>د. أحمد</b> · 30 دقيقة</div></div>
+        <div class="st">تمّت</div>
+      </div>
+      <div class="plan-session next">
+        <div class="n">6</div>
+        <div><div class="name">علاج طبيعي · تقوية متقدمة</div><div class="meta">النهارده · 4:30 م · 30 دقيقة</div></div>
+        <div class="st">التالية</div>
+      </div>
+      <div class="plan-session">
+        <div class="n">7</div>
+        <div><div class="name">علاج طبيعي · تمارين وظيفية</div><div class="meta">7 / 10 · <b>مقترح</b></div></div>
+        <div class="st plan">مقترحة</div>
+      </div>
+      <div class="plan-session">
+        <div class="n">8</div>
+        <div><div class="name">متابعة · تقييم منتصف الخطة</div><div class="meta">14 / 10 · <b>مقترح</b></div></div>
+        <div class="st plan">مقترحة</div>
+      </div>
+      <div class="plan-session">
+        <div class="n">9</div>
+        <div><div class="name">علاج طبيعي · محاكاة نشاط رياضي</div><div class="meta">28 / 10 · <b>مقترح</b></div></div>
+        <div class="st plan">مقترحة</div>
+      </div>
+      <div class="plan-session">
+        <div class="n">10</div>
+        <div><div class="name">إخلاء · تقييم نهائي</div><div class="meta">15 / 11 · <b>مقترح</b></div></div>
+        <div class="st plan">مقترحة</div>
+      </div>
+    </div>
+    <div class="split">
+      <button class="run">احجز الجلسة التالية</button>
+      <button class="pill">عدّل الخطة</button>
+      <button class="pill">أرسل تذكير للمريض</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 18: Patient Profile ═════════ -->
+<section class="screen" id="s18">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 18</span>
+    <span class="screen-title">ملف المريض</span>
+    <span class="screen-sub">التايم لاين الكامل · زيارات، وصفات، رسائل، فواتير · <b>مصدر الحقيقة</b> عن المريض</span>
+  </div>
+
+  <div class="c-card" style="padding:0;overflow:hidden">
+    <div class="pt-hero">
+      <div class="avatar">ك</div>
+      <div class="info">
+        <div class="name">كريم فتحي <span class="age">34 سنة · ذكر</span></div>
+        <div class="meta">
+          <span class="mono">0111 234 5678</span>
+          <span class="sep"></span>
+          <b>ملف #P-1042</b>
+          <span class="sep"></span>
+          <span>أول زيارة: 18 / 7 / 2026</span>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="pt-stat"><div class="k">زيارات</div><div class="v">5</div></div>
+        <div class="pt-stat plan"><div class="k">خطة</div><div class="v">جارية</div></div>
+        <div class="pt-stat balance"><div class="k">متبقي</div><div class="v">1,250</div></div>
+      </div>
+    </div>
+
+    <div class="pt-tabs">
+      <button class="pt-tab" aria-pressed="true">الكل <span class="b">28</span></button>
+      <button class="pt-tab" aria-pressed="false">زيارات <span class="b">5</span></button>
+      <button class="pt-tab" aria-pressed="false">وصفات <span class="b">4</span></button>
+      <button class="pt-tab" aria-pressed="false">رسائل <span class="b">7</span></button>
+      <button class="pt-tab" aria-pressed="false">مدفوعات <span class="b">8</span></button>
+      <button class="pt-tab" aria-pressed="false">ملاحظات <span class="b">4</span></button>
+    </div>
+
+    <div class="pt-timeline">
+      <div class="pt-day">
+        <div class="pt-day-h">النهارده · 30 سبتمبر 2026</div>
+        <div class="pt-event visit">
+          <div class="icn">ز</div>
+          <div class="body">
+            <div class="t">زيارة — التهاب وتر الرضفة</div>
+            <div class="d"><b>د. أحمد المصري</b> · <span class="dx">التهاب وتر الرضفة</span> · شكوى: ألم في الركبة اليمنى · وصف 3 أدوية</div>
+          </div>
+          <div class="time">4:15 م</div>
+        </div>
+        <div class="pt-event rx">
+          <div class="icn">Rx</div>
+          <div class="body">
+            <div class="t">وصفة طبية · 3 أدوية</div>
+            <div class="d"><b>Diclofenac</b>، <b>Paracetamol</b>، <b>Voltaren Gel</b> · مرتبطة بزيارة اليوم</div>
+          </div>
+          <div class="time">4:28 م</div>
+        </div>
+        <div class="pt-event msg">
+          <div class="icn">✉</div>
+          <div class="body">
+            <div class="t">رسالة تذكير · واتساب</div>
+            <div class="d">تذكير بالجلسة القادمة يوم 7 أكتوبر · اتسلّمت</div>
+          </div>
+          <div class="time">4:35 م</div>
+        </div>
+      </div>
+
+      <div class="pt-day">
+        <div class="pt-day-h">15 سبتمبر · قبل ١٥ يوم</div>
+        <div class="pt-event visit">
+          <div class="icn">ز</div>
+          <div class="body">
+            <div class="t">جلسة علاج طبيعي · 5 من 10</div>
+            <div class="d"><b>د. أحمد المصري</b> · تمارين اتزان · تحسن ملحوظ · جزء من خطة الرعاية</div>
+          </div>
+          <div class="time">4:00 م</div>
+        </div>
+        <div class="pt-event pay">
+          <div class="icn">₤</div>
+          <div class="body">
+            <div class="t">دفعة · 250 ج.م نقدي</div>
+            <div class="d">فاتورة INV-2026-0128 · <b>سارة حسن</b></div>
+          </div>
+          <div class="time">4:35 م</div>
+        </div>
+      </div>
+
+      <div class="pt-day">
+        <div class="pt-day-h">15 أغسطس · بداية خطة الرعاية</div>
+        <div class="pt-event visit">
+          <div class="icn">ز</div>
+          <div class="body">
+            <div class="t">زيارة أولية · التقييم</div>
+            <div class="d"><b>د. أحمد المصري</b> · <span class="dx">آلام أسفل الظهر</span> · بدء خطة رعاية 10 جلسات</div>
+          </div>
+          <div class="time">10:00 ص</div>
+        </div>
+        <div class="pt-event msg">
+          <div class="icn">✉</div>
+          <div class="body">
+            <div class="t">رسالة ترحيب · واتساب</div>
+            <div class="d">تفاصيل خطة الرعاية + جدول الجلسات المقترحة</div>
+          </div>
+          <div class="time">11:15 ص</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 19: Messages ═════════ -->
+<section class="screen" id="s19">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 19</span>
+    <span class="screen-title">مركز الرسائل</span>
+    <span class="screen-sub">قوالب جاهزة · تأكيد مواعيد، تذكيرات، متابعات · <b>واتساب أو SMS</b></span>
+  </div>
+
+  <div class="c-card" style="padding:0;overflow:hidden">
+    <div class="msg-layout">
+      <div class="msg-side">
+        <div class="msg-side-h">القوالب</div>
+        <div class="msg-tpl active">
+          <span class="icn">✓</span>
+          <div class="body">
+            <div class="n">تأكيد الحجز</div>
+            <div class="d">يُرسل تلقائياً عند الحجز</div>
+          </div>
+          <span class="badge auto">تلقائي</span>
+        </div>
+        <div class="msg-tpl">
+          <span class="icn">⏰</span>
+          <div class="body">
+            <div class="n">تذكير بالموعد</div>
+            <div class="d">قبل الموعد بيوم</div>
+          </div>
+          <span class="badge auto">تلقائي</span>
+        </div>
+        <div class="msg-tpl">
+          <span class="icn">♥</span>
+          <div class="body">
+            <div class="n">متابعة بعد الزيارة</div>
+            <div class="d">بعد الزيارة بيومين</div>
+          </div>
+          <span class="badge">اختياري</span>
+        </div>
+        <div class="msg-tpl">
+          <span class="icn">◔</span>
+          <div class="body">
+            <div class="n">تذكير جلسة خطة</div>
+            <div class="d">للمرضى في خطط رعاية</div>
+          </div>
+          <span class="badge auto">تلقائي</span>
+        </div>
+        <div class="msg-tpl">
+          <span class="icn">₤</span>
+          <div class="body">
+            <div class="n">تذكير برصيد متبقي</div>
+            <div class="d">بعد الفاتورة بأسبوع</div>
+          </div>
+          <span class="badge">اختياري</span>
+        </div>
+        <div class="msg-tpl">
+          <span class="icn">✎</span>
+          <div class="body">
+            <div class="n">رسالة مخصصة</div>
+            <div class="d">تُكتب يدوياً</div>
+          </div>
+          <span class="badge manual">يدوي</span>
+        </div>
+      </div>
+
+      <div class="msg-main">
+        <div class="msg-preview">
+          <div class="h">
+            <span class="t">معاينة: تأكيد الحجز</span>
+            <span class="ch">قابل للتعديل</span>
+          </div>
+          <div class="msg-body">
+مرحباً <span class="var">اسم المريض</span> ،<br>
+اتأكد حجزك في عيادة <span class="var">اسم العيادة</span> :<br>
+📅 <span class="var">التاريخ</span> · <span class="var">الوقت</span><br>
+👨‍⚕️ <span class="var">اسم الطبيب</span><br><br>
+لو محتاج تعدّل أو تلغي، اتصل: <span class="var">هاتف العيادة</span><br>
+شكراً لثقتك.
+          </div>
+        </div>
+
+        <div class="split" style="padding:0;margin-bottom:10px">
+          <div class="msg-ch-toggle">
+            <button aria-pressed="true"><span class="wa">●</span> واتساب</button>
+            <button aria-pressed="false">SMS</button>
+          </div>
+          <button class="run">حفظ التعديلات</button>
+        </div>
+
+        <div class="msg-sent">
+          <div class="msg-sent-h">آخر الرسائل المرسلة</div>
+          <div class="msg-item">
+            <span class="icn wa">wa</span>
+            <div>
+              <div class="to">كريم فتحي · 0111 234 5678</div>
+              <div class="snip">تذكير بجلسة العلاج الطبيعي يوم 7 أكتوبر…</div>
+            </div>
+            <span class="st">تسلمّت</span>
+          </div>
+          <div class="msg-item">
+            <span class="icn wa">wa</span>
+            <div>
+              <div class="to">ياسمين توفيق · 0100 987 6543</div>
+              <div class="snip">اتأكد حجزك يوم الأحد الساعة 11 ص…</div>
+            </div>
+            <span class="st">تسلمّت</span>
+          </div>
+          <div class="msg-item">
+            <span class="icn sms">sms</span>
+            <div>
+              <div class="to">عمر جمال · 0122 456 7890</div>
+              <div class="snip">تذكير بموعدك بكرا 10:30 ص…</div>
+            </div>
+            <span class="st pending">في الانتظار</span>
+          </div>
+          <div class="msg-item">
+            <span class="icn wa">wa</span>
+            <div>
+              <div class="to">هدى رجب · 0100 111 2233</div>
+              <div class="snip">شكراً لزيارتك · إزاي حالتك من امبارح؟</div>
+            </div>
+            <span class="st">تسلمّت</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- ROLE: OWNER (management, doctor wears both hats) -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="role-div">
+  <span class="name">دور المالك</span>
+  <span class="sep"></span>
+  <span class="count">3 شاشات · الطبيب نفسه بيلبس القبعتين في العيادة الفردية</span>
+</div>
+
+<!-- ═════════ Screen 12: Settings - Hours ═════════ -->
+<section class="screen" id="s12">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 12</span>
+    <span class="screen-title">الإعدادات — مواعيد العمل</span>
+    <span class="screen-sub">تغيير مدة الخانة <b>يعيد توليد شبكة اليوم</b></span>
+  </div>
+
+  <div class="c-card">
+    <div class="c-head"><span class="badge">الإعدادات</span><div class="sp"><h3>د. أحمد المصري</h3><div class="sub">مواعيد العمل الأسبوعية · فرع المعادي</div></div></div>
+    <div class="set-tabs">
+      <button class="set-tab" aria-pressed="true">مواعيد العمل</button>
+      <button class="set-tab" aria-pressed="false">الخدمات</button>
+      <button class="set-tab" aria-pressed="false">الموظفون</button>
+    </div>
+    <div class="set-body">
+      <div class="set-list">
+        <div class="set-row"><span class="day">الأحد</span><span class="hours">09:00 — 14:00</span><div style="display:flex;align-items:center;gap:6px"><span class="mode">مواعيد 30د</span><button class="edit">تعديل</button></div></div>
+        <div class="set-row"><span class="day">الاثنين</span><span class="hours">09:00 — 14:00</span><div style="display:flex;align-items:center;gap:6px"><span class="mode">مواعيد 30د</span><button class="edit">تعديل</button></div></div>
+        <div class="set-row"><span class="day">الثلاثاء</span><span class="hours">—</span><div style="display:flex;align-items:center;gap:6px"><span class="mode" style="color:var(--faint)">إجازة</span><button class="edit">تعديل</button></div></div>
+        <div class="set-row"><span class="day">الأربعاء</span><span class="hours">09:00 — 14:00</span><div style="display:flex;align-items:center;gap:6px"><span class="mode">مواعيد 30د</span><button class="edit">تعديل</button></div></div>
+        <div class="set-row"><span class="day">الخميس</span><span class="hours">17:00 — 21:00</span><div style="display:flex;align-items:center;gap:6px"><span class="mode">طابور · 20 مريض</span><button class="edit">تعديل</button></div></div>
+        <div class="set-row"><span class="day">الجمعة</span><span class="hours">—</span><div style="display:flex;align-items:center;gap:6px"><span class="mode" style="color:var(--faint)">إجازة</span><button class="edit">تعديل</button></div></div>
+        <div class="set-row"><span class="day">السبت</span><span class="hours">17:00 — 21:00</span><div style="display:flex;align-items:center;gap:6px"><span class="mode">مواعيد 30د</span><button class="edit">تعديل</button></div></div>
+      </div>
+    </div>
+    <div class="runrow"><button class="run">حفظ التغييرات</button><span class="count">آخر تعديل: <b>د. أحمد</b> · قبل يومين</span></div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 13: Settings - Services ═════════ -->
+<section class="screen" id="s13">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 13</span>
+    <span class="screen-title">الإعدادات — الخدمات</span>
+    <span class="screen-sub">إيقاف الخدمة يخفيها من الحجز بس <b>يفضل اسمها في الفواتير القديمة</b></span>
+  </div>
+
+  <div class="c-card">
+    <div class="c-head"><span class="badge">الإعدادات</span><div class="sp"><h3>خدمات العيادة</h3><div class="sub">4 خدمات نشطة · 1 موقوفة</div></div></div>
+    <div class="set-tabs">
+      <button class="set-tab" aria-pressed="false">مواعيد العمل</button>
+      <button class="set-tab" aria-pressed="true">الخدمات</button>
+      <button class="set-tab" aria-pressed="false">الموظفون</button>
+    </div>
+    <div class="set-body">
+      <div class="set-list">
+        <div class="set-row svc">
+          <span class="svc-name">كشف عام</span>
+          <span class="svc-dur">30 دقيقة</span>
+          <span class="svc-price">400<i>ج.م</i></span>
+          <span class="toggle"></span>
+          <button class="edit">تعديل</button>
+        </div>
+        <div class="set-row svc">
+          <span class="svc-name">استشارة متابعة</span>
+          <span class="svc-dur">20 دقيقة</span>
+          <span class="svc-price">250<i>ج.م</i></span>
+          <span class="toggle"></span>
+          <button class="edit">تعديل</button>
+        </div>
+        <div class="set-row svc">
+          <span class="svc-name">فحص شامل</span>
+          <span class="svc-dur">45 دقيقة</span>
+          <span class="svc-price">600<i>ج.م</i></span>
+          <span class="toggle"></span>
+          <button class="edit">تعديل</button>
+        </div>
+        <div class="set-row svc">
+          <span class="svc-name">حقنة علاجية</span>
+          <span class="svc-dur">10 دقيقة</span>
+          <span class="svc-price">100<i>ج.م</i></span>
+          <span class="toggle"></span>
+          <button class="edit">تعديل</button>
+        </div>
+        <div class="set-row svc" style="opacity:.6">
+          <span class="svc-name">تدليك علاجي <span style="font-size:10.5px;color:var(--faint);margin-inline-start:6px;font-weight:400">موقوفة</span></span>
+          <span class="svc-dur">30 دقيقة</span>
+          <span class="svc-price">350<i>ج.م</i></span>
+          <span class="toggle off"></span>
+          <button class="edit">تعديل</button>
+        </div>
+      </div>
+    </div>
+    <div class="runrow"><button class="run">＋ خدمة جديدة</button><span class="count"><b>4</b> نشطة · <b>1</b> موقوفة</span></div>
+  </div>
+</section>
+
+<!-- ═════════ Screen 14: Settings - Staff ═════════ -->
+<section class="screen" id="s14">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 14</span>
+    <span class="screen-title">الإعدادات — الموظفون</span>
+    <span class="screen-sub">تعديل رقم موظف <b>يحتاج تسجيل دخول جديد</b> منه المرة الجاية</span>
+  </div>
+
+  <div class="c-card">
+    <div class="c-head"><span class="badge">الإعدادات</span><div class="sp"><h3>الموظفون</h3><div class="sub">2 موظفين نشطين</div></div></div>
+    <div class="set-tabs">
+      <button class="set-tab" aria-pressed="false">مواعيد العمل</button>
+      <button class="set-tab" aria-pressed="false">الخدمات</button>
+      <button class="set-tab" aria-pressed="true">الموظفون</button>
+    </div>
+    <div class="set-body">
+      <div class="set-list">
+        <div class="set-row staff">
+          <span class="staff-name">د. أحمد المصري<span class="role">المالك · طبيب</span></span>
+          <span class="staff-pin">•••• 5678</span>
+          <span class="toggle"></span>
+          <button class="edit">تعديل</button>
+        </div>
+        <div class="set-row staff">
+          <span class="staff-name">سارة حسن<span class="role">المساعد</span></span>
+          <span class="staff-pin">•••• 1234</span>
+          <span class="toggle"></span>
+          <button class="edit">تعديل</button>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;padding:12px 14px;background:var(--copper-wash);border:1px dashed var(--copper-line);border-radius:10px;font-size:12px;color:var(--copper);display:flex;gap:8px;align-items:flex-start">
+        <span style="font-weight:700">ملاحظة:</span>
+        <span>مش قادر تخفّي المالك — العيادة لازم عندها مالك واحد شغّال على الأقل.</span>
+      </div>
+    </div>
+    <div class="runrow"><button class="run">＋ إضافة موظف</button><span class="count">حد أدنى: <b>1 مالك</b></span></div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- ROLE: INSTALL TEAM (one-time) -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="role-div">
+  <span class="name">وقت التركيب</span>
+  <span class="sep"></span>
+  <span class="count">شاشة واحدة · مرة واحدة</span>
+</div>
+
+<!-- ═════════ Screen 15: Device Install ═════════ -->
+<section class="screen" id="s15">
+  <div class="screen-head">
+    <span class="screen-num">شاشة 15</span>
+    <span class="screen-title">تسجيل دخول الجهاز</span>
+    <span class="screen-sub">مرة واحدة · <b>يوم التركيب فقط</b> · المساعد ما يشوفهاش</span>
+  </div>
+
+  <div class="install-scr">
+    <div class="install-hero">
+      <div class="logo">C</div>
+      <div class="t">Clintra</div>
+      <div class="s">تفعيل جهاز العيادة</div>
+    </div>
+    <div class="install-body">
+      <div class="field">
+        <label>كود العيادة</label>
+        <input class="in filled" value="CLT-4821" style="font-family:ui-monospace,SF Mono,Menlo,monospace;font-size:16px;letter-spacing:.05em;text-align:center" />
+        <span class="hint">من رسالة التفعيل اللي وصلتك</span>
+      </div>
+      <div class="field">
+        <label>رقم الموبايل</label>
+        <input class="in" value="0100 111 2233" style="font-family:ui-monospace,SF Mono,Menlo,monospace;font-size:15px;letter-spacing:.03em;text-align:center" />
+      </div>
+      <div class="field">
+        <label>كود التحقق</label>
+        <input class="in" placeholder="——————" style="text-align:center;letter-spacing:.5em;font-size:18px" />
+        <span class="hint">هيوصلك SMS على الرقم اللي فوق</span>
+      </div>
+    </div>
+    <div class="install-foot">
+      <button class="run" style="width:100%">فعّل الجهاز</button>
+      <div class="install-note">بعد التفعيل، هيتم تسجيل الجهاز على <b>عيادة د. أحمد المصري · فرع المعادي</b></div>
+    </div>
+  </div>
+</section>
+
+<div class="notes">
+  <h4>ملاحظات على الفيرجن 1</h4>
+  <ul>
+    <li><b>15 شاشة</b> مقسّمة على 4 أدوار: المساعد (8) · الطبيب (3) · المالك (3) · التركيب (1).</li>
+    <li>الطبيب = المالك في العيادة الفردية · نفس الشخص، حسابين مختلفين برقمين سريين مختلفين.</li>
+    <li>مفيش مبدّل فرع ولا مبدّل طبيب في الرأس — الشاشة أنضف لأن كل واحد <b>1</b>.</li>
+    <li>اللغة البصرية موحّدة: ترويسات داكنة، سلاب هيرو بشريط نحاسي-أخضر، بلاطات بشريط جانبي، صفوف كثيفة المعلومات.</li>
+    <li>الأخضر <code>#1D5B4A</code> هوية · النحاسي <code>#A8742A</code> للحظات النشطة (في الكشف · التالي · مستحق).</li>
+    <li>لما تكبر العيادة (فرع تاني أو طبيب تاني)، <b>مفيش شاشة تتغيّر</b> — المبدّلات بتظهر لوحدها.</li>
+  </ul>
+</div>
