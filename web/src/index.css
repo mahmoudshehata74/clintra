@@ -2,11 +2,51 @@
 
 @theme {
   --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
+  /* Removed in the font step, once headings move to IBM Plex Sans Arabic weights. */
   --font-display: "Readex Pro Variable", "IBM Plex Sans Arabic", sans-serif;
 
-  --color-ink: #16211d;
-  --color-paper: #fbfaf7;
+  /* v1 tokens — docs/reference/clintra-prototype.html :root (light). See docs/design-tokens.md. */
+  --color-paper: #eff3f1;
+  --color-paper-2: #f7faf8;
+  --color-card: #ffffff;
+  --color-field: #f6f9f7;
+  --color-ink: #0b211d;
+  --color-ink-2: #14332c;
+  --color-ink-3: #1a3e35;
+  --color-text: #0b211d;
+  --color-muted: #55665f;
+  --color-faint: #8a9b95;
+  --color-rule: #d9e0dd;
+  --color-hair: #e7ecea;
   --color-green: #1d5b4a;
+  --color-green-2: #2e7a63;
+  --color-green-wash: #e8f0ec;
+  --color-green-line: #bfdbd0;
+  --color-copper: #a8742a;
+  --color-copper-2: #c68a38;
+  --color-copper-wash: #f7efe2;
+  --color-copper-line: #e2cda6;
+  --color-danger: #a32a21;
+  --color-danger-wash: #f7e3e0;
+  --color-danger-line: #e4b9b4;
+  --color-warning: #96620b;
+  --color-warning-wash: #f7eeda;
+  --color-eligible: #186b4b;
+  --color-on-dark: #f2f7f5;
+  --color-on-dark-dim: #87a29a;
+
+  --radius-chip: 6px;
+  --radius-control: 9px;
+  --radius-card: 12px;
+  --radius-panel: 14px;
+  --radius-app: 16px;
+
+  --shadow-s: 0 1px 2px rgba(11, 33, 29, 0.05);
+  --shadow-m: 0 2px 4px rgba(11, 33, 29, 0.05), 0 12px 28px -18px rgba(11, 33, 29, 0.3);
+  --shadow-l: 0 24px 50px -30px rgba(11, 33, 29, 0.55);
+
+  /* Legacy tokens — still used by screens not yet restyled. Each is removed
+     in the commit that migrates its last usage. Do not use in new code. */
   --color-green-soft: #e8f0ec;
   --color-green-medium: #4c8571;
   --color-red: #b23a34;
@@ -17,15 +57,12 @@
   --color-purple-soft: #edebfb;
   --color-line: #e2e3dc;
   --color-line-soft: #edeee8;
-  --color-muted: #6e7370;
-
-  /* Brand tokens for logo surfaces only (wordmark/icon) — not part of the
-     app's own UI palette above, and not meant to retheme it. */
-  --color-brand-teal: #1a957d;
-  --color-brand-ink: #0e1814;
-
   --radius-el: 8px;
   --radius-frame: 12px;
+
+  /* Brand tokens for logo surfaces only (wordmark/icon). */
+  --color-brand-teal: #1a957d;
+  --color-brand-ink: #0e1814;
 }
 
 @layer utilities {

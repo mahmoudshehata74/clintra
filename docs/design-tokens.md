@@ -1,61 +1,66 @@
 # Clintra design tokens
 
-This is the single source of truth for colour, alongside `docs/schema.md`
-for data shape. Every token is declared once, in `web/src/index.css`'s
-`@theme` block, as a Tailwind CSS custom property (`--color-*`). No
-component should hardcode a hex value — see `docs/design-audit.md`'s
-verification list for the current, temporary exceptions still awaiting a
-per-screen rework.
+Every token is declared once, in `web/src/index.css`'s `@theme` block, and
+generates Tailwind utilities (`bg-*`, `text-*`, `border-*`, `rounded-*`,
+`shadow-*`). Values come from the `:root` block of
+`docs/reference/clintra-prototype.html`. No component hardcodes a hex value.
 
-## Strong colours
-
-Used for body text, borders, and primary/destructive button fills.
+## Surfaces and text
 
 | Token | Hex | Use |
 |---|---|---|
-| `--color-ink` | `#16211d` | Primary text colour. |
-| `--color-paper` | `#fbfaf7` | Page background. |
-| `--color-green` | `#1d5b4a` | Primary brand colour: primary buttons, positive/active state, links. |
-| `--color-red` | `#b23a34` | Destructive actions and negative/error state (cancel, void, validation errors). |
-| `--color-amber` | `#8a6a22` | Warning/attention state (delay, needs-review, pending difference). |
-| `--color-purple` | `#453fa0` | Secondary accent for tags unrelated to the green/red/amber status vocabulary (e.g. a price override, a specialty-form marker). |
-| `--color-green-medium` | `#4c8571` | Secondary green — a softer weight than `--color-green`. As text: meta/sub-text sitting on a `--color-green-soft` fill (e.g. an arrived row's time and status line). As a ring: the queue's "next in line" accent (`ring-green-medium`), a priority marker distinct from arrived's own fill. Never a background fill itself. |
-| `--color-line` | `#e2e3dc` | Borders and dividers. |
-| `--color-line-soft` | `#edeee8` | A lighter divider than `--color-line` for internal row separators (list rows, table cells, key-value rows), and the fill for a neutral/informational tag pill that isn't green/red/amber/purple-toned. |
-| `--color-muted` | `#6e7370` | Secondary/muted text. |
+| `paper` | `#EFF3F1` | Page background. |
+| `paper-2` | `#F7FAF8` | Content area inside the app frame; top of the page gradient. |
+| `card` | `#FFFFFF` | Cards, sheets, rows. |
+| `field` | `#F6F9F7` | Input fill, table header, footer strips. |
+| `ink` / `ink-2` / `ink-3` | `#0B211D` / `#14332C` / `#1A3E35` | Dark surfaces: app bar, card heads, hero slab, lock screen. |
+| `text` | `#0B211D` | Primary text. |
+| `muted` | `#55665F` | Secondary text, labels. |
+| `faint` | `#8A9B95` | Hints, timestamps, empty states. |
+| `rule` | `#D9E0DD` | Borders. |
+| `hair` | `#E7ECEA` | Row separators. |
+| `on-dark` / `on-dark-dim` | `#F2F7F5` / `#87A29A` | Text on `ink` surfaces. |
 
-## Soft fills
-
-Used as tinted backgrounds behind a status pill or a highlighted row —
-paired one-to-one with the strong colour whose text sits on top of them.
+## Brand and state
 
 | Token | Hex | Use |
 |---|---|---|
-| `--color-green-soft` | `#e8f0ec` | Background for a green-toned highlighted row or tag (e.g. the current/next item in a queue). |
-| `--color-red-soft` | `#faecea` | Background for a red-toned row or tag (e.g. a no-show/missed slot, a "needs attention" stat). |
-| `--color-amber-soft` | `#f6efdd` | Background for an amber-toned tag or row (e.g. a cash-close difference, a needs-review flag). |
-| `--color-purple-soft` | `#edebfb` | Background for a purple-toned tag (paired with `--color-purple`). |
+| `green` / `green-2` | `#1D5B4A` / `#2E7A63` | Identity: primary buttons, selected state, links. |
+| `green-wash` / `green-line` | `#E8F0EC` / `#BFDBD0` | Green-toned fill and border. |
+| `copper` / `copper-2` | `#A8742A` / `#C68A38` | Active moments: in the room, next, amount due, prescription. |
+| `copper-wash` / `copper-line` | `#F7EFE2` / `#E2CDA6` | Copper-toned fill and border. |
+| `eligible` | `#186B4B` | Done, arrived, paid, matched. |
+| `warning` / `warning-wash` | `#96620B` / `#F7EEDA` | Delay, partial payment, needs attention. |
+| `danger` / `danger-wash` / `danger-line` | `#A32A21` / `#F7E3E0` / `#E4B9B4` | No-show, cancel, destructive actions, errors. |
 
-## Provenance
+## Radius and shadow
 
-`--color-green`, `--color-green-soft`, `--color-red`, `--color-amber`,
-`--color-ink`, `--color-paper`, `--color-line` and `--color-muted` already
-matched the design reference's own values exactly before this document
-existed. `--color-amber-soft`, `--color-purple` and `--color-purple-soft`
-were added from the reference's `--ambs`, `--pur` and `--purs` values to
-close the gap `docs/design-audit.md` flagged. `--color-green-medium`,
-`--color-red-soft` and `--color-line-soft` were added in a full palette
-reconciliation pass against the reference's complete `:root` block
-(`clintra-screens.html`, lines 11–15), matching `--pm`, `--reds` and `--rs`
-respectively — each confirmed to be used more than once, across more than
-one real screen mockup, before being promoted to a token (the reconciliation
-also found `--card: #fff`, used exactly once and only in the reference
-tool's own outer screen-picker chrome rather than any actual per-screen
-mockup — deliberately not added as a token; revisit only if a future screen
-needs a card surface distinct from `--color-paper`).
+| Token | Value | Use |
+|---|---|---|
+| `rounded-chip` | 6px | Badges, small tags. |
+| `rounded-control` | 9px | Buttons, inputs, toggles. |
+| `rounded-card` | 12px | Inner cards, tiles, rows with a frame. |
+| `rounded-panel` | 14px | Cards, sheets, hero slab. |
+| `rounded-app` | 16px | The app frame. |
+| `shadow-s` | `0 1px 2px` | Cards and tiles at rest. |
+| `shadow-m` | two-layer | App frame, sticky bars. |
+| `shadow-l` | deep, soft | Sheets, print previews, hero slab. |
 
-Every reference `:root` colour has now been reconciled: no remaining hex
-disagreements between the reference and this theme. The reference's digit
-convention (Arabic-Indic) was deliberately not adopted — see
-`docs/design-audit.md`'s decision (a)1–4, now settled: this app uses
-Western digits everywhere, on purpose.
+## Typography
+
+IBM Plex Sans Arabic only, weights 300–700, for headings and body. All
+numbers render as Latin digits with `font-variant-numeric: tabular-nums`
+where they align in columns.
+
+## Legacy tokens
+
+`green-soft`, `green-medium`, `red`, `red-soft`, `amber`, `amber-soft`,
+`purple`, `purple-soft`, `line`, `line-soft`, and the radii `--radius-el`
+(8px) and `--radius-frame` (12px) belong to the pre-prototype system. They
+stay only while screens that use them are not yet restyled, and each is
+deleted in the commit that migrates its last usage.
+
+## Not yet enabled
+
+Dark mode. The prototype defines dark values; they are enabled in a separate
+step once every screen uses the tokens above, so light and dark never mix.
