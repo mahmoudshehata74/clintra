@@ -138,8 +138,9 @@
 
 @theme {
   --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
-  /* Removed in the font step, once headings move to IBM Plex Sans Arabic weights. */
-  --font-display: "Readex Pro Variable", "IBM Plex Sans Arabic", sans-serif;
+  /* Legacy alias: headings use the same family as body text. Removed once the
+     last `font-display` usage is migrated. */
+  --font-display: "IBM Plex Sans Arabic", system-ui, sans-serif;
 
   /* v1 tokens — docs/reference/clintra-prototype.html :root (light). See docs/design-tokens.md. */
   --color-paper: #eff3f1;
