@@ -88,6 +88,8 @@ test("deactivating a service hides it from the booking picker but keeps a comple
   // Complete كريم's visit (service استشارة متابعة) to produce an invoice.
   const karim = rowFor(page, PATIENTS.karim);
   await karim.locator("button").filter({ hasText: PATIENTS.karim }).click();
+  await expect(karim).toContainText(S.statusInRoom);
+
   await karim.locator("button").filter({ hasText: PATIENTS.karim }).click();
   await expect(page.getByText(S.completedToastMessage)).toBeVisible();
 
