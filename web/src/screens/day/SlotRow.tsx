@@ -22,6 +22,8 @@ interface SlotRowProps {
   isExtraAtTime?: boolean;
   /** Present only when a single tap on this row does something (see visitActions.ts). */
   onPrimaryAction?: () => void;
+  /** True while this row's visit is in its post-tap cooldown — see advanceCooldown.ts. Never affects the empty-slot "+" tile, which never advances a visit. */
+  disablePrimaryAction?: boolean;
   /** Present only when this row's visit is eligible for the overflow menu. */
   menu?: VisitMenuActions;
   /** Present only for a genuinely (or visually) empty slot when booking is currently possible. */
@@ -56,6 +58,7 @@ export default function SlotRow({
   service,
   isExtraAtTime = false,
   onPrimaryAction,
+  disablePrimaryAction = false,
   menu,
   onTapEmptySlot,
   actorLabel,
@@ -127,7 +130,12 @@ export default function SlotRow({
   return (
     <li className={containerClassName}>
       {isTappable ? (
-        <button type="button" onClick={handleClick} className="flex w-full flex-1 flex-col items-start gap-0.5 text-start">
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={onPrimaryAction ? disablePrimaryAction : undefined}
+          className="flex w-full flex-1 flex-col items-start gap-0.5 text-start"
+        >
           {occupiedContent}
         </button>
       ) : (

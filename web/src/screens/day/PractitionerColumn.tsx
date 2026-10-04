@@ -33,6 +33,8 @@ interface PractitionerColumnProps {
   actorLabelByVisitId: ReadonlyMap<string, string>;
   /** Which visits already have a visit_form_data row — see db/visitForm.ts. Drives the completed-row empty-form hint. */
   formDataVisitIds: ReadonlySet<string>;
+  /** Visit ids whose primary row button is in its post-tap cooldown — see advanceCooldown.ts. */
+  advancingVisitIds: ReadonlySet<string>;
   /** Present only when booking is currently possible — slots mode only. Tapping an empty slot opens the booking sheet pre-filled with that time. */
   onTapEmptySlot?: (time: ClockTime) => void;
   onAdvance: (visit: Visit, toStatus: VisitStatus) => void;
@@ -59,6 +61,7 @@ export default function PractitionerColumn({
   avgConsultMinutes,
   actorLabelByVisitId,
   formDataVisitIds,
+  advancingVisitIds,
   onTapEmptySlot,
   onAdvance,
   openMenuVisitId,
@@ -102,6 +105,7 @@ export default function PractitionerColumn({
         avgConsultMinutes={avgConsultMinutes}
         actorLabelByVisitId={actorLabelByVisitId}
         formDataVisitIds={formDataVisitIds}
+        advancingVisitIds={advancingVisitIds}
         onAdvance={onAdvance}
         openMenuVisitId={openMenuVisitId}
         onOpenMenu={onOpenMenu}
@@ -173,6 +177,7 @@ export default function PractitionerColumn({
               onPrimaryAction={
                 advanceTarget && visit ? () => onAdvance(visit, advanceTarget) : isCompleted ? openVisitForm : undefined
               }
+              disablePrimaryAction={visit ? advancingVisitIds.has(visit.id) : false}
               onOpenVisitForm={showVisitFormPill ? openVisitForm : undefined}
               showEmptyFormHint={isCompleted && visit ? !formDataVisitIds.has(visit.id) : false}
               onTapEmptySlot={
@@ -211,6 +216,8 @@ interface QueueColumnProps {
   avgConsultMinutes: number | null;
   actorLabelByVisitId: ReadonlyMap<string, string>;
   formDataVisitIds: ReadonlySet<string>;
+  /** Visit ids whose primary row button is in its post-tap cooldown — see advanceCooldown.ts. */
+  advancingVisitIds: ReadonlySet<string>;
   onAdvance: (visit: Visit, toStatus: VisitStatus) => void;
   openMenuVisitId: string | null;
   onOpenMenu: (visitId: string) => void;
@@ -235,6 +242,7 @@ function QueueColumn({
   avgConsultMinutes,
   actorLabelByVisitId,
   formDataVisitIds,
+  advancingVisitIds,
   onAdvance,
   openMenuVisitId,
   onOpenMenu,
@@ -307,6 +315,7 @@ function QueueColumn({
               expectedWaitLabel={expectedWaitLabel}
               actorLabel={actorLabelByVisitId.get(visit.id)}
               onPrimaryAction={advanceTarget ? () => onAdvance(visit, advanceTarget) : isCompleted ? openVisitForm : undefined}
+              disablePrimaryAction={advancingVisitIds.has(visit.id)}
               onOpenVisitForm={showVisitFormPill ? openVisitForm : undefined}
               showEmptyFormHint={isCompleted && !formDataVisitIds.has(visit.id)}
               menu={

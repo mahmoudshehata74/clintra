@@ -42,6 +42,14 @@ import {
 } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import { formatActorLabel } from "./actorLabel";
+import {
+  ADVANCE_COOLDOWN_MS,
+  beginCooldown,
+  EMPTY_COOLDOWN_STATE,
+  isCoolingDown,
+  settleCooldown,
+  type CooldownState,
+} from "./advanceCooldown";
 import AuditSheet from "./AuditSheet";
 import BookingSheet, { type BookingSheetMode } from "./BookingSheet";
 import CancelVisitSheet from "./CancelVisitSheet";
@@ -160,6 +168,10 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
   const [isCashCloseOpen, setIsCashCloseOpen] = useState(false);
   const [isDaySheetOpen, setIsDaySheetOpen] = useState(false);
   const [isAuditSheetOpen, setIsAuditSheetOpen] = useState(false);
+  // Per visit id: blocks a row's primary button for ADVANCE_COOLDOWN_MS after
+  // a status-advancing tap, so an accidental double-tap can't skip a status
+  // — see advanceCooldown.ts.
+  const [advanceCooldown, setAdvanceCooldown] = useState<CooldownState>(EMPTY_COOLDOWN_STATE);
   const actingMembership = useActingMembership();
   const isOwner = actingMembership?.role === Role.Owner;
 
@@ -373,6 +385,14 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
   }, [toastState]);
 
   async function handleAdvance(visit: Visit, toStatus: VisitStatus) {
+    const startedAt = Date.now();
+    setAdvanceCooldown((prev) => beginCooldown(prev, visit.id, startedAt));
+    // Forces a render at the cooldown window's end even if nothing else
+    // does — the advance below typically settles well before this fires.
+    window.setTimeout(() => {
+      setAdvanceCooldown((prev) => (prev[visit.id] ? { ...prev } : prev));
+    }, ADVANCE_COOLDOWN_MS);
+
     try {
       if (toStatus === VisitStatus.Arrived) {
         const auditLogId = await markVisitArrived(db, visit.id);
@@ -399,6 +419,8 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
       });
     } catch (error) {
       console.error(error);
+    } finally {
+      setAdvanceCooldown((prev) => settleCooldown(prev, visit.id));
     }
   }
 
@@ -679,6 +701,10 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
   const currentPractitionerVisits = dynamicData.visits.filter(
     (visit) => visit.practitioner_id === currentPractitionerId,
   );
+  const advanceCooldownNow = Date.now();
+  const advancingVisitIds = new Set(
+    Object.keys(advanceCooldown).filter((visitId) => isCoolingDown(advanceCooldown, visitId, advanceCooldownNow)),
+  );
   const activeServices = allServices.filter((service) => service.is_active);
   const defaultService = activeServices[0] ?? null;
 
@@ -808,6 +834,7 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
               avgConsultMinutes={dynamicData.dayStateByPractitionerId.get(practitioner.id)?.avg_consult_minutes ?? null}
               actorLabelByVisitId={dynamicData.actorLabelByVisitId}
               formDataVisitIds={dynamicData.formDataVisitIds}
+              advancingVisitIds={advancingVisitIds}
               onTapEmptySlot={
                 canBook && practitioner.id === currentPractitionerId ? handleTapEmptySlot : undefined
               }
