@@ -179,6 +179,8 @@ async function openFreshInvoice(page: Page) {
   await selectPractitioner(page, SLOTS_DR);
   const karim = rowFor(page, PATIENTS.karim);
   await karim.locator("button").filter({ hasText: PATIENTS.karim }).click();
+  await expect(karim).toContainText(S.statusInRoom);
+
   await karim.locator("button").filter({ hasText: PATIENTS.karim }).click();
   await expect(page.getByText(S.completedToastMessage)).toBeVisible();
   await karim.getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();

@@ -55,6 +55,8 @@ test("typing in a field and blurring saves it, showing the muted saved indicator
 test("completing a visit with an empty form succeeds and shows the muted hint", async ({ page }) => {
   const karim = rowFor(page, PATIENTS.karim);
   await karim.locator("button").filter({ hasText: PATIENTS.karim }).click(); // arrived -> in_room
+  await expect(karim).toContainText(S.statusInRoom);
+
   await karim.locator("button").filter({ hasText: PATIENTS.karim }).click(); // in_room -> completed, form untouched
   await expect(page.getByText(S.completedToastMessage)).toBeVisible();
 
@@ -82,7 +84,10 @@ test("completing a visit with a filled form does not show the hint", async ({ pa
 test("tapping a completed row opens the form for a late edit", async ({ page }) => {
   const karim = rowFor(page, PATIENTS.karim);
   await karim.locator("button").filter({ hasText: PATIENTS.karim }).click(); // arrived -> in_room
+  await expect(karim).toContainText(S.statusInRoom);
+
   await karim.locator("button").filter({ hasText: PATIENTS.karim }).click(); // in_room -> completed
+  await expect(page.getByText(S.completedToastMessage)).toBeVisible();
 
   // No advance action is left on a completed row, so tapping the row body
   // itself opens the form, same as the pill.
@@ -109,7 +114,10 @@ test("autosave creates then updates the same row, and the audit sheet shows the 
 
   const mona = rowFor(page, PATIENTS.mona);
   await mona.locator("button").filter({ hasText: PATIENTS.mona }).click(); // booked -> arrived
+  await expect(mona).toContainText(S.statusArrived);
+
   await mona.locator("button").filter({ hasText: PATIENTS.mona }).click(); // arrived -> in_room
+  await expect(mona).toContainText(S.statusInRoom);
 
   const dialog = await openVisitForm(page, PATIENTS.mona);
   const complaintField = dialog.getByPlaceholder(S.visitFormComplaintPlaceholder);
