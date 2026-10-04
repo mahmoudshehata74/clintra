@@ -88,6 +88,7 @@ test("tapping a completed row opens the form for a late edit", async ({ page }) 
 
   await karim.locator("button").filter({ hasText: PATIENTS.karim }).click(); // in_room -> completed
   await expect(page.getByText(S.completedToastMessage)).toBeVisible();
+  await expect(karim).toContainText(S.statusCompleted);
 
   // No advance action is left on a completed row, so tapping the row body
   // itself opens the form, same as the pill.
