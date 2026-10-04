@@ -27,6 +27,17 @@ test("the next-in-line accent sits on the earliest waiting row once nothing is i
   await expect(rowFor(page, PATIENTS.omar)).toContainText(S.queueNextBadge);
 });
 
+test("double-clicking a waiting row's primary button advances exactly one status, not two", async ({ page }) => {
+  // The seeded booked visit (هدى), waiting — see seed.ts's queueVisitPlan.
+  const hoda = rowFor(page, PATIENTS.hoda);
+  await expect(hoda).toContainText(S.statusBooked);
+
+  await hoda.locator("button").filter({ hasText: PATIENTS.hoda }).dblclick();
+  await expect(page.getByText(S.attendanceMarked)).toBeVisible();
+  await expect(hoda).toContainText(S.statusArrived);
+  await expect(page.getByText(S.inRoomToastMessage)).toHaveCount(0);
+});
+
 test("average consult minutes render in Western digits, and the expected-wait line is computed", async ({ page }) => {
   // The seed completes two consultations (10 and 12 min; median 11) and writes
   // avg_consult_minutes = 11, so the average shows immediately — in Western

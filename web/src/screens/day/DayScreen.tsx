@@ -45,8 +45,8 @@ import { formatActorLabel } from "./actorLabel";
 import {
   ADVANCE_COOLDOWN_MS,
   beginCooldown,
+  elapseCooldown,
   EMPTY_COOLDOWN_STATE,
-  isCoolingDown,
   settleCooldown,
   type CooldownState,
 } from "./advanceCooldown";
@@ -385,12 +385,9 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
   }, [toastState]);
 
   async function handleAdvance(visit: Visit, toStatus: VisitStatus) {
-    const startedAt = Date.now();
-    setAdvanceCooldown((prev) => beginCooldown(prev, visit.id, startedAt));
-    // Forces a render at the cooldown window's end even if nothing else
-    // does — the advance below typically settles well before this fires.
+    setAdvanceCooldown((prev) => beginCooldown(prev, visit.id));
     window.setTimeout(() => {
-      setAdvanceCooldown((prev) => (prev[visit.id] ? { ...prev } : prev));
+      setAdvanceCooldown((prev) => elapseCooldown(prev, visit.id));
     }, ADVANCE_COOLDOWN_MS);
 
     try {
@@ -701,10 +698,7 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
   const currentPractitionerVisits = dynamicData.visits.filter(
     (visit) => visit.practitioner_id === currentPractitionerId,
   );
-  const advanceCooldownNow = Date.now();
-  const advancingVisitIds = new Set(
-    Object.keys(advanceCooldown).filter((visitId) => isCoolingDown(advanceCooldown, visitId, advanceCooldownNow)),
-  );
+  const advancingVisitIds = new Set(Object.keys(advanceCooldown));
   const activeServices = allServices.filter((service) => service.is_active);
   const defaultService = activeServices[0] ?? null;
 

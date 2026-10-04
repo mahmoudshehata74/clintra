@@ -11,39 +11,51 @@
 export const ADVANCE_COOLDOWN_MS = 700;
 
 interface CooldownEntry {
-  startedAt: number;
   /** True once the advance's own write has resolved (success or failure). */
   settled: boolean;
+  /** True once ADVANCE_COOLDOWN_MS has elapsed since the tap — set by a timer, never compared against a clock at render time. */
+  windowElapsed: boolean;
 }
 
 export type CooldownState = Readonly<Record<string, CooldownEntry>>;
 
 export const EMPTY_COOLDOWN_STATE: CooldownState = {};
 
-/** Starts a visit's cooldown at the moment of its advancing tap. */
-export function beginCooldown(state: CooldownState, visitId: string, startedAt: number): CooldownState {
-  return { ...state, [visitId]: { startedAt, settled: false } };
+/** Starts (or restarts) a visit's cooldown at the moment of its advancing tap. */
+export function beginCooldown(state: CooldownState, visitId: string): CooldownState {
+  return { ...state, [visitId]: { settled: false, windowElapsed: false } };
 }
 
 /** Marks a visit's in-flight advance as settled. A no-op for an unknown visit id. */
 export function settleCooldown(state: CooldownState, visitId: string): CooldownState {
+  return resolveFlag(state, visitId, "settled");
+}
+
+/** Marks a visit's cooldown window as elapsed (called from the timer started alongside beginCooldown). A no-op for an unknown visit id. */
+export function elapseCooldown(state: CooldownState, visitId: string): CooldownState {
+  return resolveFlag(state, visitId, "windowElapsed");
+}
+
+// Sets the given flag on a visit's entry, unless the other flag is already
+// true — in that case both conditions are now met, so the entry is dropped
+// entirely rather than kept around fully resolved, which is what lets
+// isCoolingDown stay a plain membership check and keeps the map from
+// growing over the course of a day.
+function resolveFlag(state: CooldownState, visitId: string, flag: keyof CooldownEntry): CooldownState {
   const entry = state[visitId];
   if (!entry) {
     return state;
   }
-  return { ...state, [visitId]: { ...entry, settled: true } };
+  const otherFlag: keyof CooldownEntry = flag === "settled" ? "windowElapsed" : "settled";
+  if (entry[otherFlag]) {
+    const next = { ...state };
+    delete next[visitId];
+    return next;
+  }
+  return { ...state, [visitId]: { ...entry, [flag]: true } };
 }
 
-/**
- * True while this visit's row button should stay disabled: blocked until
- * ADVANCE_COOLDOWN_MS has passed since the tap AND the advance has settled,
- * whichever is later. A visit with no cooldown entry (never tapped, or long
- * since released) is never blocked.
- */
-export function isCoolingDown(state: CooldownState, visitId: string, now: number): boolean {
-  const entry = state[visitId];
-  if (!entry) {
-    return false;
-  }
-  return !entry.settled || now - entry.startedAt < ADVANCE_COOLDOWN_MS;
+/** True while this visit's row button should stay disabled: present in the state at all means at least one of settled/windowElapsed is still outstanding. */
+export function isCoolingDown(state: CooldownState, visitId: string): boolean {
+  return visitId in state;
 }
