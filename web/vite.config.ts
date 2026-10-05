@@ -21,7 +21,7 @@ export default defineConfig({
         display: "standalone",
         // --color-green and --color-paper from src/index.css.
         theme_color: "#1D5B4A",
-        background_color: "#FBFAF7",
+        background_color: "#EFF3F1",
         icons: [
           { src: "icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "icon-512.png", sizes: "512x512", type: "image/png" },

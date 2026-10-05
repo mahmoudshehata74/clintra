@@ -108,14 +108,13 @@ export default function App() {
 
   useIdleLock(!isLocked, IDLE_TIMEOUT_MS, clearActiveSession);
 
-  // Settings lives one level up from DayScreen now: AppShell's sidebar is
-  // what opens it (its "الإعدادات" item), and the sidebar needs to know
-  // whether it's the currently active section to apply the reference's
-  // .fn div.on treatment — both read this same flag, so it can't stay
-  // DayScreen's own local state the way it was before this task.
+  // Settings lives one level up from DayScreen now: AppShell's rail is what
+  // opens it (its "الإعدادات" item, shown only to an owner per
+  // navItemsFor), and the rail needs to know whether it's the currently
+  // active item to apply aria-current and the active look — both read this
+  // same flag, so it can't stay DayScreen's own local state.
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const actingMembership = useActingMembership();
-  const isOwner = actingMembership?.role === Role.Owner;
 
   if (bootStatus !== "ready") {
     // "checking" renders nothing rather than a spinner: it resolves from
@@ -147,10 +146,9 @@ export default function App() {
         </div>
       )}
       <AppShell
+        role={actingMembership?.role ?? Role.Assistant}
         activeItem={isSettingsOpen ? "settings" : "day"}
-        onSelectDay={() => setIsSettingsOpen(false)}
-        settingsEnabled={isOwner}
-        onSelectSettings={() => setIsSettingsOpen(true)}
+        onSelect={(key) => setIsSettingsOpen(key === "settings")}
       >
         <DayScreen isSettingsOpen={isSettingsOpen} onCloseSettings={() => setIsSettingsOpen(false)} />
       </AppShell>
