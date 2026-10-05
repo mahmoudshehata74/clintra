@@ -1,5 +1,16 @@
+import type { BadgeTone } from "../../components/ui/Badge";
 import { VisitStatus, type VisitStatus as VisitStatusType } from "../../domain/visitStatus";
 import { dayScreenStrings } from "./strings";
+
+// Mirrors Badge.tsx's own SoftBadgeVariant/SolidBadgeVariant/DashedBadgeVariant
+// (minus `shape`, which SlotRow always sets to "pill" itself) so `<Badge
+// {...visual.badge} shape="pill">` type-checks as a real Badge variant
+// rather than a loose {appearance, tone} pair Badge would reject at the type
+// level (e.g. a "dashed" appearance only ever accepts four of the six tones).
+type SlotBadgeProps =
+  | { appearance: "soft"; tone: Exclude<BadgeTone, "eligible"> }
+  | { appearance: "solid"; tone: BadgeTone }
+  | { appearance: "dashed"; tone: "green" | "copper" | "warning" | "danger" };
 
 /** Shared by SlotRow (slots mode) and QueueRow (queue mode) — the same seven statuses read the same way regardless of how a day is scheduled. */
 export const STATUS_LABEL: Record<string, string> = {
@@ -13,75 +24,101 @@ export const STATUS_LABEL: Record<string, string> = {
 };
 
 export interface StatusVisual {
-  /** Border/fill classes for the slot row container. */
-  containerClassName: string;
+  /** `.slot::before` — the row's 3px left accent. */
+  stripeClassName: string;
+  /** `.slot.in-room`/`.no-show`'s own subtle background wash; empty for every other status. */
+  rowBgClassName: string;
   /** Classes for the patient name text. */
   nameClassName: string;
-  /** Classes for everything else on the row: time, status word, service line, sub-lines, the "recorded by" byline. */
+  /** Classes for the time column's own text (not `.until`). */
+  timeClassName: string;
+  /** Classes for the `.until` sub-line under the time — copper for in_room, faint otherwise. */
+  untilClassName: string;
+  /** Classes for everything else on the row: service line, reopened-slot note, the "recorded by" byline. */
   metaClassName: string;
+  /** The `.state` pill's Badge props (shape is always "pill" — SlotRow's own concern). */
+  badge: SlotBadgeProps;
 }
 
 const WAITING = new Set<string>([VisitStatus.Booked, VisitStatus.Confirmed]);
 
 /**
- * One authoritative full-row visual treatment per status, matching the
- * design reference's filled-card model (clintra-screens.html screen 3's
- * .sl/.now/.her/.mis/.pst classes) rather than a left-edge accent stripe:
- * in_room is a solid green fill (.now) because it is the loudest signal on
- * the screen and must not read as a plain booking; arrived gets a lighter
- * green fill (.her) so it visibly stands out from a plain booking without
- * competing with in_room; a finished visit fades into a muted grey fill
- * (.pst) so it visibly settles into the past; a no-show fills red (.mis)
- * since the slot was expected to be used and was not; booked/confirmed gets
- * the reference's plain, unfilled card outline (.sl with no modifier) —
- * colour is reserved for exceptions and highlights, not for "waiting as
- * normal." Cancelled has no equivalent in the reference (its slots-grid
- * sample never shows a cancelled slot): the pre-existing dashed-border,
- * struck-through-name treatment is kept, generalised from a left-edge
- * stripe to a full border so it still reads as "removed" without being the
- * only state left using the old stripe language.
+ * One authoritative visual treatment per status, matching the prototype's
+ * `.slot` row (docs/reference/clintra-prototype.html #s2): a 3px left-edge
+ * accent stripe plus a coloured state pill carry each status's meaning,
+ * rather than filling the whole row — only in_room and no_show additionally
+ * get a very subtle background wash, reproducing `.slot.in-room`/`.no-show`'s
+ * own linear-gradient exactly. Cancelled has no equivalent in the reference's
+ * own slots-grid sample; the pre-existing dashed-border, struck-through-name
+ * treatment is kept, now expressed as a dashed stripe + dashed danger pill.
  */
 export function statusVisual(status: VisitStatusType): StatusVisual | null {
   if (WAITING.has(status)) {
     return {
-      containerClassName: "border border-line bg-paper",
+      stripeClassName: "before:bg-transparent",
+      rowBgClassName: "",
       nameClassName: "",
+      timeClassName: "",
+      untilClassName: "text-faint",
       metaClassName: "text-muted",
+      badge: { appearance: "soft", tone: "neutral" },
     };
   }
   if (status === VisitStatus.Arrived) {
     return {
-      containerClassName: "border border-green/20 bg-green-soft",
-      nameClassName: "font-semibold text-green",
-      metaClassName: "text-green-medium",
+      stripeClassName: "before:bg-eligible",
+      rowBgClassName: "",
+      nameClassName: "",
+      timeClassName: "",
+      untilClassName: "text-faint",
+      metaClassName: "text-muted",
+      badge: { appearance: "solid", tone: "eligible" },
     };
   }
   if (status === VisitStatus.InRoom) {
     return {
-      containerClassName: "border border-green bg-green",
-      nameClassName: "font-semibold text-paper",
-      metaClassName: "text-paper/80",
+      stripeClassName: "before:bg-copper",
+      rowBgClassName:
+        "bg-[linear-gradient(90deg,color-mix(in_srgb,var(--color-copper-wash)_65%,transparent)_0%,transparent_40%)]",
+      nameClassName: "text-copper",
+      timeClassName: "",
+      untilClassName: "font-semibold text-copper-2",
+      metaClassName: "text-muted",
+      badge: { appearance: "solid", tone: "copper" },
     };
   }
   if (status === VisitStatus.Completed) {
     return {
-      containerClassName: "border border-line bg-line-soft",
+      stripeClassName: "before:bg-rule",
+      rowBgClassName: "",
       nameClassName: "text-muted",
-      metaClassName: "text-muted",
+      timeClassName: "text-muted",
+      untilClassName: "text-faint",
+      metaClassName: "text-faint",
+      badge: { appearance: "soft", tone: "neutral" },
     };
   }
   if (status === VisitStatus.Cancelled) {
     return {
-      containerClassName: "border border-dashed border-red bg-paper",
-      nameClassName: "line-through",
-      metaClassName: "text-muted",
+      stripeClassName: "before:bg-faint before:opacity-40",
+      rowBgClassName: "",
+      nameClassName: "text-muted line-through decoration-faint",
+      timeClassName: "text-faint",
+      untilClassName: "text-faint",
+      metaClassName: "text-faint",
+      badge: { appearance: "dashed", tone: "danger" },
     };
   }
   if (status === VisitStatus.NoShow) {
     return {
-      containerClassName: "border border-red/20 bg-red-soft",
-      nameClassName: "text-red",
-      metaClassName: "text-red",
+      stripeClassName: "before:bg-danger",
+      rowBgClassName:
+        "bg-[linear-gradient(90deg,color-mix(in_srgb,var(--color-danger-wash)_55%,transparent)_0%,transparent_40%)]",
+      nameClassName: "text-danger",
+      timeClassName: "",
+      untilClassName: "text-faint",
+      metaClassName: "text-muted",
+      badge: { appearance: "solid", tone: "danger" },
     };
   }
   return null;

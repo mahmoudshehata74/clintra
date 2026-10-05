@@ -71,10 +71,10 @@ export default function VisitMenu({ actions }: VisitMenuProps) {
         <div
           ref={containerRef}
           role="menu"
-          className="absolute end-0 top-full z-10 mt-1 flex w-48 flex-col overflow-hidden rounded-[--radius-el] border border-line bg-paper shadow-lg"
+          className="absolute end-0 top-full z-10 mt-1 flex w-48 flex-col overflow-hidden rounded-panel border border-rule bg-card shadow-l"
         >
           {actions.onMove && (
-            <button type="button" role="menuitem" onClick={actions.onMove} className="p-3 text-start hover:bg-line/30">
+            <button type="button" role="menuitem" onClick={actions.onMove} className="p-3 text-start hover:bg-field">
               {dayScreenStrings.moveMenuLabel}
             </button>
           )}
@@ -83,7 +83,7 @@ export default function VisitMenu({ actions }: VisitMenuProps) {
               type="button"
               role="menuitem"
               onClick={actions.onSendToEnd}
-              className="p-3 text-start hover:bg-line/30"
+              className="p-3 text-start hover:bg-field"
             >
               {dayScreenStrings.sendToEndOfQueueMenuLabel}
             </button>
@@ -93,20 +93,20 @@ export default function VisitMenu({ actions }: VisitMenuProps) {
               type="button"
               role="menuitem"
               onClick={actions.onInvoice}
-              className="p-3 text-start hover:bg-line/30"
+              className="p-3 text-start hover:bg-field"
             >
               {dayScreenStrings.invoiceMenuLabel}
             </button>
           )}
           {(actions.onCancel || actions.onNoShow) && (actions.onMove || actions.onSendToEnd || actions.onInvoice) && (
-            <div className="border-t border-red/20" />
+            <div className="border-t border-danger-line" />
           )}
           {actions.onCancel && (
             <button
               type="button"
               role="menuitem"
               onClick={actions.onCancel}
-              className="bg-red-soft p-3 text-start text-red hover:bg-red-soft/60"
+              className="bg-danger-wash p-3 text-start text-danger hover:bg-danger-wash/60"
             >
               {dayScreenStrings.cancelMenuLabel}
             </button>
@@ -116,7 +116,7 @@ export default function VisitMenu({ actions }: VisitMenuProps) {
               type="button"
               role="menuitem"
               onClick={actions.onNoShow}
-              className="bg-red-soft p-3 text-start text-red hover:bg-red-soft/60"
+              className="bg-danger-wash p-3 text-start text-danger hover:bg-danger-wash/60"
             >
               {dayScreenStrings.noShowMenuLabel}
             </button>
