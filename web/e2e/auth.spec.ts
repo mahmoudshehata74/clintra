@@ -140,6 +140,51 @@ test("the idle timeout re-locks the app without a reload", async ({ page }) => {
   await expect(lockOverlay(page)).toBeVisible();
 });
 
+test("the PIN pad exposes exactly the keys 1-9, 0 and delete, by accessible name", async ({ page }) => {
+  await openLocked(page);
+  await pickAssistant(page);
+  const overlay = lockOverlay(page);
+
+  for (const digit of ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]) {
+    await expect(overlay.getByRole("button", { name: digit, exact: true })).toBeVisible();
+  }
+  await expect(overlay.getByRole("button", { name: AUTH.lockDeleteAria, exact: true })).toBeVisible();
+});
+
+test("the four dots fill as digits are entered", async ({ page }) => {
+  await openLocked(page);
+  await pickAssistant(page);
+  const overlay = lockOverlay(page);
+  const dots = overlay.locator("[data-filled]");
+
+  await expect(dots).toHaveCount(4);
+  await expect(overlay.locator('[data-filled="true"]')).toHaveCount(0);
+
+  await overlay.getByRole("button", { name: WRONG_PIN[0], exact: true }).click();
+  await expect(overlay.locator('[data-filled="true"]')).toHaveCount(1);
+
+  await overlay.getByRole("button", { name: WRONG_PIN[1], exact: true }).click();
+  await expect(overlay.locator('[data-filled="true"]')).toHaveCount(2);
+});
+
+test("the lockout message shows a Latin-digit countdown", async ({ page }) => {
+  await page.clock.install();
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  const overlay = lockOverlay(page);
+  await expect(overlay).toBeVisible();
+  await pickAssistant(page);
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await enterPin(page, WRONG_PIN);
+  }
+  const countdown = overlay.getByText(new RegExp(AUTH.lockLockedOutPrefix));
+  await expect(countdown).toBeVisible();
+  const countdownText = await countdown.innerText();
+  expect(countdownText).toMatch(/[0-9]/);
+  expect(countdownText).not.toMatch(/[٠-٩]/);
+});
+
 test("a half-open booking sheet is preserved under the lock and restored on unlock", async ({ page }) => {
   await gotoSeededDay(page);
   await selectPractitioner(page, SLOTS_DR);

@@ -1,14 +1,12 @@
 import type { ReactNode } from "react";
+import { navItemsFor, type NavItem } from "../domain/navigation";
+import type { Role } from "../domain/role";
 import { sidebarStrings } from "./strings";
 
-export type SidebarActiveItem = "day" | "settings";
-
 interface AppShellProps {
-  activeItem: SidebarActiveItem;
-  onSelectDay: () => void;
-  /** Owner-only, same gate the day screen's own settings entry always used. */
-  settingsEnabled: boolean;
-  onSelectSettings: () => void;
+  role: Role;
+  activeItem: NavItem["key"];
+  onSelect: (key: NavItem["key"]) => void;
   children: ReactNode;
 }
 
@@ -29,183 +27,93 @@ function SidebarIcon({ path }: { path: ReactNode }) {
   );
 }
 
-// Small hand-drawn line icons — no icon package added for six glyphs.
-const TODAY_ICON = (
-  <>
-    <rect x="3" y="4" width="18" height="17" rx="2" />
-    <line x1="3" y1="9" x2="21" y2="9" />
-    <line x1="7" y1="2" x2="7" y2="6" />
-    <line x1="17" y1="2" x2="17" y2="6" />
-  </>
-);
-const PATIENTS_ICON = (
-  <>
-    <circle cx="12" cy="8" r="4" />
-    <path d="M4 21c0-4 4-7 8-7s8 3 8 7" />
-  </>
-);
-const QUEUE_ICON = (
-  <>
-    <line x1="9" y1="6" x2="20" y2="6" />
-    <line x1="9" y1="12" x2="20" y2="12" />
-    <line x1="9" y1="18" x2="20" y2="18" />
-    <circle cx="4.5" cy="6" r="1.4" />
-    <circle cx="4.5" cy="12" r="1.4" />
-    <circle cx="4.5" cy="18" r="1.4" />
-  </>
-);
-const INVOICES_ICON = (
-  <>
-    <path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2z" />
-    <line x1="9" y1="7" x2="15" y2="7" />
-    <line x1="9" y1="11" x2="15" y2="11" />
-  </>
-);
-const REPORTS_ICON = (
-  <>
-    <line x1="5" y1="20" x2="5" y2="12" />
-    <line x1="12" y1="20" x2="12" y2="6" />
-    <line x1="19" y1="20" x2="19" y2="15" />
-  </>
-);
-const SETTINGS_ICON = (
-  <>
-    <line x1="4" y1="6" x2="20" y2="6" />
-    <circle cx="9" cy="6" r="2" />
-    <line x1="4" y1="12" x2="20" y2="12" />
-    <circle cx="15" cy="12" r="2" />
-    <line x1="4" y1="18" x2="20" y2="18" />
-    <circle cx="9" cy="18" r="2" />
-  </>
-);
+const ICON_PATHS: Record<NavItem["key"], ReactNode> = {
+  day: (
+    <>
+      <rect x="3" y="4" width="18" height="17" rx="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="7" y1="2" x2="7" y2="6" />
+      <line x1="17" y1="2" x2="17" y2="6" />
+    </>
+  ),
+  settings: (
+    <>
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <circle cx="9" cy="6" r="2" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <circle cx="15" cy="12" r="2" />
+      <line x1="4" y1="18" x2="20" y2="18" />
+      <circle cx="9" cy="18" r="2" />
+    </>
+  ),
+};
 
-interface SidebarItemConfig {
-  key: "day" | "patients" | "queue" | "invoices" | "reports" | "settings";
-  label: string;
-  icon: ReactNode;
-}
+// An un-pressed item (`.tb-nav button`'s own look: transparent, on-dark-dim,
+// hover lightens). The active look (lighter fill + a copper marker) is not
+// in the prototype's own `.tb-nav` rule — it never draws a pressed state —
+// so it's designed here: a copper edge on the side that reads as "forward"
+// in each layout (the bottom edge of a bottom-bar pill, the leading edge of
+// a rail row), reserved as a transparent border at rest so taking the
+// active state never shifts the row's size.
+const ITEM_BASE =
+  "flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-chip border-b-2 border-transparent px-2 py-1.5 text-center text-[11px] font-medium text-on-dark-dim transition-colors duration-150 " +
+  "hover:bg-white/[0.10] hover:text-on-dark " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink " +
+  "sm:w-full sm:flex-none sm:flex-row sm:justify-start sm:gap-2 sm:border-b-0 sm:border-s-2 sm:px-3 sm:py-2 sm:text-sm";
 
-// Fixed order from clintra-screens.html's NAV array: اليوم · المرضى ·
-// الطابور · الفواتير · التقارير · الإعدادات.
-const SIDEBAR_ITEMS: readonly SidebarItemConfig[] = [
-  { key: "day", label: sidebarStrings.navDay, icon: TODAY_ICON },
-  { key: "patients", label: sidebarStrings.navPatients, icon: PATIENTS_ICON },
-  { key: "queue", label: sidebarStrings.navQueue, icon: QUEUE_ICON },
-  { key: "invoices", label: sidebarStrings.navInvoices, icon: INVOICES_ICON },
-  { key: "reports", label: sidebarStrings.navReports, icon: REPORTS_ICON },
-  { key: "settings", label: sidebarStrings.navSettings, icon: SETTINGS_ICON },
-];
-
-// Permanently disabled regardless of role — a later task each, per the owner
-// decision. "settings" is handled separately below: it is live for an owner,
-// not "coming soon" for anyone else.
-const COMING_SOON_KEYS = new Set<SidebarItemConfig["key"]>(["patients", "queue", "invoices", "reports"]);
-
-/** The reference's .fn div.on treatment: pine text, medium weight, light-green fill. */
-function activeItemClassName(isActive: boolean): string {
-  return isActive
-    ? "flex flex-col items-center gap-0.5 rounded-[--radius-el] bg-green-soft px-2 py-1.5 text-center text-green sm:flex-row sm:justify-start sm:gap-2 sm:px-3 sm:py-2"
-    : "flex flex-col items-center gap-0.5 rounded-[--radius-el] px-2 py-1.5 text-center text-muted hover:bg-line-soft hover:text-ink sm:flex-row sm:justify-start sm:gap-2 sm:px-3 sm:py-2";
-}
+const ITEM_ACTIVE = "border-copper bg-white/[0.14] text-on-dark";
 
 /**
- * The app-wide navigation shell — clintra-screens.html's shared sidebar
- * (`.fn`/`.fn div`/`.fn div.on` inside its `shell()` mockup helper, reused
- * across every screen 1-19 mockup via the NAV array) made persistent and
- * real. That file is itself a two-level tool: an outer `aside`/`.brand`
- * used only to browse between mockups, and this inner `.fn` list
- * representing the actual app's own sidebar (which the mockup never gives a
- * brand of its own, since the outer browsing chrome already has one). Our
- * app has only one level of chrome, so the brand + its `.brand .n` styling
- * (Readex Pro, "tra" in pine) moves here, as the owner decided, rather than
- * living in the day screen's own header.
+ * The app-wide navigation rail, in the prototype's own dark-chrome language:
+ * the ink-gradient surface and copper accent edge `.topbar` uses, the brand
+ * block `.appbar .brand`/`.brand .logo`/`.brand-t` draws, and each item
+ * styled after `.tb-nav button` (adapted from that control's own horizontal
+ * segmented layout to this rail's vertical one — the prototype never shows
+ * a sidebar at all; "navigation is a role-dependent sidebar" is a settled
+ * deviation from it, per docs/design-rule.md).
  *
- * Six items in the reference's fixed order; only "اليوم" and "الإعدادات"
- * open a real screen today. The rest render disabled with a muted "جاي
- * قريب" note instead of being hidden, so the eventual shape of the app is
- * visible from day one (see docs/schema.md's "future seams built empty now"
- * principle — the same idea applied to navigation, not just data). Settings
- * is a third, narrower case: live for an owner, otherwise structurally
- * absent (not merely disabled) — the exact access rule the day screen's own
- * settings entry always enforced, preserved here rather than changed.
+ * Items come from navItemsFor(role) — today "day" (every role) and
+ * "settings" (owner only, the same gate the day screen's own settings entry
+ * always used). Rendering is generic over whatever that returns, so a later
+ * task that appends an item needs no change here, only an icon entry above.
  *
- * Below 640px the rail becomes a fixed bottom bar rather than a side rail.
- * The reference's own outer shell collapses its aside into a full-width
- * horizontal strip below 900px
- * (`@media(max-width:900px){aside{position:static;...;border-bottom:1px solid var(--rule)}}`);
- * a fixed bottom bar is that same idea taken one step further, appropriate
- * here because this rail carries live navigation, not just a browsing aid.
- * Every item keeps the same icon+label(+hint) content at every width —
- * only the container's own flex direction and sizing change — so nothing
- * this shell needs to expose to a script (the "جاي قريب" hint, in
- * particular) is ever hidden by width alone.
+ * Below the `sm` breakpoint the rail becomes a fixed bottom bar instead of a
+ * side rail — same breakpoint and the same z-20 Sheet.tsx reserves this
+ * bar's height for (the two never geometrically overlap below `sm:`, and
+ * both sit above the day screen's own floating actions at z-10 and below
+ * LockScreen's z-50, which must always win regardless of width).
  */
-export default function AppShell({ activeItem, onSelectDay, settingsEnabled, onSelectSettings, children }: AppShellProps) {
-  function renderItem(item: SidebarItemConfig) {
-    if (item.key === "day") {
-      const isActive = activeItem === "day";
-      return (
-        <button
-          key={item.key}
-          type="button"
-          onClick={onSelectDay}
-          aria-current={isActive ? "page" : undefined}
-          className={activeItemClassName(isActive)}
-        >
-          <SidebarIcon path={item.icon} />
-          <span className="text-[11px] sm:text-sm">{item.label}</span>
-        </button>
-      );
-    }
-
-    if (item.key === "settings" && settingsEnabled) {
-      const isActive = activeItem === "settings";
-      return (
-        <button
-          key={item.key}
-          type="button"
-          onClick={onSelectSettings}
-          aria-current={isActive ? "page" : undefined}
-          className={activeItemClassName(isActive)}
-        >
-          <SidebarIcon path={item.icon} />
-          <span className="text-[11px] sm:text-sm">{item.label}</span>
-        </button>
-      );
-    }
-
-    // Not a <button> at all, deliberately: the four not-yet-built sections
-    // are visible-but-inert, and settings for a non-owner stays exactly as
-    // absent from the accessibility tree as it always was — a script asking
-    // "is there a settings button" gets the same answer as before this task.
-    return (
-      <div key={item.key} className="flex flex-col items-center gap-0.5 px-2 py-1.5 text-center opacity-40 sm:items-start sm:px-3 sm:py-2">
-        <span className="flex flex-col items-center gap-0.5 sm:flex-row sm:gap-2">
-          <SidebarIcon path={item.icon} />
-          <span className="text-[11px] sm:text-sm">{item.label}</span>
-        </span>
-        {COMING_SOON_KEYS.has(item.key) && <span className="text-[9px] text-muted sm:text-xs">{sidebarStrings.comingSoonHint}</span>}
-      </div>
-    );
-  }
+export default function AppShell({ role, activeItem, onSelect, children }: AppShellProps) {
+  const items = navItemsFor(role);
 
   return (
     <div className="flex min-h-screen flex-col-reverse sm:flex-row">
       <nav
         aria-label={sidebarStrings.navAriaLabel}
-        // z-20, matching Sheet.tsx: the two never geometrically overlap
-        // (Sheet reserves this bar's height at the bottom below sm: — see
-        // Sheet.tsx), so their relative stacking order no longer matters,
-        // but both sit above the day screen's own floating action buttons
-        // (z-10) and below LockScreen's z-50, which must always win.
-        className="fixed inset-x-0 bottom-0 z-20 flex items-stretch justify-around border-t border-line bg-paper px-1 py-1 sm:static sm:h-screen sm:w-56 sm:flex-col sm:items-stretch sm:justify-start sm:gap-1 sm:border-e sm:border-t-0 sm:p-3"
+        className="fixed inset-x-0 bottom-0 z-20 flex items-stretch gap-1 border-t-2 border-copper bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-2 py-1.5 shadow-m sm:static sm:h-screen sm:w-56 sm:flex-col sm:items-stretch sm:gap-1 sm:border-e-2 sm:border-t-0 sm:p-3"
       >
-        <div className="hidden sm:mb-3 sm:block">
-          <p className="font-display text-xl font-semibold">
-            Clin<span className="text-green">tra</span>
-          </p>
+        <div className="hidden items-center gap-[10px] px-1 pb-4 sm:flex">
+          <div className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-[linear-gradient(135deg,var(--color-green-2)_0%,var(--color-green)_100%)] text-sm font-bold text-white shadow-[0_2px_8px_rgba(0,0,0,.35)]">
+            C
+          </div>
+          <p className="text-base font-semibold leading-[1.15] tracking-[-0.01em] text-on-dark">Clintra</p>
         </div>
-        {SIDEBAR_ITEMS.map(renderItem)}
+
+        {items.map((item) => {
+          const isActive = item.key === activeItem;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => onSelect(item.key)}
+              aria-current={isActive ? "page" : undefined}
+              className={`${ITEM_BASE} ${isActive ? ITEM_ACTIVE : ""}`}
+            >
+              <SidebarIcon path={ICON_PATHS[item.key]} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
       </nav>
       <div className="min-w-0 flex-1 pb-16 sm:pb-0">{children}</div>
     </div>

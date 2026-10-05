@@ -46,23 +46,26 @@ test("the active sidebar item reflects whether settings is open", async ({ page 
   await expect(dayItem).toHaveAttribute("aria-current", "page");
 });
 
-test("only اليوم and الإعدادات are tappable; the other four show the جاي قريب hint and do not navigate", async ({ page }) => {
+test("the four placeholder sections are gone; only اليوم and الإعدادات exist", async ({ page }) => {
   const nav = sidebar(page);
   await expect(nav.getByRole("button", { name: SIDEBAR.navDay, exact: true })).toBeVisible();
   await expect(nav.getByRole("button", { name: SIDEBAR.navSettings, exact: true })).toBeVisible();
 
-  const disabledLabels = [SIDEBAR.navPatients, SIDEBAR.navQueue, SIDEBAR.navInvoices, SIDEBAR.navReports];
-  for (const label of disabledLabels) {
-    // Present as text, but not as a button — nothing to tap, nothing to navigate to.
-    await expect(nav.getByRole("button", { name: label, exact: true })).toHaveCount(0);
-    await expect(nav.getByText(label, { exact: true })).toBeVisible();
+  // Removed from the nav model entirely — not disabled, not present as text.
+  for (const label of ["المرضى", "الطابور", "الفواتير", "التقارير"]) {
+    await expect(nav.getByText(label, { exact: true })).toHaveCount(0);
   }
-  await expect(nav.getByText(SIDEBAR.comingSoonHint)).toHaveCount(disabledLabels.length);
+  await expect(nav.getByText("جاي قريب")).toHaveCount(0);
+});
 
-  // Clicking where a disabled item sits does nothing observable: still on
-  // the day view, no dialog opened.
-  await nav.getByText(SIDEBAR.navQueue, { exact: true }).click({ force: true });
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+test("an assistant sees no settings item", async ({ page }) => {
+  await gotoSeededDay(page); // assistant by default
+  await selectPractitioner(page, SLOTS_DR);
+  await expect(rowFor(page, PATIENTS.mona)).toContainText(S.statusBooked);
+
+  const nav = sidebar(page);
+  await expect(nav.getByRole("button", { name: SIDEBAR.navDay, exact: true })).toBeVisible();
+  await expect(nav.getByRole("button", { name: SIDEBAR.navSettings, exact: true })).toHaveCount(0);
 });
 
 test("the day grid renders as a 3-column layout: the first three slots share one row", async ({ page }) => {
