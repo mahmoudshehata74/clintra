@@ -16,6 +16,7 @@ import {
   SLOTS_DR,
   QUEUE_DR,
 } from "./support";
+import { galleryStrings } from "../src/gallery/strings";
 
 // Opt-in visual-review capture. Every test here is tagged @screenshot, so the
 // default interaction run (pnpm test:e2e uses --grep-invert @screenshot) and CI
@@ -256,6 +257,16 @@ test("@screenshot audit-sheet", async ({ page }) => {
   await page.getByRole("button", { name: S.auditButtonLabel, exact: true }).click();
   await expect(page.getByRole("dialog").getByText(S.auditSheetTitle)).toBeVisible();
   await shoot(page, "audit-sheet", false);
+});
+
+test("@screenshot gallery-buttons", async ({ page }) => {
+  // Re-navigate: the gallery replaces the app outright (main.tsx), so it
+  // never goes through beforeEach's seeded/logged-in day screen. It's also
+  // a lazy-loaded chunk (main.tsx), so the shot has to wait for it rather
+  // than firing immediately after goto.
+  await page.goto("/?gallery=1");
+  await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
+  await shoot(page, "gallery-buttons", true);
 });
 
 test("@screenshot day-sheet-print", async ({ page }) => {
