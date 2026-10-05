@@ -7,6 +7,44 @@ export const galleryStrings = {
   pageTitle: "مكونات Clintra",
   buttonsSectionTitle: "الأزرار",
   clickCounterLabel: "عدد الضغطات",
+  fieldsSectionTitle: "الحقول",
+} as const;
+
+// Labels, values and hints are the prototype's own field text
+// (docs/reference/clintra-prototype.html), per source: screen 4's search
+// field (`.field` around `.in filled` value "كريم"), screen 6's amount and
+// note fields, the visit form's chief-complaint textarea, and screen 15's
+// activation-code field. The error demo's label and message are an
+// addition — Field's doc comment explains why. See FieldSection.tsx for how
+// each is composed.
+export const fieldGalleryStrings = {
+  searchLabel: "ابحث بالاسم أو التليفون",
+  searchFilledValue: "كريم",
+  emptyHeading: "فاضي",
+  focusedHeading: "بالتركيز",
+  // Focus isn't forced here (autoFocus would scroll the whole gallery page
+  // to this field on load) — this caption just points at the real
+  // `:focus` style already on the control, triggered by tabbing to it.
+  focusedCaption: "انتقل إليه بمفتاح Tab لرؤية شكل التركيز الحقيقي",
+  filledHeading: "معبّى",
+  complaintLabel: "الشكوى الرئيسية",
+  complaintValue: "ألم مستمر في الركبة اليمنى من 5 أيام، يزيد مع الحركة، لا يوجد تورم واضح.",
+  complaintHint: "اتحفظ · قبل ثانيتين",
+  complaintHeading: "متعدد الأسطر",
+  phoneLabel: "رقم الموبايل",
+  phoneValue: "0100",
+  phoneError: "رقم الموبايل غير صحيح",
+  errorHeading: "خطأ",
+  noteLabel: "ملاحظة (اختيارية)",
+  notePlaceholder: "مثلًا: باقي المبلغ الأسبوع الجاي",
+  disabledHeading: "معطّل",
+  codeLabel: "كود العيادة",
+  codeValue: "CLT-4821",
+  codeHeading: "كود مُفعّل",
+  amountLabel: "المبلغ",
+  amountValue: "200",
+  amountHint: "اكتب رقم أقل عشان دفعة جزئية تانية",
+  amountHeading: "مبلغ",
 } as const;
 
 export interface SmCapableButtonDemo {

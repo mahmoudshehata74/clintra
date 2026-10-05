@@ -1,4 +1,5 @@
 import ButtonsSection from "./sections/ButtonsSection";
+import FieldSection from "./sections/FieldSection";
 import { galleryStrings } from "./strings";
 
 /**
@@ -15,6 +16,7 @@ export default function Gallery() {
       <div className="mx-auto flex max-w-3xl flex-col gap-10">
         <h1 className="text-2xl font-bold text-text">{galleryStrings.pageTitle}</h1>
         <ButtonsSection />
+        <FieldSection />
       </div>
     </div>
   );

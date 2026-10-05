@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   DARK_SURFACE_MD_ONLY_BUTTON_DEMOS,
   DARK_SURFACE_SM_BUTTON_DEMOS,
+  fieldGalleryStrings,
   galleryStrings,
   LIGHT_SURFACE_MD_ONLY_BUTTON_DEMOS,
   LIGHT_SURFACE_SM_BUTTON_DEMOS,
@@ -75,4 +76,29 @@ test("an outline button's touch target reaches 40px even though its box is short
     { x, y, handle },
   );
   expect(hitTargetIsTheButton).toBe(true);
+});
+
+test("a field's label is associated with its control", async ({ page }) => {
+  const filledSearch = page.getByLabel(fieldGalleryStrings.searchLabel).nth(2);
+  await expect(filledSearch).toHaveValue(fieldGalleryStrings.searchFilledValue);
+});
+
+test("typing into an empty field switches it to filled styling", async ({ page }) => {
+  // font-bold is unique to the filled look (`.field .in.filled`'s own
+  // font-weight:700) — unlike border-green, it never appears as a
+  // focus:/aria-invalid: prefixed variant elsewhere in the base classes.
+  const input = page.getByLabel(fieldGalleryStrings.searchLabel).first();
+  await expect(input).not.toHaveClass(/\bfont-bold\b/);
+  await input.fill(fieldGalleryStrings.searchFilledValue);
+  await expect(input).toHaveClass(/\bfont-bold\b/);
+});
+
+test("an invalid field exposes aria-invalid and its error message", async ({ page }) => {
+  const input = page.getByLabel(fieldGalleryStrings.phoneLabel);
+  await expect(input).toHaveAttribute("aria-invalid", "true");
+  const describedById = await input.getAttribute("aria-describedby");
+  if (!describedById) {
+    throw new Error("expected the invalid field to have aria-describedby set");
+  }
+  await expect(page.locator(`#${describedById}`)).toHaveText(fieldGalleryStrings.phoneError);
 });
