@@ -13,3 +13,9 @@ export const sidebarStrings = {
   navDay: "اليوم",
   navSettings: "الإعدادات",
 } as const;
+
+// The app bar AppShell.tsx renders above every screen (prototype's
+// `.appbar`). The screen itself only ever supplies the title text.
+export const appBarStrings = {
+  brandName: "Clintra",
+} as const;

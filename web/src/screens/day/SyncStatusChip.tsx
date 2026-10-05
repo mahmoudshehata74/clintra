@@ -11,18 +11,19 @@ import { dayScreenStrings } from "./strings";
 
 type ChipState = "online" | "local" | "server_unreachable" | "needs_review";
 
-// Matches the design reference's .tg tag-pill language: a filled soft
-// background rather than an outline, one colour per meaning — green for
-// "everything is fine" (.tg.a), red for "needs attention" (.tg.b), neutral
-// grey otherwise (.tg.e).
+// Restyled for the dark app bar it now lives in (AppShell.tsx) — a soft
+// `.app-btn`-sized chip whose border/fill tint carries the meaning (green for
+// "everything is fine", danger for "needs attention", plain on-dark otherwise)
+// while the text itself stays on-dark for contrast against the ink gradient.
+const CHIP_BASE = "rounded-control border px-[11px] py-[5px] text-[11.5px] font-medium text-on-dark";
 function chipClassName(state: ChipState): string {
   if (state === "needs_review") {
-    return "rounded-[5px] bg-red-soft px-2 py-0.5 text-xs text-red";
+    return `${CHIP_BASE} border-danger-line bg-[color-mix(in_srgb,var(--color-danger)_26%,transparent)]`;
   }
   if (state === "online") {
-    return "rounded-[5px] bg-green-soft px-2 py-0.5 text-xs text-green";
+    return `${CHIP_BASE} border-green-line bg-[color-mix(in_srgb,var(--color-green)_20%,transparent)]`;
   }
-  return "rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted";
+  return `${CHIP_BASE} border-white/[0.14] bg-white/[0.08]`;
 }
 
 interface ReviewRow {
@@ -96,7 +97,7 @@ export default function SyncStatusChip() {
           <p className="p-3 pb-1 text-sm font-medium">{dayScreenStrings.syncReviewListTitle}</p>
           <div className="flex flex-col overflow-y-auto">
             {reviewRows.map(({ review, comparison }) => (
-              <div key={review.id} className="flex flex-col gap-2 border-t border-line p-3">
+              <div key={review.id} className="flex flex-col gap-2 border-t border-rule p-3">
                 <p className="text-sm">{describeSyncReview(review)}</p>
 
                 {comparison.ready ? (
@@ -106,14 +107,14 @@ export default function SyncStatusChip() {
                       <button
                         type="button"
                         onClick={() => handleKeep(review.id)}
-                        className="rounded-[--radius-el] border border-line px-2 py-1 text-sm"
+                        className="rounded-control border border-rule px-2 py-1 text-sm"
                       >
                         {dayScreenStrings.syncReviewKeepAction}
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDiscard(review.id)}
-                        className="rounded-[--radius-el] border border-line px-2 py-1 text-sm"
+                        className="rounded-control border border-rule px-2 py-1 text-sm"
                       >
                         {dayScreenStrings.syncReviewRemoveAction}
                       </button>
@@ -140,7 +141,7 @@ export default function SyncStatusChip() {
  */
 function ReviewComparisonTable({ comparison }: { comparison: ReviewComparison }) {
   if (comparison.server === null) {
-    return <p className="rounded-[--radius-el] bg-line-soft p-2 text-xs text-muted">{dayScreenStrings.syncReviewNoServerRow}</p>;
+    return <p className="rounded-control bg-field p-2 text-xs text-muted">{dayScreenStrings.syncReviewNoServerRow}</p>;
   }
 
   const diffs = describeReviewFieldDiffs(comparison.mine, comparison.server);

@@ -1,12 +1,23 @@
 import type { ReactNode } from "react";
+import { authStrings } from "../auth/authStrings";
+import { clearActiveSession } from "../auth/session";
+import { useActingMembership } from "../auth/useActingMembership";
+import { db } from "../db/database";
+import { useLiveQuery } from "../db/useLiveQuery";
 import { navItemsFor, type NavItem } from "../domain/navigation";
 import type { Role } from "../domain/role";
-import { sidebarStrings } from "./strings";
+import { todayInCairo } from "../domain/time";
+import SyncStatusChip from "../screens/day/SyncStatusChip";
+import { formatAppBarDate } from "./appBarDate";
+import Button from "./ui/Button";
+import { appBarStrings, sidebarStrings } from "./strings";
 
 interface AppShellProps {
   role: Role;
   activeItem: NavItem["key"];
   onSelect: (key: NavItem["key"]) => void;
+  /** The current screen's own title — the only piece of the app bar a screen supplies (e.g. "يوم العيادة"). */
+  title: ReactNode;
   children: ReactNode;
 }
 
@@ -83,20 +94,90 @@ const ITEM_ACTIVE = "border-copper bg-white/[0.14] text-on-dark";
  * both sit above the day screen's own floating actions at z-10 and below
  * LockScreen's z-50, which must always win regardless of width).
  */
-export default function AppShell({ role, activeItem, onSelect, children }: AppShellProps) {
+// The brand tile shared by the rail (sm+) and the app bar's own mobile-only
+// brand block (below `sm`, where the rail becomes a bottom bar with no room
+// for it) — `.brand .logo` reproduced once rather than duplicated inline.
+function BrandLogo() {
+  return (
+    <div className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-[linear-gradient(135deg,var(--color-green-2)_0%,var(--color-green)_100%)] text-sm font-bold text-white shadow-[0_2px_8px_rgba(0,0,0,.35)]">
+      C
+    </div>
+  );
+}
+
+/**
+ * The dark app bar above every screen (prototype's `.appbar`, `.brand`,
+ * `.who`, `.date`, `.app-btn`). Owns its own chrome end to end — the acting
+ * member's name/avatar, the lock action and the date are all resolved here,
+ * independent of whatever screen is mounted; `title` is the one thing a
+ * screen supplies (DayScreen.tsx's own subtitle, e.g. "يوم العيادة").
+ *
+ * Below `sm` (the bottom-bar breakpoint, where the rail carries no brand of
+ * its own) the leading slot is the brand block; from `sm` up the rail already
+ * shows the brand, so the bar's own leading slot is the title, rendered as a
+ * real `<h1>` for accessibility either way — visually hidden on mobile
+ * (sr-only) rather than removed, so exactly one page heading always exists.
+ */
+function AppBar({ title }: { title: ReactNode }) {
+  const actingMembership = useActingMembership();
+  const actingUser = useLiveQuery(
+    async () => (actingMembership ? db.users.get(actingMembership.user_id) : undefined),
+    [actingMembership?.user_id],
+  );
+  const { dateLine, weekdayLine } = formatAppBarDate(todayInCairo());
+
+  return (
+    <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3.5 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[11px] text-on-dark shadow-m">
+      <div className="me-auto flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 sm:hidden">
+          <BrandLogo />
+          <div>
+            <p className="text-base font-semibold leading-[1.15] tracking-[-0.01em] text-on-dark">
+              {appBarStrings.brandName}
+            </p>
+            <p className="text-[10px] tracking-[0.06em] text-on-dark-dim">{title}</p>
+          </div>
+        </div>
+        <h1 className="sr-only text-sm font-semibold tracking-[-0.005em] text-on-dark sm:not-sr-only">{title}</h1>
+      </div>
+
+      <SyncStatusChip />
+
+      {actingUser && (
+        <div className="flex items-center gap-2 rounded-control border border-white/[0.14] bg-white/[0.06] px-3 py-[5px] text-xs text-on-dark">
+          <span className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[11px] font-bold text-white">
+            {actingUser.full_name.charAt(0)}
+          </span>
+          <span>{actingUser.full_name}</span>
+        </div>
+      )}
+
+      <Button variant="onDark" size="sm" onClick={() => clearActiveSession()}>
+        {authStrings.lockButtonLabel}
+      </Button>
+
+      <div className="flex flex-col gap-px border-s border-white/[0.13] ps-3 text-end">
+        <span className="text-[12.5px] font-semibold tracking-[-0.01em] text-on-dark tabular-nums">{dateLine}</span>
+        <span className="text-[10px] tracking-[0.04em] text-on-dark-dim">{weekdayLine}</span>
+      </div>
+    </header>
+  );
+}
+
+export default function AppShell({ role, activeItem, onSelect, title, children }: AppShellProps) {
   const items = navItemsFor(role);
 
   return (
     <div className="flex min-h-screen flex-col-reverse sm:flex-row">
       <nav
         aria-label={sidebarStrings.navAriaLabel}
-        className="fixed inset-x-0 bottom-0 z-20 flex items-stretch gap-1 border-t-2 border-copper bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-2 py-1.5 shadow-m sm:static sm:h-screen sm:w-56 sm:flex-col sm:items-stretch sm:gap-1 sm:border-e-2 sm:border-t-0 sm:p-3"
+        className="fixed inset-x-0 bottom-0 z-20 flex items-stretch gap-1 border-t-2 border-copper bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-2 py-1.5 shadow-m sm:sticky sm:top-0 sm:h-screen sm:w-56 sm:flex-col sm:items-stretch sm:gap-1 sm:border-e-2 sm:border-t-0 sm:p-3"
       >
         <div className="hidden items-center gap-[10px] px-1 pb-4 sm:flex">
-          <div className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-[linear-gradient(135deg,var(--color-green-2)_0%,var(--color-green)_100%)] text-sm font-bold text-white shadow-[0_2px_8px_rgba(0,0,0,.35)]">
-            C
-          </div>
-          <p className="text-base font-semibold leading-[1.15] tracking-[-0.01em] text-on-dark">Clintra</p>
+          <BrandLogo />
+          <p className="text-base font-semibold leading-[1.15] tracking-[-0.01em] text-on-dark">
+            {appBarStrings.brandName}
+          </p>
         </div>
 
         {items.map((item) => {
@@ -115,7 +196,10 @@ export default function AppShell({ role, activeItem, onSelect, children }: AppSh
           );
         })}
       </nav>
-      <div className="min-w-0 flex-1 pb-16 sm:pb-0">{children}</div>
+      <div className="min-w-0 flex-1 pb-16 sm:pb-0">
+        <AppBar title={title} />
+        {children}
+      </div>
     </div>
   );
 }

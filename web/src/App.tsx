@@ -16,6 +16,7 @@ import { isDeviceRegistered } from "./db/registration";
 import { isDemoModeRequested } from "./domain/appMode";
 import { Role } from "./domain/role";
 import DayScreen from "./screens/day/DayScreen";
+import { dayScreenStrings } from "./screens/day/strings";
 import { SYNC_AUTH_ERROR_EVENT_NAME, startSyncEngine, type SyncEngineHandle } from "./sync/engine";
 import { FakeTransport } from "./sync/fakeTransport";
 import { selectSyncTransport } from "./sync/httpTransport";
@@ -115,6 +116,10 @@ export default function App() {
   // same flag, so it can't stay DayScreen's own local state.
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const actingMembership = useActingMembership();
+  // Reported up by DayScreen (its own subtitle, e.g. "يوم العيادة" or the
+  // queue-mode variant) — the one piece of the app bar a screen supplies;
+  // see AppShell.tsx's own doc comment.
+  const [dayScreenTitle, setDayScreenTitle] = useState<string>(dayScreenStrings.appBarTitle);
 
   if (bootStatus !== "ready") {
     // "checking" renders nothing rather than a spinner: it resolves from
@@ -149,8 +154,13 @@ export default function App() {
         role={actingMembership?.role ?? Role.Assistant}
         activeItem={isSettingsOpen ? "settings" : "day"}
         onSelect={(key) => setIsSettingsOpen(key === "settings")}
+        title={dayScreenTitle}
       >
-        <DayScreen isSettingsOpen={isSettingsOpen} onCloseSettings={() => setIsSettingsOpen(false)} />
+        <DayScreen
+          isSettingsOpen={isSettingsOpen}
+          onCloseSettings={() => setIsSettingsOpen(false)}
+          onTitleChange={setDayScreenTitle}
+        />
       </AppShell>
       {isLocked && <LockScreen defaultMembershipId={lastMembershipId} />}
     </>
