@@ -9,7 +9,62 @@ export const galleryStrings = {
   clickCounterLabel: "عدد الضغطات",
   fieldsSectionTitle: "الحقول",
   cardsSectionTitle: "البطاقات",
+  badgesSectionTitle: "الشارات",
 } as const;
+
+// Each row's label and source class, from docs/reference/clintra-prototype.html:
+// .c-head .badge, .brief-h .tag, .tag.warn, .inv-status, .rx-head .c,
+// .set-row .mode, .msg-tpl .badge (+ .auto renamed per the settled
+// deviation, + .manual), .slot .state on .arrived/.in-room/.done/
+// .no-show/.cancelled.
+export const badgeGalleryStrings = {
+  onDarkHeading: "على خلفية داكنة · اليوم",
+  onDarkLabel: "اليوم",
+  waitingHeading: "مستني في الاستقبال",
+  longestWaitHeading: "أطول انتظار",
+  longestWaitLabel: "أطول انتظار 34د",
+  invoicePartialHeading: "فاتورة مدفوعة جزئيًا",
+  invoicePartialLabel: "مدفوعة جزئيًا",
+  prescriptionCountHeading: "عدد الأدوية",
+  prescriptionCountLabel: "3 أدوية",
+  slotModeHeading: "مدة الموعد",
+  slotModeLabel: "مواعيد 30د",
+  suggestedTemplateHeading: "قالب مقترح",
+  suggestedTemplateLabel: "مقترح",
+  optionalTemplateHeading: "قالب اختياري",
+  optionalTemplateLabel: "اختياري",
+  manualTemplateHeading: "قالب يدوي",
+  manualTemplateLabel: "يدوي",
+  statusArrivedHeading: "وصل",
+  statusArrivedLabel: "وصلت",
+  statusInRoomHeading: "في الكشف",
+  statusInRoomLabel: "في الكشف",
+  statusDoneHeading: "اكتمل",
+  statusDoneLabel: "اكتمل",
+  statusNoShowHeading: "لم يحضر",
+  statusNoShowLabel: "لم يحضر",
+  statusCancelledHeading: "ملغي",
+  statusCancelledLabel: "ملغي",
+} as const;
+
+// One label per BadgeSection row, in its render order — gallery.spec.ts
+// iterates this instead of hand-copying the list a second time.
+export const ALL_BADGE_DEMO_LABELS: readonly string[] = [
+  badgeGalleryStrings.waitingHeading,
+  badgeGalleryStrings.longestWaitLabel,
+  badgeGalleryStrings.invoicePartialLabel,
+  badgeGalleryStrings.prescriptionCountLabel,
+  badgeGalleryStrings.slotModeLabel,
+  badgeGalleryStrings.suggestedTemplateLabel,
+  badgeGalleryStrings.optionalTemplateLabel,
+  badgeGalleryStrings.manualTemplateLabel,
+  badgeGalleryStrings.statusArrivedLabel,
+  badgeGalleryStrings.statusInRoomLabel,
+  badgeGalleryStrings.statusDoneLabel,
+  badgeGalleryStrings.statusNoShowLabel,
+  badgeGalleryStrings.statusCancelledLabel,
+  badgeGalleryStrings.onDarkLabel,
+];
 
 // Screen 3's "مواعيد اليوم" card (docs/reference/clintra-prototype.html,
 // `.c-card`/`.c-head`/`.runrow` around that card) — head, footer and count

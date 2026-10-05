@@ -1,3 +1,4 @@
+import BadgeSection from "./sections/BadgeSection";
 import ButtonsSection from "./sections/ButtonsSection";
 import CardSection from "./sections/CardSection";
 import FieldSection from "./sections/FieldSection";
@@ -19,6 +20,7 @@ export default function Gallery() {
         <ButtonsSection />
         <FieldSection />
         <CardSection />
+        <BadgeSection />
       </div>
     </div>
   );

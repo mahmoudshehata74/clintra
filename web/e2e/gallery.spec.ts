@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  ALL_BADGE_DEMO_LABELS,
   cardGalleryStrings,
   DARK_SURFACE_MD_ONLY_BUTTON_DEMOS,
   DARK_SURFACE_SM_BUTTON_DEMOS,
@@ -120,4 +121,10 @@ test("the day card's footer buttons and count are reachable", async ({ page }) =
       { exact: false },
     ),
   ).toBeVisible();
+});
+
+test("every badge demo is visible by its text", async ({ page }) => {
+  for (const label of ALL_BADGE_DEMO_LABELS) {
+    await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+  }
 });

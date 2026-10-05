@@ -281,6 +281,12 @@ test("@screenshot gallery-card", async ({ page }) => {
   await shoot(page, "gallery-card", true);
 });
 
+test("@screenshot gallery-badge", async ({ page }) => {
+  await page.goto("/?gallery=1");
+  await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
+  await shoot(page, "gallery-badge", true);
+});
+
 test("@screenshot day-sheet-print", async ({ page }) => {
   await page.addInitScript(() => {
     window.print = () => {};
