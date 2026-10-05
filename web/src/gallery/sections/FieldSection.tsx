@@ -18,7 +18,7 @@ function Row({ heading, children }: { heading: string; children: ReactNode }) {
  */
 export default function FieldSection() {
   return (
-    <section className="flex flex-col gap-6">
+    <section data-gallery-section="field" className="flex flex-col gap-6">
       <h2 className="text-lg font-semibold text-text">{galleryStrings.fieldsSectionTitle}</h2>
 
       <div className="flex flex-col gap-6">

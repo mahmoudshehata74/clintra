@@ -10,6 +10,8 @@ export interface ToggleGroupOption<T extends string> {
 
 export interface ToggleGroupProps<T extends string> {
   variant: ToggleChipVariant;
+  /** The group's accessible name — `role="group"` has none of its own otherwise. */
+  label: string;
   value: T;
   onChange: (value: T) => void;
   options: readonly ToggleGroupOption<T>[];
@@ -33,11 +35,18 @@ const GROUP_LAYOUT: Record<ToggleChipVariant, string> = {
 };
 
 /** Single-selection over a row of ToggleChip — controlled (value/onChange). Arrow-key navigation is not implemented. */
-export default function ToggleGroup<T extends string>({ variant, value, onChange, options, className }: ToggleGroupProps<T>) {
+export default function ToggleGroup<T extends string>({
+  variant,
+  label,
+  value,
+  onChange,
+  options,
+  className,
+}: ToggleGroupProps<T>) {
   const classes = [GROUP_LAYOUT[variant], className ?? ""].filter(Boolean).join(" ");
 
   return (
-    <div role="group" className={classes}>
+    <div role="group" aria-label={label} className={classes}>
       {options.map((option) => (
         <ToggleChip
           key={option.value}

@@ -79,9 +79,20 @@ export default function Field({ label, id, hint, error, children }: FieldProps) 
 // this component's own variant/state.
 const IN_BASE =
   "w-full rounded-control border-[1.5px] px-[13px] py-2.5 font-[inherit] transition-colors duration-150 " +
-  "placeholder:font-normal placeholder:text-faint " +
-  "focus:outline-none focus:border-green focus:bg-card focus:shadow-[0_0_0_3.5px_color-mix(in_srgb,var(--color-green)_16%,transparent)] " +
+  "placeholder:font-normal placeholder:text-faint focus:outline-none " +
   "disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-50";
+
+// `.field .in:focus`'s own green ring, kept apart from an invalid control's
+// focus look below — same split as COLOR_CLASSES, and for the same reason:
+// exactly one class ever sets each of border/background/shadow on focus,
+// decided here in JS rather than left to class order.
+const FOCUS_CLASSES = {
+  default: "focus:border-green focus:bg-card focus:shadow-[0_0_0_3.5px_color-mix(in_srgb,var(--color-green)_16%,transparent)]",
+  // An invalid control stays visibly invalid while focused: the ring and
+  // border go danger, and the background stays the danger wash rather than
+  // switching to card the way a valid control's focus does.
+  invalid: "focus:border-danger-line focus:bg-danger-wash focus:shadow-[0_0_0_3.5px_color-mix(in_srgb,var(--color-danger)_16%,transparent)]",
+} as const;
 
 // `.field .in`'s own resting border/background/text color, and
 // `.field .in.filled`'s (card background, green border and text). Weight is
@@ -126,7 +137,13 @@ const VARIANT_WEIGHT_OVERRIDE: Partial<Record<TextInputVariant, string>> = {
 
 function controlStateClasses(state: ControlState, variant: TextInputVariant): string {
   const weight = VARIANT_WEIGHT_OVERRIDE[variant] ?? WEIGHT_CLASSES[state === "filled" ? "filled" : "default"];
-  return `${COLOR_CLASSES[state]} ${weight}`;
+  const focus = state === "invalid" ? FOCUS_CLASSES.invalid : FOCUS_CLASSES.default;
+  return `${COLOR_CLASSES[state]} ${weight} ${focus}`;
+}
+
+/** Treats `0` as filled, unlike a plain `Boolean(...)` check. */
+function isNonEmpty(value: unknown): boolean {
+  return value !== "" && value != null;
 }
 
 type TextInputOwnProps = {
@@ -149,9 +166,9 @@ export function TextInput({
   ...rest
 }: TextInputProps) {
   const isControlled = value !== undefined;
-  const [uncontrolledFilled, setUncontrolledFilled] = useState(() => Boolean(defaultValue));
+  const [uncontrolledFilled, setUncontrolledFilled] = useState(() => isNonEmpty(defaultValue));
   const isInvalid = ariaInvalid === true || ariaInvalid === "true";
-  const isFilled = filled ?? (isControlled ? Boolean(value) : uncontrolledFilled);
+  const isFilled = filled ?? (isControlled ? isNonEmpty(value) : uncontrolledFilled);
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     if (!isControlled) {
@@ -199,9 +216,9 @@ export function TextArea({
   ...rest
 }: TextAreaProps) {
   const isControlled = value !== undefined;
-  const [uncontrolledFilled, setUncontrolledFilled] = useState(() => Boolean(defaultValue));
+  const [uncontrolledFilled, setUncontrolledFilled] = useState(() => isNonEmpty(defaultValue));
   const isInvalid = ariaInvalid === true || ariaInvalid === "true";
-  const isFilled = filled ?? (isControlled ? Boolean(value) : uncontrolledFilled);
+  const isFilled = filled ?? (isControlled ? isNonEmpty(value) : uncontrolledFilled);
 
   function handleChange(event: ChangeEvent<HTMLTextAreaElement>) {
     if (!isControlled) {

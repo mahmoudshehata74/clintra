@@ -14,7 +14,7 @@ function Row({ heading, children }: { heading: string; children: ReactNode }) {
 /** One row per prototype source class — see strings.ts's badgeGalleryStrings doc comment. */
 export default function BadgeSection() {
   return (
-    <section className="flex flex-col gap-6">
+    <section data-gallery-section="badge" className="flex flex-col gap-6">
       <h2 className="text-lg font-semibold text-text">{galleryStrings.badgesSectionTitle}</h2>
 
       <div className="flex flex-col gap-6">

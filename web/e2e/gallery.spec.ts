@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import {
   ALL_BADGE_DEMO_LABELS,
   cardGalleryStrings,
@@ -9,6 +9,7 @@ import {
   LIGHT_SURFACE_MD_ONLY_BUTTON_DEMOS,
   LIGHT_SURFACE_SM_BUTTON_DEMOS,
   sheetPanelGalleryStrings,
+  toggleChipGalleryStrings,
 } from "../src/gallery/strings";
 
 // The dev-only component gallery (?gallery=1, see src/gallery/Gallery.tsx and
@@ -130,13 +131,25 @@ test("every badge demo is visible by its text", async ({ page }) => {
   }
 });
 
-test("clicking a chip in each toggle group moves aria-pressed to it and off the previous one", async ({ page }) => {
-  const groups = page.getByRole("group");
-  const groupCount = await groups.count();
-  expect(groupCount).toBeGreaterThan(0);
+// Each group's own accessible name — ToggleGroup's required `label` prop.
+// "services" is reused by both ToggleChipSection and SheetPanelSection (the
+// same prototype field shown a second time), so it resolves to two groups.
+const TOGGLE_GROUP_NAMES = [
+  toggleChipGalleryStrings.servicesHeading,
+  toggleChipGalleryStrings.filtersHeading,
+  toggleChipGalleryStrings.tabsHeading,
+  toggleChipGalleryStrings.patientTabsHeading,
+  toggleChipGalleryStrings.channelHeading,
+];
 
-  for (let i = 0; i < groupCount; i++) {
-    const group = groups.nth(i);
+test("clicking a chip in each named toggle group moves aria-pressed to it and off the previous one", async ({ page }) => {
+  const groups: Locator[] = [];
+  for (const name of TOGGLE_GROUP_NAMES) {
+    groups.push(...(await page.getByRole("group", { name }).all()));
+  }
+  expect(groups.length).toBeGreaterThanOrEqual(TOGGLE_GROUP_NAMES.length);
+
+  for (const group of groups) {
     const chips = group.getByRole("button");
     const first = chips.first();
     const second = chips.nth(1);

@@ -17,7 +17,7 @@ export default function SheetPanelSection() {
   const [closedCount, setClosedCount] = useState(0);
 
   return (
-    <section className="flex flex-col gap-4">
+    <section data-gallery-section="sheetpanel" className="flex flex-col gap-4">
       <h2 className="text-lg font-semibold text-text">{galleryStrings.sheetPanelSectionTitle}</h2>
 
       <SheetPanel>
@@ -32,6 +32,7 @@ export default function SheetPanelSection() {
           </Field>
           <ToggleGroup
             variant="service"
+            label={toggleChipGalleryStrings.servicesHeading}
             value={service}
             onChange={setService}
             options={toggleChipGalleryStrings.servicesOptions.map((label) => ({ value: label, label }))}

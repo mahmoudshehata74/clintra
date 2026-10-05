@@ -30,12 +30,13 @@ export default function ToggleChipSection() {
   );
 
   return (
-    <section className="flex flex-col gap-6">
+    <section data-gallery-section="togglechip" className="flex flex-col gap-6">
       <h2 className="text-lg font-semibold text-text">{galleryStrings.toggleChipsSectionTitle}</h2>
 
       <Row heading={toggleChipGalleryStrings.servicesHeading}>
         <ToggleGroup
           variant="service"
+          label={toggleChipGalleryStrings.servicesHeading}
           value={service}
           onChange={setService}
           options={toggleChipGalleryStrings.servicesOptions.map((label) => ({ value: label, label }))}
@@ -45,6 +46,7 @@ export default function ToggleChipSection() {
       <Row heading={toggleChipGalleryStrings.filtersHeading}>
         <ToggleGroup
           variant="filter"
+          label={toggleChipGalleryStrings.filtersHeading}
           value={filter}
           onChange={setFilter}
           options={toggleChipGalleryStrings.filtersOptions.map((label) => ({ value: label, label }))}
@@ -54,6 +56,7 @@ export default function ToggleChipSection() {
       <Row heading={toggleChipGalleryStrings.tabsHeading}>
         <ToggleGroup
           variant="tab"
+          label={toggleChipGalleryStrings.tabsHeading}
           value={tab}
           onChange={setTab}
           options={toggleChipGalleryStrings.tabsOptions.map((label) => ({ value: label, label }))}
@@ -63,6 +66,7 @@ export default function ToggleChipSection() {
       <Row heading={toggleChipGalleryStrings.patientTabsHeading}>
         <ToggleGroup
           variant="patientTab"
+          label={toggleChipGalleryStrings.patientTabsHeading}
           value={patientTab}
           onChange={setPatientTab}
           options={toggleChipGalleryStrings.patientTabsOptions.map(({ label, counter }) => ({
@@ -76,6 +80,7 @@ export default function ToggleChipSection() {
       <Row heading={toggleChipGalleryStrings.channelHeading}>
         <ToggleGroup
           variant="channel"
+          label={toggleChipGalleryStrings.channelHeading}
           value={channel}
           onChange={setChannel}
           options={toggleChipGalleryStrings.channelOptions.map((label) => ({ value: label, label }))}

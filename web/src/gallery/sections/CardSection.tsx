@@ -5,7 +5,7 @@ import { cardGalleryStrings, galleryStrings } from "../strings";
 /** Card, CardHead, CardBody and CardFooter — screen 3's "مواعيد اليوم" shell, plus a plain body-only card. */
 export default function CardSection() {
   return (
-    <section className="flex flex-col gap-6">
+    <section data-gallery-section="card" className="flex flex-col gap-6">
       <h2 className="text-lg font-semibold text-text">{galleryStrings.cardsSectionTitle}</h2>
 
       <Card>

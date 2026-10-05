@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Badge from "./Badge";
 
 export type CardHeadingLevel = 2 | 3 | 4 | 5 | 6;
 
@@ -41,11 +42,7 @@ export function CardHead({ badge, title, level = 3, subtitle, action }: CardHead
 
   return (
     <div className="flex items-center gap-3 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_120%)] px-[18px] py-3 text-on-dark">
-      {badge ? (
-        <span className="rounded-chip border border-white/[0.14] bg-white/[0.08] px-[9px] py-[3px] text-[10.5px] font-semibold tracking-[0.05em] text-on-dark-dim">
-          {badge}
-        </span>
-      ) : null}
+      {badge ? <Badge appearance="onDark">{badge}</Badge> : null}
       <div className="me-auto">
         <Heading className="m-0 text-sm font-semibold tracking-[-0.005em]">{title}</Heading>
         {subtitle ? <div className="-mt-px text-[11px] text-on-dark-dim">{subtitle}</div> : null}

@@ -62,7 +62,7 @@ export default function ButtonsSection() {
   const [clickCount, setClickCount] = useState(0);
 
   return (
-    <section className="flex flex-col gap-8">
+    <section data-gallery-section="buttons" className="flex flex-col gap-8">
       <h2 className="text-lg font-semibold text-text">{galleryStrings.buttonsSectionTitle}</h2>
 
       <div className="flex flex-col gap-6">
