@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Ltr from "../../components/Ltr";
+import Button from "../../components/ui/Button";
+import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
-import { authStrings } from "../../auth/authStrings";
-import { clearActiveSession } from "../../auth/session";
 import { useActingMembership } from "../../auth/useActingMembership";
 import { Role } from "../../domain/role";
+import { computeExpectedCashTotal } from "../../db/cashClose";
 import { setDayDelay } from "../../db/dayState";
 import { ensureDeviceRegistration } from "../../db/deviceRegistration";
 import {
@@ -19,6 +20,7 @@ import { seedDatabase, seededVisitsDate } from "../../db/seed";
 import type {
   ClinicDay,
   DayState,
+  Invoice,
   Location,
   Membership,
   Patient,
@@ -32,14 +34,9 @@ import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitArrived, markVisitCompleted, markVisitInRoom } from "../../db/visitAttendance";
 import { cancelVisit, markVisitNoShow, type VisitCancelReason } from "../../db/visitCancel";
 import { sendVisitToEndOfQueue, undoSendVisitToEndOfQueue } from "../../db/visitQueue";
+import { formatPiastresForDisplay, type Piastres } from "../../domain/money";
 import { ScheduleMode } from "../../domain/scheduleMode";
-import {
-  addDaysToClinicDay,
-  formatCairoDisplayDateParts,
-  todayInCairo,
-  weekdayOf,
-  type ClockTime,
-} from "../../domain/time";
+import { addDaysToClinicDay, clockTimeInCairo, todayInCairo, weekdayOf, type ClockTime } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import { formatActorLabel } from "./actorLabel";
 import {
@@ -54,19 +51,25 @@ import AuditSheet from "./AuditSheet";
 import BookingSheet, { type BookingSheetMode } from "./BookingSheet";
 import CancelVisitSheet from "./CancelVisitSheet";
 import CashCloseSheet from "./CashCloseSheet";
-import Counters from "./Counters";
 import { computeDayCounters } from "./dayCounters";
+import { computeDaySlotsSlab } from "./daySlotsSlab";
+import DaySlab from "./DaySlab";
+import DayTiles from "./DayTiles";
 import DaySheet from "./DaySheet";
 import DelayControl from "./DelayControl";
 import InvoiceSheet from "./InvoiceSheet";
 import MoveVisitSheet from "./MoveVisitSheet";
 import PaymentSheet from "./PaymentSheet";
 import PractitionerColumn from "./PractitionerColumn";
+import {
+  computeQueueCellCounts,
+  computeQueueExpectedFinishTime,
+  computeQueueSummary,
+} from "./queueSummary";
 import SettingsSheet from "./SettingsSheet";
 import VisitFormSheet from "./VisitFormSheet";
 import { resolveDayScheduleState } from "./scheduleState";
 import { dayScreenStrings } from "./strings";
-import SyncStatusChip from "./SyncStatusChip";
 import type { UndoAction } from "./undoAction";
 import UndoToast from "./UndoToast";
 import { SEED_DAY_QUERY_PARAM } from "../../domain/appMode";
@@ -92,6 +95,8 @@ interface DynamicData {
   actorLabelByVisitId: Map<string, string>;
   /** Which of today's visits already have a visit_form_data row — see db/visitForm.ts. Drives the completed-row empty-form hint. */
   formDataVisitIds: Set<string>;
+  /** Today's non-void invoices at the selected location — the slab's money tiles, scoped exactly as cash-close's own total is. */
+  invoicesAtLocationToday: Invoice[];
 }
 
 const EMPTY_DYNAMIC_DATA: DynamicData = {
@@ -102,6 +107,7 @@ const EMPTY_DYNAMIC_DATA: DynamicData = {
   dayStateByPractitionerId: new Map(),
   actorLabelByVisitId: new Map(),
   formDataVisitIds: new Set(),
+  invoicesAtLocationToday: [],
 };
 
 // The undo action stays available for five minutes after any of the writes
@@ -133,27 +139,25 @@ function readStoredPractitionerId(): string | null {
   return localStorage.getItem(SELECTED_PRACTITIONER_STORAGE_KEY);
 }
 
-function toggleButtonClass(isSelected: boolean): string {
-  return isSelected
-    ? "rounded-[--radius-el] border border-green bg-green-soft px-3 py-1 text-sm"
-    : "rounded-[--radius-el] border border-line px-3 py-1 text-sm";
-}
-
-// Matches the reference's .tg.a (selected) / .tg.e (neutral) tag-pill
-// language, the same treatment already used for the other header pills.
-function practitionerPillClassName(isSelected: boolean): string {
-  return isSelected
-    ? "rounded-[5px] bg-green-soft px-2 py-0.5 text-xs text-green"
-    : "rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted";
+/** Scrolls a day-grid row into view and focuses its primary button — the slab's "next up" action (COMMIT 2). */
+function focusVisitRow(visitId: string): void {
+  const row = document.querySelector(`[data-visit-row-id="${visitId}"]`);
+  if (!row) {
+    return;
+  }
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  row.querySelector("button")?.focus();
 }
 
 interface DayScreenProps {
   /** Lifted to App.tsx: AppShell's sidebar is what opens this now, and needs the same flag to know it's the active section. */
   isSettingsOpen: boolean;
   onCloseSettings: () => void;
+  /** Reports this screen's own app-bar title up to App.tsx, which forwards it to AppShell — see AppShell.tsx's own doc comment. */
+  onTitleChange: (title: string) => void;
 }
 
-export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreenProps) {
+export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChange }: DayScreenProps) {
   const [staticData, setStaticData] = useState<StaticData | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [selectedPractitionerId, setSelectedPractitionerIdState] = useState<string | null>(readStoredPractitionerId);
@@ -178,6 +182,43 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
   const isSeedDayPinned = new URLSearchParams(window.location.search).get(SEED_DAY_QUERY_PARAM) === "1";
   const today = isSeedDayPinned && staticData?.seededDay ? staticData.seededDay : todayInCairo();
   const weekday = weekdayOf(today);
+
+  // Hoisted above the loading guard below (with null-safe fallbacks) so the
+  // title effect — which must run unconditionally, like every hook — can
+  // read isQueueMode. Each binding is still exactly what the post-guard
+  // render logic used before this task; nothing here changes once
+  // staticData has actually loaded.
+  const currentPractitionerId = useMemo(() => {
+    if (!staticData) {
+      return null;
+    }
+    const isStoredSelectionValid =
+      selectedPractitionerId != null &&
+      staticData.practitioners.some((practitioner) => practitioner.id === selectedPractitionerId);
+    return isStoredSelectionValid ? selectedPractitionerId : (staticData.practitioners[0]?.id ?? null);
+  }, [staticData, selectedPractitionerId]);
+  const schedulesForSelectedLocation = (staticData?.schedules ?? []).filter(
+    (schedule) => schedule.location_id === selectedLocationId,
+  );
+  const currentPractitioner =
+    staticData?.practitioners.find((practitioner) => practitioner.id === currentPractitionerId) ?? null;
+  const currentPractitionerSchedule = schedulesForSelectedLocation.find(
+    (schedule) => schedule.practitioner_id === currentPractitionerId && schedule.weekday === weekday,
+  );
+  const currentPractitionerHasAnySchedule = (staticData?.schedules ?? []).some(
+    (schedule) => schedule.practitioner_id === currentPractitionerId,
+  );
+  const currentPractitionerScheduleState = resolveDayScheduleState(
+    currentPractitionerSchedule,
+    currentPractitionerHasAnySchedule,
+  );
+  const isQueueMode =
+    currentPractitionerScheduleState.kind === "scheduled" &&
+    currentPractitionerScheduleState.schedule.mode === ScheduleMode.Queue;
+
+  useEffect(() => {
+    onTitleChange(isQueueMode ? dayScreenStrings.appBarTitleQueue : dayScreenStrings.appBarTitle);
+  }, [isQueueMode, onTitleChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -255,19 +296,15 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
     if (!staticData) {
       return [];
     }
-    const isStoredSelectionValid =
-      selectedPractitionerId != null &&
-      staticData.practitioners.some((practitioner) => practitioner.id === selectedPractitionerId);
-    const targetId = isStoredSelectionValid ? selectedPractitionerId : (staticData.practitioners[0]?.id ?? null);
-    return staticData.practitioners.filter((practitioner) => practitioner.id === targetId);
-  }, [staticData, selectedPractitionerId]);
+    return staticData.practitioners.filter((practitioner) => practitioner.id === currentPractitionerId);
+  }, [staticData, currentPractitionerId]);
 
   // Live query: re-emits automatically whenever any write touches the visits
   // table (attendance, booking, cancel, no-show, move, or an undo of any of
   // them), so the row and the counters update without a manual refetch.
   const dynamicData =
     useLiveQuery<DynamicData>(async () => {
-      if (!staticData || practitionersToShow.length === 0) {
+      if (!staticData || practitionersToShow.length === 0 || !selectedLocationId) {
         return EMPTY_DYNAMIC_DATA;
       }
 
@@ -291,21 +328,23 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
 
       const visitIds = visits.map((visit) => visit.id);
       const membershipIds = [...new Set(visits.map((visit) => visit.created_by))];
-      const [patients, services, invoicesForVisits, formDataRows, dayStateRows, memberships] = await Promise.all([
-        db.patients.bulkGet(patientIds),
-        db.services.bulkGet(serviceIds),
-        visitIds.length > 0 ? db.invoices.where("visit_id").anyOf(visitIds).toArray() : Promise.resolve([]),
-        visitIds.length > 0 ? db.visit_form_data.where("visit_id").anyOf(visitIds).toArray() : Promise.resolve([]),
-        Promise.all(
-          practitionersToShow.map((practitioner) =>
-            db.day_state
-              .where("[practitioner_id+location_id+date]")
-              .equals([practitioner.id, selectedLocationId ?? "", today])
-              .first(),
+      const [patients, services, invoicesForVisits, invoicesAtLocation, formDataRows, dayStateRows, memberships] =
+        await Promise.all([
+          db.patients.bulkGet(patientIds),
+          db.services.bulkGet(serviceIds),
+          visitIds.length > 0 ? db.invoices.where("visit_id").anyOf(visitIds).toArray() : Promise.resolve([]),
+          db.invoices.where("location_id").equals(selectedLocationId).toArray(),
+          visitIds.length > 0 ? db.visit_form_data.where("visit_id").anyOf(visitIds).toArray() : Promise.resolve([]),
+          Promise.all(
+            practitionersToShow.map((practitioner) =>
+              db.day_state
+                .where("[practitioner_id+location_id+date]")
+                .equals([practitioner.id, selectedLocationId, today])
+                .first(),
+            ),
           ),
-        ),
-        db.memberships.bulkGet(membershipIds),
-      ]);
+          db.memberships.bulkGet(membershipIds),
+        ]);
 
       const patientsById = new Map(
         patients.filter((patient): patient is Patient => patient != null).map((patient) => [patient.id, patient]),
@@ -320,6 +359,9 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
         }
       }
       const formDataVisitIds = new Set(formDataRows.map((row) => row.visit_id));
+      const invoicesAtLocationToday = invoicesAtLocation.filter(
+        (invoice) => todayInCairo(new Date(invoice.issued_at)) === today,
+      );
 
       const dayStateByPractitionerId = new Map<string, DayState>();
       dayStateRows.forEach((dayStateRow, index) => {
@@ -349,6 +391,7 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
         dayStateByPractitionerId,
         actorLabelByVisitId,
         formDataVisitIds,
+        invoicesAtLocationToday,
       };
     }, [staticData, practitionersToShow, today, selectedLocationId]) ?? EMPTY_DYNAMIC_DATA;
 
@@ -358,11 +401,6 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
   // toArray querier (the active filter is applied below in render) so Dexie's
   // dependency tracking reliably re-runs it on any services write.
   const allServices = useLiveQuery(() => db.services.toArray(), []) ?? [];
-
-  // The same resolution practitionersToShow already applied — kept as its
-  // own binding since it's read unconditionally below, before the early
-  // return, for the day_state live query.
-  const currentPractitionerId = practitionersToShow[0]?.id ?? null;
 
   const dayStateRow = useLiveQuery(async () => {
     if (!currentPractitionerId || !selectedLocationId) {
@@ -374,6 +412,7 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
       .first();
   }, [currentPractitionerId, selectedLocationId, today]);
   const delayMinutes = dayStateRow?.delay_minutes ?? 0;
+  const avgConsultMinutes = dayStateRow?.avg_consult_minutes ?? null;
 
   useEffect(() => {
     if (!toastState) {
@@ -418,6 +457,15 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
       console.error(error);
     } finally {
       setAdvanceCooldown((prev) => settleCooldown(prev, visit.id));
+    }
+  }
+
+  async function handleCallNextInQueue() {
+    const sorted = [...currentPractitionerVisits].sort((a, b) => a.position - b.position);
+    const nextVisitId = computeQueueSummary(sorted).nextVisitId;
+    const nextVisit = sorted.find((visit) => visit.id === nextVisitId);
+    if (nextVisit) {
+      await handleAdvance(nextVisit, VisitStatus.InRoom);
     }
   }
 
@@ -543,6 +591,16 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
   function handleTapEmptySlot(time: ClockTime) {
     setPresetBookingTime(time);
     setBookingSheetMode("booking");
+  }
+
+  function handleOpenBooking() {
+    setPresetBookingTime(null);
+    setBookingSheetMode("booking");
+  }
+
+  function handleWalkIn() {
+    setPresetBookingTime(null);
+    setBookingSheetMode("walk_in");
   }
 
   function handleRequestMove(visit: Visit) {
@@ -676,25 +734,6 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
   const showPractitionerLabel = staticData.practitioners.length > 1;
 
   const counters = computeDayCounters(dynamicData.visits);
-  const schedulesForSelectedLocation = staticData.schedules.filter(
-    (schedule) => schedule.location_id === selectedLocationId,
-  );
-
-  // The booking sheet, walk-in and delay control all target one
-  // practitioner: whichever the filter has selected, or the first one when
-  // "all" is active.
-  const currentPractitioner =
-    staticData.practitioners.find((practitioner) => practitioner.id === currentPractitionerId) ?? null;
-  const currentPractitionerSchedule = schedulesForSelectedLocation.find(
-    (schedule) => schedule.practitioner_id === currentPractitionerId && schedule.weekday === weekday,
-  );
-  const currentPractitionerHasAnySchedule = staticData.schedules.some(
-    (schedule) => schedule.practitioner_id === currentPractitionerId,
-  );
-  const currentPractitionerScheduleState = resolveDayScheduleState(
-    currentPractitionerSchedule,
-    currentPractitionerHasAnySchedule,
-  );
   const currentPractitionerVisits = dynamicData.visits.filter(
     (visit) => visit.practitioner_id === currentPractitionerId,
   );
@@ -705,103 +744,212 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
   // Booking (and walk-in) do not require today's schedule to exist: they
   // must stay reachable on a day off and even before any schedule is
   // configured (BookingSheet itself explains that case and offers no slots).
-  const canBook = Boolean(currentPractitioner && selectedLocationId && defaultService);
-  const isQueueMode = currentPractitionerScheduleState.kind === "scheduled" && currentPractitionerScheduleState.schedule.mode === ScheduleMode.Queue;
+  const canBook = Boolean(currentPractitioner && selectedLocationId && defaultService && !bookingSheetMode);
+
+  // The slab's own numbers, computed once per mode and reused across the
+  // hero/cells/split/actions JSX below rather than recomputed per section.
+  const slotsSlab = computeDaySlotsSlab(currentPractitionerVisits, dynamicData.invoicesAtLocationToday);
+  const queueSummaryForCurrent = computeQueueSummary(currentPractitionerVisits);
+  const queueCellsForCurrent = computeQueueCellCounts(currentPractitionerVisits);
+  const queueExpectedFinishTime = computeQueueExpectedFinishTime(
+    queueSummaryForCurrent.waitingCount,
+    queueCellsForCurrent.inRoomCount,
+    avgConsultMinutes,
+    new Date().toISOString(),
+  );
+  const nextVisit = isQueueMode
+    ? currentPractitionerVisits.find((visit) => visit.id === queueSummaryForCurrent.nextVisitId)
+    : slotsSlab.nextVisit;
+  const finalStateCount = isQueueMode ? queueCellsForCurrent.finalStateCount : slotsSlab.finalStateCount;
+  const collectedPiastres = selectedLocationId
+    ? computeExpectedCashTotal(dynamicData.invoicesAtLocationToday, selectedLocationId, today)
+    : (0 as Piastres);
 
   return (
-    <main className={`mx-auto max-w-3xl px-6 pt-16 ${toastState ? "pb-28" : "pb-16"}`}>
-      {/* Row 1: the reference's horizontal .fbar composition — the screen's
-          title (the date, its real heading) on the leading side, the
-          connectivity chip on the trailing side. The brand now lives in
-          AppShell's sidebar instead of repeating here. */}
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-display text-2xl font-semibold text-ink">
-          {formatCairoDisplayDateParts(today).map((part, index) =>
-            part.type === "day" ? <Ltr key={index}>{part.value}</Ltr> : <span key={index}>{part.value}</span>,
-          )}
-        </p>
-        <SyncStatusChip />
-      </div>
-
-      {/* Row 2: a metadata row of tag-styled pills — delay state and the
-          day-header actions, matching the reference's .tg tag language
-          instead of underlined text links or a bordered chip. */}
-      {currentPractitioner && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <DelayControl
-            delayMinutes={delayMinutes}
-            scheduleStartTime={currentPractitionerSchedule?.start_time ?? null}
-            onSetDelay={handleSetDelay}
-          />
-          {showPractitionerFilter &&
-            staticData.practitioners.map((practitioner) => (
-              <button
-                key={practitioner.id}
-                type="button"
-                onClick={() => handleSelectPractitioner(practitioner.id)}
-                className={practitionerPillClassName(practitioner.id === currentPractitionerId)}
-              >
-                {practitioner.full_name}
-              </button>
-            ))}
-          {selectedLocationId && (
+    <main className={`mx-auto max-w-3xl px-6 py-6 ${toastState ? "pb-28" : "pb-16"}`}>
+      {currentPractitioner && selectedLocationId && (
+        <DaySlab
+          heroLabel={isQueueMode ? dayScreenStrings.queueSummaryCurrentTurnLabel : dayScreenStrings.slabRemainingLabel}
+          heroValue={<Ltr>{isQueueMode ? (queueSummaryForCurrent.currentTurnPosition ?? "—") : counters.remaining}</Ltr>}
+          heroUnit={
+            isQueueMode ? (
+              <>
+                {dayScreenStrings.queueHeroOfTotalWord} <Ltr>{currentPractitionerVisits.length}</Ltr>
+              </>
+            ) : (
+              dayScreenStrings.slabRemainingUnit
+            )
+          }
+          heroCaption={
+            isQueueMode ? (
+              <>
+                {dayScreenStrings.queueSummaryAverageLabel}{" "}
+                <b className="font-semibold text-on-dark">
+                  {avgConsultMinutes !== null ? (
+                    <>
+                      <Ltr>{avgConsultMinutes}</Ltr>
+                      {dayScreenStrings.minutesShortUnit}
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </b>
+                {" · "}
+                {dayScreenStrings.queueExpectedFinishPrefix}{" "}
+                <b className="font-semibold text-on-dark">
+                  {queueExpectedFinishTime ? <Ltr>{queueExpectedFinishTime}</Ltr> : "—"}
+                </b>
+              </>
+            ) : (
+              <>
+                {dayScreenStrings.slabTotalCaptionPrefix}{" "}
+                <b className="font-semibold text-on-dark">
+                  <Ltr>{counters.total}</Ltr>
+                </b>{" "}
+                {dayScreenStrings.slabTotalCaptionSuffix}
+              </>
+            )
+          }
+          cells={
+            isQueueMode
+              ? [
+                  {
+                    label: dayScreenStrings.queueSummaryWaitingLabel,
+                    value: <Ltr>{queueSummaryForCurrent.waitingCount}</Ltr>,
+                    tone: "arrived",
+                  },
+                  { label: dayScreenStrings.countersCompleted, value: <Ltr>{queueCellsForCurrent.completedCount}</Ltr> },
+                  {
+                    label: dayScreenStrings.queueInRoomCellLabel,
+                    value: <Ltr>{queueCellsForCurrent.inRoomCount}</Ltr>,
+                    tone: "copper",
+                  },
+                ]
+              : [
+                  { label: dayScreenStrings.countersArrived, value: <Ltr>{counters.arrived}</Ltr>, tone: "arrived" },
+                  { label: dayScreenStrings.countersCompleted, value: <Ltr>{counters.completed}</Ltr> },
+                  { label: dayScreenStrings.slabNoShowCellLabel, value: <Ltr>{slotsSlab.noShowCount}</Ltr>, tone: "miss" },
+                ]
+          }
+          splitSharePercent={isQueueMode ? queueCellsForCurrent.splitSharePercent : slotsSlab.splitSharePercent}
+          splitCompletedText={
             <>
-              <button
-                type="button"
-                onClick={() => setIsDaySheetOpen(true)}
-                className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
-              >
-                {dayScreenStrings.daySheetButtonLabel}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsAuditSheetOpen(true)}
-                className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
-              >
-                {dayScreenStrings.auditButtonLabel}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsCashCloseOpen(true)}
-                className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
-              >
-                {dayScreenStrings.cashCloseButtonLabel}
-              </button>
-              {/* Settings itself moved to AppShell's sidebar ("الإعدادات"),
-                  which enforces the same owner-only gate this button used to. */}
-              <button
-                type="button"
-                onClick={() => clearActiveSession()}
-                className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
-              >
-                {authStrings.lockButtonLabel}
-              </button>
+              {dayScreenStrings.slabSplitCompletedPrefix}{" "}
+              <b>
+                <Ltr>{finalStateCount}</Ltr>
+              </b>{" "}
+              {dayScreenStrings.slabSplitOfWord}{" "}
+              <b>
+                <Ltr>{currentPractitionerVisits.length}</Ltr>
+              </b>
             </>
+          }
+          splitRemainingText={
+            <>
+              {dayScreenStrings.slabSplitRemainingPrefix}{" "}
+              <b>
+                <Ltr>{currentPractitionerVisits.length - finalStateCount}</Ltr>
+              </b>
+            </>
+          }
+          actions={
+            <>
+              {nextVisit && (
+                <Button variant="onDarkCopper" onClick={() => focusVisitRow(nextVisit.id)}>
+                  {dayScreenStrings.slabNextActionPrefix}{" "}
+                  <span className="font-bold">{dynamicData.patientsById.get(nextVisit.patient_id)?.full_name}</span>
+                  {" · "}
+                  {isQueueMode ? (
+                    <>
+                      {dayScreenStrings.queueNextActionNumberPrefix} <Ltr>{nextVisit.position}</Ltr>
+                    </>
+                  ) : (
+                    nextVisit.scheduled_at && <Ltr>{clockTimeInCairo(nextVisit.scheduled_at)}</Ltr>
+                  )}
+                </Button>
+              )}
+              <DelayControl
+                delayMinutes={delayMinutes}
+                scheduleStartTime={currentPractitionerSchedule?.start_time ?? null}
+                onSetDelay={handleSetDelay}
+              />
+              <Button variant="onDark" onClick={() => setIsCashCloseOpen(true)}>
+                {dayScreenStrings.cashCloseButtonLabel}
+              </Button>
+              {currentPractitionerSchedule && (
+                <span className="ms-auto text-[11px] text-on-dark-dim">
+                  {dayScreenStrings.slabCloseKbdPrefix} <Ltr>{currentPractitionerSchedule.end_time}</Ltr>
+                </span>
+              )}
+            </>
+          }
+        />
+      )}
+
+      {!isQueueMode && currentPractitioner && selectedLocationId && (
+        <div className="mt-2.5">
+          <DayTiles
+            tiles={[
+              {
+                label: dayScreenStrings.tileCollectedLabel,
+                value: <Ltr>{formatPiastresForDisplay(collectedPiastres)}</Ltr>,
+                sub: (
+                  <>
+                    <Ltr>{slotsSlab.invoiceCount}</Ltr> {dayScreenStrings.tileInvoiceCountSuffix}
+                  </>
+                ),
+                tone: "ok",
+              },
+              {
+                label: dayScreenStrings.tileDueLabel,
+                value: <Ltr>{formatPiastresForDisplay(slotsSlab.duePiastres)}</Ltr>,
+                sub: slotsSlab.hasPartialInvoice ? dayScreenStrings.invoiceStatusPartial : undefined,
+                tone: "copper",
+              },
+              {
+                label: dayScreenStrings.queueSummaryAverageLabel,
+                value: avgConsultMinutes !== null ? <Ltr>{avgConsultMinutes}</Ltr> : "—",
+                unit: dayScreenStrings.delayMinutesSuffix,
+                sub:
+                  slotsSlab.longestCompletedConsultMinutes !== null ? (
+                    <>
+                      {dayScreenStrings.tileLongestConsultPrefix} <Ltr>{slotsSlab.longestCompletedConsultMinutes}</Ltr>
+                      {dayScreenStrings.minutesShortUnit}
+                    </>
+                  ) : undefined,
+              },
+            ]}
+          />
+        </div>
+      )}
+
+      {(showPractitionerFilter || showLocationSwitcher) && (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {showPractitionerFilter && (
+            <ToggleGroup
+              variant="filter"
+              label={dayScreenStrings.practitionerFilterAriaLabel}
+              value={currentPractitionerId ?? ""}
+              onChange={handleSelectPractitioner}
+              options={staticData.practitioners.map((practitioner) => ({
+                value: practitioner.id,
+                label: practitioner.full_name,
+              }))}
+            />
+          )}
+          {showLocationSwitcher && (
+            <ToggleGroup
+              variant="filter"
+              label={dayScreenStrings.locationSwitcherAriaLabel}
+              value={selectedLocationId ?? ""}
+              onChange={setSelectedLocationId}
+              options={staticData.locations.map((location) => ({ value: location.id, label: location.name }))}
+            />
           )}
         </div>
       )}
 
-      {/* Row 3: counters. */}
-      <div className="mt-3">
-        <Counters counters={counters} />
-      </div>
-
-      {showLocationSwitcher && (
-        <div className="mt-4 flex gap-2">
-          {staticData.locations.map((location) => (
-            <button
-              key={location.id}
-              type="button"
-              onClick={() => setSelectedLocationId(location.id)}
-              className={toggleButtonClass(location.id === selectedLocationId)}
-            >
-              {location.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-8 flex flex-col gap-8">
+      <div className="mt-6 flex flex-col gap-6">
         {practitionersToShow.map((practitioner) => {
           const practitionerSchedules = schedulesForSelectedLocation.filter(
             (schedule) => schedule.practitioner_id === practitioner.id,
@@ -829,9 +977,12 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
               actorLabelByVisitId={dynamicData.actorLabelByVisitId}
               formDataVisitIds={dynamicData.formDataVisitIds}
               advancingVisitIds={advancingVisitIds}
+              today={today}
               onTapEmptySlot={
                 canBook && practitioner.id === currentPractitionerId ? handleTapEmptySlot : undefined
               }
+              onOpenBooking={canBook && practitioner.id === currentPractitionerId ? handleOpenBooking : undefined}
+              onWalkIn={canBook && practitioner.id === currentPractitionerId ? handleWalkIn : undefined}
               onAdvance={handleAdvance}
               openMenuVisitId={openMenuVisitId}
               onOpenMenu={setOpenMenuVisitId}
@@ -842,35 +993,13 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings }: DayScreen
               onOpenInvoice={handleOpenInvoice}
               onSendToEnd={handleSendToEnd}
               onOpenVisitForm={handleOpenVisitForm}
+              onOpenDaySheet={practitioner.id === currentPractitionerId ? () => setIsDaySheetOpen(true) : undefined}
+              onOpenAudit={practitioner.id === currentPractitionerId ? () => setIsAuditSheetOpen(true) : undefined}
+              onCallNextInQueue={practitioner.id === currentPractitionerId ? handleCallNextInQueue : undefined}
             />
           );
         })}
       </div>
-
-      {!bookingSheetMode && canBook && (
-        <div className="fixed inset-x-6 bottom-24 z-10 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setPresetBookingTime(null);
-              setBookingSheetMode("walk_in");
-            }}
-            className="rounded-full border border-line bg-paper px-4 py-3 font-display text-sm font-medium text-ink shadow-lg"
-          >
-            {dayScreenStrings.walkInButtonLabel}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPresetBookingTime(null);
-              setBookingSheetMode("booking");
-            }}
-            className="rounded-full bg-green px-6 py-3 font-display font-medium text-paper shadow-lg"
-          >
-            {isQueueMode ? dayScreenStrings.addToQueueButtonLabel : dayScreenStrings.bookingButtonLabel}
-          </button>
-        </div>
-      )}
 
       {bookingSheetMode && currentPractitioner && selectedLocationId && defaultService && (
         <BookingSheet

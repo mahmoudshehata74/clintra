@@ -1,6 +1,11 @@
 // All user-facing Arabic strings for the day screen live in this module so
 // they can be reviewed in one place.
 export const dayScreenStrings = {
+  // The app bar's title (AppShell.tsx) — the one piece of that bar's content
+  // this screen supplies. Queue mode gets its own suffix, slots mode none.
+  appBarTitle: "يوم العيادة",
+  appBarTitleQueue: "يوم العيادة — طابور",
+
   // SheetHeader.tsx's explicit close button — an additional, discoverable
   // dismissal alongside the sheet's existing backdrop-tap/Escape/drag-down,
   // shared by every sheet built with that header.
@@ -37,11 +42,43 @@ export const dayScreenStrings = {
   // Shown instead of the undo option when the undo is refused: the window
   // passed, or the visit changed since the mark, so nothing was written.
   undoRefused: "التراجع مش متاح دلوقتي",
-  countersTotalBooked: "إجمالي الحجوزات",
+  // The summary slab (prototype `.slab`) — shared cell words, reused by both
+  // slots and queue mode.
   countersArrived: "حضروا",
   countersCompleted: "خلصوا",
-  countersRemaining: "متبقي",
   allLocations: "كل الفروع",
+  // Accessible group names for the practitioner/location ToggleGroups under
+  // the slab (shown only when there is more than one of either).
+  practitionerFilterAriaLabel: "اختار الطبيب",
+  locationSwitcherAriaLabel: "اختار الفرع",
+
+  // Slots mode's slab (#s2): hero, cells, split legend, tiles.
+  slabRemainingLabel: "متبقي في اليوم",
+  slabRemainingUnit: "مريض",
+  slabTotalCaptionPrefix: "من إجمالي",
+  slabTotalCaptionSuffix: "حجوزات",
+  slabNoShowCellLabel: "لم يحضر",
+  slabSplitCompletedPrefix: "اكتمل",
+  slabSplitOfWord: "من",
+  slabSplitRemainingPrefix: "باقي",
+  // The copper "next up" action and the cash-close kbd hint.
+  slabNextActionPrefix: "التالي:",
+  slabCloseKbdPrefix: "إقفال",
+  // Money/consult-length tiles.
+  tileCollectedLabel: "محصّل اليوم",
+  tileInvoiceCountSuffix: "فواتير",
+  tileDueLabel: "مستحق",
+  tileLongestConsultPrefix: "أطول",
+  // Short minute suffix ("27د"), distinct from delayMinutesSuffix's full
+  // word ("27 دقيقة") — both appear in the prototype, in different spots.
+  minutesShortUnit: "د",
+
+  // Queue mode's slab (#s3): hero caption and its own cell/action words
+  // (مستنيين/خلصوا reuse the two shared cell words above).
+  queueHeroOfTotalWord: "من",
+  queueExpectedFinishPrefix: "يتوقع خلاص",
+  queueInRoomCellLabel: "في الكشف",
+  queueNextActionNumberPrefix: "نمرة",
   // The floating action that opens the booking sheet.
   bookingButtonLabel: "حجز",
   bookingSearchPlaceholder: "دور بالاسم أو الرقم",
@@ -100,8 +137,10 @@ export const dayScreenStrings = {
   // is still marked as moved, not assume the whole move was cleanly undone.
   moveUndoPartialFailure: "اترجع الميعاد الجديد، لكن الميعاد القديم لسه متسجل إنه اتنقل",
 
-  // Doctor delay: the day header chip and its picker.
-  delayNone: "بدون تأخير",
+  // Doctor delay: the slab's trigger action and its picker.
+  // The trigger's own visible/accessible label (prototype's `.sb` text) —
+  // static; the amount appends to this same label when a delay is set.
+  delayControlTriggerLabel: "تسجيل تأخير الطبيب",
   delayMinutesSuffix: "دقيقة",
   delayPickerTitle: "تأخير الطبيب",
   delayClearOption: "شيل التأخير",
@@ -123,6 +162,27 @@ export const dayScreenStrings = {
   // Shown on every row after the first at a clock time two or more visits
   // share — only reachable through the overbook flow.
   overbookedRowBadge: "فوق السعة",
+
+  // The slots-list card (prototype `.c-card`/`.c-head`, #s2) and its rows.
+  slotsCardBadge: "اليوم",
+  slotsCardTitle: "مواعيد اليوم",
+  slotsCardSubtitleBookedSuffix: "حجوزات",
+  slotsCardSubtitleFreeSuffix: "فاضية",
+  // `.slot .time .until` — shown under the time, state-dependent.
+  untilArrivedPrefix: "وصل",
+  untilSincePrefix: "من",
+  // The empty slot's own free-text line and its dashed quick-book button —
+  // distinct from emptySlot above, which stays the button's accessible name.
+  emptySlotFreeLabel: "موعد فاضي",
+  emptySlotQuickActionLabel: "＋ احجز هنا",
+  // Appended to the actor byline when the visit was recorded on an earlier
+  // day — "أمس" for yesterday, otherwise a short d/m date (no string needed
+  // for that — see actorRecency.ts).
+  actorYesterdaySuffix: "أمس",
+  // `.runrow .count` on the slots card's footer.
+  slotsFooterCountTotalSuffix: "ميعاد",
+  slotsFooterCountBookedSuffix: "محجوز",
+  slotsFooterCountFreeSuffix: "فاضي",
 
   // The sync status chip in the day header, and its needs-review list.
   syncOnline: "متصل",
@@ -238,9 +298,6 @@ export const dayScreenStrings = {
   queueSummaryCurrentTurnLabel: "الدور دلوقتي",
   queueSummaryWaitingLabel: "مستنيين",
   queueSummaryAverageLabel: "متوسط الكشف",
-  // Marks the single waiting row that is next in line, distinct from the
-  // in_room row's own (stronger) treatment.
-  queueNextBadge: "التالي",
   // Prefixes the expected-wait minutes on a waiting row, e.g. "متوقع دورك بعد ~٢٢ دقيقة".
   queueExpectedWaitPrefix: "متوقع دورك بعد ~",
   // Shown instead, on every waiting row, until at least two visits have
@@ -254,6 +311,20 @@ export const dayScreenStrings = {
   // The overflow menu's send-to-end-of-queue entry, and its toast.
   sendToEndOfQueueMenuLabel: "أجّله لآخر الدور",
   sendToEndOfQueueToastMessage: "اتنقل لآخر الدور",
+
+  // The queue-list card (prototype `.q-list`/`.qrow`, #s3) and its rows.
+  queueCardBadge: "الطابور",
+  queueCardTitle: "الدور",
+  queueCardSubtitle: "النمرة تلقائية للأقدم انتظار",
+  queueCallNextActionLabel: "استدعاء التالي",
+  // `.qwait` — completed shows a duration, in_room a plain dash (the
+  // prototype's own rendering: no elapsed time there), waiting reuses
+  // queueExpectedWaitPrefix/queueExpectedWaitUnknown above unchanged.
+  queueWaitCompletedPrefix: "استغرق",
+  queueWaitInRoomDash: "—",
+  // `.runrow .count` on the queue card's footer.
+  queueFooterCountInQueueSuffix: "في الطابور",
+  queueFooterCountCompletedSuffix: "اكتملوا",
 
   // The day header's day-sheet action ("ورقة الغد"): a printable list of
   // tomorrow's booked visits for the current practitioner+location, prepared
