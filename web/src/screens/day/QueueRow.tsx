@@ -15,6 +15,8 @@ interface QueueRowProps {
   /** Null for a non-waiting row, or a waiting row shown before this label is known — see queueSummary.ts's gating. */
   expectedWaitLabel: ReactNode;
   onPrimaryAction?: () => void;
+  /** True while this visit is in its post-tap cooldown — see advanceCooldown.ts. */
+  disablePrimaryAction?: boolean;
   menu?: VisitMenuActions;
   /** Resolved "recorded by" label for the visit's created_by membership — see actorLabel.ts. */
   actorLabel?: string;
@@ -38,6 +40,7 @@ export default function QueueRow({
   isNext,
   expectedWaitLabel,
   onPrimaryAction,
+  disablePrimaryAction = false,
   menu,
   actorLabel,
   onOpenVisitForm,
@@ -84,7 +87,12 @@ export default function QueueRow({
   return (
     <li className={containerClassName}>
       {isTappable ? (
-        <button type="button" onClick={onPrimaryAction} className="flex flex-1 items-center gap-3 text-start">
+        <button
+          type="button"
+          onClick={onPrimaryAction}
+          disabled={disablePrimaryAction}
+          className="flex flex-1 items-center gap-3 text-start"
+        >
           {rowContent}
         </button>
       ) : (

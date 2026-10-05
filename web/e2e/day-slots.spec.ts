@@ -75,6 +75,26 @@ test("single tap advances booked -> arrived -> in_room -> completed, and undo re
   await expect(karim).toContainText(S.statusCompleted);
 });
 
+test("double-clicking a booked row's primary button advances only to arrived, not in_room", async ({ page }) => {
+  const mona = rowFor(page, PATIENTS.mona);
+  await expect(mona).toContainText(S.statusBooked);
+
+  await mona.locator("button").filter({ hasText: PATIENTS.mona }).dblclick();
+  await expect(page.getByText(S.attendanceMarked)).toBeVisible();
+  await expect(mona).toContainText(S.statusArrived);
+  await expect(page.getByText(S.inRoomToastMessage)).toHaveCount(0);
+});
+
+test("double-clicking an arrived row's primary button advances only to in_room, not completed", async ({ page }) => {
+  const karim = rowFor(page, PATIENTS.karim);
+  await expect(karim).toContainText(S.statusArrived);
+
+  await karim.locator("button").filter({ hasText: PATIENTS.karim }).dblclick();
+  await expect(page.getByText(S.inRoomToastMessage)).toBeVisible();
+  await expect(karim).toContainText(S.statusInRoom);
+  await expect(page.getByText(S.completedToastMessage)).toHaveCount(0);
+});
+
 test("empty-slot plus tile opens the booking sheet with the slot's time pre-filled", async ({ page }) => {
   const firstTile = emptySlotTiles(page).first();
   // The tile itself shows no time text (clintra-screens.html's .sl.free is a
