@@ -1,19 +1,18 @@
 import type { ReactNode } from "react";
 import Ltr from "../../components/Ltr";
-import { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Service, Visit } from "../../db/types";
-import { STATUS_LABEL, statusVisual } from "./statusStyle";
 import { dayScreenStrings } from "./strings";
 import VisitMenu, { type VisitMenuActions } from "./VisitMenu";
+
+export type QueueRowKind = "current" | "next" | "done" | "waiting";
 
 interface QueueRowProps {
   visit: Visit;
   patient?: Patient;
   service?: Service;
-  /** The single waiting row currently first in line — see screens/day/queueSummary.ts. */
-  isNext: boolean;
-  /** Null for a non-waiting row, or a waiting row shown before this label is known — see queueSummary.ts's gating. */
-  expectedWaitLabel: ReactNode;
+  kind: QueueRowKind;
+  /** The `.qwait` column's content — composed by the caller (QueueColumn), since it varies by kind: a duration, a plain dash, or the existing expected-wait label. */
+  waitNode: ReactNode;
   onPrimaryAction?: () => void;
   /** True while this visit is in its post-tap cooldown — see advanceCooldown.ts. */
   disablePrimaryAction?: boolean;
@@ -26,19 +25,27 @@ interface QueueRowProps {
   showEmptyFormHint?: boolean;
 }
 
-// Rescheduled is the one status statusVisual() has no treatment for (a
-// rescheduled visit no longer occupies its slot at all) — not reachable
-// through any queue-mode action today, since queue rows have no "move"
-// entry, but handled the same plain way slots mode would rather than
-// leaving a row with no styling at all if that ever changes.
-const FALLBACK_VISUAL = { containerClassName: "border border-line bg-paper", nameClassName: "", metaClassName: "text-muted" };
+const QNUM_LOOK: Record<QueueRowKind, string> = {
+  current:
+    "border-transparent bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-white shadow-[0_3px_10px_color-mix(in_srgb,var(--color-copper)_40%,transparent)]",
+  next: "border-green-line bg-green-wash text-green",
+  done: "border-rule bg-field text-faint",
+  waiting: "border-rule bg-field text-muted",
+};
 
+/**
+ * One row of the queue list (prototype `.qrow`, #s3): position | patient |
+ * wait column, with the position badge (`.qnum`) coloured by whether this
+ * visit is the one being seen now, next in line, already done, or still
+ * waiting. Everything a row can do today — advance, the overflow menu, the
+ * visit-form pill — still works exactly as before this task.
+ */
 export default function QueueRow({
   visit,
   patient,
   service,
-  isNext,
-  expectedWaitLabel,
+  kind,
+  waitNode,
   onPrimaryAction,
   disablePrimaryAction = false,
   menu,
@@ -47,62 +54,61 @@ export default function QueueRow({
   showEmptyFormHint = false,
 }: QueueRowProps) {
   const isTappable = Boolean(onPrimaryAction);
-  const isInRoom = visit.status === VisitStatus.InRoom;
-  const visual = statusVisual(visit.status) ?? FALLBACK_VISUAL;
-  // "Next in line" is a priority marker layered on top of whatever the
-  // row's own status treatment already is — an arrived visit that also
-  // happens to be next still keeps its light-green fill, plus this ring in
-  // the reference's --pm colour (--color-green-medium), distinct from
-  // arrived's own fill so the two meanings never look identical. in_room is
-  // never "next" — it is the current turn, not the one waiting for it.
-  const nextAccentClassName = isNext && !isInRoom ? "ring-2 ring-inset ring-green-medium" : "";
-  const containerClassName =
-    `flex w-full items-center gap-3 rounded-[--radius-el] p-3 ${visual.containerClassName} ${nextAccentClassName}`.trim();
 
   const rowContent = (
     <>
-      <span className={`w-8 shrink-0 text-center ${visual.metaClassName}`}>
+      <span
+        className={`flex h-[38px] w-[38px] flex-none items-center justify-center rounded-control border-[1.5px] text-[15px] font-bold leading-none tracking-[-0.02em] tabular-nums ${QNUM_LOOK[kind]}`}
+      >
         <Ltr>{visit.position}</Ltr>
       </span>
-      <span className="flex flex-1 flex-col">
-        <span className="flex items-baseline gap-2">
-          <span className={visual.nameClassName}>{patient?.full_name}</span>
-          <span className={`text-sm ${visual.metaClassName}`}>{STATUS_LABEL[visit.status]}</span>
-          {isNext && !isInRoom && (
-            <span className="text-sm font-semibold text-green-medium">{dayScreenStrings.queueNextBadge}</span>
-          )}
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className={`truncate text-sm font-semibold ${kind === "done" ? "text-muted" : "text-text"}`}>
+          {patient?.full_name}
         </span>
-        {service && <span className={`text-sm ${visual.metaClassName}`}>{service.name}</span>}
-        {expectedWaitLabel && <span className={`text-sm ${visual.metaClassName}`}>{expectedWaitLabel}</span>}
-        {actorLabel && (
-          <span className={`text-sm ${visual.metaClassName}`}>
-            {dayScreenStrings.recordedByPrefix} {actorLabel}
-          </span>
-        )}
-        {showEmptyFormHint && <span className="text-sm text-muted">{dayScreenStrings.visitFormEmptyHint}</span>}
+        {service && <span className="mt-px text-[11.5px] text-muted">{service.name}</span>}
+        {actorLabel && <span className="mt-0.5 text-[10px] text-faint">{dayScreenStrings.recordedByPrefix} {actorLabel}</span>}
+        {showEmptyFormHint && <span className="text-[10px] text-muted">{dayScreenStrings.visitFormEmptyHint}</span>}
+      </span>
+      <span className={`flex flex-none flex-col items-end gap-0.5 text-end text-[11px] tabular-nums text-muted [&>b]:text-[13.5px] [&>b]:font-bold [&>b]:tracking-[-0.01em] [&>b]:text-text ${kind === "current" ? "[&>b]:text-copper" : ""}`}>
+        {waitNode}
       </span>
     </>
   );
 
   return (
-    <li className={containerClassName}>
+    <li
+      data-visit-row-id={visit.id}
+      // A plain, non-visual hook (same precedent as SlotRow.tsx's own
+      // data-slot-time): the redesigned row no longer shows a status word for
+      // every state (booked and arrived now read identically — see
+      // queueSummary.ts and this file's own doc comment), so e2e specs
+      // asserting a specific transition need a way to read the real status.
+      data-visit-status={visit.status}
+      // Another non-visual hook, for the same reason: the prototype's own
+      // `.qrow.next` carries no text badge at all (only the qnum's colour
+      // changes), so "is this the next-in-line row" is otherwise unreadable
+      // from the rendered page.
+      data-queue-row-kind={kind}
+      className="flex items-center gap-3.5 border-b border-hair px-[18px] py-[13px] last:border-b-0"
+    >
       {isTappable ? (
         <button
           type="button"
           onClick={onPrimaryAction}
           disabled={disablePrimaryAction}
-          className="flex flex-1 items-center gap-3 text-start"
+          className="flex flex-1 items-center gap-3.5 text-start"
         >
           {rowContent}
         </button>
       ) : (
-        <div className="flex flex-1 items-center gap-3 text-start">{rowContent}</div>
+        <div className="flex flex-1 items-center gap-3.5 text-start">{rowContent}</div>
       )}
       {onOpenVisitForm && (
         <button
           type="button"
           onClick={onOpenVisitForm}
-          className="shrink-0 rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted hover:bg-green-soft hover:text-green"
+          className="shrink-0 rounded-chip bg-field px-2 py-0.5 text-xs text-muted hover:bg-green-wash hover:text-green"
         >
           {dayScreenStrings.visitFormPillLabel}
         </button>
