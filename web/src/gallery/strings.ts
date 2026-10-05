@@ -8,6 +8,28 @@ export const galleryStrings = {
   buttonsSectionTitle: "الأزرار",
   clickCounterLabel: "عدد الضغطات",
   fieldsSectionTitle: "الحقول",
+  cardsSectionTitle: "البطاقات",
+} as const;
+
+// Screen 3's "مواعيد اليوم" card (docs/reference/clintra-prototype.html,
+// `.c-card`/`.c-head`/`.runrow` around that card) — head, footer and count
+// text reproduced verbatim; the body is a placeholder, since the slot list
+// itself belongs to the day screen, not this gallery.
+export const cardGalleryStrings = {
+  dayCardBadge: "اليوم",
+  dayCardTitle: "مواعيد اليوم",
+  dayCardSubtitle: "5 حجوزات · 3 فاضية · 30 دقيقة",
+  dayCardTrailingAction: "ورقة الغد",
+  dayCardPlaceholderBody: "قائمة المواعيد تظهر هنا",
+  dayCardPrimaryAction: "احجز مريض جديد",
+  dayCardSecondaryAction: "مريض جه دلوقتي",
+  dayCardCountAppointments: "7",
+  dayCardCountAppointmentsLabel: "ميعاد",
+  dayCardCountBooked: "5",
+  dayCardCountBookedLabel: "محجوز",
+  dayCardCountFree: "2",
+  dayCardCountFreeLabel: "فاضي",
+  plainCardBody: "بطاقة بجسم فقط، بدون رأس أو تذييل",
 } as const;
 
 // Labels, values and hints are the prototype's own field text

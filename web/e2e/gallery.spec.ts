@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  cardGalleryStrings,
   DARK_SURFACE_MD_ONLY_BUTTON_DEMOS,
   DARK_SURFACE_SM_BUTTON_DEMOS,
   fieldGalleryStrings,
@@ -101,4 +102,22 @@ test("an invalid field exposes aria-invalid and its error message", async ({ pag
     throw new Error("expected the invalid field to have aria-describedby set");
   }
   await expect(page.locator(`#${describedById}`)).toHaveText(fieldGalleryStrings.phoneError);
+});
+
+test("the day card's head renders a real, correctly-leveled heading", async ({ page }) => {
+  await expect(page.getByRole("heading", { name: cardGalleryStrings.dayCardTitle, level: 3 })).toBeVisible();
+});
+
+test("the day card's footer buttons and count are reachable", async ({ page }) => {
+  // Both labels are reused from the Buttons section's own primary/secondary
+  // demos (same prototype source) — disambiguated as the last match, since
+  // the card renders after that section in the page.
+  await expect(page.getByRole("button", { name: cardGalleryStrings.dayCardPrimaryAction }).last()).toBeVisible();
+  await expect(page.getByRole("button", { name: cardGalleryStrings.dayCardSecondaryAction }).last()).toBeVisible();
+  await expect(
+    page.getByText(
+      `${cardGalleryStrings.dayCardCountAppointments} ${cardGalleryStrings.dayCardCountAppointmentsLabel}`,
+      { exact: false },
+    ),
+  ).toBeVisible();
 });

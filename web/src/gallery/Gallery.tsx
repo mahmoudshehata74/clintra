@@ -1,4 +1,5 @@
 import ButtonsSection from "./sections/ButtonsSection";
+import CardSection from "./sections/CardSection";
 import FieldSection from "./sections/FieldSection";
 import { galleryStrings } from "./strings";
 
@@ -17,6 +18,7 @@ export default function Gallery() {
         <h1 className="text-2xl font-bold text-text">{galleryStrings.pageTitle}</h1>
         <ButtonsSection />
         <FieldSection />
+        <CardSection />
       </div>
     </div>
   );
