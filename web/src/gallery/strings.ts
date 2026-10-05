@@ -10,6 +10,32 @@ export const galleryStrings = {
   fieldsSectionTitle: "الحقول",
   cardsSectionTitle: "البطاقات",
   badgesSectionTitle: "الشارات",
+  toggleChipsSectionTitle: "شارات الاختيار",
+} as const;
+
+// Each group's own options, from docs/reference/clintra-prototype.html:
+// .svc-row (screen 4's service picker), .filts (screen 13's audit
+// filters), .set-tabs (screen 11-13's settings tabs), .pt-tabs (screen
+// 18's patient tabs, with their own .b counters), .msg-ch-toggle (screen
+// 17's channel switch).
+export const toggleChipGalleryStrings = {
+  servicesHeading: "الخدمات (svc-row)",
+  servicesOptions: ["كشف عام · 400ج", "استشارة متابعة · 250ج", "فحص شامل · 600ج"] as const,
+  filtersHeading: "فلاتر السجل (filt)",
+  filtersOptions: ["الكل", "زيارات", "فواتير", "إعدادات"] as const,
+  tabsHeading: "تبويبات الإعدادات (set-tab)",
+  tabsOptions: ["مواعيد العمل", "الخدمات", "الموظفون"] as const,
+  patientTabsHeading: "تبويبات ملف المريض (pt-tab)",
+  patientTabsOptions: [
+    { label: "الكل", counter: 28 },
+    { label: "زيارات", counter: 5 },
+    { label: "وصفات", counter: 4 },
+    { label: "رسائل", counter: 7 },
+    { label: "مدفوعات", counter: 8 },
+    { label: "ملاحظات", counter: 4 },
+  ] as const,
+  channelHeading: "قناة الإرسال (msg-ch-toggle)",
+  channelOptions: ["واتساب", "SMS"] as const,
 } as const;
 
 // Each row's label and source class, from docs/reference/clintra-prototype.html:

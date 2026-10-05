@@ -128,3 +128,24 @@ test("every badge demo is visible by its text", async ({ page }) => {
     await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
   }
 });
+
+test("clicking a chip in each toggle group moves aria-pressed to it and off the previous one", async ({ page }) => {
+  const groups = page.getByRole("group");
+  const groupCount = await groups.count();
+  expect(groupCount).toBeGreaterThan(0);
+
+  for (let i = 0; i < groupCount; i++) {
+    const group = groups.nth(i);
+    const chips = group.getByRole("button");
+    const first = chips.first();
+    const second = chips.nth(1);
+
+    await expect(first).toHaveAttribute("aria-pressed", "true");
+    await expect(second).toHaveAttribute("aria-pressed", "false");
+
+    await second.click();
+
+    await expect(second).toHaveAttribute("aria-pressed", "true");
+    await expect(first).toHaveAttribute("aria-pressed", "false");
+  }
+});
