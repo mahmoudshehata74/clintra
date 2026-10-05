@@ -185,7 +185,6 @@
   /* Legacy tokens — still used by screens not yet restyled. Each is removed
      in the commit that migrates its last usage. Do not use in new code. */
   --color-green-soft: #e8f0ec;
-  --color-green-medium: #4c8571;
   --color-red: #b23a34;
   --color-red-soft: #faecea;
   --color-amber: #8a6a22;
