@@ -9,6 +9,11 @@ export const SEED_DAY_QUERY_PARAM = "seedDay";
 // which deliberately runs against the real current day).
 const DEMO_MODE_QUERY_PARAM = "demo";
 
+// A third, unrelated signal: the component gallery (src/gallery/Gallery.tsx)
+// replaces the app entirely rather than layering onto it, so main.tsx checks
+// this before ever importing App.
+const GALLERY_QUERY_PARAM = "gallery";
+
 /**
  * True when this navigation explicitly opted into demo/dev mode — the
  * seed-based bootstrap (db/seed.ts) and the tokenless device-binding
@@ -26,4 +31,10 @@ const DEMO_MODE_QUERY_PARAM = "demo";
 export function isDemoModeRequested(): boolean {
   const params = new URLSearchParams(window.location.search);
   return params.get(SEED_DAY_QUERY_PARAM) === "1" || params.get(DEMO_MODE_QUERY_PARAM) === "1";
+}
+
+/** True when the URL asks for the component gallery instead of the app (?gallery=1). */
+export function isGalleryModeRequested(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  return params.get(GALLERY_QUERY_PARAM) === "1";
 }
