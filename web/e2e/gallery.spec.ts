@@ -8,6 +8,7 @@ import {
   galleryStrings,
   LIGHT_SURFACE_MD_ONLY_BUTTON_DEMOS,
   LIGHT_SURFACE_SM_BUTTON_DEMOS,
+  sheetPanelGalleryStrings,
 } from "../src/gallery/strings";
 
 // The dev-only component gallery (?gallery=1, see src/gallery/Gallery.tsx and
@@ -148,4 +149,12 @@ test("clicking a chip in each toggle group moves aria-pressed to it and off the 
     await expect(second).toHaveAttribute("aria-pressed", "true");
     await expect(first).toHaveAttribute("aria-pressed", "false");
   }
+});
+
+test("the sheet panel's heading is present and its close button fires onClose once", async ({ page }) => {
+  await expect(page.getByRole("heading", { name: sheetPanelGalleryStrings.title })).toBeVisible();
+
+  await expect(page.getByText(`${sheetPanelGalleryStrings.closeLabel}: 0`)).toBeVisible();
+  await page.getByRole("button", { name: sheetPanelGalleryStrings.closeLabel }).click();
+  await expect(page.getByText(`${sheetPanelGalleryStrings.closeLabel}: 1`)).toBeVisible();
 });

@@ -293,6 +293,12 @@ test("@screenshot gallery-togglechip", async ({ page }) => {
   await shoot(page, "gallery-togglechip", true);
 });
 
+test("@screenshot gallery-sheetpanel", async ({ page }) => {
+  await page.goto("/?gallery=1");
+  await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
+  await shoot(page, "gallery-sheetpanel", true);
+});
+
 test("@screenshot day-sheet-print", async ({ page }) => {
   await page.addInitScript(() => {
     window.print = () => {};

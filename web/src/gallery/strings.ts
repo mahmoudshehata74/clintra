@@ -11,6 +11,18 @@ export const galleryStrings = {
   cardsSectionTitle: "البطاقات",
   badgesSectionTitle: "الشارات",
   toggleChipsSectionTitle: "شارات الاختيار",
+  sheetPanelSectionTitle: "لوحة الشيت",
+} as const;
+
+// Screen 4's booking sheet, composed from the pieces above — the search
+// field reuses fieldGalleryStrings.searchLabel/searchFilledValue and the
+// services toggle reuses toggleChipGalleryStrings.servicesOptions, since
+// both are the exact same prototype fields shown there a second time.
+export const sheetPanelGalleryStrings = {
+  title: "حجز · 11:30 · د. أحمد المصري",
+  closeLabel: "إغلاق",
+  primaryAction: "تأكيد الحجز",
+  secondaryAction: "من غير رقم",
 } as const;
 
 // Each group's own options, from docs/reference/clintra-prototype.html:
