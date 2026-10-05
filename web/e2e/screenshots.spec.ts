@@ -45,6 +45,12 @@ async function shoot(page: Page, surface: string, fullPage: boolean): Promise<vo
   await page.screenshot({ path: `${OUT_DIR}/${surface}-${project}.png`, fullPage });
 }
 
+/** Captures only the named gallery section, not the whole scrollable page. */
+async function shootGallerySection(page: Page, surface: string, section: string): Promise<void> {
+  const project = test.info().project.name;
+  await page.locator(`[data-gallery-section="${section}"]`).screenshot({ path: `${OUT_DIR}/${surface}-${project}.png` });
+}
+
 test("@screenshot lock-screen-picker", async ({ page }) => {
   // Re-navigate to the fresh, still-locked state (beforeEach logged in).
   await page.goto("/?seedDay=1");
@@ -266,7 +272,37 @@ test("@screenshot gallery-buttons", async ({ page }) => {
   // than firing immediately after goto.
   await page.goto("/?gallery=1");
   await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
-  await shoot(page, "gallery-buttons", true);
+  await shootGallerySection(page, "gallery-buttons", "buttons");
+});
+
+test("@screenshot gallery-field", async ({ page }) => {
+  await page.goto("/?gallery=1");
+  await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
+  await shootGallerySection(page, "gallery-field", "field");
+});
+
+test("@screenshot gallery-card", async ({ page }) => {
+  await page.goto("/?gallery=1");
+  await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
+  await shootGallerySection(page, "gallery-card", "card");
+});
+
+test("@screenshot gallery-badge", async ({ page }) => {
+  await page.goto("/?gallery=1");
+  await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
+  await shootGallerySection(page, "gallery-badge", "badge");
+});
+
+test("@screenshot gallery-togglechip", async ({ page }) => {
+  await page.goto("/?gallery=1");
+  await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
+  await shootGallerySection(page, "gallery-togglechip", "togglechip");
+});
+
+test("@screenshot gallery-sheetpanel", async ({ page }) => {
+  await page.goto("/?gallery=1");
+  await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
+  await shootGallerySection(page, "gallery-sheetpanel", "sheetpanel");
 });
 
 test("@screenshot day-sheet-print", async ({ page }) => {

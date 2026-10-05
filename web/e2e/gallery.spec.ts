@@ -1,10 +1,15 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import {
+  ALL_BADGE_DEMO_LABELS,
+  cardGalleryStrings,
   DARK_SURFACE_MD_ONLY_BUTTON_DEMOS,
   DARK_SURFACE_SM_BUTTON_DEMOS,
+  fieldGalleryStrings,
   galleryStrings,
   LIGHT_SURFACE_MD_ONLY_BUTTON_DEMOS,
   LIGHT_SURFACE_SM_BUTTON_DEMOS,
+  sheetPanelGalleryStrings,
+  toggleChipGalleryStrings,
 } from "../src/gallery/strings";
 
 // The dev-only component gallery (?gallery=1, see src/gallery/Gallery.tsx and
@@ -75,4 +80,94 @@ test("an outline button's touch target reaches 40px even though its box is short
     { x, y, handle },
   );
   expect(hitTargetIsTheButton).toBe(true);
+});
+
+test("a field's label is associated with its control", async ({ page }) => {
+  const filledSearch = page.getByLabel(fieldGalleryStrings.searchLabel).nth(2);
+  await expect(filledSearch).toHaveValue(fieldGalleryStrings.searchFilledValue);
+});
+
+test("typing into an empty field switches it to filled styling", async ({ page }) => {
+  // font-bold is unique to the filled look (`.field .in.filled`'s own
+  // font-weight:700) — unlike border-green, it never appears as a
+  // focus:/aria-invalid: prefixed variant elsewhere in the base classes.
+  const input = page.getByLabel(fieldGalleryStrings.searchLabel).first();
+  await expect(input).not.toHaveClass(/\bfont-bold\b/);
+  await input.fill(fieldGalleryStrings.searchFilledValue);
+  await expect(input).toHaveClass(/\bfont-bold\b/);
+});
+
+test("an invalid field exposes aria-invalid and its error message", async ({ page }) => {
+  const input = page.getByLabel(fieldGalleryStrings.phoneLabel);
+  await expect(input).toHaveAttribute("aria-invalid", "true");
+  const describedById = await input.getAttribute("aria-describedby");
+  if (!describedById) {
+    throw new Error("expected the invalid field to have aria-describedby set");
+  }
+  await expect(page.locator(`#${describedById}`)).toHaveText(fieldGalleryStrings.phoneError);
+});
+
+test("the day card's head renders a real, correctly-leveled heading", async ({ page }) => {
+  await expect(page.getByRole("heading", { name: cardGalleryStrings.dayCardTitle, level: 3 })).toBeVisible();
+});
+
+test("the day card's footer buttons and count are reachable", async ({ page }) => {
+  // Both labels are reused from the Buttons section's own primary/secondary
+  // demos (same prototype source) — disambiguated as the last match, since
+  // the card renders after that section in the page.
+  await expect(page.getByRole("button", { name: cardGalleryStrings.dayCardPrimaryAction }).last()).toBeVisible();
+  await expect(page.getByRole("button", { name: cardGalleryStrings.dayCardSecondaryAction }).last()).toBeVisible();
+  await expect(
+    page.getByText(
+      `${cardGalleryStrings.dayCardCountAppointments} ${cardGalleryStrings.dayCardCountAppointmentsLabel}`,
+      { exact: false },
+    ),
+  ).toBeVisible();
+});
+
+test("every badge demo is visible by its text", async ({ page }) => {
+  for (const label of ALL_BADGE_DEMO_LABELS) {
+    await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+  }
+});
+
+// Each group's own accessible name — ToggleGroup's required `label` prop.
+// "services" is reused by both ToggleChipSection and SheetPanelSection (the
+// same prototype field shown a second time), so it resolves to two groups.
+const TOGGLE_GROUP_NAMES = [
+  toggleChipGalleryStrings.servicesHeading,
+  toggleChipGalleryStrings.filtersHeading,
+  toggleChipGalleryStrings.tabsHeading,
+  toggleChipGalleryStrings.patientTabsHeading,
+  toggleChipGalleryStrings.channelHeading,
+];
+
+test("clicking a chip in each named toggle group moves aria-pressed to it and off the previous one", async ({ page }) => {
+  const groups: Locator[] = [];
+  for (const name of TOGGLE_GROUP_NAMES) {
+    groups.push(...(await page.getByRole("group", { name }).all()));
+  }
+  expect(groups.length).toBeGreaterThanOrEqual(TOGGLE_GROUP_NAMES.length);
+
+  for (const group of groups) {
+    const chips = group.getByRole("button");
+    const first = chips.first();
+    const second = chips.nth(1);
+
+    await expect(first).toHaveAttribute("aria-pressed", "true");
+    await expect(second).toHaveAttribute("aria-pressed", "false");
+
+    await second.click();
+
+    await expect(second).toHaveAttribute("aria-pressed", "true");
+    await expect(first).toHaveAttribute("aria-pressed", "false");
+  }
+});
+
+test("the sheet panel's heading is present and its close button fires onClose once", async ({ page }) => {
+  await expect(page.getByRole("heading", { name: sheetPanelGalleryStrings.title })).toBeVisible();
+
+  await expect(page.getByText(`${sheetPanelGalleryStrings.closeLabel}: 0`)).toBeVisible();
+  await page.getByRole("button", { name: sheetPanelGalleryStrings.closeLabel }).click();
+  await expect(page.getByText(`${sheetPanelGalleryStrings.closeLabel}: 1`)).toBeVisible();
 });
