@@ -114,7 +114,7 @@ export default function MoveVisitSheet({
                       type="button"
                       disabled={isMoving}
                       onClick={() => handleSelectSlot(group.date, slot.time, schedule)}
-                      className="flex w-full items-center gap-3 rounded-[--radius-el] border border-line p-3 text-start disabled:opacity-60"
+                      className="flex w-full items-center gap-3 rounded-control border border-rule p-3 text-start disabled:opacity-60"
                     >
                       <span className="text-muted">
                         <Ltr>{slot.time}</Ltr>

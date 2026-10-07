@@ -33,17 +33,21 @@ interface SheetProps {
  * ever left undimmed above it — at z-30. The app bar and rail sit above it
  * at z-40 (see AppShell.tsx) rather than below: both stay genuinely
  * interactive while a sheet is open (the sidebar switches away from settings
- * without an extra dismiss tap; the lock action stays reachable mid-booking),
- * which a backdrop dimming them while still eating their clicks would break.
+ * without an extra dismiss tap; the lock action stays reachable mid-booking).
  * Sheet itself sits below LockScreen's z-50. UndoToast stays at its own
  * z-10, i.e. below a sheet: that's the relationship already in place before
  * this change (Sheet was z-20 to UndoToast's z-10), so a toast raised while
  * a sheet is open is not expected to stay usable over it here.
  * The panel is bottom-anchored on every width and capped to the viewport
- * height minus a top gap (top-6) so the dimmed backdrop is always visible
- * above it; its own content scrolls internally (overflow-y-auto on the
- * dialog element) while a restyled sheet's SheetPanelHead/Foot stay pinned
- * via their own sticky positioning.
+ * height minus a top gap (top-16, 64px) so the dimmed backdrop is always
+ * visible above it; its own content scrolls internally (overflow-y-auto on
+ * the dialog element) while a restyled sheet's SheetPanelHead/Foot stay
+ * pinned via their own sticky positioning. The gap is sized to clear the app
+ * bar's own single-row height (confirmed at both tested widths — see
+ * AppShell.tsx), not just to be "visible": since the app bar now paints
+ * above the sheet (z-40 > z-30) so it stays clickable, a sheet tall enough
+ * to reach under it would have its own top content hidden under the bar
+ * rather than merely dimmed by it.
  */
 export default function Sheet({ onDismiss, size = "md", children }: SheetProps) {
   const [dragY, setDragY] = useState(0);
@@ -110,17 +114,18 @@ export default function Sheet({ onDismiss, size = "md", children }: SheetProps) 
     <div className="fixed inset-0 z-30">
       <div className="absolute inset-0 bg-ink/40" onClick={onDismiss} aria-hidden="true" />
       {/* pointer-events-none: this box spans the full remaining viewport
-          (top-6 down to the bottom, mobile bottom-bar height excluded) so
-          the dialog panel inside it has a definite height to cap itself
-          against, but its own empty flex space (above and beside the
-          centered panel) must NOT steal clicks meant for the backdrop
+          (top-16, clearing the app bar's own height — see this component's
+          doc comment — down to the bottom, mobile bottom-bar height
+          excluded) so the dialog panel inside it has a definite height to
+          cap itself against, but its own empty flex space (above and beside
+          the centered panel) must NOT steal clicks meant for the backdrop
           behind it — only the two children below re-enable pointer-events
           on themselves. bottom-16 below sm: keeps the panel itself from
           ever sitting under AppShell's mobile bottom nav bar (z-40, above
           this backdrop so it stays genuinely clickable) — at sm: and above
           the rail is a side column instead, so this reclaims the full
           height. */}
-      <div className="pointer-events-none absolute inset-x-0 top-6 bottom-16 flex flex-col items-center justify-end sm:bottom-0">
+      <div className="pointer-events-none absolute inset-x-0 top-16 bottom-16 flex flex-col items-center justify-end sm:bottom-0">
         {/* Drag-to-dismiss handle: sits in the dimmed gap above the card
             itself rather than inside it, since the card's own top is now
             either the dark SheetPanelHead or (for a not-yet-restyled sheet)

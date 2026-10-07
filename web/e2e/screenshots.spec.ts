@@ -108,6 +108,29 @@ test("@screenshot day-slots-with-cancelled", async ({ page }) => {
   await shoot(page, "day-slots-with-cancelled", true);
 });
 
+test("@screenshot cancel-prompt", async ({ page }) => {
+  await selectPractitioner(page, SLOTS_DR);
+  await rowFor(page, PATIENTS.mona).getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
+  await page.getByRole("menuitem", { name: S.cancelMenuLabel, exact: true }).click();
+  await expect(page.getByRole("dialog").getByText(S.cancelPromptTitle)).toBeVisible();
+  await shoot(page, "cancel-prompt", false);
+});
+
+test("@screenshot move-sheet", async ({ page }) => {
+  await selectPractitioner(page, SLOTS_DR);
+  await rowFor(page, PATIENTS.mona).getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
+  await page.getByRole("menuitem", { name: S.moveMenuLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText(S.moveSheetHeading)).toBeVisible();
+  // The target list loads asynchronously (useLiveQuery) and is tall enough
+  // to scroll; wait for a real slot button so the capture isn't racing that
+  // load, then pin the dialog's own scroll back to its head before shooting.
+  await expect(dialog.getByRole("button", { name: /^\d{1,2}:\d{2}$/ }).first()).toBeVisible();
+  await dialog.evaluate((el) => el.scrollTo(0, 0));
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await shoot(page, "move-sheet", false);
+});
+
 test("@screenshot day-slots-with-overbook", async ({ page }) => {
   test.setTimeout(120_000);
   await selectPractitioner(page, SLOTS_DR);

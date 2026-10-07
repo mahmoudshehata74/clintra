@@ -68,7 +68,7 @@ export default function InstallBanner() {
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-line bg-green-soft px-4 py-2">
+    <div className="flex items-center justify-between gap-3 border-b border-rule bg-green-wash px-4 py-2">
       <p className="text-sm">{installBannerStrings.message}</p>
       <div className="flex shrink-0 gap-2">
         <button
@@ -82,7 +82,7 @@ export default function InstallBanner() {
           type="button"
           onClick={handleDismiss}
           aria-label={installBannerStrings.dismissAriaLabel}
-          className="rounded-full border border-line px-3 py-1.5 text-sm"
+          className="rounded-full border border-rule px-3 py-1.5 text-sm"
         >
           {installBannerStrings.dismissAction}
         </button>

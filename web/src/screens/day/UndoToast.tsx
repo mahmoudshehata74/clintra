@@ -16,7 +16,7 @@ interface UndoToastProps {
 export default function UndoToast({ message, onUndo }: UndoToastProps) {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-20 z-10 flex justify-center px-4 sm:bottom-4">
-      <div className="pointer-events-auto flex items-center gap-3 rounded-[--radius-el] border border-line bg-paper px-4 py-2 shadow-lg">
+      <div className="pointer-events-auto flex items-center gap-3 rounded-control border border-rule bg-paper px-4 py-2 shadow-m">
         <span className="text-sm">{message}</span>
         {onUndo && (
           <button type="button" onClick={onUndo} className="text-sm font-semibold text-green">
