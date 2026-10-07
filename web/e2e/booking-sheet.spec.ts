@@ -42,8 +42,9 @@ test("an existing patient is booked into a specific empty slot in exactly 3 taps
   await pickSearchResult(dialog, PATIENTS.hoda); // tap 2 — choose patient
 
   // The pre-filled time took us straight to confirm; the default service needs
-  // no tap, so the common path never grew past three.
-  await expect(dialog.getByText(time)).toBeVisible();
+  // no tap, so the common path never grew past three. exact: true tells this
+  // apart from the sheet's own head, which now also names the chosen time.
+  await expect(dialog.getByText(time, { exact: true })).toBeVisible();
 
   taps++;
   await dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click(); // tap 3 — confirm
@@ -75,18 +76,20 @@ test("the service picker pre-selects the first service and updates when another 
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.mona);
   await pickSearchResult(dialog, PATIENTS.mona);
 
-  // Service order in the DB is UUID-ordered, so which pill is pre-selected is
-  // not fixed — assert the behaviour structurally: exactly one pill selected,
-  // and tapping an unselected one moves the selection to it.
-  const pills = dialog.locator("button.flex-1");
-  await expect(pills).toHaveCount(3);
-  await expect(dialog.locator("button.flex-1.border-green")).toHaveCount(1);
+  // Service order in the DB is UUID-ordered, so which option is pre-selected
+  // is not fixed — assert the behaviour structurally via aria-pressed (the
+  // ToggleGroup's own selection state, matching the reference's own
+  // `.svc-row .svc[aria-pressed="true"]`): exactly one option selected, and
+  // tapping an unselected one moves the selection to it.
+  const group = dialog.getByRole("group", { name: S.bookingServiceFieldLabel });
+  await expect(group.getByRole("button")).toHaveCount(3);
+  await expect(group.getByRole("button", { pressed: true })).toHaveCount(1);
 
-  const unselected = dialog.locator("button.flex-1:not(.border-green)").first();
+  const unselected = group.getByRole("button", { pressed: false }).first();
   const unselectedName = (await unselected.innerText()).trim();
   await unselected.click();
-  await expect(dialog.locator("button.flex-1.border-green")).toHaveCount(1);
-  await expect(dialog.getByRole("button", { name: unselectedName, exact: true })).toHaveClass(/border-green/);
+  await expect(group.getByRole("button", { pressed: true })).toHaveCount(1);
+  await expect(group.getByRole("button", { name: unselectedName, exact: true })).toHaveAttribute("aria-pressed", "true");
 });
 
 test("'من غير رقم' visibly disables the phone field, and the booking still completes", async ({ page }) => {

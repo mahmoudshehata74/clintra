@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SheetPanelBody } from "../../components/ui/SheetPanel";
 import ServicesPanel from "./ServicesPanel";
 import Sheet from "./Sheet";
 import SheetHeader from "./SheetHeader";
@@ -34,27 +35,29 @@ export default function SettingsSheet({ practitionerId, locationId, orgId, onDis
     <Sheet onDismiss={onDismiss}>
       <SheetHeader title={dayScreenStrings.settingsButtonLabel} onDismiss={onDismiss} />
 
-      <div className="mt-3 flex gap-2">
-        <button type="button" onClick={() => setPanel("hours")} className={tabClassName(panel === "hours")}>
-          {dayScreenStrings.settingsHoursTab}
-        </button>
-        <button type="button" onClick={() => setPanel("services")} className={tabClassName(panel === "services")}>
-          {dayScreenStrings.settingsServicesTab}
-        </button>
-        <button type="button" onClick={() => setPanel("staff")} className={tabClassName(panel === "staff")}>
-          {dayScreenStrings.settingsStaffTab}
-        </button>
-      </div>
-
-      <div className="overflow-y-auto">
-        {panel === "hours" && <WorkingHoursPanel practitionerId={practitionerId} locationId={locationId} />}
-        {panel === "services" && <ServicesPanel orgId={orgId} />}
-        {panel === "staff" && <StaffPanel orgId={orgId} />}
-
-        <div className="mt-6 flex justify-center border-t border-line pt-4">
-          <img src="/brand/clintra-wordmark.png" alt="Clintra" className="h-4 w-auto opacity-70" />
+      <SheetPanelBody>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setPanel("hours")} className={tabClassName(panel === "hours")}>
+            {dayScreenStrings.settingsHoursTab}
+          </button>
+          <button type="button" onClick={() => setPanel("services")} className={tabClassName(panel === "services")}>
+            {dayScreenStrings.settingsServicesTab}
+          </button>
+          <button type="button" onClick={() => setPanel("staff")} className={tabClassName(panel === "staff")}>
+            {dayScreenStrings.settingsStaffTab}
+          </button>
         </div>
-      </div>
+
+        <div className="overflow-y-auto">
+          {panel === "hours" && <WorkingHoursPanel practitionerId={practitionerId} locationId={locationId} />}
+          {panel === "services" && <ServicesPanel orgId={orgId} />}
+          {panel === "staff" && <StaffPanel orgId={orgId} />}
+
+          <div className="mt-6 flex justify-center border-t border-line pt-4">
+            <img src="/brand/clintra-wordmark.png" alt="Clintra" className="h-4 w-auto opacity-70" />
+          </div>
+        </div>
+      </SheetPanelBody>
     </Sheet>
   );
 }

@@ -27,14 +27,14 @@ export default function CancelVisitSheet({ patientName, onDismiss, onSelectReaso
           ref={firstButtonRef}
           type="button"
           onClick={() => onSelectReason(CancelReason.Patient)}
-          className="rounded-[--radius-el] border border-line p-3 text-center"
+          className="rounded-control border border-rule p-3 text-center"
         >
           {dayScreenStrings.cancelReasonPatient}
         </button>
         <button
           type="button"
           onClick={() => onSelectReason(CancelReason.Clinic)}
-          className="rounded-[--radius-el] border border-line p-3 text-center"
+          className="rounded-control border border-rule p-3 text-center"
         >
           {dayScreenStrings.cancelReasonClinic}
         </button>

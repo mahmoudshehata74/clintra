@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { resolveSelectedService } from "./bookingServiceSelection";
+import { formatServicePriceWholePounds, resolveSelectedService } from "./bookingServiceSelection";
 import type { Service } from "../../db/types";
+import type { Piastres } from "../../domain/money";
 
 function service(id: string, name: string): Service {
   return { id, org_id: "org-1", name, duration_minutes: 15, default_price: 30000, is_active: true } as Service;
@@ -26,5 +27,17 @@ describe("resolveSelectedService", () => {
 
   it("returns null when there are no services at all", () => {
     expect(resolveSelectedService([], null)).toBeNull();
+  });
+});
+
+describe("formatServicePriceWholePounds", () => {
+  it("drops the fraction entirely, even when the piastres part is non-zero", () => {
+    expect(formatServicePriceWholePounds(40000 as Piastres)).toBe("400");
+    expect(formatServicePriceWholePounds(40050 as Piastres)).toBe("401"); // rounds, not truncates
+    expect(formatServicePriceWholePounds(40049 as Piastres)).toBe("400");
+  });
+
+  it("adds thousands separators", () => {
+    expect(formatServicePriceWholePounds(123_456_00 as Piastres)).toBe("123,456");
   });
 });

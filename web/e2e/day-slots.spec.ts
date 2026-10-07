@@ -113,8 +113,10 @@ test("empty-slot plus tile opens the booking sheet with the slot's time pre-fill
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.mona);
   await pickSearchResult(dialog, PATIENTS.mona);
 
-  // Jumped straight to confirm for the pre-filled time (the slots step was skipped).
-  await expect(dialog.getByText(time)).toBeVisible();
+  // Jumped straight to confirm for the pre-filled time (the slots step was
+  // skipped). exact: true tells this apart from the sheet's own head, which
+  // now also names the chosen time.
+  await expect(dialog.getByText(time, { exact: true })).toBeVisible();
   await expect(dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true })).toBeVisible();
 });
 

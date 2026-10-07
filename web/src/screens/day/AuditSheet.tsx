@@ -14,6 +14,7 @@ import {
   isAuditRowInScope,
 } from "./auditLogFilters";
 import Sheet from "./Sheet";
+import { SheetPanelBody } from "../../components/ui/SheetPanel";
 import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
 
@@ -195,48 +196,50 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         onDismiss={onDismiss}
       />
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {ENTITY_FILTER_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setEntityFilter(option.value)}
-            className={filterPillClassName(option.value === entityFilter)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {ACTION_FILTER_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setActionFilter(option.value)}
-            className={filterPillClassName(option.value === actionFilter)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <SheetPanelBody>
+        <div className="flex flex-wrap gap-2">
+          {ENTITY_FILTER_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setEntityFilter(option.value)}
+              className={filterPillClassName(option.value === entityFilter)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {ACTION_FILTER_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setActionFilter(option.value)}
+              className={filterPillClassName(option.value === actionFilter)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
 
-      <div className="mt-4 flex flex-col divide-y divide-line-soft overflow-y-auto">
-        {filteredRows.length === 0 && <p className="py-3 text-muted">{dayScreenStrings.auditSheetEmpty}</p>}
-        {filteredRows.map(({ row, verb, description, actorLabel }) => (
-          <div key={row.id} className="py-2.5">
-            <div className="flex items-baseline justify-between gap-2">
-              <span>
-                <span className="text-ink">{verb}</span>
-                {description && <span className="text-muted"> — {description}</span>}
-              </span>
-              <Ltr>
-                <span className="text-sm text-muted">{clockTimeInCairo(row.at)}</span>
-              </Ltr>
+        <div className="flex flex-col divide-y divide-line-soft overflow-y-auto">
+          {filteredRows.length === 0 && <p className="py-3 text-muted">{dayScreenStrings.auditSheetEmpty}</p>}
+          {filteredRows.map(({ row, verb, description, actorLabel }) => (
+            <div key={row.id} className="py-2.5">
+              <div className="flex items-baseline justify-between gap-2">
+                <span>
+                  <span className="text-ink">{verb}</span>
+                  {description && <span className="text-muted"> — {description}</span>}
+                </span>
+                <Ltr>
+                  <span className="text-sm text-muted">{clockTimeInCairo(row.at)}</span>
+                </Ltr>
+              </div>
+              <p className="mt-1 text-sm text-muted">{actorLabel}</p>
             </div>
-            <p className="mt-1 text-sm text-muted">{actorLabel}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </SheetPanelBody>
     </Sheet>
   );
 }

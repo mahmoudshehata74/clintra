@@ -186,15 +186,9 @@
      in the commit that migrates its last usage. Do not use in new code. */
   --color-green-soft: #e8f0ec;
   --color-red: #b23a34;
-  --color-red-soft: #faecea;
-  --color-amber: #8a6a22;
-  --color-amber-soft: #f6efdd;
-  --color-purple: #453fa0;
-  --color-purple-soft: #edebfb;
   --color-line: #e2e3dc;
   --color-line-soft: #edeee8;
   --radius-el: 8px;
-  --radius-frame: 12px;
 
   /* Brand tokens for logo surfaces only (wordmark/icon). */
   --color-brand-teal: #1a957d;

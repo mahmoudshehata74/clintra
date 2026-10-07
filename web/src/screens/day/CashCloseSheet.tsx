@@ -7,6 +7,7 @@ import { formatPiastresForDisplay, parsePoundsToPiastres, type Piastres } from "
 import type { ClinicDay } from "../../domain/time";
 import { validateCashCloseForm } from "./cashCloseForm";
 import Sheet from "./Sheet";
+import { SheetPanelBody } from "../../components/ui/SheetPanel";
 import { dayScreenStrings } from "./strings";
 
 interface CashCloseSheetProps {
@@ -61,57 +62,59 @@ export default function CashCloseSheet({ locationId, orgId, date, onDismiss, onC
 
   return (
     <Sheet onDismiss={onDismiss}>
-      <p className="font-medium">{dayScreenStrings.cashCloseSheetTitle}</p>
+      <SheetPanelBody>
+        <p className="font-medium">{dayScreenStrings.cashCloseSheetTitle}</p>
 
-      <p className="mt-3 flex justify-between text-sm">
-        <span className="text-muted">{dayScreenStrings.cashCloseExpectedLabel}</span>
-        <Ltr>{formatPiastresForDisplay(expected)}</Ltr>
-      </p>
-
-      <div className="mt-3">
-        <input
-          type="text"
-          inputMode="decimal"
-          value={totalCollectedInput}
-          onChange={(event) => {
-            setTotalCollectedInput(event.target.value);
-            setCollectedError(null);
-          }}
-          placeholder={dayScreenStrings.cashCloseCollectedPlaceholder}
-          className="w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start"
-        />
-        {collectedError && <p className="mt-1 text-sm text-red">{collectedError}</p>}
-      </div>
-
-      {difference !== null && (
-        <p className="mt-3 flex justify-between text-sm">
-          <span className="text-muted">{dayScreenStrings.cashCloseDifferenceLabel}</span>
-          <Ltr>{formatPiastresForDisplay(difference)}</Ltr>
+        <p className="flex justify-between text-sm">
+          <span className="text-muted">{dayScreenStrings.cashCloseExpectedLabel}</span>
+          <Ltr>{formatPiastresForDisplay(expected)}</Ltr>
         </p>
-      )}
 
-      <div className="mt-3">
-        <input
-          type="text"
-          value={note}
-          onChange={(event) => {
-            setNote(event.target.value);
-            setNoteError(null);
-          }}
-          placeholder={dayScreenStrings.cashCloseNotePlaceholder}
-          className="w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start"
-        />
-        {noteError && <p className="mt-1 text-sm text-red">{noteError}</p>}
-      </div>
+        <div>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={totalCollectedInput}
+            onChange={(event) => {
+              setTotalCollectedInput(event.target.value);
+              setCollectedError(null);
+            }}
+            placeholder={dayScreenStrings.cashCloseCollectedPlaceholder}
+            className="w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start"
+          />
+          {collectedError && <p className="mt-1 text-sm text-red">{collectedError}</p>}
+        </div>
 
-      <button
-        type="button"
-        disabled={isSubmitting}
-        onClick={handleConfirm}
-        className="mt-4 rounded-[--radius-el] bg-green px-4 py-3 text-center font-semibold text-paper disabled:opacity-60"
-      >
-        {dayScreenStrings.cashCloseConfirmButton}
-      </button>
+        {difference !== null && (
+          <p className="flex justify-between text-sm">
+            <span className="text-muted">{dayScreenStrings.cashCloseDifferenceLabel}</span>
+            <Ltr>{formatPiastresForDisplay(difference)}</Ltr>
+          </p>
+        )}
+
+        <div>
+          <input
+            type="text"
+            value={note}
+            onChange={(event) => {
+              setNote(event.target.value);
+              setNoteError(null);
+            }}
+            placeholder={dayScreenStrings.cashCloseNotePlaceholder}
+            className="w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start"
+          />
+          {noteError && <p className="mt-1 text-sm text-red">{noteError}</p>}
+        </div>
+
+        <button
+          type="button"
+          disabled={isSubmitting}
+          onClick={handleConfirm}
+          className="rounded-[--radius-el] bg-green px-4 py-3 text-center font-semibold text-paper disabled:opacity-60"
+        >
+          {dayScreenStrings.cashCloseConfirmButton}
+        </button>
+      </SheetPanelBody>
     </Sheet>
   );
 }

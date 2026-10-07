@@ -177,3 +177,14 @@ export async function readClockTime(text: string | null): Promise<string> {
 export function rowFor(page: Page, patientName: string) {
   return page.getByRole("listitem").filter({ hasText: patientName });
 }
+
+/**
+ * The value text beside a label in a "k/v" row (e.g. the invoice sheet's
+ * totals block: a label span followed by its value span under one row —
+ * InvoiceSheet.tsx). Reads the label's own next sibling rather than the
+ * row's full text, so it still works regardless of which element the two
+ * are wrapped in.
+ */
+export async function labeledRowValue(scope: Locator, label: string): Promise<string> {
+  return (await scope.getByText(label, { exact: true }).locator("xpath=following-sibling::*[1]").innerText()).trim();
+}
