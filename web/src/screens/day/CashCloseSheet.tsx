@@ -7,13 +7,14 @@ import { SheetPanelBody, SheetPanelFoot } from "../../components/ui/SheetPanel";
 import { useActingMembership } from "../../auth/useActingMembership";
 import { closeCashForDay, computeExpectedCashTotal } from "../../db/cashClose";
 import { db } from "../../db/database";
-import { InvoiceStatus, type CashClose, type Patient, type Schedule, type Service, type Visit } from "../../db/types";
+import { InvoiceStatus, type CashClose, type InvoiceItem, type Patient, type Schedule, type Service, type Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitNoShow } from "../../db/visitCancel";
 import { parsePoundsToPiastres, type Piastres } from "../../domain/money";
 import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo, type ClinicDay } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import { formatMoneyAmount } from "../money";
+import { buildDayInvoicesCsv, csvFileNameForDay, type CsvInvoiceRow } from "./cashCloseCsv";
 import { validateCashCloseForm } from "./cashCloseForm";
 import { computePastDueVisits } from "./pastDueVisits";
 import Sheet from "./Sheet";
@@ -113,6 +114,46 @@ export default function CashCloseSheet({
   const expected = computeExpectedCashTotal(invoicesAtLocation, locationId, date);
   const invoicesToday = invoicesAtLocation.filter((invoice) => todayInCairo(new Date(invoice.issued_at)) === date);
   const paidInvoiceCount = invoicesToday.filter((invoice) => invoice.status === InvoiceStatus.Paid).length;
+
+  // Self-contained, like `data` below, rather than derived from
+  // invoicesToday above: that array is a fresh reference every render, which
+  // would resubscribe this query on every render if it were a dependency.
+  const csvRows =
+    useLiveQuery<CsvInvoiceRow[]>(async () => {
+      const invoices = (await db.invoices.where("location_id").equals(locationId).toArray()).filter(
+        (invoice) => todayInCairo(new Date(invoice.issued_at)) === date,
+      );
+      const invoiceIds = invoices.map((invoice) => invoice.id);
+      const [items, patients] = await Promise.all([
+        invoiceIds.length > 0 ? db.invoice_items.where("invoice_id").anyOf(invoiceIds).toArray() : Promise.resolve([]),
+        db.patients.bulkGet([...new Set(invoices.map((invoice) => invoice.patient_id))]),
+      ]);
+      const itemsByInvoiceId = new Map<string, InvoiceItem[]>();
+      for (const item of items) {
+        const list = itemsByInvoiceId.get(item.invoice_id) ?? [];
+        list.push(item);
+        itemsByInvoiceId.set(item.invoice_id, list);
+      }
+      const patientsById = new Map(patients.filter((p): p is Patient => p != null).map((p) => [p.id, p]));
+      return invoices.map((invoice) => ({
+        invoice,
+        patientName: patientsById.get(invoice.patient_id)?.full_name ?? "",
+        itemDescriptions: (itemsByInvoiceId.get(invoice.id) ?? []).map((item) => item.description),
+      }));
+    }, [locationId, date]) ?? [];
+
+  function handleExportCsv() {
+    const csv = buildDayInvoicesCsv(date, csvRows);
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = csvFileNameForDay(date);
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }
 
   const data =
     useLiveQuery<SheetData>(async () => {
@@ -249,6 +290,11 @@ export default function CashCloseSheet({
           </p>
           <p className="text-sm text-muted">{closedClose.difference_note ?? dayScreenStrings.cashCloseNoDifferenceNoteLabel}</p>
         </SheetPanelBody>
+        <SheetPanelFoot>
+          <Button variant="secondary" onClick={handleExportCsv}>
+            {dayScreenStrings.cashCloseExportCsvAction}
+          </Button>
+        </SheetPanelFoot>
       </Sheet>
     );
   }
@@ -369,7 +415,7 @@ export default function CashCloseSheet({
         <Button variant="primary" className="flex-1" disabled={isSubmitting} onClick={handleConfirm}>
           {dayScreenStrings.cashCloseConfirmButton}
         </Button>
-        <Button variant="secondary" disabled>
+        <Button variant="secondary" onClick={handleExportCsv}>
           {dayScreenStrings.cashCloseExportCsvAction}
         </Button>
         {actingUser && (

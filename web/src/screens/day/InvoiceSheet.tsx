@@ -31,7 +31,7 @@ interface InvoiceData {
   practitioner: Practitioner | undefined;
 }
 
-const STATUS_LABEL: Record<string, string> = {
+export const STATUS_LABEL: Record<string, string> = {
   [InvoiceStatus.Unpaid]: dayScreenStrings.invoiceStatusUnpaid,
   [InvoiceStatus.Partial]: dayScreenStrings.invoiceStatusPartial,
   [InvoiceStatus.Paid]: dayScreenStrings.invoiceStatusPaid,

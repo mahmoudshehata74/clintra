@@ -1,5 +1,16 @@
 import { expect, test } from "@playwright/test";
-import { gotoRealDay, gotoSeededDay, PATIENTS, QUEUE_DR, rowFor, S, selectPractitioner, SLOTS_DR } from "./support";
+import {
+  gotoRealDay,
+  gotoSeededDay,
+  openBookingSheet,
+  PATIENTS,
+  pickSearchResult,
+  QUEUE_DR,
+  rowFor,
+  S,
+  selectPractitioner,
+  SLOTS_DR,
+} from "./support";
 
 // The seeded day (?seedDay=1) is always a past Monday relative to the real
 // current day (see support.ts's SEEDED_DAY), so every still-booked seeded
@@ -100,4 +111,42 @@ test("a matching amount shows the eligible banner; a difference requires a note 
   await expect(closedDialog.getByText(S.cashCloseClosedAtLabel)).toBeVisible();
   await expect(closedDialog.getByText(S.cashCloseClosedByLabel)).toBeVisible();
   await expect(closedDialog.getByPlaceholder(S.cashCloseCollectedPlaceholder)).toHaveCount(0);
+});
+
+test("exporting CSV downloads a header row plus one row per invoice issued today here", async ({ page }) => {
+  await gotoRealDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+
+  // Book, then complete, a fresh visit so today has one invoice to export.
+  await openBookingSheet(page);
+  const bookingDialog = page.getByRole("dialog");
+  await bookingDialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.mona);
+  await pickSearchResult(bookingDialog, PATIENTS.mona);
+  await bookingDialog.getByRole("button", { name: /^\d{1,2}:\d{2}$/ }).first().click();
+  await bookingDialog.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
+  await expect(page.getByText(S.visitBooked)).toBeVisible();
+
+  const monaRow = rowFor(page, PATIENTS.mona);
+  await monaRow.locator("button").filter({ hasText: PATIENTS.mona }).click(); // booked -> arrived
+  await monaRow.locator("button").filter({ hasText: PATIENTS.mona }).click(); // arrived -> in_room
+  await monaRow.locator("button").filter({ hasText: PATIENTS.mona }).click(); // in_room -> completed
+  await expect(page.getByText(S.completedToastMessage)).toBeVisible();
+
+  await openCashClose(page);
+  const dialog = page.getByRole("dialog");
+  const downloadPromise = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: S.cashCloseExportCsvAction, exact: true }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^clintra-\d{4}-\d{2}-\d{2}\.csv$/);
+
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk as Buffer);
+  }
+  const content = Buffer.concat(chunks).toString("utf-8").replace(/^﻿/, "");
+  const lines = content.split("\r\n");
+  expect(lines[0]).toBe("التاريخ,المريض,الخدمة,المبلغ,حالة الدفع");
+  expect(lines[1]).toContain(PATIENTS.mona);
+  expect(lines[1]).toContain(S.invoiceStatusUnpaid);
 });
