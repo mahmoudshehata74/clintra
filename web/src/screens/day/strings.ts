@@ -65,6 +65,9 @@ export const dayScreenStrings = {
   slabNextActionPrefix: "التالي:",
   slabCloseKbdPrefix: "إقفال",
   // Money/consult-length tiles.
+  // `.tile .v i` — the small faint unit after the number, separate from the
+  // value itself (tileMoney.ts formats the bare number).
+  tileCurrencyUnit: "ج.م",
   tileCollectedLabel: "محصّل اليوم",
   tileInvoiceCountSuffix: "فواتير",
   tileDueLabel: "مستحق",

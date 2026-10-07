@@ -34,7 +34,7 @@ import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitArrived, markVisitCompleted, markVisitInRoom } from "../../db/visitAttendance";
 import { cancelVisit, markVisitNoShow, type VisitCancelReason } from "../../db/visitCancel";
 import { sendVisitToEndOfQueue, undoSendVisitToEndOfQueue } from "../../db/visitQueue";
-import { formatPiastresForDisplay, type Piastres } from "../../domain/money";
+import type { Piastres } from "../../domain/money";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import { addDaysToClinicDay, clockTimeInCairo, todayInCairo, weekdayOf, type ClockTime } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
@@ -70,6 +70,7 @@ import SettingsSheet from "./SettingsSheet";
 import VisitFormSheet from "./VisitFormSheet";
 import { resolveDayScheduleState } from "./scheduleState";
 import { dayScreenStrings } from "./strings";
+import { formatTileMoney } from "./tileMoney";
 import type { UndoAction } from "./undoAction";
 import UndoToast from "./UndoToast";
 import { SEED_DAY_QUERY_PARAM } from "../../domain/appMode";
@@ -898,7 +899,8 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
             tiles={[
               {
                 label: dayScreenStrings.tileCollectedLabel,
-                value: <Ltr>{formatPiastresForDisplay(collectedPiastres)}</Ltr>,
+                value: <Ltr>{formatTileMoney(collectedPiastres)}</Ltr>,
+                unit: dayScreenStrings.tileCurrencyUnit,
                 sub: (
                   <>
                     <Ltr>{slotsSlab.invoiceCount}</Ltr> {dayScreenStrings.tileInvoiceCountSuffix}
@@ -908,7 +910,8 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
               },
               {
                 label: dayScreenStrings.tileDueLabel,
-                value: <Ltr>{formatPiastresForDisplay(slotsSlab.duePiastres)}</Ltr>,
+                value: <Ltr>{formatTileMoney(slotsSlab.duePiastres)}</Ltr>,
+                unit: dayScreenStrings.tileCurrencyUnit,
                 sub: slotsSlab.hasPartialInvoice ? dayScreenStrings.invoiceStatusPartial : undefined,
                 tone: "copper",
               },

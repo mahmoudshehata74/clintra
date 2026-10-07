@@ -1,0 +1,25 @@
+import { describe, expect, it } from "vitest";
+import type { Piastres } from "../../domain/money";
+import { formatTileMoney } from "./tileMoney";
+
+describe("formatTileMoney", () => {
+  it("drops the fraction entirely when the piastres part is zero", () => {
+    expect(formatTileMoney(1200 as Piastres)).toBe("12");
+    expect(formatTileMoney(0 as Piastres)).toBe("0");
+  });
+
+  it("shows two fraction digits when the piastres part is non-zero", () => {
+    expect(formatTileMoney(1250 as Piastres)).toBe("12.50");
+    expect(formatTileMoney(1205 as Piastres)).toBe("12.05");
+  });
+
+  it("adds thousands separators to the pound part", () => {
+    expect(formatTileMoney(123_456_00 as Piastres)).toBe("123,456");
+    expect(formatTileMoney(123_456_78 as Piastres)).toBe("123,456.78");
+    expect(formatTileMoney(1_000_00 as Piastres)).toBe("1,000");
+  });
+
+  it("keeps the sign on a negative amount", () => {
+    expect(formatTileMoney(-1250 as Piastres)).toBe("-12.50");
+  });
+});
