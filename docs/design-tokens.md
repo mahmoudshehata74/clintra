@@ -54,11 +54,11 @@ where they align in columns.
 
 ## Legacy tokens
 
-`green-soft`, `green-medium`, `red`, `red-soft`, `amber`, `amber-soft`,
-`purple`, `purple-soft`, `line`, `line-soft`, and the radii `--radius-el`
-(8px) and `--radius-frame` (12px) belong to the pre-prototype system. They
-stay only while screens that use them are not yet restyled, and each is
-deleted in the commit that migrates its last usage.
+`green-soft`, `red`, `red-soft`, `amber`, `amber-soft`, `purple`,
+`purple-soft`, `line`, `line-soft`, and the radii `--radius-el` (8px) and
+`--radius-frame` (12px) belong to the pre-prototype system. They stay only
+while screens that use them are not yet restyled, and each is deleted in the
+commit that migrates its last usage.
 
 ## Not yet enabled
 

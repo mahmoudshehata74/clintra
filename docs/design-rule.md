@@ -55,6 +55,8 @@ not the prototype, wherever they apply.
 - **Navigation** is a role-dependent sidebar, which the prototype does not
   show. Prescription (16) and care plan (17) are reached from the visit or
   the patient profile, not from the sidebar.
+- **PIN pad order** is left-to-right (1 2 3), as on a phone keypad; the
+  prototype's right-to-left order is a side effect of page direction.
 
 `docs/reference/clintra-screens.html` is retired and kept only as history;
 older documents that cite it describe the state of the project at the time

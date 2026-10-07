@@ -219,7 +219,12 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
             ) : null}
           </div>
 
-          <div className="mt-[22px] grid w-full max-w-[240px] grid-cols-3 gap-2">
+          {/* dir="ltr" scoped to the grid only: the pad reads left-to-right
+              like every phone keypad (1 2 3 / 4 5 6 / 7 8 9 / [blank] 0
+              [مسح]) regardless of the page's own RTL direction, which would
+              otherwise auto-place grid items right-to-left and mirror it —
+              see docs/design-rule.md's "Settled deviations". */}
+          <div dir="ltr" className="mt-[22px] grid w-full max-w-[240px] grid-cols-3 gap-2">
             {PAD_DIGITS.map((digit) => (
               <button
                 key={digit}

@@ -2,50 +2,63 @@ import { describe, expect, it } from "vitest";
 import { statusVisual } from "./statusStyle";
 import { VisitStatus } from "../../domain/visitStatus";
 
+// Rewritten for the prototype's `.slot` row design (a left-edge accent
+// stripe + a coloured state pill, not a full-row fill) — see
+// docs/design-rule.md's #s2 reference and statusStyle.ts's own doc comment.
 describe("statusVisual", () => {
   it.each([VisitStatus.Booked, VisitStatus.Confirmed])(
-    "%s: plain unfilled card outline, muted meta, no accent",
+    "%s: no stripe, muted meta, a neutral soft pill",
     (status) => {
       const visual = statusVisual(status)!;
-      expect(visual.containerClassName).toBe("border border-line bg-paper");
+      expect(visual.stripeClassName).toBe("before:bg-transparent");
+      expect(visual.rowBgClassName).toBe("");
       expect(visual.nameClassName).toBe("");
       expect(visual.metaClassName).toBe("text-muted");
+      expect(visual.badge).toEqual({ appearance: "soft", tone: "neutral" });
     },
   );
 
-  it("arrived: light green fill, bold green name, green-medium meta", () => {
+  it("arrived: eligible stripe, no name/time colour change, a solid eligible pill", () => {
     const visual = statusVisual(VisitStatus.Arrived)!;
-    expect(visual.containerClassName).toBe("border border-green/20 bg-green-soft");
-    expect(visual.nameClassName).toBe("font-semibold text-green");
-    expect(visual.metaClassName).toBe("text-green-medium");
+    expect(visual.stripeClassName).toBe("before:bg-eligible");
+    expect(visual.rowBgClassName).toBe("");
+    expect(visual.nameClassName).toBe("");
+    expect(visual.badge).toEqual({ appearance: "solid", tone: "eligible" });
   });
 
-  it("in_room: solid green fill, bold paper-coloured name — the loudest treatment on the screen", () => {
+  it("in_room: copper stripe and wash, copper name, bold copper-2 until, a solid copper pill — the loudest treatment", () => {
     const visual = statusVisual(VisitStatus.InRoom)!;
-    expect(visual.containerClassName).toBe("border border-green bg-green");
-    expect(visual.nameClassName).toBe("font-semibold text-paper");
-    expect(visual.metaClassName).toBe("text-paper/80");
+    expect(visual.stripeClassName).toBe("before:bg-copper");
+    expect(visual.rowBgClassName).not.toBe("");
+    expect(visual.nameClassName).toBe("text-copper");
+    expect(visual.untilClassName).toBe("font-semibold text-copper-2");
+    expect(visual.badge).toEqual({ appearance: "solid", tone: "copper" });
   });
 
-  it("completed: muted grey fill, all text muted — settles into the past", () => {
+  it("completed: rule stripe, muted time/name/meta, a neutral soft pill — settles into the past", () => {
     const visual = statusVisual(VisitStatus.Completed)!;
-    expect(visual.containerClassName).toBe("border border-line bg-line-soft");
+    expect(visual.stripeClassName).toBe("before:bg-rule");
     expect(visual.nameClassName).toBe("text-muted");
-    expect(visual.metaClassName).toBe("text-muted");
+    expect(visual.timeClassName).toBe("text-muted");
+    expect(visual.metaClassName).toBe("text-faint");
+    expect(visual.badge).toEqual({ appearance: "soft", tone: "neutral" });
   });
 
-  it("cancelled: dashed red border (full, not a left-edge stripe), struck-through name, no fill", () => {
+  it("cancelled: dashed faint stripe, struck-through muted name, a dashed danger pill — no fill", () => {
     const visual = statusVisual(VisitStatus.Cancelled)!;
-    expect(visual.containerClassName).toBe("border border-dashed border-red bg-paper");
-    expect(visual.nameClassName).toBe("line-through");
-    expect(visual.metaClassName).toBe("text-muted");
+    expect(visual.stripeClassName).toBe("before:bg-faint before:opacity-40");
+    expect(visual.rowBgClassName).toBe("");
+    expect(visual.nameClassName).toBe("text-muted line-through decoration-faint");
+    expect(visual.metaClassName).toBe("text-faint");
+    expect(visual.badge).toEqual({ appearance: "dashed", tone: "danger" });
   });
 
-  it("no_show: light red fill, red name and meta, no bold — was expected and did not show", () => {
+  it("no_show: danger stripe and wash, danger name, a solid danger pill — was expected and did not show", () => {
     const visual = statusVisual(VisitStatus.NoShow)!;
-    expect(visual.containerClassName).toBe("border border-red/20 bg-red-soft");
-    expect(visual.nameClassName).toBe("text-red");
-    expect(visual.metaClassName).toBe("text-red");
+    expect(visual.stripeClassName).toBe("before:bg-danger");
+    expect(visual.rowBgClassName).not.toBe("");
+    expect(visual.nameClassName).toBe("text-danger");
+    expect(visual.badge).toEqual({ appearance: "solid", tone: "danger" });
   });
 
   it("rescheduled has no treatment — the caller renders that slot as empty instead", () => {

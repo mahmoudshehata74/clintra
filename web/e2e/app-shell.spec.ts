@@ -46,6 +46,24 @@ test("the active sidebar item reflects whether settings is open", async ({ page 
   await expect(dayItem).toHaveAttribute("aria-current", "page");
 });
 
+test("the active rail item's colour and border actually differ from an inactive one", async ({ page }) => {
+  const nav = sidebar(page);
+  const dayItem = nav.getByRole("button", { name: SIDEBAR.navDay, exact: true });
+  const settingsItem = nav.getByRole("button", { name: SIDEBAR.navSettings, exact: true });
+
+  // "اليوم" is active, "الإعدادات" is not — ITEM_BASE/ITEM_ACTIVE used to
+  // both set text/border colour, leaving the winner up to Tailwind's
+  // generated-sheet order rather than isActive (AppShell.tsx).
+  const [activeColor, activeBorder, inactiveColor, inactiveBorder] = await Promise.all([
+    dayItem.evaluate((el) => getComputedStyle(el).color),
+    dayItem.evaluate((el) => getComputedStyle(el).borderColor),
+    settingsItem.evaluate((el) => getComputedStyle(el).color),
+    settingsItem.evaluate((el) => getComputedStyle(el).borderColor),
+  ]);
+  expect(activeColor).not.toBe(inactiveColor);
+  expect(activeBorder).not.toBe(inactiveBorder);
+});
+
 test("the four placeholder sections are gone; only اليوم and الإعدادات exist", async ({ page }) => {
   const nav = sidebar(page);
   await expect(nav.getByRole("button", { name: SIDEBAR.navDay, exact: true })).toBeVisible();
@@ -68,22 +86,23 @@ test("an assistant sees no settings item", async ({ page }) => {
   await expect(nav.getByRole("button", { name: SIDEBAR.navSettings, exact: true })).toHaveCount(0);
 });
 
-test("the day grid renders as a 3-column layout: the first three slots share one row", async ({ page }) => {
-  const tiles = page.getByRole("listitem");
-  const count = await tiles.count();
+test("the day grid renders as the prototype's single-column row list, not the old 3-column tile grid", async ({ page }) => {
+  // COMMIT 3 replaces the 3-column tile grid with the prototype's `.slot`
+  // row list (one row per line, PractitionerColumn.tsx) — the opposite
+  // layout claim this test made before that task.
+  const rows = page.getByRole("listitem");
+  const count = await rows.count();
   expect(count).toBeGreaterThanOrEqual(3);
 
-  const [first, second, third] = await Promise.all([tiles.nth(0).boundingBox(), tiles.nth(1).boundingBox(), tiles.nth(2).boundingBox()]);
+  const [first, second, third] = await Promise.all([
+    rows.nth(0).boundingBox(),
+    rows.nth(1).boundingBox(),
+    rows.nth(2).boundingBox(),
+  ]);
   if (!first || !second || !third) {
-    throw new Error("expected the first three grid tiles to each have a bounding box");
+    throw new Error("expected the first three rows to each have a bounding box");
   }
-  expect(Math.abs(first.y - second.y)).toBeLessThan(2);
-  expect(Math.abs(second.y - third.y)).toBeLessThan(2);
-  // And a 4th tile (if the grid has one) wraps to a new row, proving this is
-  // genuinely a 3-column grid and not a very wide single row.
-  if (count >= 4) {
-    const fourth = await tiles.nth(3).boundingBox();
-    if (!fourth) throw new Error("expected a 4th grid tile to have a bounding box");
-    expect(fourth.y).toBeGreaterThan(first.y + 2);
-  }
+  // Each row sits below the previous one, never side by side.
+  expect(second.y).toBeGreaterThan(first.y + first.height - 2);
+  expect(third.y).toBeGreaterThan(second.y + second.height - 2);
 });

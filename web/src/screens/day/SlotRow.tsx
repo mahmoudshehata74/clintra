@@ -1,19 +1,19 @@
+import { useEffect, useState } from "react";
+import Badge from "../../components/ui/Badge";
+import Button from "../../components/ui/Button";
 import Ltr from "../../components/Ltr";
+import { formatEgyptianPhoneForDisplay } from "../../domain/phone";
+import { clockTimeInCairo, type ClinicDay } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Service, Visit } from "../../db/types";
+import { computeActorRecency } from "./actorRecency";
+import { computeElapsedLabel } from "./elapsedLabel";
 import { dayScreenStrings } from "./strings";
 import { STATUS_LABEL, statusVisual } from "./statusStyle";
 import VisitMenu, { type VisitMenuActions } from "./VisitMenu";
 
 interface SlotRowProps {
   time: string;
-  /**
-   * Kept for interface stability, but no longer varied by the caller: each
-   * tile is now its own visually separate cell in a 3-column grid (not a
-   * continuous list), so every occupied tile shows its own time regardless
-   * of whether a neighbour shares it — see PractitionerColumn.tsx's own note
-   * on why an overbooked pair no longer hides the second tile's time.
-   */
   showTime?: boolean;
   visit?: Visit;
   patient?: Patient;
@@ -22,7 +22,7 @@ interface SlotRowProps {
   isExtraAtTime?: boolean;
   /** Present only when a single tap on this row does something (see visitActions.ts). */
   onPrimaryAction?: () => void;
-  /** True while this row's visit is in its post-tap cooldown — see advanceCooldown.ts. Never affects the empty-slot "+" tile, which never advances a visit. */
+  /** True while this row's visit is in its post-tap cooldown — see advanceCooldown.ts. Never affects the empty-slot action, which never advances a visit. */
   disablePrimaryAction?: boolean;
   /** Present only when this row's visit is eligible for the overflow menu. */
   menu?: VisitMenuActions;
@@ -30,6 +30,8 @@ interface SlotRowProps {
   onTapEmptySlot?: () => void;
   /** Resolved "recorded by" label for the visit's created_by membership — see actorLabel.ts. */
   actorLabel?: string;
+  /** Today, for the actor byline's "· أمس" / short-date suffix — see actorRecency.ts. */
+  today: ClinicDay;
   /** Present only when this row's visit is in_room or completed — opens the visit form sheet (see VisitFormSheet.tsx). */
   onOpenVisitForm?: () => void;
   /** True for a completed visit with no visit_form_data row at all — a passive note, never a warning. */
@@ -39,16 +41,43 @@ interface SlotRowProps {
 const REOPENED_STATUSES = new Set<string>([VisitStatus.Cancelled, VisitStatus.NoShow]);
 
 /**
- * One cell of the day grid — clintra-screens.html's `.sl` tile: a compact
- * card (`min-height:64px`) stacking time, name and a status/service line,
- * rather than the wide horizontal row this used to be. `.sl.free` is a
- * dashed, centered "+" with no time label at all, reproduced exactly (an
- * empty tile in the reference carries no clock text); every occupied
- * status keeps its exact fill/border/text-colour treatment from
- * statusStyle.ts — only the container's shape changed, per this task's
- * scope. The overflow menu and the visit-form pill, absent from the
- * reference's own minimal mockup, sit as a small trailing footer row
- * pinned to the tile's bottom edge instead of trailing inline siblings.
+ * The `.until` sub-line's own text per status — arrived/in_room/completed/
+ * no_show only. arrived's is a fixed clock time, always shown. The other
+ * three route through elapsedLabel.ts's computeElapsedLabel, which shows
+ * nothing at all unless `today` is the real current Cairo day (in_room/
+ * no_show are live "elapsed since" counts that would otherwise read a stale
+ * ?seedDay=1 pin's timestamps against real now; completed's own duration is
+ * gated the same way, for one consistent rule across the three).
+ */
+function untilText(visit: Visit, today: ClinicDay, now: Date): string | null {
+  if (visit.status === VisitStatus.Arrived && visit.arrived_at) {
+    return `${dayScreenStrings.untilArrivedPrefix} ${clockTimeInCairo(visit.arrived_at)}`;
+  }
+  if (visit.status === VisitStatus.InRoom && visit.started_at) {
+    const elapsed = computeElapsedLabel(visit.started_at, now.toISOString(), today, now);
+    return elapsed ? `${dayScreenStrings.untilSincePrefix} ${elapsed}` : null;
+  }
+  if (visit.status === VisitStatus.Completed && visit.started_at && visit.ended_at) {
+    return computeElapsedLabel(visit.started_at, visit.ended_at, today, now);
+  }
+  if (visit.status === VisitStatus.NoShow && visit.scheduled_at) {
+    const elapsed = computeElapsedLabel(visit.scheduled_at, now.toISOString(), today, now);
+    return elapsed ? `${dayScreenStrings.untilSincePrefix} ${elapsed}` : null;
+  }
+  return null;
+}
+
+// in_room and no_show are the two statuses whose `.until` text is a live
+// "elapsed since" count, so only they need the minute tick below.
+const LIVE_UNTIL_STATUSES = new Set<string>([VisitStatus.InRoom, VisitStatus.NoShow]);
+
+/**
+ * One row of the day grid (prototype `.slot`, #s2): time | patient | status
+ * pill, with a 3px left accent stripe carrying the status colour
+ * (statusStyle.ts). The row's primary button still covers the time+patient
+ * area and keeps its exact advance/open-form/cooldown behaviour from before
+ * this task; the overflow menu and visit-form pill sit in their own trailing
+ * column, under the status pill.
  */
 export default function SlotRow({
   time,
@@ -62,99 +91,137 @@ export default function SlotRow({
   menu,
   onTapEmptySlot,
   actorLabel,
+  today,
   onOpenVisitForm,
   showEmptyFormHint = false,
 }: SlotRowProps) {
-  // A visit with no visual treatment (only "rescheduled" today) no longer
-  // occupies this slot, so it renders as empty rather than booked.
   const visual = visit ? statusVisual(visit.status) : null;
   const handleClick = onPrimaryAction ?? onTapEmptySlot;
   const isTappable = Boolean(handleClick);
 
-  const containerClassName = visual
-    ? `flex min-h-16 flex-col rounded-[--radius-el] p-2 ${visual.containerClassName}`
-    : "flex min-h-16 flex-col rounded-[--radius-el] border border-dashed border-line bg-paper p-2";
+  // `.until`'s "minutes since" text (in_room/no_show) is wall-clock-derived,
+  // so nothing re-renders it on its own — this tick forces one every minute.
+  const [, forceMinuteTick] = useState(0);
+  useEffect(() => {
+    if (!visit || !LIVE_UNTIL_STATUSES.has(visit.status)) {
+      return;
+    }
+    const interval = setInterval(() => forceMinuteTick((tick) => tick + 1), 60_000);
+    return () => clearInterval(interval);
+  }, [visit?.status]);
 
   if (!visual || !visit) {
-    // .sl.free: no time shown, just a centered plus glyph filling the tile —
-    // exact visual match to the reference, but that leaves nothing on the
-    // page for a test (or a screen reader) to tell one empty tile from the
-    // next by time. data-slot-time is a plain, non-visual, non-ARIA hook for
-    // that — it does not change the accessible name (still exactly
-    // dayScreenStrings.emptySlot, matching every other empty-slot test) and
-    // is not rendered.
     return (
-      <li className={containerClassName}>
+      <li className="relative grid grid-cols-[60px_1fr_auto] items-center gap-3.5 border-b border-hair px-[18px] py-2.5 last:border-b-0 before:absolute before:inset-y-0 before:start-0 before:w-[3px] before:bg-transparent before:content-[''] hover:bg-field">
+        <span className="text-sm font-medium leading-none tracking-[-0.02em] text-faint tabular-nums">
+          {showTime && <Ltr>{time}</Ltr>}
+        </span>
+        <span className="text-xs text-faint">{dayScreenStrings.emptySlotFreeLabel}</span>
         {isTappable ? (
-          <button
-            type="button"
+          <Button
+            variant="dashed"
             onClick={handleClick}
             aria-label={dayScreenStrings.emptySlot}
             data-slot-time={time}
-            className="flex flex-1 items-center justify-center text-xl text-muted"
           >
-            +
-          </button>
+            {dayScreenStrings.emptySlotQuickActionLabel}
+          </Button>
         ) : (
-          <span className="flex flex-1 items-center justify-center text-xl text-muted" aria-hidden="true">
-            +
+          <span className="text-[11.5px] font-semibold text-faint" aria-hidden="true">
+            {dayScreenStrings.emptySlotQuickActionLabel}
           </span>
         )}
       </li>
     );
   }
 
-  const occupiedContent = (
-    <>
-      <span className={`text-xs ${visual.metaClassName}`}>{showTime && <Ltr>{time}</Ltr>}</span>
-      <span className={`text-sm leading-tight ${visual.nameClassName}`}>{patient?.full_name}</span>
-      <span className={`text-xs ${visual.metaClassName}`}>{STATUS_LABEL[visit.status]}</span>
-      {isExtraAtTime && (
-        <span className="mt-0.5 self-start rounded-[5px] bg-line-soft px-1.5 py-0.5 text-[10px] text-muted">
-          {dayScreenStrings.overbookedRowBadge}
-        </span>
-      )}
-      {service && <span className={`text-xs ${visual.metaClassName}`}>{service.name}</span>}
-      {REOPENED_STATUSES.has(visit.status) && (
-        <span className={`text-xs ${visual.metaClassName}`}>{dayScreenStrings.slotAvailableAgain}</span>
-      )}
+  const phoneDisplay = patient?.phone ? formatEgyptianPhoneForDisplay(patient.phone) : null;
+  const recency = computeActorRecency(visit.created_at, today);
+  const until = untilText(visit, today, new Date());
+
+  const timeBlock = (
+    <span className={`text-sm font-bold leading-none tracking-[-0.02em] tabular-nums ${visual.timeClassName}`}>
+      {showTime && <Ltr>{time}</Ltr>}
+      {until && <span className={`mt-[3px] block text-[10px] font-medium ${visual.untilClassName}`}>{until}</span>}
+    </span>
+  );
+
+  const whoBlock = (
+    <span className="flex min-w-0 flex-col gap-px">
+      <span className={`truncate text-sm font-semibold leading-[1.3] tracking-[-0.005em] ${visual.nameClassName}`}>
+        {patient?.full_name}
+      </span>
+      <span className={`flex flex-wrap items-center gap-1.5 text-[11px] ${visual.metaClassName}`}>
+        {isExtraAtTime && (
+          <Badge appearance="soft" tone="neutral">
+            {dayScreenStrings.overbookedRowBadge}
+          </Badge>
+        )}
+        {service && <span>{service.name}</span>}
+        {phoneDisplay && (
+          <>
+            <span aria-hidden="true" className="h-[3px] w-[3px] flex-none rounded-full bg-faint" />
+            <Ltr className="font-mono text-[10.5px] tracking-[0.02em]">{phoneDisplay}</Ltr>
+          </>
+        )}
+        {REOPENED_STATUSES.has(visit.status) && <span>{dayScreenStrings.slotAvailableAgain}</span>}
+      </span>
       {actorLabel && (
-        <span className={`text-[10px] ${visual.metaClassName}`}>
+        <span className="mt-0.5 text-[10px] text-faint">
           {dayScreenStrings.recordedByPrefix} {actorLabel}
+          {recency?.kind === "yesterday" && ` · ${dayScreenStrings.actorYesterdaySuffix}`}
+          {recency?.kind === "earlier" && (
+            <>
+              {" · "}
+              <Ltr>{`${recency.day}/${recency.month}`}</Ltr>
+            </>
+          )}
         </span>
       )}
       {showEmptyFormHint && <span className="text-[10px] text-muted">{dayScreenStrings.visitFormEmptyHint}</span>}
-    </>
+    </span>
   );
 
   return (
-    <li className={containerClassName}>
+    <li
+      data-visit-row-id={visit.id}
+      className={`relative flex items-center gap-3.5 border-b border-hair px-[18px] py-3 transition-colors duration-150 last:border-b-0 before:absolute before:inset-y-0 before:start-0 before:w-[3px] before:content-[''] hover:bg-field ${visual.stripeClassName} ${visual.rowBgClassName}`}
+    >
       {isTappable ? (
         <button
           type="button"
           onClick={handleClick}
           disabled={onPrimaryAction ? disablePrimaryAction : undefined}
-          className="flex w-full flex-1 flex-col items-start gap-0.5 text-start"
+          className="grid flex-1 grid-cols-[60px_1fr] items-center gap-3.5 text-start"
         >
-          {occupiedContent}
+          {timeBlock}
+          {whoBlock}
         </button>
       ) : (
-        <div className="flex w-full flex-1 flex-col items-start gap-0.5 text-start">{occupiedContent}</div>
-      )}
-      {(onOpenVisitForm || menu) && (
-        <div className="mt-auto flex items-center justify-end gap-1 pt-1">
-          {onOpenVisitForm && (
-            <button
-              type="button"
-              onClick={onOpenVisitForm}
-              className="shrink-0 rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted hover:bg-green-soft hover:text-green"
-            >
-              {dayScreenStrings.visitFormPillLabel}
-            </button>
-          )}
-          {menu && <VisitMenu actions={menu} />}
+        <div className="grid flex-1 grid-cols-[60px_1fr] items-center gap-3.5 text-start">
+          {timeBlock}
+          {whoBlock}
         </div>
       )}
+      <div className="flex flex-none flex-col items-end gap-1">
+        <Badge {...visual.badge} shape="pill">
+          {STATUS_LABEL[visit.status]}
+        </Badge>
+        {(onOpenVisitForm || menu) && (
+          <div className="flex items-center gap-1">
+            {onOpenVisitForm && (
+              <button
+                type="button"
+                onClick={onOpenVisitForm}
+                className="shrink-0 rounded-chip bg-field px-2 py-0.5 text-xs text-muted hover:bg-green-wash hover:text-green"
+              >
+                {dayScreenStrings.visitFormPillLabel}
+              </button>
+            )}
+            {menu && <VisitMenu actions={menu} />}
+          </div>
+        )}
+      </div>
     </li>
   );
 }

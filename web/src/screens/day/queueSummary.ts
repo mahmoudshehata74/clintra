@@ -1,4 +1,5 @@
 import type { Visit } from "../../db/types";
+import { clockTimeInCairo, type ClockTime, type Instant } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 
 export interface QueueSummary {
@@ -47,4 +48,62 @@ export function computeExpectedWaitMinutes(
   avgConsultMinutes: number,
 ): number {
   return Math.max(0, position - currentTurnPosition) * avgConsultMinutes;
+}
+
+export interface QueueCellCounts {
+  completedCount: number;
+  inRoomCount: number;
+  totalCount: number;
+  /** How many of today's visits reached a final state (completed, cancelled or no-show). */
+  finalStateCount: number;
+  /** finalStateCount / totalCount, as a whole percentage (0 on an empty queue). */
+  splitSharePercent: number;
+}
+
+// Terminal: nothing further happens to the visit today — the same meaning
+// daySlab.ts's own split bar uses for slots mode.
+const TERMINAL_STATUSES = new Set<VisitStatus>([VisitStatus.Completed, VisitStatus.Cancelled, VisitStatus.NoShow]);
+
+/** The queue summary slab's cell counts and split-bar share, beyond what computeQueueSummary already gives. */
+export function computeQueueCellCounts(visits: readonly Visit[]): QueueCellCounts {
+  let completedCount = 0;
+  let inRoomCount = 0;
+  let finalStateCount = 0;
+
+  for (const visit of visits) {
+    if (visit.status === VisitStatus.Completed) {
+      completedCount += 1;
+    }
+    if (visit.status === VisitStatus.InRoom) {
+      inRoomCount += 1;
+    }
+    if (TERMINAL_STATUSES.has(visit.status)) {
+      finalStateCount += 1;
+    }
+  }
+
+  const totalCount = visits.length;
+  const splitSharePercent = totalCount > 0 ? Math.round((finalStateCount / totalCount) * 100) : 0;
+  return { completedCount, inRoomCount, totalCount, finalStateCount, splitSharePercent };
+}
+
+/**
+ * The queue slab's "يتوقع خلاص {time}" caption: `now` plus one average
+ * consult per remaining turn (every waiting visit, plus the one currently in
+ * the room, each counted as a full average — this never tracks how far into
+ * a running consult the in-room visit already is). Null whenever there is no
+ * average yet, or nobody left to see.
+ */
+export function computeQueueExpectedFinishTime(
+  waitingCount: number,
+  inRoomCount: number,
+  avgConsultMinutes: number | null,
+  now: Instant,
+): ClockTime | null {
+  const remainingTurns = waitingCount + inRoomCount;
+  if (avgConsultMinutes === null || remainingTurns === 0) {
+    return null;
+  }
+  const finishInstant = new Date(new Date(now).getTime() + remainingTurns * avgConsultMinutes * 60_000).toISOString();
+  return clockTimeInCairo(finishInstant);
 }

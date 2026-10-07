@@ -7,6 +7,7 @@ import {
   readClockTime,
   rowFor,
   S,
+  SEEDED_APP_BAR_DATE,
   selectPractitioner,
   SLOTS_DR,
   QUEUE_DR,
@@ -20,19 +21,23 @@ test.beforeEach(async ({ page }) => {
   await expect(rowFor(page, PATIENTS.mona)).toContainText(S.statusBooked);
 });
 
-test("header renders connection chip, date, delay chip, and counters", async ({ page }) => {
+test("app bar renders the connection chip and date; the slab renders the delay trigger and counters", async ({ page }) => {
   // Connection chip: online or local-only, depending on the runner's network.
   await expect(
     page.getByRole("button", { name: new RegExp(`${S.syncOnline}|${S.syncLocal}`) }),
   ).toBeVisible();
-  // Date heading (font-display 2xl line under the brand).
-  const dateLine = page.locator("p.font-display.text-2xl").first();
-  await expect(dateLine).toBeVisible();
-  expect((await dateLine.innerText()).trim().length).toBeGreaterThan(0);
-  // Delay chip (no delay set on the seeded day).
-  await expect(page.getByRole("button", { name: S.delayNone, exact: true })).toBeVisible();
-  // Counters row.
-  await expect(page.getByText(S.countersTotalBooked)).toBeVisible();
+  // The app bar's own date block (AppShell.tsx) — moved out of the day
+  // screen's own heading in this task's COMMIT 1. It must show the seeded
+  // day the grid itself is pinned to (?seedDay=1), not the real current
+  // day: AppShell no longer resolves its own "today" (DayScreen reports it
+  // up the same way it reports its title — see App.tsx).
+  await expect(page.getByText(SEEDED_APP_BAR_DATE.dateLine, { exact: true })).toBeVisible();
+  await expect(page.getByText(SEEDED_APP_BAR_DATE.weekdayLine, { exact: true })).toBeVisible();
+  // The slab's delay trigger (no delay set on the seeded day, so no amount
+  // appended — see DelayControl.tsx and strings.ts's delayControlTriggerLabel).
+  await expect(page.getByRole("button", { name: S.delayControlTriggerLabel, exact: true })).toBeVisible();
+  // The slab's cells (DaySlab.tsx), replacing the old Counters row.
+  await expect(page.getByText(S.countersArrived)).toBeVisible();
   await expect(page.getByText(S.countersCompleted)).toBeVisible();
 });
 
@@ -124,8 +129,8 @@ test("overflow menu offers move, cancel and mark-no-show with destructive action
   await expect(cancel).toBeVisible();
   await expect(noShow).toBeVisible();
 
-  // Destructive grouping: cancel and no-show carry the red treatment, move does not.
-  await expect(cancel).toHaveClass(/text-red/);
-  await expect(noShow).toHaveClass(/text-red/);
-  await expect(move).not.toHaveClass(/text-red/);
+  // Destructive grouping: cancel and no-show carry the danger treatment, move does not.
+  await expect(cancel).toHaveClass(/text-danger/);
+  await expect(noShow).toHaveClass(/text-danger/);
+  await expect(move).not.toHaveClass(/text-danger/);
 });

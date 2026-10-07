@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Ltr from "../../components/Ltr";
+import Button from "../../components/ui/Button";
 import type { ClockTime } from "../../domain/time";
 import { DELAY_PRESET_MINUTES, effectiveStartTime } from "./dayDelay";
 import { dayScreenStrings } from "./strings";
@@ -12,8 +13,11 @@ interface DelayControlProps {
 }
 
 /**
- * The day header's doctor-delay chip and its picker. The slot grid's own
- * times never change; this only reports the effective start time above it.
+ * The summary slab's doctor-delay trigger (prototype `.sb` — Button's onDark
+ * md variant) and its picker. The trigger's own label is static
+ * (delayControlTriggerLabel), with the current amount appended once set; the
+ * slot grid's own times never change, so the effective start time this
+ * implies only ever shows inside the open picker, not on the slab itself.
  */
 export default function DelayControl({ delayMinutes, scheduleStartTime, onSetDelay }: DelayControlProps) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -47,65 +51,52 @@ export default function DelayControl({ delayMinutes, scheduleStartTime, onSetDel
   }
 
   return (
-    <div>
-      <div ref={containerRef} className="relative inline-block">
-        <button
-          type="button"
-          onClick={() => setIsPickerOpen((open) => !open)}
-          aria-haspopup="menu"
-          aria-expanded={isPickerOpen}
-          className={
-            delayMinutes > 0
-              ? "rounded-[5px] bg-amber-soft px-2 py-0.5 text-xs text-amber"
-              : "rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted"
-          }
-        >
-          {delayMinutes > 0 ? (
-            <>
-              <Ltr>{delayMinutes}</Ltr> {dayScreenStrings.delayMinutesSuffix}
-            </>
-          ) : (
-            dayScreenStrings.delayNone
-          )}
-        </button>
+    <div ref={containerRef} className="relative inline-block">
+      <Button
+        variant="onDark"
+        onClick={() => setIsPickerOpen((open) => !open)}
+        aria-haspopup="menu"
+        aria-expanded={isPickerOpen}
+      >
+        {dayScreenStrings.delayControlTriggerLabel}
+        {delayMinutes > 0 && (
+          <>
+            {" · "}
+            <Ltr>{delayMinutes}</Ltr> {dayScreenStrings.delayMinutesSuffix}
+          </>
+        )}
+      </Button>
 
-        {isPickerOpen && (
-          <div
-            role="menu"
-            className="absolute start-0 top-full z-10 mt-1 flex w-44 flex-col overflow-hidden rounded-[--radius-el] border border-line bg-paper shadow-lg"
-          >
-            <p className="p-3 pb-1 text-sm font-medium">{dayScreenStrings.delayPickerTitle}</p>
-            {DELAY_PRESET_MINUTES.map((minutes) => (
-              <button
-                key={minutes}
-                type="button"
-                role="menuitem"
-                onClick={() => choose(minutes)}
-                className="p-3 text-start hover:bg-line/30"
-              >
-                +<Ltr>{minutes}</Ltr> {dayScreenStrings.delayMinutesSuffix}
-              </button>
-            ))}
-            <div className="border-t border-line" />
+      {isPickerOpen && (
+        <div
+          role="menu"
+          className="absolute start-0 top-full z-10 mt-1 flex w-48 flex-col overflow-hidden rounded-panel border border-rule bg-card text-text shadow-l"
+        >
+          <p className="p-3 pb-1 text-sm font-medium">{dayScreenStrings.delayPickerTitle}</p>
+          {delayMinutes > 0 && scheduleStartTime && (
+            <p className="px-3 pb-2 text-xs text-muted">
+              {dayScreenStrings.delayLinePrefix} <Ltr>{delayMinutes}</Ltr> {dayScreenStrings.delayMinutesSuffix}
+              {" — "}
+              {dayScreenStrings.delayLineActualStart}{" "}
+              <Ltr>{effectiveStartTime(scheduleStartTime, delayMinutes)}</Ltr>
+            </p>
+          )}
+          {DELAY_PRESET_MINUTES.map((minutes) => (
             <button
+              key={minutes}
               type="button"
               role="menuitem"
-              onClick={() => choose(0)}
-              className="p-3 text-start hover:bg-line/30"
+              onClick={() => choose(minutes)}
+              className="p-3 text-start hover:bg-field"
             >
-              {dayScreenStrings.delayClearOption}
+              +<Ltr>{minutes}</Ltr> {dayScreenStrings.delayMinutesSuffix}
             </button>
-          </div>
-        )}
-      </div>
-
-      {delayMinutes > 0 && scheduleStartTime && (
-        <p className="mt-1 text-sm text-muted">
-          {dayScreenStrings.delayLinePrefix} <Ltr>{delayMinutes}</Ltr> {dayScreenStrings.delayMinutesSuffix}
-          {" — "}
-          {dayScreenStrings.delayLineActualStart}{" "}
-          <Ltr>{effectiveStartTime(scheduleStartTime, delayMinutes)}</Ltr>
-        </p>
+          ))}
+          <div className="border-t border-hair" />
+          <button type="button" role="menuitem" onClick={() => choose(0)} className="p-3 text-start hover:bg-field">
+            {dayScreenStrings.delayClearOption}
+          </button>
+        </div>
       )}
     </div>
   );

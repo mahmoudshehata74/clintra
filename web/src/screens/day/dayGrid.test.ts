@@ -120,8 +120,8 @@ describe("computeGridRows", () => {
 
     expect(overbookRow.isExtraAtTime).toBe(true);
     expect(overbookVisual).toEqual(normalVisual);
-    expect(overbookVisual.containerClassName).not.toBe(cancelledVisual.containerClassName);
-    expect(overbookVisual.containerClassName).not.toContain("dashed");
-    expect(overbookVisual.containerClassName).not.toContain("red");
+    expect(overbookVisual.stripeClassName).not.toBe(cancelledVisual.stripeClassName);
+    expect(overbookVisual.badge.appearance).not.toBe("dashed");
+    expect(overbookVisual.badge.tone).not.toBe("danger");
   });
 });

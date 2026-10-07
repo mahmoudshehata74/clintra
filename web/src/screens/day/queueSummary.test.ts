@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { Visit } from "../../db/types";
 import { VisitSource } from "../../domain/visitSource";
 import { VisitStatus } from "../../domain/visitStatus";
-import { computeExpectedWaitMinutes, computeQueueSummary } from "./queueSummary";
+import {
+  computeExpectedWaitMinutes,
+  computeQueueCellCounts,
+  computeQueueExpectedFinishTime,
+  computeQueueSummary,
+} from "./queueSummary";
 
 function makeVisit(overrides: Partial<Visit> = {}): Visit {
   return {
@@ -95,5 +100,50 @@ describe("computeExpectedWaitMinutes", () => {
 
   it("never goes negative", () => {
     expect(computeExpectedWaitMinutes(1, 3, 11)).toBe(0);
+  });
+});
+
+describe("computeQueueCellCounts", () => {
+  it("counts completed, in_room and the final-state share", () => {
+    const visits = [
+      makeVisit({ position: 1, status: VisitStatus.Completed }),
+      makeVisit({ position: 2, status: VisitStatus.Completed }),
+      makeVisit({ position: 3, status: VisitStatus.InRoom }),
+      makeVisit({ position: 4, status: VisitStatus.Arrived }),
+      makeVisit({ position: 5, status: VisitStatus.NoShow }),
+    ];
+    const counts = computeQueueCellCounts(visits);
+    expect(counts.completedCount).toBe(2);
+    expect(counts.inRoomCount).toBe(1);
+    expect(counts.totalCount).toBe(5);
+    expect(counts.finalStateCount).toBe(3);
+    expect(counts.splitSharePercent).toBe(60);
+  });
+
+  it("reports all zero on an empty queue", () => {
+    expect(computeQueueCellCounts([])).toEqual({
+      completedCount: 0,
+      inRoomCount: 0,
+      totalCount: 0,
+      finalStateCount: 0,
+      splitSharePercent: 0,
+    });
+  });
+});
+
+describe("computeQueueExpectedFinishTime", () => {
+  const NOW = "2026-09-07T10:00:00.000Z"; // 13:00 Cairo (UTC+3 in September)
+
+  it("adds one average consult per remaining turn (waiting + in_room)", () => {
+    // 3 waiting + 1 in_room = 4 turns * 11 minutes = 44 minutes from now.
+    expect(computeQueueExpectedFinishTime(3, 1, 11, NOW)).toBe("13:44");
+  });
+
+  it("is null when there is no average yet", () => {
+    expect(computeQueueExpectedFinishTime(3, 1, null, NOW)).toBeNull();
+  });
+
+  it("is null when nobody is left to see", () => {
+    expect(computeQueueExpectedFinishTime(0, 0, 11, NOW)).toBeNull();
   });
 });
