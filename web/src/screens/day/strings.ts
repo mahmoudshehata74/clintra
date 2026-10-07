@@ -307,6 +307,24 @@ export const dayScreenStrings = {
   cashCloseAlreadyClosedError: "الصندوق مقفول بالفعل عن اليوم ده",
   cashCloseToastMessage: "اتقفل الصندوق",
 
+  // The past-due gate (screen 7): visits still booked/confirmed whose time
+  // has already passed — see pastDueVisits.ts. Shown as its own list above
+  // the totals, with a per-row no-show/move pair, a bulk no-show action, and
+  // a checkbox that lets the close proceed without touching any of them.
+  cashClosePastDueSectionTitle: "تحتاج تعليم",
+  cashClosePastDueNoShowAction: "لم يحضر",
+  cashClosePastDueMoveAction: "نقل",
+  cashClosePastDueBulkAction: "علّم الكل لم يحضر",
+  cashClosePastDueBulkToastMessage: "اتسجل غياب الزيارات المتأخرة",
+  // Shown instead of the undo option when reversing the bulk mark fails
+  // partway through — some visits went back to how they were, some didn't.
+  noShowBulkUndoPartialFailure: "جزء من التراجع مكنش ممكن، راجع القايمة",
+  cashClosePastDueAcknowledgeLabel: "عارف إنهم ما حضروش — اقفل من غير تعليم",
+  // Shown instead of the amount/note errors while the past-due list is
+  // non-empty and the checkbox above is unchecked — closing is refused
+  // outright until one of the two is true.
+  cashClosePastDueBlockedError: "لسه فيه زيارات متأخرة محتاجة تعليم أو تأكيد",
+
   // Print output: a plainly-labeled placeholder header shown in the app in
   // place of clinic branding, since settings screens don't exist yet — the
   // specification is explicit that this placeholder must never itself
