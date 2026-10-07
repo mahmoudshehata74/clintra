@@ -70,7 +70,7 @@ import SettingsSheet from "./SettingsSheet";
 import VisitFormSheet from "./VisitFormSheet";
 import { resolveDayScheduleState } from "./scheduleState";
 import { dayScreenStrings } from "./strings";
-import { formatTileMoney } from "./tileMoney";
+import { formatMoneyAmount } from "../money";
 import type { UndoAction } from "./undoAction";
 import UndoToast from "./UndoToast";
 import { SEED_DAY_QUERY_PARAM } from "../../domain/appMode";
@@ -899,7 +899,7 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
             tiles={[
               {
                 label: dayScreenStrings.tileCollectedLabel,
-                value: <Ltr>{formatTileMoney(collectedPiastres)}</Ltr>,
+                value: <Ltr>{formatMoneyAmount(collectedPiastres)}</Ltr>,
                 unit: dayScreenStrings.tileCurrencyUnit,
                 sub: (
                   <>
@@ -910,7 +910,7 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
               },
               {
                 label: dayScreenStrings.tileDueLabel,
-                value: <Ltr>{formatTileMoney(slotsSlab.duePiastres)}</Ltr>,
+                value: <Ltr>{formatMoneyAmount(slotsSlab.duePiastres)}</Ltr>,
                 unit: dayScreenStrings.tileCurrencyUnit,
                 sub: slotsSlab.hasPartialInvoice ? dayScreenStrings.invoiceStatusPartial : undefined,
                 tone: "copper",
@@ -1055,6 +1055,7 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
       {invoiceSheetInvoiceId && (
         <InvoiceSheet
           invoiceId={invoiceSheetInvoiceId}
+          showPractitionerName={showPractitionerLabel}
           onDismiss={() => setInvoiceSheetInvoiceId(null)}
           onRequestPayment={handleRequestPayment}
           onVoided={handleInvoiceVoided}

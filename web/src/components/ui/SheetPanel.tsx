@@ -27,6 +27,37 @@ export default function SheetPanel({ children, className }: SheetPanelProps) {
   return <div className={classes}>{children}</div>;
 }
 
+export interface SheetPanelCloseButtonProps {
+  onClose: () => void;
+  closeLabel: string;
+}
+
+/**
+ * `.book-head .x` — the round close button (its own 8px radius collapses to
+ * the control token). Shared by SheetPanelHead and any sheet whose head
+ * isn't built from SheetPanelHead (e.g. InvoiceSheet.tsx's bespoke
+ * `.inv-head`, which still needs the same accessible dismissal every other
+ * sheet offers).
+ */
+export function SheetPanelCloseButton({ onClose, closeLabel }: SheetPanelCloseButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label={closeLabel}
+      className={
+        "relative flex h-7 w-7 shrink-0 items-center justify-center rounded-control border border-white/[0.14] bg-white/[0.08] p-0 font-[inherit] text-base leading-none text-on-dark " +
+        // A square icon button, unlike Button.tsx's MD_TOUCH_TARGET —
+        // extend the invisible hit area in both axes, not just height.
+        "after:absolute after:left-1/2 after:top-1/2 after:h-10 after:w-10 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] " +
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
+      }
+    >
+      ×
+    </button>
+  );
+}
+
 export interface SheetPanelHeadProps {
   title: ReactNode;
   onClose: () => void;
@@ -34,29 +65,15 @@ export interface SheetPanelHeadProps {
 }
 
 /**
- * `.book-head` — dark gradient bar, a flex-1 title and a round close button
- * (`.book-head .x`'s 8px radius collapses to the control token). Sticky to
- * the top of Sheet.tsx's own scrolling dialog element, so it stays pinned
- * while SheetPanelBody scrolls underneath it.
+ * `.book-head` — dark gradient bar, a flex-1 title and a round close button.
+ * Sticky to the top of Sheet.tsx's own scrolling dialog element, so it stays
+ * pinned while SheetPanelBody scrolls underneath it.
  */
 export function SheetPanelHead({ title, onClose, closeLabel }: SheetPanelHeadProps) {
   return (
     <div className="sticky top-0 z-10 flex items-center bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[14px] text-on-dark">
       <h3 className="m-0 flex-1 text-[15px] font-semibold tracking-[-0.005em]">{title}</h3>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label={closeLabel}
-        className={
-          "relative flex h-7 w-7 items-center justify-center rounded-control border border-white/[0.14] bg-white/[0.08] p-0 font-[inherit] text-base leading-none text-on-dark " +
-          // A square icon button, unlike Button.tsx's MD_TOUCH_TARGET —
-          // extend the invisible hit area in both axes, not just height.
-          "after:absolute after:left-1/2 after:top-1/2 after:h-10 after:w-10 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] " +
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
-        }
-      >
-        ×
-      </button>
+      <SheetPanelCloseButton onClose={onClose} closeLabel={closeLabel} />
     </div>
   );
 }
