@@ -1020,6 +1020,7 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
           services={activeServices}
           visitDate={today}
           mode={bookingSheetMode}
+          showPractitionerName={showPractitionerLabel}
           presetTime={presetBookingTime ?? undefined}
           onDismiss={() => {
             setBookingSheetMode(null);

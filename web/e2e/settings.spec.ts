@@ -118,8 +118,10 @@ test("deactivating a service hides it from the booking picker but keeps a comple
   await booking.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.mona);
   await pickSearchResult(booking, PATIENTS.mona);
   await expect(booking.getByRole("button", { name: S.bookingConfirmButton, exact: true })).toBeVisible();
-  await expect(booking.getByRole("button", { name: "كشف عام", exact: true })).toBeVisible();
-  await expect(booking.getByRole("button", { name: "استشارة متابعة", exact: true })).toHaveCount(0);
+  // Not exact: the service option's own accessible name now also carries its
+  // price (e.g. "كشف عام · 400ج").
+  await expect(booking.getByRole("button", { name: "كشف عام" })).toBeVisible();
+  await expect(booking.getByRole("button", { name: "استشارة متابعة" })).toHaveCount(0);
 });
 
 test("demoting the last owner is blocked with the Arabic explanation", async ({ page }) => {

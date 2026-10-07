@@ -124,7 +124,8 @@ test("existing patient booking: 3 taps, under 3 seconds", async ({ page }) => {
   await firstTile.click(); // tap 1 — the empty slot pre-fills its time
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.hoda); // typing, not a tap
   await pickSearchResult(dialog, PATIENTS.hoda); // tap 2 — choose patient
-  await expect(dialog.getByText(time)).toBeVisible();
+  // exact: true tells this apart from the sheet's own head, which now also names the chosen time.
+  await expect(dialog.getByText(time, { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click(); // tap 3 — confirm
   await expect(page.getByText(S.visitBooked)).toBeVisible();
   const elapsedMs = Date.now() - start;

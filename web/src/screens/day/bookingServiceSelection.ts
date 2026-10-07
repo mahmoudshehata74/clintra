@@ -1,3 +1,4 @@
+import type { Piastres } from "../../domain/money";
 import type { Service } from "../../db/types";
 
 /**
@@ -19,4 +20,16 @@ export function resolveSelectedService(
     }
   }
   return services[0] ?? null;
+}
+
+/**
+ * The service picker's own price display (`.svc-row .svc`, e.g. "400"):
+ * whole pounds, rounded to the nearest pound rather than truncated, with no
+ * fraction shown at all — unlike domain/money.ts's formatPiastresForDisplay
+ * or screens/money.ts's formatMoneyAmount, which both keep a piastres
+ * remainder when one exists. The caller appends the currency suffix.
+ */
+export function formatServicePriceWholePounds(priceInPiastres: Piastres): string {
+  const pounds = Math.round(priceInPiastres / 100);
+  return pounds.toLocaleString("en-US");
 }

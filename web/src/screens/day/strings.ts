@@ -94,7 +94,15 @@ export const dayScreenStrings = {
   queueNextActionNumberPrefix: "نمرة",
   // The floating action that opens the booking sheet.
   bookingButtonLabel: "حجز",
+  // `.field label` above the search box — distinct from the placeholder
+  // below, which stays its own (shorter) wording.
+  bookingSearchLabel: "ابحث بالاسم أو التليفون",
   bookingSearchPlaceholder: "دور بالاسم أو الرقم",
+  // `.field label` above the confirm step's service picker.
+  bookingServiceFieldLabel: "الخدمة",
+  // `.svc-row .svc`'s own price suffix, e.g. "400ج" — short, unlike
+  // tileCurrencyUnit's full "ج.م" on the day tiles.
+  shortCurrencySuffix: "ج",
   // Shown only once the search query is non-empty and matches nothing. An
   // empty query renders no results and no message at all.
   bookingNoResults: "مفيش نتائج",

@@ -1,5 +1,6 @@
 import {
   cloneElement,
+  forwardRef,
   useState,
   type ChangeEvent,
   type InputHTMLAttributes,
@@ -154,17 +155,25 @@ type TextInputOwnProps = {
 
 export type TextInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & TextInputOwnProps;
 
-/** `.field .in` on an `<input>` — see Field's doc comment for the shared styling and variants. */
-export function TextInput({
-  filled,
-  variant = "default",
-  className,
-  value,
-  defaultValue,
-  onChange,
-  "aria-invalid": ariaInvalid,
-  ...rest
-}: TextInputProps) {
+/**
+ * `.field .in` on an `<input>` — see Field's doc comment for the shared
+ * styling and variants. Forwards its ref to the native input: some callers
+ * (e.g. BookingSheet.tsx's step-entry autofocus) need to call .focus() on it
+ * directly rather than relying on the `autoFocus` attribute.
+ */
+export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
+  {
+    filled,
+    variant = "default",
+    className,
+    value,
+    defaultValue,
+    onChange,
+    "aria-invalid": ariaInvalid,
+    ...rest
+  },
+  ref,
+) {
   const isControlled = value !== undefined;
   const [uncontrolledFilled, setUncontrolledFilled] = useState(() => isNonEmpty(defaultValue));
   const isInvalid = ariaInvalid === true || ariaInvalid === "true";
@@ -189,6 +198,7 @@ export function TextInput({
 
   return (
     <input
+      ref={ref}
       value={value}
       defaultValue={defaultValue}
       onChange={handleChange}
@@ -197,7 +207,7 @@ export function TextInput({
       {...rest}
     />
   );
-}
+});
 
 type TextAreaOwnProps = {
   filled?: boolean;

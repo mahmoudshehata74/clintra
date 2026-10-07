@@ -100,10 +100,14 @@ const ITEM_ACTIVE = "border-copper bg-white/[0.14] text-on-dark";
  * task that appends an item needs no change here, only an icon entry above.
  *
  * Below the `sm` breakpoint the rail becomes a fixed bottom bar instead of a
- * side rail — same breakpoint and the same z-20 Sheet.tsx reserves this
- * bar's height for (the two never geometrically overlap below `sm:`, and
- * both sit above the day screen's own floating actions at z-10 and below
- * LockScreen's z-50, which must always win regardless of width).
+ * side rail. Both the rail/bottom-bar and the app bar below sit at z-40 —
+ * above Sheet.tsx's own backdrop (z-30), which dims the whole viewport
+ * (including this chrome) when a sheet is open but must never block a tap on
+ * it: the sidebar stays usable while settings is open, and the lock action
+ * stays reachable mid-booking, by real browser hit-testing rather than
+ * pointer-events tricks, since this chrome is genuinely always interactive.
+ * Both still sit below LockScreen's z-50, which must always win regardless
+ * of width.
  */
 // The brand tile shared by the rail (sm+) and the app bar's own mobile-only
 // brand block (below `sm`, where the rail becomes a bottom bar with no room
@@ -143,7 +147,7 @@ function AppBar({ title, today }: { title: ReactNode; today: ClinicDay }) {
   const { dateLine, weekdayLine } = formatAppBarDate(today);
 
   return (
-    <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3.5 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[11px] text-on-dark shadow-m">
+    <header className="sticky top-0 z-40 flex flex-wrap items-center gap-3.5 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[11px] text-on-dark shadow-m">
       <div className="me-auto flex items-center gap-2.5">
         <div className="flex items-center gap-2.5 sm:hidden">
           <BrandLogo />
@@ -187,7 +191,7 @@ export default function AppShell({ role, activeItem, onSelect, title, today, chi
     <div className="flex min-h-screen flex-col-reverse sm:flex-row">
       <nav
         aria-label={sidebarStrings.navAriaLabel}
-        className="fixed inset-x-0 bottom-0 z-20 flex items-stretch gap-1 border-t-2 border-copper bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-2 py-1.5 shadow-m sm:sticky sm:top-0 sm:h-screen sm:w-56 sm:flex-col sm:items-stretch sm:gap-1 sm:border-e-2 sm:border-t-0 sm:p-3"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-1 border-t-2 border-copper bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-2 py-1.5 shadow-m sm:sticky sm:top-0 sm:h-screen sm:w-56 sm:flex-col sm:items-stretch sm:gap-1 sm:border-e-2 sm:border-t-0 sm:p-3"
       >
         <div className="hidden items-center gap-[10px] px-1 pb-4 sm:flex">
           <BrandLogo />
