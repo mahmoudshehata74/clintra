@@ -46,6 +46,24 @@ test("the active sidebar item reflects whether settings is open", async ({ page 
   await expect(dayItem).toHaveAttribute("aria-current", "page");
 });
 
+test("the active rail item's colour and border actually differ from an inactive one", async ({ page }) => {
+  const nav = sidebar(page);
+  const dayItem = nav.getByRole("button", { name: SIDEBAR.navDay, exact: true });
+  const settingsItem = nav.getByRole("button", { name: SIDEBAR.navSettings, exact: true });
+
+  // "اليوم" is active, "الإعدادات" is not — ITEM_BASE/ITEM_ACTIVE used to
+  // both set text/border colour, leaving the winner up to Tailwind's
+  // generated-sheet order rather than isActive (AppShell.tsx).
+  const [activeColor, activeBorder, inactiveColor, inactiveBorder] = await Promise.all([
+    dayItem.evaluate((el) => getComputedStyle(el).color),
+    dayItem.evaluate((el) => getComputedStyle(el).borderColor),
+    settingsItem.evaluate((el) => getComputedStyle(el).color),
+    settingsItem.evaluate((el) => getComputedStyle(el).borderColor),
+  ]);
+  expect(activeColor).not.toBe(inactiveColor);
+  expect(activeBorder).not.toBe(inactiveBorder);
+});
+
 test("the four placeholder sections are gone; only اليوم and الإعدادات exist", async ({ page }) => {
   const nav = sidebar(page);
   await expect(nav.getByRole("button", { name: SIDEBAR.navDay, exact: true })).toBeVisible();

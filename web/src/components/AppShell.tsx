@@ -64,14 +64,23 @@ const ICON_PATHS: Record<NavItem["key"], ReactNode> = {
 // in the prototype's own `.tb-nav` rule — it never draws a pressed state —
 // so it's designed here: a copper edge on the side that reads as "forward"
 // in each layout (the bottom edge of a bottom-bar pill, the leading edge of
-// a rail row), reserved as a transparent border at rest so taking the
-// active state never shifts the row's size.
+// a rail row).
+//
+// Border/background/text colour live in ITEM_INACTIVE/ITEM_ACTIVE below, not
+// here, so exactly one class of each ever applies — never both an inactive
+// and an active colour utility on the same render. Tailwind's cascade is by
+// generated-sheet order, not by position in the className string (see
+// Button.tsx's BASE comment), so two classes setting the same property would
+// leave the winner up to that order instead of to isActive.
 const ITEM_BASE =
-  "flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-chip border-b-2 border-transparent px-2 py-1.5 text-center text-[11px] font-medium text-on-dark-dim transition-colors duration-150 " +
+  "flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-chip border-b-2 px-2 py-1.5 text-center text-[11px] font-medium transition-colors duration-150 " +
   "hover:bg-white/[0.10] hover:text-on-dark " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink " +
   "sm:w-full sm:flex-none sm:flex-row sm:justify-start sm:gap-2 sm:border-b-0 sm:border-s-2 sm:px-3 sm:py-2 sm:text-sm";
 
+// At rest: transparent border (reserved so taking the active state never
+// shifts the row's size), no background fill, dim on-dark text.
+const ITEM_INACTIVE = "border-transparent bg-transparent text-on-dark-dim";
 const ITEM_ACTIVE = "border-copper bg-white/[0.14] text-on-dark";
 
 /**
@@ -188,7 +197,7 @@ export default function AppShell({ role, activeItem, onSelect, title, children }
               type="button"
               onClick={() => onSelect(item.key)}
               aria-current={isActive ? "page" : undefined}
-              className={`${ITEM_BASE} ${isActive ? ITEM_ACTIVE : ""}`}
+              className={`${ITEM_BASE} ${isActive ? ITEM_ACTIVE : ITEM_INACTIVE}`}
             >
               <SidebarIcon path={ICON_PATHS[item.key]} />
               <span>{item.label}</span>
