@@ -293,19 +293,44 @@ export const dayScreenStrings = {
   // the visit itself expired independently).
   visitCompletionUndoPartialFailure: "اتلغت الفاتورة، لكن حالة الزيارة لسه \"خلصت\"",
 
-  // The day header's cash-close action and its sheet.
+  // The day header's cash-close action and its sheet (prototype #s7: `.c-head`,
+  // `.close-summary`, `.close-grid`, `.close-cell`, `.match`, `.diff`, `.field`,
+  // `.runrow`).
   cashCloseButtonLabel: "إغلاق الصندوق",
   cashCloseSheetTitle: "إغلاق الصندوق",
-  cashCloseExpectedLabel: "المتوقع",
+  // `.c-head h3`'s own prefix, combined with formatCairoDisplayDate(date) —
+  // e.g. "إقفال يوم الاثنين 7 سبتمبر".
+  cashCloseHeadTitlePrefix: "إقفال يوم",
+  cashCloseSummaryHeading: "ملخّص اليوم",
+  // `.close-grid`'s four cells.
+  cashCloseExpectedLabel: "إجمالي المتوقع",
+  cashCloseGridCollectedLabel: "المحصّل نقدي",
+  cashCloseGridInvoicesLabel: "فاتورة",
+  cashCloseGridInvoicesUnit: "مدفوعة",
+  cashCloseActualCashFieldLabel: "الكاش الفعلي في الدرج",
   cashCloseCollectedPlaceholder: "المبلغ المحصل (جنيه)",
   cashCloseCollectedInvalidError: "المبلغ ده مش صحيح",
   cashCloseDifferenceLabel: "الفرق",
   cashCloseNotePlaceholder: "سبب الفرق",
   // Shown only once the difference is non-zero and the note is still empty.
   cashCloseNoteRequiredError: "لازم تكتب سبب الفرق",
+  // The eligible/warning result banner once an amount has been typed.
+  cashCloseMatchedTitle: "مطابق تمامًا",
+  cashCloseMatchedSubtitle: "مفيش فرق بين المتوقع والمحصّل",
+  // Existing label kept as-is per the task's own instruction (no printing
+  // added here, unlike the prototype's own ".run" button text).
   cashCloseConfirmButton: "إغلاق",
+  cashCloseExportCsvAction: "تصدير CSV",
+  // `.runrow .count`'s own prefix, e.g. "هيقفله سارة حسن".
+  cashCloseClosesCountPrefix: "هيقفله",
   cashCloseAlreadyClosedError: "الصندوق مقفول بالفعل عن اليوم ده",
   cashCloseToastMessage: "اتقفل الصندوق",
+
+  // The read-only summary shown instead of the form once this location/day
+  // already has a cash_close row.
+  cashCloseClosedAtLabel: "اتقفل الساعة",
+  cashCloseClosedByLabel: "بواسطة",
+  cashCloseNoDifferenceNoteLabel: "مفيش ملاحظة",
 
   // The past-due gate (screen 7): visits still booked/confirmed whose time
   // has already passed — see pastDueVisits.ts. Shown as its own list above
