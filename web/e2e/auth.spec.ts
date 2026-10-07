@@ -151,6 +151,21 @@ test("the PIN pad exposes exactly the keys 1-9, 0 and delete, by accessible name
   await expect(overlay.getByRole("button", { name: AUTH.lockDeleteAria, exact: true })).toBeVisible();
 });
 
+test("the pad reads left to right like a phone keypad, regardless of page direction", async ({ page }) => {
+  await openLocked(page);
+  await pickAssistant(page);
+  const overlay = lockOverlay(page);
+
+  const [oneBox, threeBox] = await Promise.all([
+    overlay.getByRole("button", { name: "1", exact: true }).boundingBox(),
+    overlay.getByRole("button", { name: "3", exact: true }).boundingBox(),
+  ]);
+  if (!oneBox || !threeBox) {
+    throw new Error("expected both pad keys to have a bounding box");
+  }
+  expect(oneBox.x).toBeLessThan(threeBox.x);
+});
+
 test("the four dots fill as digits are entered", async ({ page }) => {
   await openLocked(page);
   await pickAssistant(page);
