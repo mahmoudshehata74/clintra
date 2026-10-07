@@ -11,9 +11,10 @@ test("the queue renders one numbered row per visit", async ({ page }) => {
   // Six seeded queue visits: two completed, one in_room, one arrived, one
   // booked, one no-show (see seed.ts).
   await expect(page.getByRole("listitem")).toHaveCount(6);
-  // The redesigned row (QueueRow.tsx) no longer shows a status word; the
-  // in_room row's own "في الكشف" qwait text is its visible signature instead.
-  await expect(page.getByText(S.queueInRoomCellLabel, { exact: true }).first()).toBeVisible();
+  // The in_room row's own meta phrase falls back to the plain status text
+  // under ?seedDay=1 (elapsedLabel.ts's real-day gate — see PractitionerColumn.tsx).
+  await expect(rowFor(page, PATIENTS.yasmin)).toContainText(S.statusInRoom);
+  await expect(rowFor(page, PATIENTS.yasmin)).toHaveAttribute("data-visit-status", "in_room");
 });
 
 test("the next-in-line accent sits on the earliest waiting row once nothing is in_room", async ({ page }) => {
@@ -24,8 +25,10 @@ test("the next-in-line accent sits on the earliest waiting row once nothing is i
   await inRoom.locator("button").filter({ hasText: PATIENTS.yasmin }).click();
   await expect(page.getByText(S.completedToastMessage)).toBeVisible();
 
-  // The redesigned row carries this as a non-visual hook, not a text badge
-  // — the prototype's own `.qrow.next` only recolours the qnum (QueueRow.tsx).
+  // The next row carries "التالي" as visually-hidden text for assistive
+  // technology (QueueRow.tsx) — present in its content either way.
+  await expect(rowFor(page, PATIENTS.omar)).toContainText(S.queueNextBadge);
+  // The data attribute stays as an additional, non-visual hook.
   await expect(page.locator('[data-queue-row-kind="next"]')).toHaveCount(1);
   await expect(rowFor(page, PATIENTS.omar)).toHaveAttribute("data-queue-row-kind", "next");
 });
@@ -33,10 +36,12 @@ test("the next-in-line accent sits on the earliest waiting row once nothing is i
 test("double-clicking a waiting row's primary button advances exactly one status, not two", async ({ page }) => {
   // The seeded booked visit (هدى), waiting — see seed.ts's queueVisitPlan.
   const hoda = rowFor(page, PATIENTS.hoda);
+  await expect(hoda).toContainText(S.statusBooked);
   await expect(hoda).toHaveAttribute("data-visit-status", "booked");
 
   await hoda.locator("button").filter({ hasText: PATIENTS.hoda }).dblclick();
   await expect(page.getByText(S.attendanceMarked)).toBeVisible();
+  await expect(hoda).toContainText(S.statusArrived);
   await expect(hoda).toHaveAttribute("data-visit-status", "arrived");
   await expect(page.getByText(S.inRoomToastMessage)).toHaveCount(0);
 });

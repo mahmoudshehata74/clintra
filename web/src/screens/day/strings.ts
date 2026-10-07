@@ -83,6 +83,14 @@ export const dayScreenStrings = {
   queueHeroOfTotalWord: "من",
   queueExpectedFinishPrefix: "يتوقع خلاص",
   queueInRoomCellLabel: "في الكشف",
+  // `.qwho .meta`'s in_room phrase ("دخل من 7د") — gender-neutral, unlike
+  // the prototype's own per-row sample text.
+  queueInRoomMetaPrefix: "دخل من",
+  // Marks the single waiting row that is next in line. The redesigned row
+  // (QueueRow.tsx) carries this as visually-hidden text for assistive
+  // technology, not a visible badge — the prototype's own `.qrow.next`
+  // only recolours the qnum.
+  queueNextBadge: "التالي",
   queueNextActionNumberPrefix: "نمرة",
   // The floating action that opens the booking sheet.
   bookingButtonLabel: "حجز",

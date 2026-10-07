@@ -1,19 +1,21 @@
 import type { ReactNode } from "react";
 import Ltr from "../../components/Ltr";
+import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Card, { CardFooter, CardHead } from "../../components/ui/Card";
 import { countCompletedConsultations } from "../../domain/consultStats";
 import { ScheduleMode } from "../../domain/scheduleMode";
-import type { ClinicDay, ClockTime } from "../../domain/time";
+import { clockTimeInCairo, type ClinicDay, type ClockTime } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Schedule, Service, Visit } from "../../db/types";
 import { computeGridRows } from "./dayGrid";
+import { computeElapsedLabel } from "./elapsedLabel";
 import { computeEmptySlots } from "./emptySlots";
 import { computeExpectedWaitMinutes, computeQueueSummary } from "./queueSummary";
 import QueueRow, { type QueueRowKind } from "./QueueRow";
 import { resolveDayScheduleState } from "./scheduleState";
 import SlotRow from "./SlotRow";
-import { STATUS_LABEL } from "./statusStyle";
+import { STATUS_LABEL, statusVisual } from "./statusStyle";
 import { dayScreenStrings } from "./strings";
 import { isMenuEligible, isQueueWaiting, primaryAdvanceTarget } from "./visitActions";
 
@@ -136,6 +138,7 @@ export default function PractitionerColumn({
         onCallNext={onCallNextInQueue}
         onOpenBooking={onOpenBooking}
         onWalkIn={onWalkIn}
+        today={today}
       />
     );
   }
@@ -298,6 +301,8 @@ interface QueueColumnProps {
   onCallNext?: () => void;
   onOpenBooking?: () => void;
   onWalkIn?: () => void;
+  /** Today, for the elapsed in_room meta phrase's real-day gating — see elapsedLabel.ts. */
+  today: ClinicDay;
 }
 
 /** Never extrapolated from a single data point — see queueSummary.ts and docs/schema.md. */
@@ -326,7 +331,9 @@ function QueueColumn({
   onCallNext,
   onOpenBooking,
   onWalkIn,
+  today,
 }: QueueColumnProps) {
+  const now = new Date();
   const sortedVisits = [...visits].sort((a, b) => a.position - b.position);
   const summary = computeQueueSummary(sortedVisits);
   const hasEnoughDataForEstimate = countCompletedConsultations(sortedVisits) >= MINIMUM_COMPLETED_FOR_ESTIMATE;
@@ -377,9 +384,33 @@ function QueueColumn({
                   ? "next"
                   : "waiting";
 
+          // `.qwho .meta`'s state phrase, gender-neutral per the task's own
+          // wording — "{service} · {phrase}" is QueueRow.tsx's own concern,
+          // this only ever builds the phrase half.
+          let metaPhrase: ReactNode = null;
+          if (visit.status === VisitStatus.Completed && visit.ended_at) {
+            metaPhrase = `${dayScreenStrings.statusCompleted} ${clockTimeInCairo(visit.ended_at)}`;
+          } else if (visit.status === VisitStatus.InRoom && visit.started_at) {
+            const elapsed = computeElapsedLabel(visit.started_at, now.toISOString(), today, now);
+            metaPhrase = elapsed ? `${dayScreenStrings.queueInRoomMetaPrefix} ${elapsed}` : dayScreenStrings.statusInRoom;
+          } else if (visit.status === VisitStatus.Arrived && visit.arrived_at) {
+            metaPhrase = `${dayScreenStrings.statusArrived} ${clockTimeInCairo(visit.arrived_at)}`;
+          } else if (visit.status === VisitStatus.Booked || visit.status === VisitStatus.Confirmed) {
+            metaPhrase = STATUS_LABEL[visit.status];
+          }
+
           let waitNode: ReactNode = null;
           if (isSettledButNotCompleted) {
-            waitNode = <b>{STATUS_LABEL[visit.status]}</b>;
+            // The slots list's own Badge pill, in place of a bare bold word
+            // — same statusVisual.ts tones/appearances SlotRow.tsx uses.
+            const visual = statusVisual(visit.status);
+            waitNode = visual ? (
+              <Badge {...visual.badge} shape="pill">
+                {STATUS_LABEL[visit.status]}
+              </Badge>
+            ) : (
+              <b>{STATUS_LABEL[visit.status]}</b>
+            );
           } else if (isCompleted && visit.started_at && visit.ended_at) {
             const minutes = Math.round(
               (new Date(visit.ended_at).getTime() - new Date(visit.started_at).getTime()) / 60_000,
@@ -423,6 +454,7 @@ function QueueColumn({
               patient={patient}
               service={service}
               kind={kind}
+              metaPhrase={metaPhrase}
               waitNode={waitNode}
               actorLabel={actorLabelByVisitId.get(visit.id)}
               onPrimaryAction={advanceTarget ? () => onAdvance(visit, advanceTarget) : isCompleted ? openVisitForm : undefined}

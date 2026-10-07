@@ -11,7 +11,9 @@ interface QueueRowProps {
   patient?: Patient;
   service?: Service;
   kind: QueueRowKind;
-  /** The `.qwait` column's content — composed by the caller (QueueColumn), since it varies by kind: a duration, a plain dash, or the existing expected-wait label. */
+  /** The `.qwho .meta` state phrase, composed by the caller (QueueColumn) — "خلص HH:MM", "دخل من …", "وصل HH:MM", or the plain booked/confirmed status text. Combined with `service` into one "{service} · {phrase}" line. */
+  metaPhrase?: ReactNode;
+  /** The `.qwait` column's content — composed by the caller (QueueColumn), since it varies by kind: a duration, a plain dash, the existing expected-wait label, or (cancelled/no_show) the slots list's own Badge pill. */
   waitNode: ReactNode;
   onPrimaryAction?: () => void;
   /** True while this visit is in its post-tap cooldown — see advanceCooldown.ts. */
@@ -45,6 +47,7 @@ export default function QueueRow({
   patient,
   service,
   kind,
+  metaPhrase,
   waitNode,
   onPrimaryAction,
   disablePrimaryAction = false,
@@ -65,8 +68,15 @@ export default function QueueRow({
       <span className="flex min-w-0 flex-1 flex-col">
         <span className={`truncate text-sm font-semibold ${kind === "done" ? "text-muted" : "text-text"}`}>
           {patient?.full_name}
+          {kind === "next" && <span className="sr-only">{dayScreenStrings.queueNextBadge}</span>}
         </span>
-        {service && <span className="mt-px text-[11.5px] text-muted">{service.name}</span>}
+        {(service || metaPhrase) && (
+          <span className="mt-px text-[11.5px] text-muted">
+            {service?.name}
+            {service && metaPhrase && " · "}
+            {metaPhrase}
+          </span>
+        )}
         {actorLabel && <span className="mt-0.5 text-[10px] text-faint">{dayScreenStrings.recordedByPrefix} {actorLabel}</span>}
         {showEmptyFormHint && <span className="text-[10px] text-muted">{dayScreenStrings.visitFormEmptyHint}</span>}
       </span>
