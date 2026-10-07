@@ -10,13 +10,12 @@ export interface SheetPanelProps {
  * .x`, `.book-body`, `.book-foot` (docs/reference/clintra-prototype.html).
  *
  * Presentational only — no overlay, no portal, no focus trap, no Escape
- * handling. web/src/screens/day/Sheet.tsx already owns all of that for the
- * day screen's sheets (backdrop tap, drag-down, Escape, scroll lock) and is
- * where this panel is meant to end up once the booking screen is restyled:
- * `<Sheet onDismiss={...}><SheetPanel>...</SheetPanel></Sheet>`. Sheet.tsx's
- * own chrome on the sliding panel div (border/bg/shadow/rounded corners) is
- * a separate, pre-existing concern this task doesn't touch — reconciling
- * the two frames is for that future restyle, not for this component.
+ * handling. web/src/screens/day/Sheet.tsx now carries this same look
+ * (token radius on its top corners, bg-card, shadow-l) on its own sliding
+ * panel directly, so a day-screen sheet renders SheetPanelHead/Body/Foot
+ * straight inside `<Sheet>` rather than this default export — Sheet.tsx
+ * already is the card. This default SheetPanel component stays for
+ * standalone, non-dialog uses (e.g. the gallery's static demo).
  */
 export default function SheetPanel({ children, className }: SheetPanelProps) {
   const classes = [
@@ -34,10 +33,15 @@ export interface SheetPanelHeadProps {
   closeLabel: string;
 }
 
-/** `.book-head` — dark gradient bar, a flex-1 title and a round close button (`.book-head .x`'s 8px radius collapses to the control token). */
+/**
+ * `.book-head` — dark gradient bar, a flex-1 title and a round close button
+ * (`.book-head .x`'s 8px radius collapses to the control token). Sticky to
+ * the top of Sheet.tsx's own scrolling dialog element, so it stays pinned
+ * while SheetPanelBody scrolls underneath it.
+ */
 export function SheetPanelHead({ title, onClose, closeLabel }: SheetPanelHeadProps) {
   return (
-    <div className="flex items-center bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[14px] text-on-dark">
+    <div className="sticky top-0 z-10 flex items-center bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[14px] text-on-dark">
       <h3 className="m-0 flex-1 text-[15px] font-semibold tracking-[-0.005em]">{title}</h3>
       <button
         type="button"
@@ -70,7 +74,12 @@ export interface SheetPanelFootProps {
   children: ReactNode;
 }
 
-/** `.book-foot` — the action row. Give the primary action `className="flex-1"` to match `.book-foot .run`'s own flex:1. */
+/**
+ * `.book-foot` — the action row. Give the primary action `className="flex-1"`
+ * to match `.book-foot .run`'s own flex:1. Sticky to the bottom of
+ * Sheet.tsx's own scrolling dialog element, so it stays pinned while
+ * SheetPanelBody scrolls underneath it.
+ */
 export function SheetPanelFoot({ children }: SheetPanelFootProps) {
-  return <div className="flex gap-2 border-t border-hair bg-field px-5 py-[14px]">{children}</div>;
+  return <div className="sticky bottom-0 z-10 flex gap-2 border-t border-hair bg-field px-5 py-[14px]">{children}</div>;
 }

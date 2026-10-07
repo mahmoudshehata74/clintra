@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { SheetPanelHead } from "../../components/ui/SheetPanel";
 import { dayScreenStrings } from "./strings";
 
 interface SheetHeaderProps {
@@ -9,29 +10,30 @@ interface SheetHeaderProps {
 }
 
 /**
- * The reference's compact .fbar header bar: a short title on the leading
- * side, a close affordance (and any extra pills) on the trailing side.
- * Reused across every sheet redesigned to match the reference (booking,
- * invoice, payment, receipt, audit, day sheet) so they all share one
- * chrome. Sheet.tsx's own backdrop-tap/Escape/drag-down dismissal is
- * unchanged by this — the button here calls the exact same onDismiss,
- * just as an additional, discoverable way to close.
+ * Thin wrapper over SheetPanelHead (`.book-head`) so every sheet that uses
+ * it gets the new dark gradient head at once. `extra` has no slot of its own
+ * on SheetPanelHead, so it renders just before the close button, inside the
+ * same trailing area SheetPanelHead already reserves for it via its
+ * title's `flex-1`. The close button keeps calling the same onDismiss
+ * Sheet.tsx's backdrop-tap/Escape/drag-down also use, and the same
+ * accessible name (dayScreenStrings.sheetCloseAriaLabel) existing specs
+ * rely on.
  */
 export default function SheetHeader({ title, onDismiss, extra }: SheetHeaderProps) {
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-line pb-2">
-      <p className="font-display text-sm font-medium">{title}</p>
-      <div className="flex shrink-0 items-center gap-2">
-        {extra}
-        <button
-          type="button"
-          onClick={onDismiss}
-          aria-label={dayScreenStrings.sheetCloseAriaLabel}
-          className="text-lg leading-none text-muted"
-        >
-          ×
-        </button>
-      </div>
-    </div>
+    <SheetPanelHead
+      title={
+        extra ? (
+          <span className="flex items-center justify-between gap-2">
+            {title}
+            <span className="flex shrink-0 items-center gap-2 text-xs font-normal">{extra}</span>
+          </span>
+        ) : (
+          title
+        )
+      }
+      onClose={onDismiss}
+      closeLabel={dayScreenStrings.sheetCloseAriaLabel}
+    />
   );
 }
