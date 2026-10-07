@@ -7,6 +7,7 @@ import { clockTimeInCairo, type ClinicDay } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Service, Visit } from "../../db/types";
 import { computeActorRecency } from "./actorRecency";
+import { computeElapsedLabel } from "./elapsedLabel";
 import { dayScreenStrings } from "./strings";
 import { STATUS_LABEL, statusVisual } from "./statusStyle";
 import VisitMenu, { type VisitMenuActions } from "./VisitMenu";
@@ -39,30 +40,35 @@ interface SlotRowProps {
 
 const REOPENED_STATUSES = new Set<string>([VisitStatus.Cancelled, VisitStatus.NoShow]);
 
-/** The `.until` sub-line's own text per status — arrived/in_room/completed/no_show only. */
-function untilText(visit: Visit): string | null {
+/**
+ * The `.until` sub-line's own text per status — arrived/in_room/completed/
+ * no_show only. arrived's is a fixed clock time, always shown. The other
+ * three route through elapsedLabel.ts's computeElapsedLabel, which shows
+ * nothing at all unless `today` is the real current Cairo day (in_room/
+ * no_show are live "elapsed since" counts that would otherwise read a stale
+ * ?seedDay=1 pin's timestamps against real now; completed's own duration is
+ * gated the same way, for one consistent rule across the three).
+ */
+function untilText(visit: Visit, today: ClinicDay, now: Date): string | null {
   if (visit.status === VisitStatus.Arrived && visit.arrived_at) {
     return `${dayScreenStrings.untilArrivedPrefix} ${clockTimeInCairo(visit.arrived_at)}`;
   }
   if (visit.status === VisitStatus.InRoom && visit.started_at) {
-    return `${dayScreenStrings.untilSincePrefix} ${minutesSince(visit.started_at)}${dayScreenStrings.minutesShortUnit}`;
+    const elapsed = computeElapsedLabel(visit.started_at, now.toISOString(), today, now);
+    return elapsed ? `${dayScreenStrings.untilSincePrefix} ${elapsed}` : null;
   }
   if (visit.status === VisitStatus.Completed && visit.started_at && visit.ended_at) {
-    const minutes = Math.round((new Date(visit.ended_at).getTime() - new Date(visit.started_at).getTime()) / 60_000);
-    return `${minutes}${dayScreenStrings.minutesShortUnit}`;
+    return computeElapsedLabel(visit.started_at, visit.ended_at, today, now);
   }
   if (visit.status === VisitStatus.NoShow && visit.scheduled_at) {
-    return `${dayScreenStrings.untilSincePrefix} ${minutesSince(visit.scheduled_at)}${dayScreenStrings.minutesShortUnit}`;
+    const elapsed = computeElapsedLabel(visit.scheduled_at, now.toISOString(), today, now);
+    return elapsed ? `${dayScreenStrings.untilSincePrefix} ${elapsed}` : null;
   }
   return null;
 }
 
-function minutesSince(instant: string): number {
-  return Math.max(0, Math.round((Date.now() - new Date(instant).getTime()) / 60_000));
-}
-
 // in_room and no_show are the two statuses whose `.until` text is a live
-// "minutes since" count, so only they need the minute tick below.
+// "elapsed since" count, so only they need the minute tick below.
 const LIVE_UNTIL_STATUSES = new Set<string>([VisitStatus.InRoom, VisitStatus.NoShow]);
 
 /**
@@ -131,7 +137,7 @@ export default function SlotRow({
 
   const phoneDisplay = patient?.phone ? formatEgyptianPhoneForDisplay(patient.phone) : null;
   const recency = computeActorRecency(visit.created_at, today);
-  const until = untilText(visit);
+  const until = untilText(visit, today, new Date());
 
   const timeBlock = (
     <span className={`text-sm font-bold leading-none tracking-[-0.02em] tabular-nums ${visual.timeClassName}`}>

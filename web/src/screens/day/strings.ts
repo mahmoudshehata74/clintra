@@ -72,6 +72,8 @@ export const dayScreenStrings = {
   // Short minute suffix ("27د"), distinct from delayMinutesSuffix's full
   // word ("27 دقيقة") — both appear in the prototype, in different spots.
   minutesShortUnit: "د",
+  // Short hour suffix for elapsedLabel.ts's bounded elapsed labels ("1س 15د").
+  hoursShortUnit: "س",
 
   // Queue mode's slab (#s3): hero caption and its own cell/action words
   // (مستنيين/خلصوا reuse the two shared cell words above).
