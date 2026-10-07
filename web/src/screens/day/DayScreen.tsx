@@ -796,6 +796,10 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
 
   return (
     <main className={`mx-auto max-w-3xl px-6 py-6 ${toastState ? "pb-28" : "pb-16"}`}>
+      {/* Everything but the sheets below (each of which manages its own
+          print:hidden/print:block split) — printing only ever shows a
+          sheet's own print target, never the day grid behind it. */}
+      <div className="print:hidden">
       {currentPractitioner && selectedLocationId && (
         <DaySlab
           heroLabel={isQueueMode ? dayScreenStrings.queueSummaryCurrentTurnLabel : dayScreenStrings.slabRemainingLabel}
@@ -1030,6 +1034,7 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
             />
           );
         })}
+      </div>
       </div>
 
       {bookingSheetMode && currentPractitioner && selectedLocationId && defaultService && (

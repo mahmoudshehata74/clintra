@@ -376,6 +376,13 @@ test("@screenshot gallery-sheetpanel", async ({ page }) => {
   await shootGallerySection(page, "gallery-sheetpanel", "sheetpanel");
 });
 
+test("@screenshot day-sheet-preview", async ({ page }) => {
+  await selectPractitioner(page, SLOTS_DR);
+  await page.getByRole("button", { name: S.daySheetButtonLabel, exact: true }).click();
+  await expect(page.getByRole("dialog").getByText(S.daySheetTitle)).toBeVisible();
+  await shoot(page, "day-sheet-preview", false);
+});
+
 test("@screenshot day-sheet-print", async ({ page }) => {
   await page.addInitScript(() => {
     window.print = () => {};

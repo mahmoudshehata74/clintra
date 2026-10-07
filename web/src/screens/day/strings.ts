@@ -405,6 +405,15 @@ export const dayScreenStrings = {
   daySheetEmpty: "مفيش حجوزات للغد",
   daySheetNoPhone: "بدون رقم",
   printDaySheetAction: "طباعة ورقة الغد",
+  // `.print-day`'s own trailing count, e.g. "— 7 مرضى".
+  daySheetPatientCountUnit: "مرضى",
+  // `.print-tbl` column headers (#s8).
+  daySheetColumnTime: "الوقت",
+  daySheetColumnPatient: "المريض",
+  daySheetColumnService: "الخدمة",
+  daySheetColumnPhone: "التليفون",
+  // `.print-foot`'s own prefix, e.g. "طُبعت 7 سبتمبر 18:15".
+  printedAtPrefix: "طُبعت",
 
   // The day header's audit-log action ("السجل") and its sheet: today's
   // audit_log rows for the current practitioner+location, newest first, read
