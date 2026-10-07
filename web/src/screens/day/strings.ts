@@ -260,7 +260,11 @@ export const dayScreenStrings = {
 
   // The "تسجيل دفعة" prompt.
   paymentSheetTitle: "تسجيل دفعة",
+  // `.book-head h3`'s own connector word, e.g. "دفعة · فاتورة INV-2026-0142".
+  paymentSheetInvoiceConnector: "فاتورة",
   paymentAmountPlaceholder: "المبلغ (جنيه)",
+  // `.field .hint` under the amount field.
+  paymentAmountHint: "اكتب رقم أقل عشان دفعة جزئية تانية",
   paymentAmountInvalidError: "المبلغ ده مش صحيح",
   paymentAmountNotPositiveError: "لازم يكون المبلغ أكبر من صفر",
   paymentAmountExceedsRemainingError: "المبلغ أكبر من المتبقي",
@@ -272,6 +276,9 @@ export const dayScreenStrings = {
   paymentMethodWallet: "محفظة",
   paymentMethodTransfer: "تحويل",
   paymentNotePlaceholder: "ملاحظة (اختياري)",
+  // The note field's own example placeholder text (`.field .in` placeholder),
+  // distinct from paymentNotePlaceholder above, which is the field's label.
+  paymentNoteExamplePlaceholder: "مثلًا: باقي المبلغ الأسبوع الجاي",
   paymentConfirmButton: "تسجيل",
   paymentToastMessage: "اتسجلت الدفعة",
   // Shown when undoing a payment reverses the invoice's paid/status but then

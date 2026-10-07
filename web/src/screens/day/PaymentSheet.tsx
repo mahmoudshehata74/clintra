@@ -1,10 +1,16 @@
 import { useState } from "react";
 import Ltr from "../../components/Ltr";
+import Field, { TextInput } from "../../components/ui/Field";
+import Button from "../../components/ui/Button";
+import { SheetPanelBody, SheetPanelFoot } from "../../components/ui/SheetPanel";
+import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
-import { formatPiastresForDisplay, type Piastres } from "../../domain/money";
+import { type Piastres } from "../../domain/money";
+import { formatMoneyAmount } from "../money";
 import { recordPayment } from "../../db/payments";
-import { PaymentMethod } from "../../db/types";
+import { PaymentMethod, type Invoice, type Patient } from "../../db/types";
+import { formatInvoiceNumber } from "./invoiceNumber";
 import { validatePaymentForm } from "./paymentForm";
 import Sheet from "./Sheet";
 import SheetHeader from "./SheetHeader";
@@ -24,15 +30,10 @@ const METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
   { value: PaymentMethod.Transfer, label: dayScreenStrings.paymentMethodTransfer },
 ];
 
-// The reference's .bt.g pill: pine border and text when selected, plain otherwise.
-function methodPillClassName(isSelected: boolean): string {
-  return isSelected
-    ? "rounded-[--radius-el] border border-green px-3 py-1.5 text-sm text-green"
-    : "rounded-[--radius-el] border border-line px-3 py-1.5 text-sm text-ink";
+interface PaymentData {
+  invoice: Invoice;
+  patient: Patient | undefined;
 }
-
-const FIELD_CLASS =
-  "w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start focus:border-green focus:outline-none focus:ring-[3px] focus:ring-green-soft";
 
 /**
  * The compact "تسجيل دفعة" prompt: amount, method, an optional note. Reads
@@ -47,16 +48,26 @@ export default function PaymentSheet({ invoiceId, onDismiss, onRecorded }: Payme
   const [amountError, setAmountError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const invoice = useLiveQuery(() => db.invoices.get(invoiceId), [invoiceId]);
+  const data = useLiveQuery<PaymentData | null>(async () => {
+    const invoice = await db.invoices.get(invoiceId);
+    if (!invoice) {
+      return null;
+    }
+    const patient = await db.patients.get(invoice.patient_id);
+    return { invoice, patient };
+  }, [invoiceId]);
 
-  if (!invoice) {
+  if (!data) {
     return (
       <Sheet onDismiss={onDismiss}>
-        <p className="text-muted">جارٍ التحميل...</p>
+        <SheetPanelBody>
+          <p className="text-muted">جارٍ التحميل...</p>
+        </SheetPanelBody>
       </Sheet>
     );
   }
 
+  const { invoice, patient } = data;
   const remaining = (invoice.total - invoice.paid) as Piastres;
 
   async function handleConfirm() {
@@ -90,55 +101,70 @@ export default function PaymentSheet({ invoiceId, onDismiss, onRecorded }: Payme
 
   return (
     <Sheet onDismiss={onDismiss}>
-      <SheetHeader title={dayScreenStrings.paymentSheetTitle} onDismiss={onDismiss} />
-      <p className="mt-3 text-sm text-muted">
-        {dayScreenStrings.invoiceRemainingLabel}: <Ltr>{formatPiastresForDisplay(remaining)}</Ltr>
-      </p>
+      <SheetHeader
+        title={`${dayScreenStrings.paymentSheetTitle} · ${dayScreenStrings.paymentSheetInvoiceConnector} ${formatInvoiceNumber(invoice)}`}
+        onDismiss={onDismiss}
+      />
 
-      <div className="mt-4">
-        <p className="mb-1 text-xs text-muted">{dayScreenStrings.paymentAmountPlaceholder}</p>
-        <input
-          type="text"
-          inputMode="decimal"
-          value={amountInput}
-          onChange={(event) => {
-            setAmountInput(event.target.value);
-            setAmountError(null);
-          }}
-          className={FIELD_CLASS}
-        />
-        {amountError && <p className="mt-1 text-sm text-red">{amountError}</p>}
-      </div>
-
-      <div className="mt-3">
-        <p className="mb-1 text-xs text-muted">{dayScreenStrings.paymentMethodLabel}</p>
-        <div className="flex flex-wrap gap-2">
-          {METHOD_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setMethod(option.value)}
-              className={methodPillClassName(method === option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
+      <SheetPanelBody>
+        {/* `.pt-summary`, bled to the body's own edges per the reference's
+            inline override on this screen (`margin:-18px -20px 0`) — the
+            body's own px-5/py-[18px] match that 20px/18px exactly. */}
+        <div className="-mx-5 -mt-[18px] flex flex-wrap items-center gap-[14px] border-b border-copper-line bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-copper)_10%,var(--color-card))_0%,var(--color-card)_100%)] px-5 py-4">
+          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-card bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[17px] font-bold text-white">
+            {patient?.full_name.charAt(0) ?? ""}
+          </span>
+          <div className="min-w-[180px] flex-1">
+            <p className="text-base font-bold tracking-[-0.01em] text-text">{patient?.full_name ?? ""}</p>
+            <p className="mt-px text-[11.5px] text-muted">
+              {dayScreenStrings.invoiceRemainingLabel}{" "}
+              <b className="font-bold text-warning">
+                <Ltr>{formatMoneyAmount(remaining)}</Ltr> {dayScreenStrings.tileCurrencyUnit}
+              </b>{" "}
+              {dayScreenStrings.slabTotalCaptionPrefix} <Ltr>{formatMoneyAmount(invoice.total)}</Ltr>{" "}
+              {dayScreenStrings.tileCurrencyUnit}
+            </p>
+          </div>
         </div>
-      </div>
 
-      <div className="mt-3">
-        <p className="mb-1 text-xs text-muted">{dayScreenStrings.paymentNotePlaceholder}</p>
-        <input type="text" value={note} onChange={(event) => setNote(event.target.value)} className={FIELD_CLASS} />
-      </div>
+        <Field label={dayScreenStrings.paymentAmountPlaceholder} id="payment-amount" hint={dayScreenStrings.paymentAmountHint} error={amountError ?? undefined}>
+          <TextInput
+            variant="amount"
+            inputMode="decimal"
+            value={amountInput}
+            onChange={(event) => {
+              setAmountInput(event.target.value);
+              setAmountError(null);
+            }}
+          />
+        </Field>
 
-      <button
-        type="button"
-        disabled={isSubmitting}
-        onClick={handleConfirm}
-        className="mt-4 rounded-[--radius-el] bg-green px-4 py-3 text-center font-semibold text-paper disabled:opacity-60"
-      >
-        {dayScreenStrings.paymentConfirmButton}
-      </button>
+        <div className="flex flex-col gap-[5px]">
+          <label className="text-[11px] font-bold tracking-[0.02em] text-muted">{dayScreenStrings.paymentMethodLabel}</label>
+          <ToggleGroup
+            variant="service"
+            label={dayScreenStrings.paymentMethodLabel}
+            value={method}
+            onChange={setMethod}
+            options={METHOD_OPTIONS}
+          />
+        </div>
+
+        <Field label={dayScreenStrings.paymentNotePlaceholder} id="payment-note">
+          <TextInput
+            type="text"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder={dayScreenStrings.paymentNoteExamplePlaceholder}
+          />
+        </Field>
+      </SheetPanelBody>
+
+      <SheetPanelFoot>
+        <Button variant="primary" className="flex-1" disabled={isSubmitting} onClick={handleConfirm}>
+          {dayScreenStrings.paymentConfirmButton}
+        </Button>
+      </SheetPanelFoot>
     </Sheet>
   );
 }
