@@ -15,6 +15,7 @@ import { db } from "./db/database";
 import { isDeviceRegistered } from "./db/registration";
 import { isDemoModeRequested } from "./domain/appMode";
 import { Role } from "./domain/role";
+import { todayInCairo, type ClinicDay } from "./domain/time";
 import DayScreen from "./screens/day/DayScreen";
 import { dayScreenStrings } from "./screens/day/strings";
 import { SYNC_AUTH_ERROR_EVENT_NAME, startSyncEngine, type SyncEngineHandle } from "./sync/engine";
@@ -120,6 +121,11 @@ export default function App() {
   // queue-mode variant) — the one piece of the app bar a screen supplies;
   // see AppShell.tsx's own doc comment.
   const [dayScreenTitle, setDayScreenTitle] = useState<string>(dayScreenStrings.appBarTitle);
+  // Reported up the same way: the day actually on screen, which the day
+  // screen alone knows how to resolve (it can be pinned away from the real
+  // current day by the dev-only ?seedDay=1 affordance) — AppShell no longer
+  // computes its own, so its date block never disagrees with the grid below it.
+  const [dayScreenToday, setDayScreenToday] = useState<ClinicDay>(() => todayInCairo());
 
   if (bootStatus !== "ready") {
     // "checking" renders nothing rather than a spinner: it resolves from
@@ -155,11 +161,13 @@ export default function App() {
         activeItem={isSettingsOpen ? "settings" : "day"}
         onSelect={(key) => setIsSettingsOpen(key === "settings")}
         title={dayScreenTitle}
+        today={dayScreenToday}
       >
         <DayScreen
           isSettingsOpen={isSettingsOpen}
           onCloseSettings={() => setIsSettingsOpen(false)}
           onTitleChange={setDayScreenTitle}
+          onTodayChange={setDayScreenToday}
         />
       </AppShell>
       {isLocked && <LockScreen defaultMembershipId={lastMembershipId} />}

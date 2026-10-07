@@ -6,7 +6,7 @@ import { db } from "../db/database";
 import { useLiveQuery } from "../db/useLiveQuery";
 import { navItemsFor, type NavItem } from "../domain/navigation";
 import type { Role } from "../domain/role";
-import { todayInCairo } from "../domain/time";
+import type { ClinicDay } from "../domain/time";
 import SyncStatusChip from "../screens/day/SyncStatusChip";
 import { formatAppBarDate } from "./appBarDate";
 import Button from "./ui/Button";
@@ -16,8 +16,10 @@ interface AppShellProps {
   role: Role;
   activeItem: NavItem["key"];
   onSelect: (key: NavItem["key"]) => void;
-  /** The current screen's own title — the only piece of the app bar a screen supplies (e.g. "يوم العيادة"). */
+  /** The current screen's own title — e.g. "يوم العيادة". */
   title: ReactNode;
+  /** The day currently on screen — one source with the grid below it, since a dev-only affordance can pin it away from the real current day. */
+  today: ClinicDay;
   children: ReactNode;
 }
 
@@ -126,14 +128,19 @@ function BrandLogo() {
  * shows the brand, so the bar's own leading slot is the title, rendered as a
  * real `<h1>` for accessibility either way — visually hidden on mobile
  * (sr-only) rather than removed, so exactly one page heading always exists.
+ *
+ * `today` is screen-supplied too, the same as `title` — this bar never calls
+ * todayInCairo() itself, so its date block can never disagree with whatever
+ * day the screen below it is actually showing (a dev-only affordance can pin
+ * that away from the real current day).
  */
-function AppBar({ title }: { title: ReactNode }) {
+function AppBar({ title, today }: { title: ReactNode; today: ClinicDay }) {
   const actingMembership = useActingMembership();
   const actingUser = useLiveQuery(
     async () => (actingMembership ? db.users.get(actingMembership.user_id) : undefined),
     [actingMembership?.user_id],
   );
-  const { dateLine, weekdayLine } = formatAppBarDate(todayInCairo());
+  const { dateLine, weekdayLine } = formatAppBarDate(today);
 
   return (
     <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3.5 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[11px] text-on-dark shadow-m">
@@ -173,7 +180,7 @@ function AppBar({ title }: { title: ReactNode }) {
   );
 }
 
-export default function AppShell({ role, activeItem, onSelect, title, children }: AppShellProps) {
+export default function AppShell({ role, activeItem, onSelect, title, today, children }: AppShellProps) {
   const items = navItemsFor(role);
 
   return (
@@ -206,7 +213,7 @@ export default function AppShell({ role, activeItem, onSelect, title, children }
         })}
       </nav>
       <div className="min-w-0 flex-1 pb-16 sm:pb-0">
-        <AppBar title={title} />
+        <AppBar title={title} today={today} />
         {children}
       </div>
     </div>

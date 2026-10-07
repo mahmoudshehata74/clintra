@@ -4,13 +4,18 @@ export type ActorRecency = { kind: "yesterday" } | { kind: "earlier"; day: numbe
 
 /**
  * How much earlier than `today` a visit's actor byline's timestamp falls —
- * null for today itself (the common case, nothing extra to show), "أمس" for
- * yesterday, or a short numeric day/month for anything earlier. Feeds
+ * null when the visit was created on `today` itself or later (the common
+ * case, nothing extra to show; "later" matters under the dev-only
+ * ?seedDay=1 affordance, where a fresh write's real-now timestamp can fall
+ * after the pinned displayed day), "أمس" for exactly the day before, or a
+ * short numeric day/month for anything strictly earlier than that. Feeds
  * SlotRow's actor line (`.slot .actor`).
  */
 export function computeActorRecency(createdAt: Instant, today: ClinicDay): ActorRecency {
   const createdDay = todayInCairo(new Date(createdAt));
-  if (createdDay === today) {
+  // ClinicDay is a zero-padded "YYYY-MM-DD" string, so lexicographic and
+  // chronological ordering agree — no Date parsing needed for the compare.
+  if (createdDay >= today) {
     return null;
   }
   if (createdDay === addDaysToClinicDay(today, -1)) {

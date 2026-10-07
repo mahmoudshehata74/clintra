@@ -155,9 +155,11 @@ interface DayScreenProps {
   onCloseSettings: () => void;
   /** Reports this screen's own app-bar title up to App.tsx, which forwards it to AppShell — see AppShell.tsx's own doc comment. */
   onTitleChange: (title: string) => void;
+  /** Reports this screen's own displayed day up to App.tsx, which forwards it to AppShell for its date block — the same lift as onTitleChange, and for the same reason: only the screen knows whether ?seedDay=1 has it pinned. */
+  onTodayChange: (today: ClinicDay) => void;
 }
 
-export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChange }: DayScreenProps) {
+export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChange, onTodayChange }: DayScreenProps) {
   const [staticData, setStaticData] = useState<StaticData | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [selectedPractitionerId, setSelectedPractitionerIdState] = useState<string | null>(readStoredPractitionerId);
@@ -219,6 +221,10 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
   useEffect(() => {
     onTitleChange(isQueueMode ? dayScreenStrings.appBarTitleQueue : dayScreenStrings.appBarTitle);
   }, [isQueueMode, onTitleChange]);
+
+  useEffect(() => {
+    onTodayChange(today);
+  }, [today, onTodayChange]);
 
   useEffect(() => {
     let cancelled = false;

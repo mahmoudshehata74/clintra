@@ -7,6 +7,7 @@ import {
   readClockTime,
   rowFor,
   S,
+  SEEDED_APP_BAR_DATE,
   selectPractitioner,
   SLOTS_DR,
   QUEUE_DR,
@@ -26,10 +27,12 @@ test("app bar renders the connection chip and date; the slab renders the delay t
     page.getByRole("button", { name: new RegExp(`${S.syncOnline}|${S.syncLocal}`) }),
   ).toBeVisible();
   // The app bar's own date block (AppShell.tsx) — moved out of the day
-  // screen's own heading in this task's COMMIT 1.
-  const dateLine = page.locator("header span").filter({ hasText: /\d{4}/ }).first();
-  await expect(dateLine).toBeVisible();
-  expect((await dateLine.innerText()).trim().length).toBeGreaterThan(0);
+  // screen's own heading in this task's COMMIT 1. It must show the seeded
+  // day the grid itself is pinned to (?seedDay=1), not the real current
+  // day: AppShell no longer resolves its own "today" (DayScreen reports it
+  // up the same way it reports its title — see App.tsx).
+  await expect(page.getByText(SEEDED_APP_BAR_DATE.dateLine, { exact: true })).toBeVisible();
+  await expect(page.getByText(SEEDED_APP_BAR_DATE.weekdayLine, { exact: true })).toBeVisible();
   // The slab's delay trigger (no delay set on the seeded day, so no amount
   // appended — see DelayControl.tsx and strings.ts's delayControlTriggerLabel).
   await expect(page.getByRole("button", { name: S.delayControlTriggerLabel, exact: true })).toBeVisible();

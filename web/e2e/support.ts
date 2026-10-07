@@ -6,13 +6,27 @@ import { authStrings } from "../src/auth/authStrings";
 // Dev-only seed PINs — imported, never written as literals into the tests, and
 // never logged, per the task's rule. See src/auth/devPins.ts.
 import { DEV_SEED_PINS } from "../src/auth/devPins";
+import { formatAppBarDate } from "../src/components/appBarDate";
 import { sidebarStrings } from "../src/components/strings";
+// Not imported from src/db/seed.ts directly: that module's import chain
+// pulls in auth/pinHash.ts's JSON import, which this test runner cannot
+// load without a "type: json" attribute. seededVisitsDate() itself is just
+// these two calls (see its own doc comment) — reproduced here against the
+// same pure domain/time.ts helpers rather than against the db module.
+import { addDaysToClinicDay, mostRecentWeekdayOnOrBefore, todayInCairo } from "../src/domain/time";
 import { dayScreenStrings } from "../src/screens/day/strings";
 
 export const S = dayScreenStrings;
 export const AUTH = authStrings;
 export const SIDEBAR = sidebarStrings;
 export { DEV_SEED_PINS };
+
+// What ?seedDay=1 pins the day screen to (the most recent Monday as of
+// whenever this test process started), and what the app bar's date block
+// (AppShell.tsx) must show while that pin is active — see gotoSeededDay.
+const SEEDED_VISITS_WEEKDAY = 1; // Monday
+export const SEEDED_DAY = mostRecentWeekdayOnOrBefore(addDaysToClinicDay(todayInCairo(), -1), SEEDED_VISITS_WEEKDAY);
+export const SEEDED_APP_BAR_DATE = formatAppBarDate(SEEDED_DAY);
 
 // Display labels the lock-screen picker shows (formatActorLabel = "name (role)").
 export const ASSISTANT_NAME = "سارة حسن";
