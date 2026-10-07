@@ -258,13 +258,13 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
             )}
           </div>
 
-          <CardFooter>
-            {canRecordPayment && (
+          {canRecordPayment && (
+            <CardFooter>
               <Button variant="primary" onClick={() => onRequestPayment(invoiceId)}>
                 {dayScreenStrings.recordPaymentAction} ({formatMoneyAmount(remaining)} {CURRENCY_UNIT})
               </Button>
-            )}
-          </CardFooter>
+            </CardFooter>
+          )}
 
           {/* Voiding stays visually separate from the daily actions above. */}
           <div className="border-t border-hair px-[18px] py-[14px]">

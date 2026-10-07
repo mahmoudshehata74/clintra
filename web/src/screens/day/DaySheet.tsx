@@ -8,6 +8,7 @@ import { ScheduleMode } from "../../domain/scheduleMode";
 import { clockTimeInCairo, formatCairoDisplayDate, weekdayOf } from "../../domain/time";
 import { selectDaySheetVisits } from "./daySheetVisits";
 import Sheet from "./Sheet";
+import { SheetPanelBody } from "../../components/ui/SheetPanel";
 import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
 
@@ -106,37 +107,39 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
             }
             onDismiss={onDismiss}
           />
-          <p className="mt-2 text-xs text-muted">{dayScreenStrings.printHeaderPlaceholder}</p>
+          <SheetPanelBody>
+            <p className="text-xs text-muted">{dayScreenStrings.printHeaderPlaceholder}</p>
 
-          <div className="mt-4 flex flex-col divide-y divide-line-soft overflow-y-auto">
-            {rows.length === 0 && <p className="py-3 text-muted">{dayScreenStrings.daySheetEmpty}</p>}
-            {rows.map((visit) => {
-              const patient = data.patientsById.get(visit.patient_id);
-              const service = visit.service_id ? data.servicesById.get(visit.service_id) : undefined;
-              return (
-                <div key={visit.id} className="py-2.5">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span>{patient?.full_name ?? ""}</span>
-                    <Ltr>
-                      <span className="text-sm text-muted">{positionOrTime(visit)}</span>
-                    </Ltr>
+            <div className="flex flex-col divide-y divide-line-soft overflow-y-auto">
+              {rows.length === 0 && <p className="py-3 text-muted">{dayScreenStrings.daySheetEmpty}</p>}
+              {rows.map((visit) => {
+                const patient = data.patientsById.get(visit.patient_id);
+                const service = visit.service_id ? data.servicesById.get(visit.service_id) : undefined;
+                return (
+                  <div key={visit.id} className="py-2.5">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span>{patient?.full_name ?? ""}</span>
+                      <Ltr>
+                        <span className="text-sm text-muted">{positionOrTime(visit)}</span>
+                      </Ltr>
+                    </div>
+                    <p className="text-sm text-muted">
+                      <Ltr>{phoneOrPlaceholder(patient)}</Ltr>
+                      {service ? ` — ${service.name}` : ""}
+                    </p>
                   </div>
-                  <p className="text-sm text-muted">
-                    <Ltr>{phoneOrPlaceholder(patient)}</Ltr>
-                    {service ? ` — ${service.name}` : ""}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
 
-          <button
-            type="button"
-            onClick={() => setPrintRequested(true)}
-            className="mt-4 rounded-[--radius-el] border border-line px-4 py-3 text-center text-muted"
-          >
-            {dayScreenStrings.printDaySheetAction}
-          </button>
+            <button
+              type="button"
+              onClick={() => setPrintRequested(true)}
+              className="rounded-[--radius-el] border border-line px-4 py-3 text-center text-muted"
+            >
+              {dayScreenStrings.printDaySheetAction}
+            </button>
+          </SheetPanelBody>
         </Sheet>
       </div>
 

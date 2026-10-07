@@ -13,6 +13,7 @@ import {
 } from "../../db/visitForm";
 import { clockTimeInCairo } from "../../domain/time";
 import Sheet from "./Sheet";
+import { SheetPanelBody } from "../../components/ui/SheetPanel";
 import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
 
@@ -136,7 +137,9 @@ export default function VisitFormSheet({ visitId, onDismiss }: VisitFormSheetPro
   if (!data) {
     return (
       <Sheet onDismiss={onDismiss}>
-        <p className="text-muted">{dayScreenStrings.visitFormLoadingLabel}</p>
+        <SheetPanelBody>
+          <p className="text-muted">{dayScreenStrings.visitFormLoadingLabel}</p>
+        </SheetPanelBody>
       </Sheet>
     );
   }
@@ -157,7 +160,7 @@ export default function VisitFormSheet({ visitId, onDismiss }: VisitFormSheetPro
         }
       />
 
-      <div className="mt-3 flex flex-col gap-4">
+      <SheetPanelBody>
         {FIELD_CONFIG.map((field) => (
           <div key={field.key}>
             <div className="mb-1 flex items-baseline justify-between gap-2">
@@ -182,7 +185,7 @@ export default function VisitFormSheet({ visitId, onDismiss }: VisitFormSheetPro
             />
           </div>
         ))}
-      </div>
+      </SheetPanelBody>
     </Sheet>
   );
 }

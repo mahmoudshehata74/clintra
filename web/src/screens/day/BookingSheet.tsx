@@ -337,30 +337,32 @@ export default function BookingSheet({
               />
             </Field>
             {noScheduleMessage && <p className="text-[12.5px] text-muted">{noScheduleMessage}</p>}
-            <div className="flex flex-col divide-y divide-hair overflow-hidden rounded-card border border-rule bg-card">
-              {debouncedQuery.trim().length > 0 && results.length === 0 && (
-                <p className="p-3 text-center text-[12.5px] text-muted">{dayScreenStrings.bookingNoResults}</p>
-              )}
-              {results.map(({ patient, lastVisitDate }) => (
-                <button key={patient.id} type="button" onClick={() => goToSlotsOrAutoConfirm(patient)} className={RESULT_ROW_CLASS}>
-                  <span className="text-[13.5px] font-semibold text-text">{patient.full_name}</span>
-                  <span className="mt-px text-[11px] text-muted">
-                    {lastVisitDate ? <Ltr>{formatCairoDisplayDate(lastVisitDate)}</Ltr> : dayScreenStrings.bookingFirstVisit}
-                    {patient.phone && (
-                      <>
-                        {" · "}
-                        <Ltr className="font-mono">{formatEgyptianPhoneForDisplay(patient.phone)}</Ltr>
-                      </>
-                    )}
-                  </span>
-                </button>
-              ))}
-              {debouncedQuery.trim().length > 0 && (
-                <button type="button" onClick={handleOpenNewPatientForm} className={NEW_PATIENT_ROW_CLASS}>
-                  {dayScreenStrings.newPatientButtonPrefix} «{query}»
-                </button>
-              )}
-            </div>
+            {(results.length > 0 || debouncedQuery.trim().length > 0) && (
+              <div className="flex flex-col divide-y divide-hair overflow-hidden rounded-card border border-rule bg-card">
+                {debouncedQuery.trim().length > 0 && results.length === 0 && (
+                  <p className="p-3 text-center text-[12.5px] text-muted">{dayScreenStrings.bookingNoResults}</p>
+                )}
+                {results.map(({ patient, lastVisitDate }) => (
+                  <button key={patient.id} type="button" onClick={() => goToSlotsOrAutoConfirm(patient)} className={RESULT_ROW_CLASS}>
+                    <span className="text-[13.5px] font-semibold text-text">{patient.full_name}</span>
+                    <span className="mt-px text-[11px] text-muted">
+                      {lastVisitDate ? <Ltr>{formatCairoDisplayDate(lastVisitDate)}</Ltr> : dayScreenStrings.bookingFirstVisit}
+                      {patient.phone && (
+                        <>
+                          {" · "}
+                          <Ltr className="font-mono">{formatEgyptianPhoneForDisplay(patient.phone)}</Ltr>
+                        </>
+                      )}
+                    </span>
+                  </button>
+                ))}
+                {debouncedQuery.trim().length > 0 && (
+                  <button type="button" onClick={handleOpenNewPatientForm} className={NEW_PATIENT_ROW_CLASS}>
+                    {dayScreenStrings.newPatientButtonPrefix} «{query}»
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
 
