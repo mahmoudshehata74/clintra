@@ -128,8 +128,13 @@ export default function ServicesPanel({ orgId }: { orgId: string }) {
             >
               <span className="min-w-0 text-[13.5px] font-semibold text-text">
                 {service.name}
+                {/* A real space before the tag: without one, Chrome joins the
+                    name's last letter to the tag's first across the span. */}
                 {!service.is_active && (
-                  <span className="ms-1.5 text-[10.5px] font-normal text-faint">{dayScreenStrings.serviceInactiveTag}</span>
+                  <>
+                    {" "}
+                    <span className="ms-1 text-[10.5px] font-normal text-faint">{dayScreenStrings.serviceInactiveTag}</span>
+                  </>
                 )}
               </span>
               <Badge appearance="soft" tone="neutral" className="tabular-nums">

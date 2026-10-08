@@ -147,9 +147,9 @@ test("a new assistant added in settings can log in and their bookings record the
   const settings = page.getByRole("dialog");
   await settings.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
   await settings.getByRole("button", { name: S.staffNewAction, exact: true }).click();
-  await settings.getByPlaceholder(S.staffNameLabel).fill(NEW_ASSISTANT_NAME);
-  await settings.getByPlaceholder(S.staffPhoneLabel).fill(NEW_ASSISTANT_PHONE);
-  await settings.getByPlaceholder(S.staffPinLabel).fill(NEW_ASSISTANT_PIN);
+  await settings.getByLabel(S.staffNameLabel, { exact: true }).fill(NEW_ASSISTANT_NAME);
+  await settings.getByLabel(S.staffPhoneLabel, { exact: true }).fill(NEW_ASSISTANT_PHONE);
+  await settings.getByLabel(S.staffPinLabel, { exact: true }).fill(NEW_ASSISTANT_PIN);
   await settings.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
   await expect(settings.getByText(NEW_ASSISTANT_NAME)).toBeVisible();
   await settings.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
@@ -235,4 +235,62 @@ test("services show duration, price, an active switch and the footer counts", as
   await dialog.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
   await expect(dialog.getByText(S.serviceNameRequiredError)).toBeVisible();
   await expect(dialog.getByLabel(S.serviceNameLabel)).toHaveAttribute("aria-invalid", "true");
+});
+
+test("staff rows show the PIN status, never a digit, and the last owner's switch is locked with the note", async ({ page }) => {
+  await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
+
+  const ownerRow = dialog.getByRole("listitem").filter({ hasText: S.roleOwner });
+  const assistantRow = dialog.getByRole("listitem").filter({ hasText: S.roleAssistant });
+  await expect(ownerRow.getByText(S.staffPinSetBadge, { exact: true })).toBeVisible();
+  await expect(assistantRow.getByText(S.staffPinSetBadge, { exact: true })).toBeVisible();
+  // No digit of any PIN anywhere in the list (names, roles and badges only).
+  for (const row of [ownerRow, assistantRow]) {
+    await expect(row).not.toContainText(/[0-9٠-٩]/);
+  }
+
+  const ownerSwitch = ownerRow.getByRole("switch");
+  await expect(ownerSwitch).toBeDisabled();
+  await expect(ownerSwitch).toHaveAttribute("aria-checked", "true");
+  await expect(dialog.getByText(S.staffLastOwnerNote, { exact: true })).toBeVisible();
+  await expect(assistantRow.getByRole("switch")).toBeEnabled();
+
+  await expect(dialog.getByText(`${S.staffMinimumPrefix} ${S.staffMinimumOwner}`)).toBeVisible();
+  await expect(dialog.getByRole("button", { name: S.staffNewAction, exact: true })).toBeVisible();
+});
+
+test("the staff switch deactivates and reactivates a member", async ({ page }) => {
+  await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
+
+  const assistantSwitch = dialog.getByRole("listitem").filter({ hasText: S.roleAssistant }).getByRole("switch");
+  await assistantSwitch.click();
+  await expect(assistantSwitch).toHaveAttribute("aria-checked", "false");
+  const memberships = await readStore<{ role: string; is_active: boolean }>(page, "memberships");
+  expect(memberships.find((m) => m.role === "assistant")?.is_active).toBe(false);
+
+  await assistantSwitch.click();
+  await expect(assistantSwitch).toHaveAttribute("aria-checked", "true");
+});
+
+test("the new-staff form keeps its PIN masked and its validation", async ({ page }) => {
+  await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
+  await dialog.getByRole("button", { name: S.staffNewAction, exact: true }).click();
+
+  await expect(dialog.getByLabel(S.staffPinLabel, { exact: true })).toHaveAttribute("type", "password");
+  await dialog.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(dialog.getByText(S.staffNameRequiredError)).toBeVisible();
+
+  await dialog.getByLabel(S.staffNameLabel, { exact: true }).fill("اسم تجريبي");
+  await dialog.getByLabel(S.staffPinLabel, { exact: true }).fill("12");
+  await dialog.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(dialog.getByText(S.staffPinLengthError)).toBeVisible();
 });

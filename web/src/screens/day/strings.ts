@@ -503,21 +503,30 @@ export const dayScreenStrings = {
   serviceNameRequiredError: "لازم تكتب اسم الخدمة",
 
   // Panel C — staff and permissions.
-  staffNewAction: "موظف جديد",
+  staffNewAction: "＋ إضافة موظف",
   staffNameLabel: "الاسم",
   staffPhoneLabel: "رقم الموبايل",
   staffRoleLabel: "الصلاحية",
   staffLocationScopeLabel: "نطاق الفروع",
   staffPractitionerScopeLabel: "نطاق الأطباء",
-  staffPinLabel: "الرقم السري (٤ أرقام)",
+  staffPinLabel: "الرقم السري (4 أرقام)",
   staffNewPinLabel: "رقم سري جديد",
   scopeAll: "الكل",
   scopeListed: "محدد",
   scopeSelf: "نفسه",
   staffActiveLabel: "مفعّل",
   staffLastOwnerError: "لازم يفضل مالك واحد نشط على الأقل",
+  // The note box under the staff list when the last active owner's switch is locked.
+  staffNoteLabel: "ملاحظة:",
+  staffLastOwnerNote: "العيادة لازم يكون ليها مالك واحد شغّال على الأقل",
+  // `.runrow .count`: "حد أدنى: 1 مالك".
+  staffMinimumPrefix: "حد أدنى:",
+  staffMinimumOwner: "1 مالك",
+  // The PIN status badge (settled deviation: never any digit of the PIN).
+  staffPinSetBadge: "مُعيّن ✓",
+  staffPinUnsetBadge: "غير مُعيّن",
   staffNameRequiredError: "لازم تكتب اسم الموظف",
-  staffPinLengthError: "الرقم السري لازم يكون ٤ أرقام",
+  staffPinLengthError: "الرقم السري لازم يكون 4 أرقام",
   staffPhoneInvalidError: "الرقم ده مش صحيح",
   staffPhoneTakenError: "الرقم ده مستخدم قبل كده",
   staffPractitionerRequiredError: "لازم تختار طبيب واحد",
