@@ -448,9 +448,14 @@ export const dayScreenStrings = {
   roleManager: "المدير",
   auditUnknownActor: "غير معروف",
 
-  // Settings (owner only). The entry pill and the three-panel sheet
-  // (reference screens 15-17).
+  // Settings (owner only): the three-panel sheet, prototype #s12-14. The
+  // label doubles as its `.c-head .badge`.
   settingsButtonLabel: "الإعدادات",
+  // The tabs' group name, and each tab's `.c-head` wording (the hours tab's
+  // title is the practitioner's own name).
+  settingsTabsGroupLabel: "أقسام الإعدادات",
+  settingsHoursHeadSubtitle: "مواعيد العمل الأسبوعية",
+  settingsServicesHeadTitle: "خدمات العيادة",
   settingsHoursTab: "مواعيد العمل",
   settingsServicesTab: "الخدمات",
   settingsStaffTab: "الموظفون",
@@ -462,9 +467,12 @@ export const dayScreenStrings = {
   hoursEndLabel: "لـ",
   hoursSlotMinutesLabel: "مدة الكشف (دقيقة)",
   hoursCapacityLabel: "السعة",
-  hoursEditAction: "غيّر",
+  hoursEditAction: "تعديل",
+  // `.set-row .mode`: "مواعيد 30د", "طابور · 20 مريض", "إجازة".
   hoursModeSlots: "مواعيد",
   hoursModeQueue: "طابور",
+  hoursModePatientsUnit: "مريض",
+  hoursModeDayOff: "إجازة",
   hoursEndBeforeStartError: "وقت النهاية لازم يكون بعد البداية",
   hoursInvalidSlotError: "مدة الكشف لازم تكون أكبر من صفر",
   hoursInvalidCapacityError: "السعة لازم تكون أكبر من صفر",
@@ -473,7 +481,14 @@ export const dayScreenStrings = {
   // Panel B — services.
   serviceDurationSuffix: "دقيقة",
   serviceActiveLabel: "مفعّلة",
-  serviceNewAction: "خدمة جديدة",
+  // `.svc-name`'s muted tag on a stopped service.
+  serviceInactiveTag: "موقوفة",
+  // A row's "تعديل" — opens that service's price overrides.
+  serviceEditAction: "تعديل",
+  serviceNewAction: "＋ خدمة جديدة",
+  // `.runrow .count`: "{a} نشطة · {i} موقوفة".
+  serviceCountActiveUnit: "نشطة",
+  serviceCountInactiveUnit: "موقوفة",
   serviceNameLabel: "الاسم",
   serviceDurationLabel: "المدة (دقيقة)",
   servicePriceLabel: "السعر (جنيه)",
@@ -481,6 +496,7 @@ export const dayScreenStrings = {
   serviceOverrideAddAction: "أضف سعر خاص",
   serviceOverrideTargetPractitioner: "طبيب",
   serviceOverrideTargetLocation: "فرع",
+  serviceOverrideTargetGroupLabel: "السعر الخاص لـ",
   serviceOverrideTargetError: "اختار طبيب أو فرع (واحد بس)",
   serviceOverrideDeleteAction: "حذف",
   servicePriceInvalidError: "السعر ده مش صحيح",

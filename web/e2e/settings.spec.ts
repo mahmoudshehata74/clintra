@@ -98,11 +98,10 @@ test("deactivating a service hides it from the booking picker but keeps a comple
   const settings = page.getByRole("dialog");
   await settings.getByRole("button", { name: S.settingsServicesTab, exact: true }).click();
   const serviceRow = settings.getByRole("listitem").filter({ hasText: "استشارة متابعة" });
-  await serviceRow.getByRole("button", { name: S.serviceActiveLabel, exact: true }).click();
-  await expect(serviceRow.getByRole("button", { name: S.serviceActiveLabel, exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
+  const activeSwitch = serviceRow.getByRole("switch", { name: `${S.serviceActiveLabel} · استشارة متابعة`, exact: true });
+  await activeSwitch.click();
+  await expect(activeSwitch).toHaveAttribute("aria-checked", "false");
+  await expect(serviceRow.getByText(S.serviceInactiveTag, { exact: true })).toBeVisible();
   await settings.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
 
   // The completed invoice still shows the original service name.
@@ -190,4 +189,50 @@ test("a new assistant added in settings can log in and their bookings record the
     .filter((row) => row.entity === "visits" && row.action === "create")
     .sort((a, b) => a.at.localeCompare(b.at));
   expect(visitCreates.at(-1)?.actor_membership_id).toBe(newMembership?.id);
+});
+
+test("working hours list every weekday with its hours, mode and edit action", async ({ page }) => {
+  await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("group", { name: S.settingsTabsGroupLabel })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: S.settingsHoursTab, exact: true })).toHaveAttribute("aria-pressed", "true");
+
+  const rows = dialog.getByRole("listitem");
+  await expect(rows).toHaveCount(7);
+  for (const name of S.weekdayNames) {
+    await expect(rows.filter({ hasText: name })).toHaveCount(1);
+  }
+  // The seeded slots practitioner works every weekday in slots mode (src/db/seed.ts).
+  const monday = rows.filter({ hasText: S.weekdayNames[1] });
+  await expect(monday).toContainText(/\d{2}:\d{2} — \d{2}:\d{2}/);
+  await expect(monday).toContainText(new RegExp(`${S.hoursModeSlots} [0-9]+${S.minutesShortUnit}`));
+  await expect(monday.getByRole("button", { name: S.hoursEditAction, exact: true })).toBeVisible();
+});
+
+test("services show duration, price, an active switch and the footer counts", async ({ page }) => {
+  await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsServicesTab, exact: true }).click();
+
+  const row = dialog.getByRole("listitem").filter({ hasText: "كشف عام" });
+  await expect(row).toContainText(`${S.serviceDurationSuffix}`);
+  await expect(row).toContainText(S.tileCurrencyUnit);
+  await expect(row.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+
+  const services = await dialog.getByRole("listitem").count();
+  await expect(dialog.getByText(`${services} ${S.serviceCountActiveUnit} · 0 ${S.serviceCountInactiveUnit}`)).toBeVisible();
+
+  // "تعديل" opens that service's price overrides.
+  await row.getByRole("button", { name: S.serviceEditAction, exact: true }).click();
+  await expect(row.getByText(S.serviceOverridesLink, { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: S.serviceOverrideAddAction, exact: true })).toBeVisible();
+
+  // The footer's new-service form keeps its validation.
+  await dialog.getByRole("button", { name: S.serviceNewAction, exact: true }).click();
+  await dialog.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(dialog.getByText(S.serviceNameRequiredError)).toBeVisible();
+  await expect(dialog.getByLabel(S.serviceNameLabel)).toHaveAttribute("aria-invalid", "true");
 });

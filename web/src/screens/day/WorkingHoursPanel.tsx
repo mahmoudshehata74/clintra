@@ -1,33 +1,50 @@
 import { useState } from "react";
 import Ltr from "../../components/Ltr";
+import Badge from "../../components/ui/Badge";
+import Button from "../../components/ui/Button";
+import Field, { TextInput } from "../../components/ui/Field";
 import { db } from "../../db/database";
-import { updateWorkingHours, type UpdateWorkingHoursResult } from "../../db/scheduleSettings";
+import { updateWorkingHours } from "../../db/scheduleSettings";
 import type { Schedule } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { ScheduleMode } from "../../domain/scheduleMode";
+import { SetBody, SetList, SetRow } from "./SettingsLayout";
 import { dayScreenStrings } from "./strings";
+import {
+  buildWorkingHoursRows,
+  formatWorkingHoursMode,
+  workingHoursErrorField,
+  type WorkingHoursField,
+} from "./workingHoursRows";
 
-const FIELD_CLASS =
-  "w-full rounded-[--radius-el] border border-line bg-paper px-3 py-2 text-start focus:border-green focus:outline-none focus:ring-[3px] focus:ring-green-soft";
+const MODE_STRINGS = {
+  slots: dayScreenStrings.hoursModeSlots,
+  queue: dayScreenStrings.hoursModeQueue,
+  dayOff: dayScreenStrings.hoursModeDayOff,
+  minutesUnit: dayScreenStrings.minutesShortUnit,
+  patientsUnit: dayScreenStrings.hoursModePatientsUnit,
+};
 
-type RefusalReason = Exclude<UpdateWorkingHoursResult, { ok: true }>["reason"];
+const REFUSAL_MESSAGE = {
+  end_before_start: dayScreenStrings.hoursEndBeforeStartError,
+  invalid_slot_minutes: dayScreenStrings.hoursInvalidSlotError,
+  invalid_capacity: dayScreenStrings.hoursInvalidCapacityError,
+  visits_on_old_grid: dayScreenStrings.hoursVisitsOnOldGridError,
+  schedule_not_found: dayScreenStrings.hoursVisitsOnOldGridError,
+} as const;
 
-function reasonMessage(reason: RefusalReason): string {
-  switch (reason) {
-    case "end_before_start":
-      return dayScreenStrings.hoursEndBeforeStartError;
-    case "invalid_slot_minutes":
-      return dayScreenStrings.hoursInvalidSlotError;
-    case "invalid_capacity":
-      return dayScreenStrings.hoursInvalidCapacityError;
-    case "visits_on_old_grid":
-      return dayScreenStrings.hoursVisitsOnOldGridError;
-    case "schedule_not_found":
-      return dayScreenStrings.hoursVisitsOnOldGridError;
-  }
+interface FieldError {
+  field: WorkingHoursField;
+  message: string;
 }
 
-/** Panel A: the current practitioner's weekly working hours, one editable row per weekday. */
+/**
+ * Panel A, prototype #s12 (`.set-list`, `.set-row`, `.day`, `.hours`,
+ * `.mode`, `.edit`): the current practitioner's week, one row per weekday.
+ * "تعديل" opens that schedule's inline editor — the same three fields,
+ * checks and save as before, on the shared Field/TextInput/Button. Saving
+ * is per row, so there is no `.runrow` "save all" footer here.
+ */
 export default function WorkingHoursPanel({
   practitionerId,
   locationId,
@@ -38,9 +55,7 @@ export default function WorkingHoursPanel({
   const schedules =
     useLiveQuery<Schedule[]>(async () => {
       const all = await db.schedules.toArray();
-      return all
-        .filter((schedule) => schedule.practitioner_id === practitionerId && schedule.location_id === locationId)
-        .sort((a, b) => a.weekday - b.weekday);
+      return all.filter((schedule) => schedule.practitioner_id === practitionerId && schedule.location_id === locationId);
     }, [practitionerId, locationId]) ?? [];
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -48,7 +63,7 @@ export default function WorkingHoursPanel({
   const [endTime, setEndTime] = useState("");
   const [slotMinutes, setSlotMinutes] = useState("");
   const [maxCapacity, setMaxCapacity] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FieldError | null>(null);
   const [saving, setSaving] = useState(false);
 
   function beginEdit(schedule: Schedule) {
@@ -63,11 +78,11 @@ export default function WorkingHoursPanel({
   async function save(schedule: Schedule) {
     const isSlots = schedule.mode === ScheduleMode.Slots;
     if (endTime <= startTime) {
-      setError(dayScreenStrings.hoursEndBeforeStartError);
+      setError({ field: "end", message: dayScreenStrings.hoursEndBeforeStartError });
       return;
     }
     if (isSlots && (slotMinutes.trim() === "" || Number(slotMinutes) <= 0)) {
-      setError(dayScreenStrings.hoursInvalidSlotError);
+      setError({ field: "slotMinutes", message: dayScreenStrings.hoursInvalidSlotError });
       return;
     }
     setSaving(true);
@@ -79,7 +94,7 @@ export default function WorkingHoursPanel({
         maxCapacity: isSlots ? null : maxCapacity.trim() === "" ? null : Number(maxCapacity),
       });
       if (!result.ok) {
-        setError(reasonMessage(result.reason));
+        setError({ field: workingHoursErrorField(result.reason), message: REFUSAL_MESSAGE[result.reason] });
         return;
       }
       setEditingId(null);
@@ -88,73 +103,81 @@ export default function WorkingHoursPanel({
     }
   }
 
-  return (
-    <ul className="mt-4 flex flex-col divide-y divide-line-soft">
-      {schedules.map((schedule) => {
-        const isSlots = schedule.mode === ScheduleMode.Slots;
-        const isEditing = editingId === schedule.id;
-        return (
-          <li key={schedule.id} className="py-3">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="font-medium">{dayScreenStrings.weekdayNames[schedule.weekday]}</span>
-              <span className="flex items-center gap-2 text-sm text-muted">
-                <Ltr>
-                  {schedule.start_time} – {schedule.end_time}
-                </Ltr>
-                <span className="rounded-[5px] bg-line-soft px-2 py-0.5 text-xs">
-                  {isSlots ? dayScreenStrings.hoursModeSlots : dayScreenStrings.hoursModeQueue}
-                </span>
-                {!isEditing && (
-                  <button type="button" onClick={() => beginEdit(schedule)} className="text-green">
-                    {dayScreenStrings.hoursEditAction}
-                  </button>
-                )}
-              </span>
-            </div>
+  function errorFor(field: WorkingHoursField): string | undefined {
+    return error?.field === field ? error.message : undefined;
+  }
 
-            {isEditing && (
-              <div className="mt-3 flex flex-col gap-3">
-                <label className="flex flex-col gap-1 text-sm text-muted">
-                  {dayScreenStrings.hoursStartLabel}
-                  <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={FIELD_CLASS} />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-muted">
-                  {dayScreenStrings.hoursEndLabel}
-                  <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={FIELD_CLASS} />
-                </label>
-                <label className="flex flex-col gap-1 text-sm text-muted">
-                  {isSlots ? dayScreenStrings.hoursSlotMinutesLabel : dayScreenStrings.hoursCapacityLabel}
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={isSlots ? slotMinutes : maxCapacity}
-                    onChange={(e) => (isSlots ? setSlotMinutes(e.target.value) : setMaxCapacity(e.target.value))}
-                    className={FIELD_CLASS}
-                  />
-                </label>
-                {error && <p className="text-sm text-red">{error}</p>}
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => save(schedule)}
-                    className="flex-1 rounded-[--radius-el] bg-green px-4 py-2 text-center font-semibold text-paper disabled:opacity-60"
-                  >
-                    {dayScreenStrings.settingsSaveAction}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingId(null)}
-                    className="rounded-[--radius-el] border border-line px-4 py-2 text-ink"
-                  >
-                    {dayScreenStrings.settingsCancelAction}
-                  </button>
-                </div>
+  return (
+    <SetBody>
+      <SetList>
+        {buildWorkingHoursRows(schedules).map((row) => {
+          const schedule = row.schedule;
+          const isSlots = schedule?.mode === ScheduleMode.Slots;
+          const isEditing = schedule !== undefined && editingId === schedule.id;
+          return (
+            <SetRow
+              key={row.key}
+              layout="hours"
+              editor={
+                isEditing ? (
+                  <div className="flex flex-col gap-3">
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-3">
+                      <Field label={dayScreenStrings.hoursStartLabel} id={`hours-${schedule.id}-start`} error={errorFor("start")}>
+                        <TextInput type="time" variant="centered" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                      </Field>
+                      <Field label={dayScreenStrings.hoursEndLabel} id={`hours-${schedule.id}-end`} error={errorFor("end")}>
+                        <TextInput type="time" variant="centered" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                      </Field>
+                      <Field
+                        label={isSlots ? dayScreenStrings.hoursSlotMinutesLabel : dayScreenStrings.hoursCapacityLabel}
+                        id={`hours-${schedule.id}-${isSlots ? "slot" : "capacity"}`}
+                        error={errorFor(isSlots ? "slotMinutes" : "capacity")}
+                      >
+                        <TextInput
+                          type="number"
+                          inputMode="numeric"
+                          variant="centered"
+                          value={isSlots ? slotMinutes : maxCapacity}
+                          onChange={(e) => (isSlots ? setSlotMinutes(e.target.value) : setMaxCapacity(e.target.value))}
+                        />
+                      </Field>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="primary" size="sm" className="flex-1" disabled={saving} onClick={() => save(schedule)}>
+                        {dayScreenStrings.settingsSaveAction}
+                      </Button>
+                      <Button variant="secondary" size="sm" onClick={() => setEditingId(null)}>
+                        {dayScreenStrings.settingsCancelAction}
+                      </Button>
+                    </div>
+                  </div>
+                ) : undefined
+              }
+            >
+              <span className="text-[12.5px] font-bold text-text">{dayScreenStrings.weekdayNames[row.weekday]}</span>
+              <span className="text-[13.5px] font-semibold text-text tabular-nums">
+                <Ltr>{row.hours}</Ltr>
+              </span>
+              <div className="flex items-center gap-1.5">
+                {/* `.set-row .mode`; the prototype tints the day-off label
+                    faint, which Badge's neutral tone (muted) only
+                    approximates — a closer tone would be a new Badge
+                    variant for this one label. */}
+                <Badge appearance="soft" tone="neutral">
+                  {formatWorkingHoursMode(row.mode, MODE_STRINGS)}
+                </Badge>
+                {/* A day off has no schedule row to edit — adding a working
+                    day is not something settings offers today. */}
+                {schedule && !isEditing && (
+                  <Button variant="outline" onClick={() => beginEdit(schedule)}>
+                    {dayScreenStrings.hoursEditAction}
+                  </Button>
+                )}
               </div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+            </SetRow>
+          );
+        })}
+      </SetList>
+    </SetBody>
   );
 }

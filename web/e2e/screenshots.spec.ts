@@ -85,9 +85,25 @@ test("@screenshot settings-hours", async ({ page }) => {
   await page.goto("/?seedDay=1");
   await page.evaluate(() => localStorage.clear());
   await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
   await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
-  await expect(page.getByRole("dialog").getByText(S.settingsHoursTab)).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(S.settingsHoursTab, { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("listitem")).toHaveCount(7);
   await shoot(page, "settings-hours", false);
+});
+
+test("@screenshot settings-services", async ({ page }) => {
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsServicesTab, exact: true }).click();
+  // One service stopped, so the capture shows both row states and counts.
+  const stopped = dialog.getByRole("listitem").filter({ hasText: "فحص شامل" }).getByRole("switch");
+  await stopped.click();
+  await expect(stopped).toHaveAttribute("aria-checked", "false");
+  await shoot(page, "settings-services", false);
 });
 
 test("@screenshot settings-staff", async ({ page }) => {

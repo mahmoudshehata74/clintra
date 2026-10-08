@@ -22,7 +22,7 @@ test("the sidebar renders on every route", async ({ page }) => {
   // Not a second page — AppShell always wraps DayScreen; opening settings
   // just overlays a sheet on top of it, and the sidebar stays put underneath.
   await nav.getByRole("button", { name: SIDEBAR.navSettings, exact: true }).click();
-  await expect(page.getByRole("dialog").getByText(S.settingsHoursTab)).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(S.settingsHoursTab, { exact: true })).toBeVisible();
   await expect(nav).toBeVisible();
   await expect(nav.getByRole("button", { name: SIDEBAR.navDay, exact: true })).toBeVisible();
 });
@@ -36,7 +36,7 @@ test("the active sidebar item reflects whether settings is open", async ({ page 
   await expect(settingsItem).not.toHaveAttribute("aria-current", "page");
 
   await settingsItem.click();
-  await expect(page.getByRole("dialog").getByText(S.settingsHoursTab)).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(S.settingsHoursTab, { exact: true })).toBeVisible();
   await expect(settingsItem).toHaveAttribute("aria-current", "page");
   await expect(dayItem).not.toHaveAttribute("aria-current", "page");
 
