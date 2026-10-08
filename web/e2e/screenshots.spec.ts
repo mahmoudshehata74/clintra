@@ -19,6 +19,7 @@ import {
   SLOTS_DR,
   QUEUE_DR,
 } from "./support";
+import { registrationStrings } from "../src/auth/registrationStrings";
 import { galleryStrings } from "../src/gallery/strings";
 
 // Opt-in visual-review capture. Every test here is tagged @screenshot, so the
@@ -444,4 +445,45 @@ test("@screenshot day-sheet-print", async ({ page }) => {
   await expect(page.getByText(S.printHeaderWarning)).toBeVisible();
   await shoot(page, "day-sheet-print", true);
   await page.emulateMedia({ media: null });
+});
+
+// Device activation: a plain "/" on a device with no real token shows the
+// activation card (the seeded demo device never holds one).
+test("@screenshot device-activation-form", async ({ page }) => {
+  await page.goto("/");
+  const card = page.getByRole("dialog", { name: registrationStrings.formAria });
+  await card.getByLabel(registrationStrings.codeLabel).fill("CLT-7F3K-9QRT-4XWM-2BCD");
+  await expect(card.getByLabel(registrationStrings.phoneLabel)).toBeVisible();
+  await shoot(page, "device-activation-form", false);
+});
+
+test("@screenshot activation-confirmation", async ({ page }) => {
+  const orgId = crypto.randomUUID();
+  const locationId = crypto.randomUUID();
+  await page.route("**/api/devices/register", async (route) => {
+    const body = JSON.parse(route.request().postData() ?? "{}") as { device_id: string };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        token: "1|screenshot-only-token",
+        device_id: body.device_id,
+        org_id: orgId,
+        location_id: locationId,
+        membership_id: crypto.randomUUID(),
+        organization: { id: orgId, name: "النور للعلاج الطبيعي", plan_tier: "small", created_at: new Date().toISOString() },
+        locations: [{ id: locationId, org_id: orgId, name: "فرع المعادي", address: "شارع 9", phone: "+20221234567", is_active: true }],
+        practitioners: [],
+        memberships: [],
+        users: [],
+      }),
+    });
+  });
+  await page.goto("/");
+  const card = page.getByRole("dialog", { name: registrationStrings.formAria });
+  await card.getByLabel(registrationStrings.codeLabel).fill("CLT-7F3K-9QRT-4XWM-2BCD");
+  await card.getByLabel(registrationStrings.phoneLabel).fill("01001234567");
+  await card.getByRole("button", { name: registrationStrings.submitLabel }).click();
+  await expect(card.getByText(`${registrationStrings.confirmationPrefix} النور للعلاج الطبيعي`, { exact: true })).toBeVisible();
+  await shoot(page, "activation-confirmation", false);
 });
