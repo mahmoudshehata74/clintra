@@ -3,6 +3,7 @@ import ButtonsSection from "./sections/ButtonsSection";
 import CardSection from "./sections/CardSection";
 import FieldSection from "./sections/FieldSection";
 import SheetPanelSection from "./sections/SheetPanelSection";
+import SwitchSection from "./sections/SwitchSection";
 import ToggleChipSection from "./sections/ToggleChipSection";
 import { galleryStrings } from "./strings";
 
@@ -24,6 +25,7 @@ export default function Gallery() {
         <CardSection />
         <BadgeSection />
         <ToggleChipSection />
+        <SwitchSection />
         <SheetPanelSection />
       </div>
     </div>

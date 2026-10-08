@@ -12,6 +12,18 @@ export const galleryStrings = {
   badgesSectionTitle: "الشارات",
   toggleChipsSectionTitle: "شارات الاختيار",
   sheetPanelSectionTitle: "لوحة الشيت",
+  switchSectionTitle: "المفاتيح",
+} as const;
+
+// The Switch section's demo labels (.set-row .toggle / .toggle.off — screens
+// 13 and 14's active/inactive control).
+export const switchGalleryStrings = {
+  liveOnLabel: "خدمة كشف عام",
+  liveOffLabel: "خدمة تدليك علاجي",
+  disabledOnLabel: "المالك (مقفول وشغّال)",
+  disabledOffLabel: "مقفول وموقوف",
+  stateOn: "شغّالة",
+  stateOff: "موقوفة",
 } as const;
 
 // Screen 4's booking sheet, composed from the pieces above — the search

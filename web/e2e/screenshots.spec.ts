@@ -396,6 +396,12 @@ test("@screenshot gallery-togglechip", async ({ page }) => {
   await shootGallerySection(page, "gallery-togglechip", "togglechip");
 });
 
+test("@screenshot gallery-switch", async ({ page }) => {
+  await page.goto("/?gallery=1");
+  await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
+  await shootGallerySection(page, "gallery-switch", "switch");
+});
+
 test("@screenshot gallery-sheetpanel", async ({ page }) => {
   await page.goto("/?gallery=1");
   await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
