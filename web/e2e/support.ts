@@ -15,8 +15,10 @@ import { sidebarStrings } from "../src/components/strings";
 // same pure domain/time.ts helpers rather than against the db module.
 import { addDaysToClinicDay, mostRecentWeekdayOnOrBefore, todayInCairo } from "../src/domain/time";
 import { dayScreenStrings } from "../src/screens/day/strings";
+import { doctorDayStrings } from "../src/screens/doctor/strings";
 
 export const S = dayScreenStrings;
+export const DOCTOR = doctorDayStrings;
 export const AUTH = authStrings;
 export const SIDEBAR = sidebarStrings;
 export { DEV_SEED_PINS };
@@ -120,10 +122,13 @@ export async function login(
  * screen instead of silently seeding demo data. gotoSeededDay doesn't
  * need its own copy of this — ?seedDay=1 already counts as demo mode.
  */
-export async function gotoRealDay(page: Page): Promise<void> {
+export async function gotoRealDay(
+  page: Page,
+  loginOptions?: { pin?: string; name?: string },
+): Promise<void> {
   await page.goto("/?demo=1");
   await page.evaluate(() => localStorage.clear());
-  await login(page);
+  await login(page, loginOptions);
   await expect(page.getByRole("button", { name: SLOTS_DR })).toBeVisible();
 }
 
@@ -136,6 +141,17 @@ export function sidebar(page: Page): Locator {
 export async function openAuditLog(page: Page): Promise<void> {
   await sidebar(page).getByRole("button", { name: SIDEBAR.navAudit, exact: true }).click();
   await expect(page.getByRole("dialog").getByText(S.auditSheetTitle, { exact: false }).first()).toBeVisible();
+}
+
+/** Open the doctor's day from the rail's "شاشة الطبيب" item and wait for its day list. */
+export async function openDoctorDay(page: Page): Promise<void> {
+  await sidebar(page).getByRole("button", { name: SIDEBAR.navDoctor, exact: true }).click();
+  await expect(page.getByRole("list", { name: DOCTOR.dayListTitle }).or(page.getByText(DOCTOR.dayListEmpty))).toBeVisible();
+}
+
+/** A doctor's-day section (each is a labelled <section>, so role "region"). */
+export function doctorSection(page: Page, name: string): Locator {
+  return page.getByRole("region", { name, exact: true });
 }
 
 /** Pin the day view to one practitioner by tapping its header pill. */
@@ -173,6 +189,25 @@ export async function pickSearchResult(scope: Locator, patientName: string): Pro
     .filter({ hasNotText: S.newPatientButtonPrefix })
     .first()
     .click();
+}
+
+/** Books an existing patient into the first open slot through the booking sheet, waiting for their row. */
+export async function bookFirstOpenSlot(page: Page, name: string): Promise<void> {
+  await openBookingSheet(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(name);
+  await pickSearchResult(dialog, name);
+  await dialog.getByRole("button", { name: /^\d{1,2}:\d{2}$/ }).first().click();
+  await dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(rowFor(page, name)).toBeVisible();
+}
+
+/** The day screen's one-tap advance on a patient's row, waiting for the new status to show. */
+export async function advanceRowTo(page: Page, name: string, expectedStatus: string): Promise<void> {
+  const row = rowFor(page, name);
+  await row.locator("button").filter({ hasText: name }).click();
+  await expect(row).toContainText(expectedStatus);
 }
 
 /** Pull the "HH:MM" clock time rendered inside a grid row or tile. */

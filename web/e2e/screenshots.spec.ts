@@ -1,6 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import { cairoInstant, todayInCairo, type ClockTime } from "../src/domain/time";
 import {
+  advanceRowTo,
   ASSISTANT_NAME,
+  bookFirstOpenSlot,
+  DOCTOR,
+  doctorSection,
+  openDoctorDay,
   emptySlotTiles,
   gotoRealDay,
   gotoSeededDay,
@@ -486,4 +492,46 @@ test("@screenshot activation-confirmation", async ({ page }) => {
   await card.getByRole("button", { name: registrationStrings.submitLabel }).click();
   await expect(card.getByText(`${registrationStrings.confirmationPrefix} النور للعلاج الطبيعي`, { exact: true })).toBeVisible();
   await shoot(page, "activation-confirmation", false);
+});
+
+// The doctor's day mid-morning on the real day, with the page clock pinned
+// and stepped forward so the wall-clock figures read like a real morning:
+// منى seen 09:00–09:18 (diagnosis filled; her invoice still unpaid — the one
+// attention item), كريم arrived 09:05 and waiting past the alert line,
+// ياسمين (a seeded past visit) called in at 09:42, عمر booked for later.
+// Every visit is built through the app's own write paths.
+test("@screenshot doctor-day", async ({ page }) => {
+  const day = todayInCairo();
+  const at = (time: ClockTime) => new Date(cairoInstant(day, time));
+  await page.clock.install({ time: at("08:30") });
+  await gotoRealDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
+  for (const name of [PATIENTS.mona, PATIENTS.karim, PATIENTS.yasmin, PATIENTS.omar]) {
+    await bookFirstOpenSlot(page, name);
+  }
+
+  await page.clock.setSystemTime(at("09:00"));
+  await advanceRowTo(page, PATIENTS.mona, S.statusArrived);
+  await advanceRowTo(page, PATIENTS.mona, S.statusInRoom);
+  await page.clock.setSystemTime(at("09:05"));
+  await advanceRowTo(page, PATIENTS.karim, S.statusArrived);
+  await page.clock.setSystemTime(at("09:18"));
+  await advanceRowTo(page, PATIENTS.mona, S.statusCompleted);
+  await rowFor(page, PATIENTS.mona).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
+  const form = page.getByRole("dialog");
+  await form.getByPlaceholder(S.visitFormDiagnosisPlaceholder).fill("التهاب حلق");
+  await form.getByPlaceholder(S.visitFormDiagnosisPlaceholder).blur();
+  await expect(form.getByText(S.visitFormSavedIndicator)).toBeVisible();
+  await form.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
+  await expect(form).toBeHidden();
+  await page.clock.setSystemTime(at("09:30"));
+  await advanceRowTo(page, PATIENTS.yasmin, S.statusArrived);
+  await page.clock.setSystemTime(at("09:42"));
+  await advanceRowTo(page, PATIENTS.yasmin, S.statusInRoom);
+
+  await openDoctorDay(page);
+  await expect(doctorSection(page, DOCTOR.heroLabel)).toContainText(PATIENTS.yasmin);
+  await expect(doctorSection(page, DOCTOR.waitingHeading)).toContainText(DOCTOR.waitingAboveThreshold);
+  await expect(doctorSection(page, DOCTOR.attentionHeading).getByRole("listitem")).toHaveCount(1);
+  await shoot(page, "doctor-day", true);
 });
