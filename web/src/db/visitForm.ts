@@ -58,6 +58,11 @@ export async function findVisitFormData(
   return db.visit_form_data.where("[visit_id+form_definition_id]").equals([visitId, formDefinitionId]).first();
 }
 
+/** A visit_form_data row read as the general form's two fields; a visit with no row yet reads as both empty. */
+export function readVisitFormValues(row: VisitFormData | undefined): VisitFormFieldValues {
+  return (row?.data as VisitFormFieldValues | undefined) ?? EMPTY_VISIT_FORM_VALUES;
+}
+
 /**
  * The autosave write behind every field's onBlur: creates the visit's
  * visit_form_data row on the first field ever saved, updates the same row on
@@ -84,7 +89,7 @@ export async function saveVisitFormField(
   const existing = await findVisitFormData(db, visitId, formDefinition.id);
   const actor = await resolveActingMembership(db);
 
-  const beforeValues = (existing?.data as VisitFormFieldValues | undefined) ?? EMPTY_VISIT_FORM_VALUES;
+  const beforeValues = readVisitFormValues(existing);
   const after: VisitFormData = {
     id: existing?.id ?? id(),
     visit_id: visitId,
