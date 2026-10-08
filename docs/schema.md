@@ -96,7 +96,7 @@ care_plan_item_id? (left null in v1), visit_date, position, scheduled_at?
 (null in queue mode), status, is_overbooked, source (phone|walkin|recovered),
 arrived_at?, started_at?, ended_at?,
 cancel_reason? (patient|clinic|no_show|postpone), rescheduled_from?,
-created_by (membership id), created_at
+created_by (membership id), created_at, note? (see v15 additions)
 
 Moving a visit creates a new row at the target slot (`rescheduled_from`
 pointing back to the original) and marks the original row
@@ -566,6 +566,41 @@ already closed is locked from that point on. Confirmed before this
 landed: no screen in `web/src/` currently sets `day_state.is_closed` to
 `true` at all, so this introduces no product conflict with anything
 shipped today.
+
+## v15 additions
+
+### visits.note
+
+The doctor's quick free-text note on one visit: a nullable `text` column on
+`visits` itself, not a separate table (owner decision — a note has no
+history, author or timestamp of its own beyond its visit's). Null means "no
+note"; an empty string is never stored, since the one write path
+(`web/src/db/visitNote.ts`'s `setVisitNote`) trims the input and stores an
+empty result as null. That write goes through `mutate()`, so every change
+is audited and queued for sync like any other visit write, and writing the
+value already stored is a no-op (no audit row, no sync op). The audit log
+reads a note change as "عدّل ملاحظة الزيارة" and never shows the note's own
+text (`web/src/domain/auditVerb.ts`).
+
+Every path that creates a visit (booking, overbooking, walk-in/queue,
+move, the seed) sets `note: null` explicitly. A move does not carry the
+original visit's note to the new row, and reusing a freed row at a slot
+clears whatever note that row held.
+
+Server: `2026_09_12_000023_add_note_to_visits_table.php` adds the column. No
+RLS change: `visits_scope` filters rows, not columns, with the same
+expression for `USING` and `WITH CHECK`, so a membership that cannot see a
+visit cannot see its note; `clintra_app`'s grant on `visits` is table-level,
+so it already covers the column; the `rev` trigger already bumps `rev` on a
+note-only update. It syncs like every other visit field: the push applier
+merges the payload as-is, and pull and bootstrap return whole rows, so no
+sync code names it (`api/tests/Feature/Rls/VisitNoteSyncTest.php`).
+
+Local: database version 14 backfills `note: null` onto every existing visit
+that has no `note` field, leaving any note a row already carries (a row
+pulled from an already-migrated server) untouched. No index: a note is only
+ever read and written by primary key with the rest of its visit. Versions
+1-13 are unchanged.
 
 ## Rules
 

@@ -47,6 +47,8 @@ API: `cd api && php artisan test` (Pest, 213 passed).
 9. 15 device activation (restyle + post-activation confirmation).
 10. Re-capture the Playwright screenshot layer for all 19 screens.
 
+`visits.note` (step 6, data only): done — migration, sync, local store, audited setter; no UI yet.
+
 ## Data decisions for the rebuild
 - `visits.note text NULL` — the doctor's quick note.
 - `practitioners.syndicate_number varchar(50) NULL` — hidden when empty.
