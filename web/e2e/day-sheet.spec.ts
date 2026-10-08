@@ -43,3 +43,26 @@ test("printing shows only the printed page — no app bar, rail or backdrop", as
   await expect(page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true })).toBeHidden();
   await page.emulateMedia({ media: null });
 });
+
+test("the preview page is as wide as the prototype's print page allows, and carries the clinic block", async ({ page }) => {
+  await page.getByRole("button", { name: S.daySheetButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  // Seed (src/db/seed.ts): organization "عيادة النور"; location "الفرع الرئيسي",
+  // address "شارع الجمهورية، القاهرة", phone +20221234567 (local: 02 2123 4567).
+  const clinicTitle = dialog.getByText("عيادة النور", { exact: true });
+  await expect(clinicTitle).toBeVisible();
+  await expect(dialog.getByText("الفرع الرئيسي · شارع الجمهورية، القاهرة · 02 2123 4567", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("+20221234567")).toHaveCount(0);
+  // The phone is its own left-to-right run, so its digit groups keep their order.
+  await expect(dialog.locator('bdi[dir="ltr"]', { hasText: "02 2123 4567" })).toBeVisible();
+
+  // The page is min(600px, 100%) of the sheet body's content box.
+  const widths = await clinicTitle.evaluate((el) => {
+    const pageEl = el.parentElement!.parentElement!;
+    const body = pageEl.parentElement!;
+    const style = getComputedStyle(body);
+    const available = body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    return { page: pageEl.getBoundingClientRect().width, available };
+  });
+  expect(Math.abs(widths.page - Math.min(600, widths.available))).toBeLessThanOrEqual(1);
+});

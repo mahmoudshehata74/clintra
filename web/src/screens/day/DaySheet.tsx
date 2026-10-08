@@ -3,7 +3,7 @@ import Ltr from "../../components/Ltr";
 import Button from "../../components/ui/Button";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
-import type { ClinicDay, Location, Patient, Schedule, Service, Visit } from "../../db/types";
+import type { ClinicDay, Patient, Schedule, Service, Visit } from "../../db/types";
 import { formatEgyptianPhoneForDisplay } from "../../domain/phone";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo, weekdayOf } from "../../domain/time";
@@ -11,6 +11,7 @@ import { SheetPanelBody } from "../../components/ui/SheetPanel";
 import { selectDaySheetVisits } from "./daySheetVisits";
 import { PrintClinicBlock, PrintDayLine, PrintFoot, PrintHeaderNote, PrintPage, PrintTable, PrintTd, PrintTh } from "./PrintPage";
 import Sheet from "./Sheet";
+import { usePrintClinic } from "./usePrintClinic";
 import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
 
@@ -26,7 +27,6 @@ interface DaySheetData {
   visits: Visit[];
   patientsById: Map<string, Patient>;
   servicesById: Map<string, Service>;
-  location: Location | undefined;
 }
 
 const EMPTY_DATA: DaySheetData = {
@@ -34,7 +34,6 @@ const EMPTY_DATA: DaySheetData = {
   visits: [],
   patientsById: new Map(),
   servicesById: new Map(),
-  location: undefined,
 };
 
 /**
@@ -65,7 +64,7 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
   const data =
     useLiveQuery<DaySheetData>(async () => {
       const weekday = weekdayOf(tomorrow);
-      const [schedules, location] = await Promise.all([db.schedules.toArray(), db.locations.get(locationId)]);
+      const schedules = await db.schedules.toArray();
       const schedule: Schedule | undefined = schedules.find(
         (candidate) =>
           candidate.practitioner_id === practitionerId &&
@@ -94,7 +93,6 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
         visits,
         patientsById: new Map(patients.filter((p): p is Patient => p != null).map((p) => [p.id, p])),
         servicesById: new Map(services.filter((s): s is Service => s != null).map((s) => [s.id, s])),
-        location,
       };
     }, [practitionerId, locationId, tomorrow]) ?? EMPTY_DATA;
 
@@ -108,7 +106,7 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
     return data.isQueueMode ? String(visit.position) : clockTimeInCairo(visit.scheduled_at!);
   }
 
-  const addressLine = [data.location?.address, data.location?.phone].filter(Boolean).join(" · ") || null;
+  const clinic = usePrintClinic(locationId);
   const dayLine = (
     <>
       {formatCairoDisplayDate(tomorrow)} <Ltr>{tomorrow.slice(0, 4)}</Ltr> — <Ltr>{rows.length}</Ltr>{" "}
@@ -122,7 +120,7 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
     return (
       <PrintPage>
         <PrintHeaderNote>{headerNote}</PrintHeaderNote>
-        <PrintClinicBlock name={data.location?.name ?? null} addressLine={addressLine} />
+        <PrintClinicBlock {...clinic} />
         <PrintDayLine>{dayLine}</PrintDayLine>
         <PrintTable>
           <thead>

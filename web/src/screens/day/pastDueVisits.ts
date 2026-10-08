@@ -1,5 +1,5 @@
 import type { Schedule, Visit } from "../../db/types";
-import { cairoInstant, todayInCairo, weekdayOf, type ClinicDay } from "../../domain/time";
+import { cairoInstant, clockTimeInCairo, todayInCairo, weekdayOf, type ClinicDay } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 
 /**
@@ -45,4 +45,13 @@ export function computePastDueVisits(
     }
     return new Date(cairoInstant(displayedDay, schedule.end_time)).getTime() < now.getTime();
   });
+}
+
+/**
+ * A past-due row's leading label: a slot visit's own Cairo clock time, or —
+ * for a queue visit, which has no scheduled_at — "{prefix} {position}"
+ * (e.g. "نمرة 3"), the same way the queue itself names a waiting patient.
+ */
+export function pastDueVisitWhenLabel(visit: Visit, queueNumberPrefix: string): string {
+  return visit.scheduled_at ? clockTimeInCairo(visit.scheduled_at) : `${queueNumberPrefix} ${visit.position}`;
 }

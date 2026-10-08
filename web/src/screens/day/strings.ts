@@ -339,6 +339,8 @@ export const dayScreenStrings = {
   cashClosePastDueSectionTitle: "تحتاج تعليم",
   cashClosePastDueNoShowAction: "لم يحضر",
   cashClosePastDueMoveAction: "نقل",
+  // A past-due queue visit's leading label, where a slot visit shows its time.
+  cashClosePastDueQueueNumberPrefix: "نمرة",
   cashClosePastDueBulkAction: "علّم الكل لم يحضر",
   cashClosePastDueBulkToastMessage: "اتسجل غياب الزيارات المتأخرة",
   // Shown instead of the undo option when reversing the bulk mark fails

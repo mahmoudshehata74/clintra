@@ -16,7 +16,7 @@ import { VisitStatus } from "../../domain/visitStatus";
 import { formatMoneyAmount } from "../money";
 import { buildDayInvoicesCsv, csvFileNameForDay, type CsvInvoiceRow } from "./cashCloseCsv";
 import { validateCashCloseForm } from "./cashCloseForm";
-import { computePastDueVisits } from "./pastDueVisits";
+import { computePastDueVisits, pastDueVisitWhenLabel } from "./pastDueVisits";
 import Sheet from "./Sheet";
 import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
@@ -195,10 +195,6 @@ export default function CashCloseSheet({
   const parsedCollected = parsePoundsToPiastres(totalCollectedInput);
   const difference = parsedCollected.ok ? ((parsedCollected.value - expected) as Piastres) : null;
 
-  function positionOrTime(visit: Visit): string {
-    return visit.scheduled_at ? clockTimeInCairo(visit.scheduled_at) : String(visit.position);
-  }
-
   async function handleMarkNoShow(visit: Visit) {
     try {
       const auditLogId = await markVisitNoShow(db, visit.id);
@@ -291,7 +287,12 @@ export default function CashCloseSheet({
           <p className="text-sm text-muted">{closedClose.difference_note ?? dayScreenStrings.cashCloseNoDifferenceNoteLabel}</p>
         </SheetPanelBody>
         <SheetPanelFoot>
-          <Button variant="secondary" onClick={handleExportCsv}>
+          {/* Keyed in both branches: the open form renders first, before
+              this location/day's cash_close row has loaded, so without keys
+              React would reuse the open form's primary confirm button as
+              this one and its colours would visibly transition from the
+              primary look to the secondary one (a faded "ghost" button). */}
+          <Button key="export-csv" variant="secondary" onClick={handleExportCsv}>
             {dayScreenStrings.cashCloseExportCsvAction}
           </Button>
         </SheetPanelFoot>
@@ -314,7 +315,7 @@ export default function CashCloseSheet({
                   <li key={visit.id} className="flex items-center justify-between gap-2 rounded-control border border-rule bg-card px-3 py-2 text-[13px]">
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-text">
-                        <Ltr>{positionOrTime(visit)}</Ltr> — {patient?.full_name ?? ""}
+                        <Ltr>{pastDueVisitWhenLabel(visit, dayScreenStrings.cashClosePastDueQueueNumberPrefix)}</Ltr> — {patient?.full_name ?? ""}
                       </p>
                       {service && <p className="truncate text-[11.5px] text-muted">{service.name}</p>}
                     </div>
@@ -412,10 +413,10 @@ export default function CashCloseSheet({
       </SheetPanelBody>
 
       <SheetPanelFoot>
-        <Button variant="primary" className="flex-1" disabled={isSubmitting} onClick={handleConfirm}>
+        <Button key="confirm" variant="primary" className="flex-1" disabled={isSubmitting} onClick={handleConfirm}>
           {dayScreenStrings.cashCloseConfirmButton}
         </Button>
-        <Button variant="secondary" onClick={handleExportCsv}>
+        <Button key="export-csv" variant="secondary" onClick={handleExportCsv}>
           {dayScreenStrings.cashCloseExportCsvAction}
         </Button>
         {actingUser && (

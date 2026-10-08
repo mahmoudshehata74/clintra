@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
+import Ltr from "../../components/Ltr";
+import type { PrintClinicLines } from "./printClinic";
 
 /**
  * Prototype source (docs/reference/clintra-prototype.html #s8): `.print-page`,
@@ -15,8 +17,13 @@ import type { ReactNode } from "react";
  * black/white/grey keywords design-rule.md's print exception allows, since
  * these are the colours that actually go on paper.
  */
+//
+// Width: `.print-page`'s own max-width (600px) as a definite
+// min(600px, 100%) rather than a max-width alone — inside a flex column
+// (SheetPanelBody) an auto-margined item shrinks to its content instead of
+// stretching, which left the preview only as wide as its table.
 export function PrintPage({ children }: { children: ReactNode }) {
-  return <div className="mx-auto max-w-[600px] rounded-panel border border-rule bg-white p-8 text-black shadow-l">{children}</div>;
+  return <div className="mx-auto w-[min(600px,100%)] rounded-panel border border-rule bg-white p-8 text-black shadow-l">{children}</div>;
 }
 
 /** `.print-header` — the placeholder/warning note; its text differs by context (see each caller) but never its own look. */
@@ -28,15 +35,29 @@ export function PrintHeaderNote({ children }: { children: ReactNode }) {
   );
 }
 
-/** `.print-clinic` — the clinic's own name, and address · phone from the location, each omitted when empty. */
-export function PrintClinicBlock({ name, addressLine }: { name: string | null; addressLine: string | null }) {
-  if (!name && !addressLine) {
+/**
+ * `.print-clinic` — the organization's name, then "{location} · {address} ·
+ * {phone}" (see printClinic.ts), each omitted when empty. The phone is its
+ * own left-to-right run: its digit groups would otherwise be reordered by
+ * the surrounding right-to-left line.
+ */
+export function PrintClinicBlock({ title, details, phone }: PrintClinicLines) {
+  if (!title && details.length === 0) {
     return null;
   }
   return (
     <div className="mb-[22px] text-center">
-      {name && <p className="text-[19px] font-bold tracking-[-0.01em] text-black">{name}</p>}
-      {addressLine && <p className="mt-0.5 text-xs text-black/60">{addressLine}</p>}
+      {title && <p className="text-[19px] font-bold tracking-[-0.01em] text-black">{title}</p>}
+      {details.length > 0 && (
+        <p className="mt-0.5 text-xs text-black/60">
+          {details.map((part, index) => (
+            <Fragment key={index}>
+              {index > 0 && " · "}
+              {phone !== null && index === details.length - 1 ? <Ltr>{part}</Ltr> : part}
+            </Fragment>
+          ))}
+        </p>
+      )}
     </div>
   );
 }

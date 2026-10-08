@@ -4,7 +4,7 @@ import { ScheduleMode } from "../../domain/scheduleMode";
 import { cairoInstant } from "../../domain/time";
 import { VisitSource } from "../../domain/visitSource";
 import { VisitStatus } from "../../domain/visitStatus";
-import { computePastDueVisits } from "./pastDueVisits";
+import { computePastDueVisits, pastDueVisitWhenLabel } from "./pastDueVisits";
 
 const TODAY = "2026-09-07"; // Monday
 const WEEKDAY = 1;
@@ -115,5 +115,15 @@ describe("computePastDueVisits", () => {
     const queue = queueVisit({ visit_date: futureDay });
     const now = new Date(cairoInstant(TODAY, "23:59"));
     expect(computePastDueVisits([slot, queue], [scheduleFor({ end_time: "00:00" })], futureDay, now)).toEqual([]);
+  });
+});
+
+describe("pastDueVisitWhenLabel", () => {
+  it("shows a slot visit's own Cairo clock time", () => {
+    expect(pastDueVisitWhenLabel(slotVisit({ scheduled_at: cairoInstant(TODAY, "09:30") }), "نمرة")).toBe("09:30");
+  });
+
+  it("shows a queue visit as its number behind the given prefix", () => {
+    expect(pastDueVisitWhenLabel(queueVisit({ position: 3 }), "نمرة")).toBe("نمرة 3");
   });
 });

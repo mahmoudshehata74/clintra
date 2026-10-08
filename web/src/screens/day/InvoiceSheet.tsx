@@ -11,8 +11,9 @@ import { useLiveQuery } from "../../db/useLiveQuery";
 import { voidInvoice } from "../../db/invoiceVoid";
 import { InvoiceStatus, PaymentMethod, type Invoice, type InvoiceItem, type Patient, type Payment, type Practitioner } from "../../db/types";
 import { formatInvoiceNumber, formatReceiptNumber } from "./invoiceNumber";
-import { PrintHeaderNote, PrintPage, PrintTable, PrintTd } from "./PrintPage";
+import { PrintClinicBlock, PrintHeaderNote, PrintPage, PrintTable, PrintTd } from "./PrintPage";
 import Sheet from "./Sheet";
+import { usePrintClinic } from "./usePrintClinic";
 import { dayScreenStrings } from "./strings";
 
 interface InvoiceSheetProps {
@@ -103,6 +104,9 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
     ]);
     return { invoice, items, payments: payments.sort((a, b) => a.created_at.localeCompare(b.created_at)), patient, practitioner };
   }, [invoiceId]);
+  // Called before the loading return below so the hook order never changes;
+  // "" just resolves to no location (and so an empty block) until it loads.
+  const clinic = usePrintClinic(data?.invoice.location_id ?? "");
 
   if (!data) {
     return (
@@ -285,6 +289,7 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
         <div className="hidden print:block">
           <PrintPage>
             <PrintHeaderNote>{dayScreenStrings.printHeaderWarning}</PrintHeaderNote>
+            <PrintClinicBlock {...clinic} />
             <h2 className="mb-4 text-center text-lg font-semibold text-black">{dayScreenStrings.printInvoiceTitle}</h2>
             <p className="text-black">
               {dayScreenStrings.invoiceNumberLabel}: {invoice.number}
@@ -329,6 +334,7 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
         <div className="hidden print:block">
           <PrintPage>
             <PrintHeaderNote>{dayScreenStrings.printHeaderWarning}</PrintHeaderNote>
+            <PrintClinicBlock {...clinic} />
             <p className="mt-4 text-center text-sm text-black/60">{dayScreenStrings.paymentReceiptNumberPrefix}</p>
             <h2 className="text-center text-2xl font-semibold text-black">{printTarget.payment.receipt_number}</h2>
             <p className="mt-6 text-center text-4xl font-semibold text-black">
