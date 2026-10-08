@@ -47,7 +47,12 @@ API: `cd api && php artisan test` (Pest, 213 passed).
 9. 15 device activation (restyle + post-activation confirmation).
 10. Re-capture the Playwright screenshot layer for all 19 screens.
 
-`visits.note` (step 6, data only): done — migration, sync, local store, audited setter; no UI yet.
+`visits.note` (step 6, data only): done — migration, sync, local store, audited setter.
+
+9 doctor day (step 6): done — `web/src/screens/doctor/`, rail item "شاشة الطبيب"
+for any membership with a `practitioner_id`; the quick note writes
+`visits.note` through `setVisitNote`. The owner decisions it implements are
+listed under "Screen 9 (doctor day)" below.
 
 ## Data decisions for the rebuild
 - `visits.note text NULL` — the doctor's quick note.
@@ -68,6 +73,18 @@ API: `cd api && php artisan test` (Pest, 213 passed).
 - Every new table goes through all of: `docs/schema.md`, a new Dexie
   version, an API migration, RLS policies, and the syncable-table list with
   `rev`.
+
+### Screen 9 (doctor day) — owner decisions over the prototype
+- a. Momentum: "متوسط الكشف" is the median of today's recorded consultations; "المخطط" the median service duration of today's occupying visits; lateness (slots only) is now minus the earliest overdue unstarted visit's time, "ماشي في الميعاد" at 5 minutes or less; queue mode shows the median and expected finish only; the bar is hidden until a consultation has a recorded length.
+- b. Last visit: the patient's most recent completed visit before the current one, with any practitioner, showing complaint and diagnosis from the visit form; no "موصوف"; empty parts, and the whole block without a prior visit, are omitted.
+- c. "افتح الملف" (patient profile) is not rendered until screen 18 exists.
+- d. Attention card: only empty diagnoses ("أكمل الآن" opens the visit form) and unpaid or partially paid invoices (no button); no lab referral; not rendered when empty.
+- e. Waiting room: arrived visits, waiting from `arrived_at` (fallback `created_at`); above 30 minutes a row is `.wait-item.long`, the header tag turns warning and the footer counts it; empty state "مفيش حد مستني".
+- f. Quick note: placeholder "ملاحظة على الزيارة دي…" (the note is visible to anyone who sees the visit), saved through `setVisitNote`, "اتحفظ" after saving; unsaved text survives the idle lock because the screen stays mounted under the lock overlay.
+- g. Calling in and closing the visit use the day screen's write paths and advance cooldown; the call button appears only where in_room is an allowed transition, disabled with "فيه مريض في الكشف" while someone is in the room.
+- h. "مستني"/"مستنية" from `patients.gender` (`female`), neutral "مستني" otherwise.
+- i. Age is the current Cairo year minus `birth_year`, omitted when unknown.
+- j. Relative time: days under 14, weeks under 60 days, months after that, with Arabic singular/dual/plural forms.
 
 ## Standing rules for the rebuild
 - Existing logic and behaviour do not change; vitest and e2e stay green at
