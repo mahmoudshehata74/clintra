@@ -444,6 +444,7 @@ async function writeSeedData(
       rescheduled_from: null,
       created_by: assistantMembership.id,
       created_at: now,
+      note: null,
       rev: 1,
     };
   });
@@ -488,6 +489,7 @@ async function writeSeedData(
       rescheduled_from: null,
       created_by: assistantMembership.id,
       created_at: now,
+      note: null,
       rev: 1,
     };
   });

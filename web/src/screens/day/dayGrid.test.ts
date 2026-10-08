@@ -44,6 +44,7 @@ function visit(overrides: Partial<Visit> & { id: string; position: number; time:
     rescheduled_from: null,
     created_by: "membership-1",
     created_at: new Date().toISOString(),
+    note: null,
     rev: 1,
     ...rest,
   };

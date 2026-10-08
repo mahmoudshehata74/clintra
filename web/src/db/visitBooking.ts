@@ -96,6 +96,7 @@ export async function bookExistingPatientVisit(
           rescheduled_from: null,
           created_by: actor.id,
           created_at: now,
+          note: null,
           rev: 1,
         };
 
@@ -144,6 +145,7 @@ export async function bookExistingPatientVisit(
             rescheduled_from: null,
             created_by: actor.id,
             created_at: now,
+            note: null,
           }
         : {
             id: id(),
@@ -167,6 +169,7 @@ export async function bookExistingPatientVisit(
             rescheduled_from: null,
             created_by: actor.id,
             created_at: now,
+            note: null,
             rev: 1,
           };
 

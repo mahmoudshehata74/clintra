@@ -306,6 +306,27 @@ export class ClintraDatabase extends Dexie {
           devices.map((device) => tx.table("device").update(device.id, { membership_id: null, token: null })),
         );
       });
+
+    // visits.note (db/visitNote.ts; the server's
+    // 2026_09_12_000023_add_note_to_visits_table.php): the doctor's quick
+    // note on one visit. No index — a note is only ever read and written by
+    // primary key alongside the rest of its visit, never queried by value —
+    // so this is backfill only, not a stores() change: every existing visit
+    // without a note field gets note: null, so a row's shape matches Visit
+    // regardless of when it was written. A row that already carries one is
+    // left alone: pulled rows are stored whole (sync/engine.ts), so a device
+    // that synced against an already-migrated server before upgrading can
+    // hold a real note this must not wipe.
+    this.version(14)
+      .stores({})
+      .upgrade(async (tx) => {
+        const visits = await tx.table("visits").toArray();
+        await Promise.all(
+          visits
+            .filter((visit) => visit.note === undefined)
+            .map((visit) => tx.table("visits").update(visit.id, { note: null })),
+        );
+      });
   }
 }
 
