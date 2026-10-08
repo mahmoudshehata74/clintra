@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import LockScreen from "./auth/LockScreen";
 import RegistrationScreen from "./auth/RegistrationScreen";
 import {
@@ -17,6 +17,8 @@ import { isDemoModeRequested } from "./domain/appMode";
 import { Role } from "./domain/role";
 import { todayInCairo, type ClinicDay } from "./domain/time";
 import DayScreen from "./screens/day/DayScreen";
+import DoctorDayScreen from "./screens/doctor/DoctorDayScreen";
+import { doctorDayStrings } from "./screens/doctor/strings";
 import { dayScreenStrings } from "./screens/day/strings";
 import { SYNC_AUTH_ERROR_EVENT_NAME, startSyncEngine, type SyncEngineHandle } from "./sync/engine";
 import { FakeTransport } from "./sync/fakeTransport";
@@ -124,6 +126,30 @@ export default function App() {
   const isSettingsOpen = openSection === "settings";
   const isAuditOpen = openSection === "audit";
   const actingMembership = useActingMembership();
+
+  // The doctor's day (rail item "شاشة الطبيب") replaces the day screen's
+  // grid while it is selected. It belongs to the acting membership's own
+  // practitioner, so it needs that membership — but useActingMembership is
+  // undefined while locked, and the screen must stay mounted under the lock
+  // overlay (as the day screen does) so a half-typed note survives an idle
+  // lock. So the last unlocked membership is remembered (React's
+  // adjust-state-while-rendering pattern) and used while locked; once
+  // someone unlocks, theirs decides — a membership with no practitioner_id
+  // never sees the screen, and falls back to the day.
+  const [isDoctorViewSelected, setIsDoctorViewSelected] = useState(false);
+  const [lastUnlockedMembership, setLastUnlockedMembership] = useState(actingMembership);
+  if (actingMembership && actingMembership !== lastUnlockedMembership) {
+    setLastUnlockedMembership(actingMembership);
+  }
+  // Right after an unlock, useActingMembership is briefly undefined again
+  // while its live query loads the new session's row; if that session is
+  // the same membership as before the lock, keep showing what it saw.
+  const isSameMemberResuming = activeMembershipId !== null && activeMembershipId === lastUnlockedMembership?.id;
+  const viewingMembership = isLocked || (!actingMembership && isSameMemberResuming) ? lastUnlockedMembership : actingMembership;
+  const doctorPractitionerId = viewingMembership?.practitioner_id ?? null;
+  const isDoctorViewShown = isDoctorViewSelected && doctorPractitionerId !== null;
+  const [doctorPractitionerName, setDoctorPractitionerName] = useState<string | undefined>(undefined);
+  const handlePractitionerName = useCallback((name: string) => setDoctorPractitionerName(name), []);
   // Reported up by DayScreen (its own subtitle, e.g. "يوم العيادة" or the
   // queue-mode variant) — the one piece of the app bar a screen supplies;
   // see AppShell.tsx's own doc comment.
@@ -169,19 +195,39 @@ export default function App() {
       )}
       <AppShell
         role={actingMembership?.role ?? Role.Assistant}
-        activeItem={openSection ?? "day"}
-        onSelect={(key) => setOpenSection(key === "day" ? null : key)}
-        title={dayScreenTitle}
+        hasPractitioner={Boolean(actingMembership?.practitioner_id)}
+        activeItem={isDoctorViewShown ? "doctor" : (openSection ?? "day")}
+        onSelect={(key) => {
+          // The audit and settings sheets open over the day screen, so
+          // picking either (or "اليوم") leaves the doctor's day.
+          setIsDoctorViewSelected(key === "doctor");
+          setOpenSection(key === "day" || key === "doctor" ? null : key);
+        }}
+        title={isDoctorViewShown ? doctorDayStrings.appBarTitle : dayScreenTitle}
         today={dayScreenToday}
+        whoName={isDoctorViewShown ? doctorPractitionerName : undefined}
       >
-        <DayScreen
-          isSettingsOpen={isSettingsOpen}
-          onCloseSettings={() => setOpenSection(null)}
-          isAuditOpen={isAuditOpen}
-          onCloseAudit={() => setOpenSection(null)}
-          onTitleChange={setDayScreenTitle}
-          onTodayChange={setDayScreenToday}
-        />
+        {/* The day screen stays mounted (hidden) under the doctor's day: it
+            owns the seed/boot load, the day actually on screen
+            (onTodayChange, which the doctor's day reads) and any sheet
+            left open, none of which should restart on switching views. */}
+        <div className={isDoctorViewShown ? "hidden" : undefined}>
+          <DayScreen
+            isSettingsOpen={isSettingsOpen}
+            onCloseSettings={() => setOpenSection(null)}
+            isAuditOpen={isAuditOpen}
+            onCloseAudit={() => setOpenSection(null)}
+            onTitleChange={setDayScreenTitle}
+            onTodayChange={setDayScreenToday}
+          />
+        </div>
+        {isDoctorViewShown && (
+          <DoctorDayScreen
+            practitionerId={doctorPractitionerId}
+            today={dayScreenToday}
+            onPractitionerName={handlePractitionerName}
+          />
+        )}
       </AppShell>
       {isLocked && <LockScreen defaultMembershipId={lastMembershipId} />}
     </>
