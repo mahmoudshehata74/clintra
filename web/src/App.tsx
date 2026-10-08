@@ -115,7 +115,14 @@ export default function App() {
   // navItemsFor), and the rail needs to know whether it's the currently
   // active item to apply aria-current and the active look — both read this
   // same flag, so it can't stay DayScreen's own local state.
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  //
+  // The audit log ("السجل") is lifted here for the same reason, so the rail
+  // can open it and show it as active. At most one of the two is open:
+  // picking one rail item closes the other's sheet, as picking "اليوم"
+  // closes both.
+  const [openSection, setOpenSection] = useState<"audit" | "settings" | null>(null);
+  const isSettingsOpen = openSection === "settings";
+  const isAuditOpen = openSection === "audit";
   const actingMembership = useActingMembership();
   // Reported up by DayScreen (its own subtitle, e.g. "يوم العيادة" or the
   // queue-mode variant) — the one piece of the app bar a screen supplies;
@@ -162,14 +169,16 @@ export default function App() {
       )}
       <AppShell
         role={actingMembership?.role ?? Role.Assistant}
-        activeItem={isSettingsOpen ? "settings" : "day"}
-        onSelect={(key) => setIsSettingsOpen(key === "settings")}
+        activeItem={openSection ?? "day"}
+        onSelect={(key) => setOpenSection(key === "day" ? null : key)}
         title={dayScreenTitle}
         today={dayScreenToday}
       >
         <DayScreen
           isSettingsOpen={isSettingsOpen}
-          onCloseSettings={() => setIsSettingsOpen(false)}
+          onCloseSettings={() => setOpenSection(null)}
+          isAuditOpen={isAuditOpen}
+          onCloseAudit={() => setOpenSection(null)}
           onTitleChange={setDayScreenTitle}
           onTodayChange={setDayScreenToday}
         />

@@ -1,5 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
-import { gotoRealDay, openBookingSheet, PATIENTS, pickSearchResult, rowFor, S, selectPractitioner, SLOTS_DR } from "./support";
+import {
+  gotoRealDay,
+  openAuditLog,
+  openBookingSheet,
+  PATIENTS,
+  pickSearchResult,
+  rowFor,
+  S,
+  SIDEBAR,
+  selectPractitioner,
+  sidebar,
+  SLOTS_DR,
+} from "./support";
 
 // The audit sheet filters rows by the screen's day, and audit rows are
 // timestamped "now" — so these run on the REAL day (no ?seedDay), where a
@@ -11,7 +23,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 function openAudit(page: Page) {
-  return page.getByRole("button", { name: S.auditButtonLabel, exact: true }).click();
+  return openAuditLog(page);
 }
 
 /** Book an existing patient into the first open slot — a visits/create row. */
@@ -37,7 +49,7 @@ async function bookNewPatient(page: Page, name: string) {
   await expect(page.getByText(S.visitBooked)).toBeVisible();
 }
 
-test("the audit sheet opens from the header with its title and filters", async ({ page }) => {
+test("the audit sheet opens from the rail with its title and filters", async ({ page }) => {
   await openAudit(page);
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText(S.auditSheetTitle)).toBeVisible();
@@ -50,9 +62,9 @@ test("each row shows a verb, an entity description and the actor label", async (
   await openAudit(page);
   const dialog = page.getByRole("dialog");
 
-  // Verb is the prominent ink text; description names the patient; the actor
-  // is the muted line (the seeded assistant, سارة حسن / المساعد).
-  await expect(dialog.locator("span.text-ink").first()).not.toBeEmpty();
+  // The verb leads the row; description names the patient; the actor is
+  // named on the line under it (the seeded assistant, سارة حسن / المساعد).
+  await expect(dialog.getByText("سجّل حجز", { exact: true }).first()).toBeVisible();
   await expect(dialog.getByText(PATIENTS.mona).first()).toBeVisible();
   await expect(dialog.getByText(/سارة حسن/).first()).toBeVisible();
 });
@@ -92,4 +104,33 @@ test("a new booking appears in the audit list without a manual refresh", async (
   // No reload between the write and reading the log.
   await openAudit(page);
   await expect(page.getByRole("dialog").getByText(PATIENTS.omar).first()).toBeVisible();
+});
+
+test("the rail's السجل item is active while the audit log is open, and the day card no longer carries its own button", async ({ page }) => {
+  const nav = sidebar(page);
+  const dayItem = nav.getByRole("button", { name: SIDEBAR.navDay, exact: true });
+  const auditItem = nav.getByRole("button", { name: SIDEBAR.navAudit, exact: true });
+  // The rail's item is the only "السجل" button on the day screen.
+  await expect(page.getByRole("button", { name: SIDEBAR.navAudit, exact: true })).toHaveCount(1);
+
+  await openAudit(page);
+  await expect(auditItem).toHaveAttribute("aria-current", "page");
+  await expect(dayItem).not.toHaveAttribute("aria-current", "page");
+
+  await page.getByRole("dialog").getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(dayItem).toHaveAttribute("aria-current", "page");
+});
+
+test("the head counts the events listed, and the filter groups are labelled", async ({ page }) => {
+  await bookExisting(page, PATIENTS.mona);
+  await openAudit(page);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText(`1 ${S.auditEventCountUnit}`, { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("group", { name: S.auditFilterEntityGroupLabel })).toBeVisible();
+  await expect(dialog.getByRole("group", { name: S.auditFilterActionGroupLabel })).toBeVisible();
+
+  await dialog.getByRole("button", { name: S.auditFilterEntityPayments, exact: true }).click();
+  await expect(dialog.getByText(`0 ${S.auditEventCountUnit}`, { exact: true })).toBeVisible();
+  await expect(dialog.getByText(S.auditSheetEmpty, { exact: true })).toBeVisible();
 });

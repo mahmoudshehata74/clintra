@@ -64,9 +64,10 @@ test("the active rail item's colour and border actually differ from an inactive 
   expect(activeBorder).not.toBe(inactiveBorder);
 });
 
-test("the four placeholder sections are gone; only اليوم and الإعدادات exist", async ({ page }) => {
+test("the four placeholder sections are gone; only اليوم, السجل and الإعدادات exist", async ({ page }) => {
   const nav = sidebar(page);
   await expect(nav.getByRole("button", { name: SIDEBAR.navDay, exact: true })).toBeVisible();
+  await expect(nav.getByRole("button", { name: SIDEBAR.navAudit, exact: true })).toBeVisible();
   await expect(nav.getByRole("button", { name: SIDEBAR.navSettings, exact: true })).toBeVisible();
 
   // Removed from the nav model entirely — not disabled, not present as text.
@@ -76,13 +77,14 @@ test("the four placeholder sections are gone; only اليوم and الإعداد
   await expect(nav.getByText("جاي قريب")).toHaveCount(0);
 });
 
-test("an assistant sees no settings item", async ({ page }) => {
+test("an assistant sees the audit log but no settings item", async ({ page }) => {
   await gotoSeededDay(page); // assistant by default
   await selectPractitioner(page, SLOTS_DR);
   await expect(rowFor(page, PATIENTS.mona)).toContainText(S.statusBooked);
 
   const nav = sidebar(page);
   await expect(nav.getByRole("button", { name: SIDEBAR.navDay, exact: true })).toBeVisible();
+  await expect(nav.getByRole("button", { name: SIDEBAR.navAudit, exact: true })).toBeVisible();
   await expect(nav.getByRole("button", { name: SIDEBAR.navSettings, exact: true })).toHaveCount(0);
 });
 

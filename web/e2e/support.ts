@@ -127,6 +127,17 @@ export async function gotoRealDay(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: SLOTS_DR })).toBeVisible();
 }
 
+/** The app-wide rail (AppShell.tsx), by its accessible name. */
+export function sidebar(page: Page): Locator {
+  return page.getByRole("navigation", { name: SIDEBAR.navAriaLabel });
+}
+
+/** Open the audit log from the rail's "السجل" item and wait for its sheet. */
+export async function openAuditLog(page: Page): Promise<void> {
+  await sidebar(page).getByRole("button", { name: SIDEBAR.navAudit, exact: true }).click();
+  await expect(page.getByRole("dialog").getByText(S.auditSheetTitle, { exact: false }).first()).toBeVisible();
+}
+
 /** Pin the day view to one practitioner by tapping its header pill. */
 export async function selectPractitioner(page: Page, name: string): Promise<void> {
   await page.getByRole("button", { name, exact: true }).click();

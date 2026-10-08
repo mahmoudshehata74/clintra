@@ -417,13 +417,19 @@ export const dayScreenStrings = {
   // `.print-foot`'s own prefix, e.g. "طُبعت 7 سبتمبر 18:15".
   printedAtPrefix: "طُبعت",
 
-  // The day header's audit-log action ("السجل") and its sheet: today's
+  // The audit-log sheet (opened from AppShell's rail, "السجل"): today's
   // audit_log rows for the current practitioner+location, newest first, read
   // as a timeline of what happened rather than staff surveillance — see
   // domain/auditVerb.ts for how a row's verb is built from its before/after
   // diff, not just its entity name.
-  auditButtonLabel: "السجل",
   auditSheetTitle: "السجل",
+  // `.c-head .sub` — "{n} حدث", the count of events the list is showing.
+  auditEventCountUnit: "حدث",
+  // The two filter groups' accessible names (role="group" has none of its own).
+  auditFilterEntityGroupLabel: "تصفية حسب النوع",
+  auditFilterActionGroupLabel: "تصفية حسب الإجراء",
+  // `.aud-time`'s elapsed part, today only: "12:18 · من 3د".
+  auditElapsedPrefix: "من",
   auditSheetEmpty: "مفيش حركة النهاردة",
   auditFilterAll: "الكل",
   auditFilterEntityVisits: "الزيارات",

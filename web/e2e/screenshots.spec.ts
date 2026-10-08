@@ -6,6 +6,7 @@ import {
   gotoSeededDay,
   labeledRowValue,
   lockOverlay,
+  openAuditLog,
   login,
   openBookingSheet,
   OWNER_NAME,
@@ -42,15 +43,21 @@ test.afterEach(async ({ page }) => {
   expect(errorsByPage.get(page) ?? []).toEqual([]);
 });
 
+// animations: "disabled" fast-forwards any running finite CSS transition to
+// its end state before capturing. Without it a capture taken right after a
+// click (e.g. the rail's 150ms active-item colour fade) shows the
+// in-between frame, which reads as a faded, half-active control.
 async function shoot(page: Page, surface: string, fullPage: boolean): Promise<void> {
   const project = test.info().project.name;
-  await page.screenshot({ path: `${OUT_DIR}/${surface}-${project}.png`, fullPage });
+  await page.screenshot({ path: `${OUT_DIR}/${surface}-${project}.png`, fullPage, animations: "disabled" });
 }
 
 /** Captures only the named gallery section, not the whole scrollable page. */
 async function shootGallerySection(page: Page, surface: string, section: string): Promise<void> {
   const project = test.info().project.name;
-  await page.locator(`[data-gallery-section="${section}"]`).screenshot({ path: `${OUT_DIR}/${surface}-${project}.png` });
+  await page
+    .locator(`[data-gallery-section="${section}"]`)
+    .screenshot({ path: `${OUT_DIR}/${surface}-${project}.png`, animations: "disabled" });
 }
 
 test("@screenshot lock-screen-picker", async ({ page }) => {
@@ -288,11 +295,30 @@ test("@screenshot receipt-print", async ({ page }) => {
 });
 
 test("@screenshot audit-sheet", async ({ page }) => {
+  // The real day: audit rows are stamped "now", so only today's log shows
+  // them (see support.ts's gotoRealDay). Three bookings, then one arrival
+  // (default dot), one cancellation (danger) and one no-show (warn).
+  await gotoRealDay(page);
   await selectPractitioner(page, SLOTS_DR);
+  for (const name of [PATIENTS.mona, PATIENTS.omar, PATIENTS.karim]) {
+    await openBookingSheet(page);
+    const booking = page.getByRole("dialog");
+    await booking.getByPlaceholder(S.bookingSearchPlaceholder).fill(name);
+    await pickSearchResult(booking, name);
+    await booking.getByRole("button", { name: /^\d{1,2}:\d{2}$/ }).first().click();
+    await booking.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
+    await expect(rowFor(page, name)).toContainText(S.statusBooked);
+  }
   await rowFor(page, PATIENTS.mona).locator("button").filter({ hasText: PATIENTS.mona }).click();
-  await expect(page.getByText(S.attendanceMarked)).toBeVisible();
-  await page.getByRole("button", { name: S.auditButtonLabel, exact: true }).click();
-  await expect(page.getByRole("dialog").getByText(S.auditSheetTitle)).toBeVisible();
+  await expect(rowFor(page, PATIENTS.mona)).toContainText(S.statusArrived);
+  await rowFor(page, PATIENTS.omar).getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
+  await page.getByRole("menuitem", { name: S.cancelMenuLabel, exact: true }).click();
+  await page.getByRole("button", { name: S.cancelReasonPatient, exact: true }).click();
+  await expect(rowFor(page, PATIENTS.omar)).toContainText(S.statusCancelled);
+  await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
+  await page.getByRole("menuitem", { name: S.noShowMenuLabel, exact: true }).click();
+  await expect(rowFor(page, PATIENTS.karim)).toContainText(S.statusNoShow);
+  await openAuditLog(page);
   await shoot(page, "audit-sheet", false);
 });
 
