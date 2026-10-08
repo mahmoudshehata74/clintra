@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { gotoSeededDay, labeledRowValue, PATIENTS, rowFor, S, selectPractitioner, SLOTS_DR } from "./support";
+import { AUTH, gotoSeededDay, labeledRowValue, PATIENTS, rowFor, S, selectPractitioner, SIDEBAR, SLOTS_DR } from "./support";
 
 // Neutralise window.print so clicking a print action leaves the print view
 // mounted (printTarget stays set) for assertions, instead of the afterprint
@@ -133,5 +133,17 @@ test("the receipt print view shows the print-header note", async ({ page }) => {
   await page.getByRole("dialog").getByRole("button", { name: S.printReceiptAction, exact: true }).click();
   await page.emulateMedia({ media: "print" });
   await expect(page.getByText(S.printHeaderWarning)).toBeVisible();
+  await page.emulateMedia({ media: null });
+});
+
+test("printing an invoice shows only the printed page — no app bar, rail or backdrop", async ({ page }) => {
+  const dialog = await completeAndOpenInvoice(page);
+  await dialog.getByRole("button", { name: S.printInvoiceAction, exact: true }).click();
+
+  await page.emulateMedia({ media: "print" });
+  await expect(page.getByText(S.printHeaderWarning)).toBeVisible();
+  await expect(page.getByRole("button", { name: AUTH.lockButtonLabel, exact: true })).toBeHidden();
+  await expect(page.getByRole("button", { name: SIDEBAR.navDay, exact: true })).toBeHidden();
+  await expect(page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true })).toBeHidden();
   await page.emulateMedia({ media: null });
 });

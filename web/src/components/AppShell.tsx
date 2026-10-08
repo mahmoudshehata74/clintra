@@ -147,7 +147,7 @@ function AppBar({ title, today }: { title: ReactNode; today: ClinicDay }) {
   const { dateLine, weekdayLine } = formatAppBarDate(today);
 
   return (
-    <header className="sticky top-0 z-40 flex flex-wrap items-center gap-3.5 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[11px] text-on-dark shadow-m">
+    <header className="sticky top-0 z-40 flex flex-wrap items-center gap-3.5 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[11px] text-on-dark shadow-m print:hidden">
       <div className="me-auto flex items-center gap-2.5">
         <div className="flex items-center gap-2.5 sm:hidden">
           <BrandLogo />
@@ -191,7 +191,7 @@ export default function AppShell({ role, activeItem, onSelect, title, today, chi
     <div className="flex min-h-screen flex-col-reverse sm:flex-row">
       <nav
         aria-label={sidebarStrings.navAriaLabel}
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-1 border-t-2 border-copper bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-2 py-1.5 shadow-m sm:sticky sm:top-0 sm:h-screen sm:w-56 sm:flex-col sm:items-stretch sm:gap-1 sm:border-e-2 sm:border-t-0 sm:p-3"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-1 border-t-2 border-copper bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-2 py-1.5 shadow-m print:hidden sm:sticky sm:top-0 sm:h-screen sm:w-56 sm:flex-col sm:items-stretch sm:gap-1 sm:border-e-2 sm:border-t-0 sm:p-3"
       >
         <div className="hidden items-center gap-[10px] px-1 pb-4 sm:flex">
           <BrandLogo />

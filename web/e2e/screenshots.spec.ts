@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   ASSISTANT_NAME,
   emptySlotTiles,
+  gotoRealDay,
   gotoSeededDay,
   labeledRowValue,
   lockOverlay,
@@ -295,6 +296,46 @@ test("@screenshot audit-sheet", async ({ page }) => {
   await shoot(page, "audit-sheet", false);
 });
 
+test("@screenshot cash-close-past-due", async ({ page }) => {
+  await selectPractitioner(page, SLOTS_DR);
+  await page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true }).click();
+  await expect(page.getByRole("dialog").getByText(S.cashClosePastDueSectionTitle)).toBeVisible();
+  await shoot(page, "cash-close-past-due", false);
+});
+
+test("@screenshot cash-close-matched", async ({ page }) => {
+  await gotoRealDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder(S.cashCloseCollectedPlaceholder).fill("0");
+  await expect(dialog.getByText(S.cashCloseMatchedTitle)).toBeVisible();
+  await shoot(page, "cash-close-matched", false);
+});
+
+test("@screenshot cash-close-diff", async ({ page }) => {
+  await gotoRealDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder(S.cashCloseCollectedPlaceholder).fill("5");
+  await expect(dialog.getByText(S.cashCloseDifferenceLabel).last()).toBeVisible();
+  await shoot(page, "cash-close-diff", false);
+});
+
+test("@screenshot cash-close-closed", async ({ page }) => {
+  await gotoRealDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder(S.cashCloseCollectedPlaceholder).fill("0");
+  await dialog.getByRole("button", { name: S.cashCloseConfirmButton, exact: true }).last().click();
+  await expect(page.getByText(S.cashCloseToastMessage)).toBeVisible();
+  await page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true }).click();
+  await expect(page.getByRole("dialog").getByText(S.cashCloseClosedAtLabel)).toBeVisible();
+  await shoot(page, "cash-close-closed", false);
+});
+
 test("@screenshot gallery-buttons", async ({ page }) => {
   // Re-navigate: the gallery replaces the app outright (main.tsx), so it
   // never goes through beforeEach's seeded/logged-in day screen. It's also
@@ -333,6 +374,13 @@ test("@screenshot gallery-sheetpanel", async ({ page }) => {
   await page.goto("/?gallery=1");
   await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
   await shootGallerySection(page, "gallery-sheetpanel", "sheetpanel");
+});
+
+test("@screenshot day-sheet-preview", async ({ page }) => {
+  await selectPractitioner(page, SLOTS_DR);
+  await page.getByRole("button", { name: S.daySheetButtonLabel, exact: true }).click();
+  await expect(page.getByRole("dialog").getByText(S.daySheetTitle)).toBeVisible();
+  await shoot(page, "day-sheet-preview", false);
 });
 
 test("@screenshot day-sheet-print", async ({ page }) => {

@@ -568,6 +568,18 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
         return;
       }
 
+      if (undo.kind === "visit_batch") {
+        // Reversed in reverse order, each independently of the others: one
+        // failing (e.g. a row moved since) must not stop the rest.
+        let allOk = true;
+        for (const auditLogId of [...undo.auditLogIds].reverse()) {
+          const outcome = await undoMostRecentVisitMutation(db, auditLogId);
+          allOk = allOk && outcome.ok;
+        }
+        setToastState(allOk ? null : { message: dayScreenStrings.noShowBulkUndoPartialFailure, undo: null });
+        return;
+      }
+
       // payment: the invoice's paid/status update first (refuses cleanly if
       // a later payment has already changed it further), then the payment
       // row itself.
@@ -703,6 +715,16 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
     setToastState({ message: dayScreenStrings.cashCloseToastMessage, undo: null });
   }
 
+  function handleCashClosePastDueMarked(undo: UndoAction) {
+    const message = undo.kind === "visit_batch" ? dayScreenStrings.cashClosePastDueBulkToastMessage : dayScreenStrings.noShowToastMessage;
+    setToastState({ message, undo });
+  }
+
+  function handleCashClosePastDueMove(visit: Visit) {
+    setIsCashCloseOpen(false);
+    setRowActionSheet({ kind: "move", visit });
+  }
+
   async function handleSetDelay(minutes: number) {
     if (!currentPractitionerId || !selectedLocationId || !staticData) {
       return;
@@ -774,6 +796,10 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
 
   return (
     <main className={`mx-auto max-w-3xl px-6 py-6 ${toastState ? "pb-28" : "pb-16"}`}>
+      {/* Everything but the sheets below (each of which manages its own
+          print:hidden/print:block split) — printing only ever shows a
+          sheet's own print target, never the day grid behind it. */}
+      <div className="print:hidden">
       {currentPractitioner && selectedLocationId && (
         <DaySlab
           heroLabel={isQueueMode ? dayScreenStrings.queueSummaryCurrentTurnLabel : dayScreenStrings.slabRemainingLabel}
@@ -1009,6 +1035,7 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
           );
         })}
       </div>
+      </div>
 
       {bookingSheetMode && currentPractitioner && selectedLocationId && defaultService && (
         <BookingSheet
@@ -1081,6 +1108,8 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
           date={today}
           onDismiss={() => setIsCashCloseOpen(false)}
           onClosed={handleCashClosed}
+          onNoShowMarked={handleCashClosePastDueMarked}
+          onRequestMove={handleCashClosePastDueMove}
         />
       )}
 

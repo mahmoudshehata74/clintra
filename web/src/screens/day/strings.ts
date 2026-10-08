@@ -293,19 +293,64 @@ export const dayScreenStrings = {
   // the visit itself expired independently).
   visitCompletionUndoPartialFailure: "اتلغت الفاتورة، لكن حالة الزيارة لسه \"خلصت\"",
 
-  // The day header's cash-close action and its sheet.
+  // The day header's cash-close action and its sheet (prototype #s7: `.c-head`,
+  // `.close-summary`, `.close-grid`, `.close-cell`, `.match`, `.diff`, `.field`,
+  // `.runrow`).
   cashCloseButtonLabel: "إغلاق الصندوق",
   cashCloseSheetTitle: "إغلاق الصندوق",
-  cashCloseExpectedLabel: "المتوقع",
+  // `.c-head h3`'s own prefix, combined with formatCairoDisplayDate(date) —
+  // e.g. "إقفال يوم الاثنين 7 سبتمبر".
+  cashCloseHeadTitlePrefix: "إقفال يوم",
+  cashCloseSummaryHeading: "ملخّص اليوم",
+  // `.close-grid`'s four cells.
+  cashCloseExpectedLabel: "إجمالي المتوقع",
+  cashCloseGridCollectedLabel: "المحصّل نقدي",
+  cashCloseGridInvoicesLabel: "فاتورة",
+  cashCloseGridInvoicesUnit: "مدفوعة",
+  cashCloseActualCashFieldLabel: "الكاش الفعلي في الدرج",
   cashCloseCollectedPlaceholder: "المبلغ المحصل (جنيه)",
   cashCloseCollectedInvalidError: "المبلغ ده مش صحيح",
   cashCloseDifferenceLabel: "الفرق",
   cashCloseNotePlaceholder: "سبب الفرق",
   // Shown only once the difference is non-zero and the note is still empty.
   cashCloseNoteRequiredError: "لازم تكتب سبب الفرق",
+  // The eligible/warning result banner once an amount has been typed.
+  cashCloseMatchedTitle: "مطابق تمامًا",
+  cashCloseMatchedSubtitle: "مفيش فرق بين المتوقع والمحصّل",
+  // Existing label kept as-is per the task's own instruction (no printing
+  // added here, unlike the prototype's own ".run" button text).
   cashCloseConfirmButton: "إغلاق",
+  cashCloseExportCsvAction: "تصدير CSV",
+  // `.runrow .count`'s own prefix, e.g. "هيقفله سارة حسن".
+  cashCloseClosesCountPrefix: "هيقفله",
   cashCloseAlreadyClosedError: "الصندوق مقفول بالفعل عن اليوم ده",
   cashCloseToastMessage: "اتقفل الصندوق",
+
+  // The read-only summary shown instead of the form once this location/day
+  // already has a cash_close row.
+  cashCloseClosedAtLabel: "اتقفل الساعة",
+  cashCloseClosedByLabel: "بواسطة",
+  cashCloseNoDifferenceNoteLabel: "مفيش ملاحظة",
+
+  // The past-due gate (screen 7): visits still booked/confirmed whose time
+  // has already passed — see pastDueVisits.ts. Shown as its own list above
+  // the totals, with a per-row no-show/move pair, a bulk no-show action, and
+  // a checkbox that lets the close proceed without touching any of them.
+  cashClosePastDueSectionTitle: "تحتاج تعليم",
+  cashClosePastDueNoShowAction: "لم يحضر",
+  cashClosePastDueMoveAction: "نقل",
+  // A past-due queue visit's leading label, where a slot visit shows its time.
+  cashClosePastDueQueueNumberPrefix: "نمرة",
+  cashClosePastDueBulkAction: "علّم الكل لم يحضر",
+  cashClosePastDueBulkToastMessage: "اتسجل غياب الزيارات المتأخرة",
+  // Shown instead of the undo option when reversing the bulk mark fails
+  // partway through — some visits went back to how they were, some didn't.
+  noShowBulkUndoPartialFailure: "جزء من التراجع مكنش ممكن، راجع القايمة",
+  cashClosePastDueAcknowledgeLabel: "عارف إنهم ما حضروش — اقفل من غير تعليم",
+  // Shown instead of the amount/note errors while the past-due list is
+  // non-empty and the checkbox above is unchecked — closing is refused
+  // outright until one of the two is true.
+  cashClosePastDueBlockedError: "لسه فيه زيارات متأخرة محتاجة تعليم أو تأكيد",
 
   // Print output: a plainly-labeled placeholder header shown in the app in
   // place of clinic branding, since settings screens don't exist yet — the
@@ -362,6 +407,15 @@ export const dayScreenStrings = {
   daySheetEmpty: "مفيش حجوزات للغد",
   daySheetNoPhone: "بدون رقم",
   printDaySheetAction: "طباعة ورقة الغد",
+  // `.print-day`'s own trailing count, e.g. "— 7 مرضى".
+  daySheetPatientCountUnit: "مرضى",
+  // `.print-tbl` column headers (#s8).
+  daySheetColumnTime: "الوقت",
+  daySheetColumnPatient: "المريض",
+  daySheetColumnService: "الخدمة",
+  daySheetColumnPhone: "التليفون",
+  // `.print-foot`'s own prefix, e.g. "طُبعت 7 سبتمبر 18:15".
+  printedAtPrefix: "طُبعت",
 
   // The day header's audit-log action ("السجل") and its sheet: today's
   // audit_log rows for the current practitioner+location, newest first, read

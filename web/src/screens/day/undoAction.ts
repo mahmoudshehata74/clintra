@@ -22,4 +22,6 @@ export type UndoAction =
     }
   | { kind: "payment"; paymentAuditLogId: string; invoiceAuditLogId: string }
   /** Reversed atomically as a whole — see db/visitQueue.ts's undoSendVisitToEndOfQueue. */
-  | { kind: "queue_reorder"; moves: QueueReorderMove[] };
+  | { kind: "queue_reorder"; moves: QueueReorderMove[] }
+  /** The past-due gate's bulk no-show action: one visit mutation per listed visit, reversed independently of one another. */
+  | { kind: "visit_batch"; auditLogIds: string[] };

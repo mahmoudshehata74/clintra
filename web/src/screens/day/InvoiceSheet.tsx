@@ -11,7 +11,9 @@ import { useLiveQuery } from "../../db/useLiveQuery";
 import { voidInvoice } from "../../db/invoiceVoid";
 import { InvoiceStatus, PaymentMethod, type Invoice, type InvoiceItem, type Patient, type Payment, type Practitioner } from "../../db/types";
 import { formatInvoiceNumber, formatReceiptNumber } from "./invoiceNumber";
+import { PrintClinicBlock, PrintHeaderNote, PrintPage, PrintTable, PrintTd } from "./PrintPage";
 import Sheet from "./Sheet";
+import { usePrintClinic } from "./usePrintClinic";
 import { dayScreenStrings } from "./strings";
 
 interface InvoiceSheetProps {
@@ -31,7 +33,7 @@ interface InvoiceData {
   practitioner: Practitioner | undefined;
 }
 
-const STATUS_LABEL: Record<string, string> = {
+export const STATUS_LABEL: Record<string, string> = {
   [InvoiceStatus.Unpaid]: dayScreenStrings.invoiceStatusUnpaid,
   [InvoiceStatus.Partial]: dayScreenStrings.invoiceStatusPartial,
   [InvoiceStatus.Paid]: dayScreenStrings.invoiceStatusPaid,
@@ -102,6 +104,9 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
     ]);
     return { invoice, items, payments: payments.sort((a, b) => a.created_at.localeCompare(b.created_at)), patient, practitioner };
   }, [invoiceId]);
+  // Called before the loading return below so the hook order never changes;
+  // "" just resolves to no location (and so an empty block) until it loads.
+  const clinic = usePrintClinic(data?.invoice.location_id ?? "");
 
   if (!data) {
     return (
@@ -282,76 +287,84 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
 
       {printTarget?.kind === "invoice" && (
         <div className="hidden print:block">
-          <p className="text-center font-semibold">{dayScreenStrings.printHeaderWarning}</p>
-          <h2 className="mt-4 text-center text-lg font-semibold">{dayScreenStrings.printInvoiceTitle}</h2>
-          <p className="mt-2">
-            {dayScreenStrings.invoiceNumberLabel}: {invoice.number}
-          </p>
-          <p>
-            {dayScreenStrings.invoicePatientLabel}: {patient?.full_name ?? ""}
-          </p>
-          <p>
-            {dayScreenStrings.invoicePractitionerLabel}: {practitioner?.full_name ?? ""}
-          </p>
-          <p>
-            {dayScreenStrings.invoiceDateLabel}: {formatCairoDisplayDate(todayInCairo(new Date(invoice.issued_at)))}
-          </p>
-          <table className="mt-4 w-full">
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.description}</td>
-                  <td>{item.qty}</td>
-                  <td>{formatMoneyAmount(item.unit_price)}</td>
-                  <td>{formatMoneyAmount(item.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="mt-4">
-            {dayScreenStrings.invoiceTotalLabel}: {formatMoneyAmount(invoice.total)}
-          </p>
-          <p>
-            {dayScreenStrings.invoicePaidLabel}: {formatMoneyAmount(invoice.paid)}
-          </p>
-          <p>
-            {dayScreenStrings.invoiceRemainingLabel}: {formatMoneyAmount(remaining)}
-          </p>
+          <PrintPage>
+            <PrintHeaderNote>{dayScreenStrings.printHeaderWarning}</PrintHeaderNote>
+            <PrintClinicBlock {...clinic} />
+            <h2 className="mb-4 text-center text-lg font-semibold text-black">{dayScreenStrings.printInvoiceTitle}</h2>
+            <p className="text-black">
+              {dayScreenStrings.invoiceNumberLabel}: {invoice.number}
+            </p>
+            <p className="text-black">
+              {dayScreenStrings.invoicePatientLabel}: {patient?.full_name ?? ""}
+            </p>
+            <p className="text-black">
+              {dayScreenStrings.invoicePractitionerLabel}: {practitioner?.full_name ?? ""}
+            </p>
+            <p className="text-black">
+              {dayScreenStrings.invoiceDateLabel}: {formatCairoDisplayDate(todayInCairo(new Date(invoice.issued_at)))}
+            </p>
+            <div className="mt-4">
+              <PrintTable>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      <PrintTd>{item.description}</PrintTd>
+                      <PrintTd>{item.qty}</PrintTd>
+                      <PrintTd>{formatMoneyAmount(item.unit_price)}</PrintTd>
+                      <PrintTd>{formatMoneyAmount(item.total)}</PrintTd>
+                    </tr>
+                  ))}
+                </tbody>
+              </PrintTable>
+            </div>
+            <p className="mt-4 text-black">
+              {dayScreenStrings.invoiceTotalLabel}: {formatMoneyAmount(invoice.total)}
+            </p>
+            <p className="text-black">
+              {dayScreenStrings.invoicePaidLabel}: {formatMoneyAmount(invoice.paid)}
+            </p>
+            <p className="text-black">
+              {dayScreenStrings.invoiceRemainingLabel}: {formatMoneyAmount(remaining)}
+            </p>
+          </PrintPage>
         </div>
       )}
 
       {printTarget?.kind === "receipt" && (
         <div className="hidden print:block">
-          <p className="text-center font-semibold">{dayScreenStrings.printHeaderWarning}</p>
-          <p className="mt-4 text-center text-sm text-muted">{dayScreenStrings.paymentReceiptNumberPrefix}</p>
-          <h2 className="text-center text-2xl font-semibold">{printTarget.payment.receipt_number}</h2>
-          <p className="mt-6 text-center text-4xl font-semibold">
-            {formatMoneyAmount(printTarget.payment.amount)}
-          </p>
-          <div className="mt-6 flex flex-col gap-1 text-sm">
-            <p className="flex justify-between">
-              <span className="text-muted">{dayScreenStrings.invoiceNumberLabel}</span>
-              <span>{invoice.number}</span>
+          <PrintPage>
+            <PrintHeaderNote>{dayScreenStrings.printHeaderWarning}</PrintHeaderNote>
+            <PrintClinicBlock {...clinic} />
+            <p className="mt-4 text-center text-sm text-black/60">{dayScreenStrings.paymentReceiptNumberPrefix}</p>
+            <h2 className="text-center text-2xl font-semibold text-black">{printTarget.payment.receipt_number}</h2>
+            <p className="mt-6 text-center text-4xl font-semibold text-black">
+              {formatMoneyAmount(printTarget.payment.amount)}
             </p>
-            <p className="flex justify-between">
-              <span className="text-muted">{dayScreenStrings.invoicePatientLabel}</span>
-              <span>{patient?.full_name ?? ""}</span>
-            </p>
-            <p className="flex justify-between">
-              <span className="text-muted">{dayScreenStrings.paymentMethodLabel}</span>
-              <span>{METHOD_LABEL[printTarget.payment.method]}</span>
-            </p>
-            <p className="flex justify-between">
-              <span className="text-muted">{dayScreenStrings.invoiceDateLabel}</span>
-              <span>{formatCairoDisplayDate(todayInCairo(new Date(printTarget.payment.created_at)))}</span>
-            </p>
-            {printTarget.payment.note && (
-              <p className="flex justify-between">
-                <span className="text-muted">{dayScreenStrings.paymentNotePlaceholder}</span>
-                <span>{printTarget.payment.note}</span>
+            <div className="mt-6 flex flex-col gap-1 text-sm">
+              <p className="flex justify-between text-black">
+                <span className="text-black/60">{dayScreenStrings.invoiceNumberLabel}</span>
+                <span>{invoice.number}</span>
               </p>
-            )}
-          </div>
+              <p className="flex justify-between text-black">
+                <span className="text-black/60">{dayScreenStrings.invoicePatientLabel}</span>
+                <span>{patient?.full_name ?? ""}</span>
+              </p>
+              <p className="flex justify-between text-black">
+                <span className="text-black/60">{dayScreenStrings.paymentMethodLabel}</span>
+                <span>{METHOD_LABEL[printTarget.payment.method]}</span>
+              </p>
+              <p className="flex justify-between text-black">
+                <span className="text-black/60">{dayScreenStrings.invoiceDateLabel}</span>
+                <span>{formatCairoDisplayDate(todayInCairo(new Date(printTarget.payment.created_at)))}</span>
+              </p>
+              {printTarget.payment.note && (
+                <p className="flex justify-between text-black">
+                  <span className="text-black/60">{dayScreenStrings.paymentNotePlaceholder}</span>
+                  <span>{printTarget.payment.note}</span>
+                </p>
+              )}
+            </div>
+          </PrintPage>
         </div>
       )}
     </>

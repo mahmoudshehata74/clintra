@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import Ltr from "../../components/Ltr";
+import Button from "../../components/ui/Button";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import type { ClinicDay, Patient, Schedule, Service, Visit } from "../../db/types";
 import { formatEgyptianPhoneForDisplay } from "../../domain/phone";
 import { ScheduleMode } from "../../domain/scheduleMode";
-import { clockTimeInCairo, formatCairoDisplayDate, weekdayOf } from "../../domain/time";
-import { selectDaySheetVisits } from "./daySheetVisits";
-import Sheet from "./Sheet";
+import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo, weekdayOf } from "../../domain/time";
 import { SheetPanelBody } from "../../components/ui/SheetPanel";
+import { selectDaySheetVisits } from "./daySheetVisits";
+import { PrintClinicBlock, PrintDayLine, PrintFoot, PrintHeaderNote, PrintPage, PrintTable, PrintTd, PrintTh } from "./PrintPage";
+import Sheet from "./Sheet";
+import { usePrintClinic } from "./usePrintClinic";
 import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
 
@@ -26,14 +29,22 @@ interface DaySheetData {
   servicesById: Map<string, Service>;
 }
 
-const EMPTY_DATA: DaySheetData = { isQueueMode: false, visits: [], patientsById: new Map(), servicesById: new Map() };
+const EMPTY_DATA: DaySheetData = {
+  isQueueMode: false,
+  visits: [],
+  patientsById: new Map(),
+  servicesById: new Map(),
+};
 
 /**
  * A printable list of tomorrow's booked visits for one practitioner and
  * location, in the order staff will actually work through them the next
- * day — see domain layer's selectDaySheetVisits for the ordering rule.
- * Reuses InvoiceSheet's print-header safeguard: the placeholder note is
- * shown on screen only, and the printed page carries only the warning.
+ * day — see domain layer's selectDaySheetVisits for the ordering rule. The
+ * on-screen preview (inside the sheet) and the actual printed page
+ * (print:block, outside it) render the exact same PrintPage content, so what
+ * staff see before printing is what comes out of the printer — only the
+ * header note's own text differs (placeholder vs. warning), per its existing
+ * rule.
  */
 export default function DaySheet({ practitionerId, locationId, tomorrow, onDismiss }: DaySheetProps) {
   const [printRequested, setPrintRequested] = useState(false);
@@ -95,75 +106,82 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
     return data.isQueueMode ? String(visit.position) : clockTimeInCairo(visit.scheduled_at!);
   }
 
+  const clinic = usePrintClinic(locationId);
+  const dayLine = (
+    <>
+      {formatCairoDisplayDate(tomorrow)} <Ltr>{tomorrow.slice(0, 4)}</Ltr> — <Ltr>{rows.length}</Ltr>{" "}
+      {dayScreenStrings.daySheetPatientCountUnit}
+    </>
+  );
+  const now = new Date();
+  const printedAt = `${dayScreenStrings.printedAtPrefix} ${formatCairoDisplayDate(todayInCairo(now))} ${clockTimeInCairo(now.toISOString())}`;
+
+  function PageBody({ headerNote }: { headerNote: string }) {
+    return (
+      <PrintPage>
+        <PrintHeaderNote>{headerNote}</PrintHeaderNote>
+        <PrintClinicBlock {...clinic} />
+        <PrintDayLine>{dayLine}</PrintDayLine>
+        <PrintTable>
+          <thead>
+            <tr>
+              <PrintTh>{dayScreenStrings.daySheetColumnTime}</PrintTh>
+              <PrintTh>{dayScreenStrings.daySheetColumnPatient}</PrintTh>
+              <PrintTh>{dayScreenStrings.daySheetColumnService}</PrintTh>
+              <PrintTh>{dayScreenStrings.daySheetColumnPhone}</PrintTh>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr>
+                <PrintTd colSpan={4}>{dayScreenStrings.daySheetEmpty}</PrintTd>
+              </tr>
+            )}
+            {rows.map((visit) => {
+              const patient = data.patientsById.get(visit.patient_id);
+              const service = visit.service_id ? data.servicesById.get(visit.service_id) : undefined;
+              return (
+                <tr key={visit.id}>
+                  <PrintTd>
+                    <Ltr>{positionOrTime(visit)}</Ltr>
+                  </PrintTd>
+                  <PrintTd>{patient?.full_name ?? ""}</PrintTd>
+                  <PrintTd>{service?.name ?? ""}</PrintTd>
+                  <PrintTd mono>
+                    <Ltr>{phoneOrPlaceholder(patient)}</Ltr>
+                  </PrintTd>
+                </tr>
+              );
+            })}
+          </tbody>
+        </PrintTable>
+        <PrintFoot printedAt={printedAt} />
+      </PrintPage>
+    );
+  }
+
   return (
     <>
       <div className="print:hidden">
-        <Sheet onDismiss={onDismiss}>
+        <Sheet onDismiss={onDismiss} size="lg">
           <SheetHeader
-            title={
-              <>
-                {dayScreenStrings.daySheetTitle} — {formatCairoDisplayDate(tomorrow)}
-              </>
-            }
+            title={dayScreenStrings.daySheetTitle}
             onDismiss={onDismiss}
+            extra={
+              <Button variant="onDark" size="sm" onClick={() => setPrintRequested(true)}>
+                {dayScreenStrings.printDaySheetAction}
+              </Button>
+            }
           />
           <SheetPanelBody>
-            <p className="text-xs text-muted">{dayScreenStrings.printHeaderPlaceholder}</p>
-
-            <div className="flex flex-col divide-y divide-line-soft overflow-y-auto">
-              {rows.length === 0 && <p className="py-3 text-muted">{dayScreenStrings.daySheetEmpty}</p>}
-              {rows.map((visit) => {
-                const patient = data.patientsById.get(visit.patient_id);
-                const service = visit.service_id ? data.servicesById.get(visit.service_id) : undefined;
-                return (
-                  <div key={visit.id} className="py-2.5">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span>{patient?.full_name ?? ""}</span>
-                      <Ltr>
-                        <span className="text-sm text-muted">{positionOrTime(visit)}</span>
-                      </Ltr>
-                    </div>
-                    <p className="text-sm text-muted">
-                      <Ltr>{phoneOrPlaceholder(patient)}</Ltr>
-                      {service ? ` — ${service.name}` : ""}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setPrintRequested(true)}
-              className="rounded-[--radius-el] border border-line px-4 py-3 text-center text-muted"
-            >
-              {dayScreenStrings.printDaySheetAction}
-            </button>
+            <PageBody headerNote={dayScreenStrings.printHeaderPlaceholder} />
           </SheetPanelBody>
         </Sheet>
       </div>
 
       {printRequested && (
         <div className="hidden print:block">
-          <p className="text-center font-semibold">{dayScreenStrings.printHeaderWarning}</p>
-          <h2 className="mt-4 text-center text-lg font-semibold">{dayScreenStrings.daySheetTitle}</h2>
-          <p className="text-center">{formatCairoDisplayDate(tomorrow)}</p>
-          <table className="mt-4 w-full">
-            <tbody>
-              {rows.map((visit) => {
-                const patient = data.patientsById.get(visit.patient_id);
-                const service = visit.service_id ? data.servicesById.get(visit.service_id) : undefined;
-                return (
-                  <tr key={visit.id}>
-                    <td>{positionOrTime(visit)}</td>
-                    <td>{patient?.full_name ?? ""}</td>
-                    <td>{phoneOrPlaceholder(patient)}</td>
-                    <td>{service?.name ?? ""}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <PageBody headerNote={dayScreenStrings.printHeaderWarning} />
         </div>
       )}
     </>
