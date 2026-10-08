@@ -9,6 +9,7 @@ import {
   LIGHT_SURFACE_MD_ONLY_BUTTON_DEMOS,
   LIGHT_SURFACE_SM_BUTTON_DEMOS,
   sheetPanelGalleryStrings,
+  switchGalleryStrings,
   toggleChipGalleryStrings,
 } from "../src/gallery/strings";
 
@@ -170,4 +171,55 @@ test("the sheet panel's heading is present and its close button fires onClose on
   await expect(page.getByText(`${sheetPanelGalleryStrings.closeLabel}: 0`)).toBeVisible();
   await page.getByRole("button", { name: sheetPanelGalleryStrings.closeLabel }).click();
   await expect(page.getByText(`${sheetPanelGalleryStrings.closeLabel}: 1`)).toBeVisible();
+});
+
+test("a switch is a named role=switch whose click flips aria-checked", async ({ page }) => {
+  const live = page.getByRole("switch", { name: switchGalleryStrings.liveOnLabel, exact: true });
+  await expect(live).toBeVisible();
+  await expect(live).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByText(`${switchGalleryStrings.liveOnLabel}: ${switchGalleryStrings.stateOn}`)).toBeVisible();
+
+  await live.click();
+  await expect(live).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByText(`${switchGalleryStrings.liveOnLabel}: ${switchGalleryStrings.stateOff}`)).toBeVisible();
+
+  // Keyboard: focus, then Space flips it back.
+  await live.focus();
+  await page.keyboard.press("Space");
+  await expect(live).toHaveAttribute("aria-checked", "true");
+});
+
+test("a disabled switch is disabled and keeps its state", async ({ page }) => {
+  const disabledOn = page.getByRole("switch", { name: switchGalleryStrings.disabledOnLabel, exact: true });
+  const disabledOff = page.getByRole("switch", { name: switchGalleryStrings.disabledOffLabel, exact: true });
+  await expect(disabledOn).toBeDisabled();
+  await expect(disabledOn).toHaveAttribute("aria-checked", "true");
+  await expect(disabledOff).toBeDisabled();
+  await expect(disabledOff).toHaveAttribute("aria-checked", "false");
+});
+
+test("a switch's on and off tracks differ, and its touch target reaches 40px", async ({ page }) => {
+  const on = page.getByRole("switch", { name: switchGalleryStrings.liveOnLabel, exact: true });
+  const off = page.getByRole("switch", { name: switchGalleryStrings.liveOffLabel, exact: true });
+  const [onColor, offColor] = await Promise.all([
+    on.evaluate((el) => getComputedStyle(el).backgroundColor),
+    off.evaluate((el) => getComputedStyle(el).backgroundColor),
+  ]);
+  expect(onColor).not.toBe(offColor);
+
+  // elementFromPoint only sees the viewport; the gallery is long.
+  await off.scrollIntoViewIfNeeded();
+  const box = await off.boundingBox();
+  if (!box) {
+    throw new Error("expected the switch to have a bounding box");
+  }
+  // The visible box is the prototype's 36x20; a point 19px above its centre
+  // is outside it but inside the 40px band its ::after covers.
+  expect(box.height).toBeLessThan(38);
+  const handle = await off.elementHandle();
+  const hit = await page.evaluate(
+    ({ x, y, handle }) => document.elementFromPoint(x, y) === handle,
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 - 19, handle },
+  );
+  expect(hit).toBe(true);
 });

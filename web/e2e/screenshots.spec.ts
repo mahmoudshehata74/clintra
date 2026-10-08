@@ -6,6 +6,7 @@ import {
   gotoSeededDay,
   labeledRowValue,
   lockOverlay,
+  openAuditLog,
   login,
   openBookingSheet,
   OWNER_NAME,
@@ -18,6 +19,7 @@ import {
   SLOTS_DR,
   QUEUE_DR,
 } from "./support";
+import { registrationStrings } from "../src/auth/registrationStrings";
 import { galleryStrings } from "../src/gallery/strings";
 
 // Opt-in visual-review capture. Every test here is tagged @screenshot, so the
@@ -42,15 +44,21 @@ test.afterEach(async ({ page }) => {
   expect(errorsByPage.get(page) ?? []).toEqual([]);
 });
 
+// animations: "disabled" fast-forwards any running finite CSS transition to
+// its end state before capturing. Without it a capture taken right after a
+// click (e.g. the rail's 150ms active-item colour fade) shows the
+// in-between frame, which reads as a faded, half-active control.
 async function shoot(page: Page, surface: string, fullPage: boolean): Promise<void> {
   const project = test.info().project.name;
-  await page.screenshot({ path: `${OUT_DIR}/${surface}-${project}.png`, fullPage });
+  await page.screenshot({ path: `${OUT_DIR}/${surface}-${project}.png`, fullPage, animations: "disabled" });
 }
 
 /** Captures only the named gallery section, not the whole scrollable page. */
 async function shootGallerySection(page: Page, surface: string, section: string): Promise<void> {
   const project = test.info().project.name;
-  await page.locator(`[data-gallery-section="${section}"]`).screenshot({ path: `${OUT_DIR}/${surface}-${project}.png` });
+  await page
+    .locator(`[data-gallery-section="${section}"]`)
+    .screenshot({ path: `${OUT_DIR}/${surface}-${project}.png`, animations: "disabled" });
 }
 
 test("@screenshot lock-screen-picker", async ({ page }) => {
@@ -78,9 +86,25 @@ test("@screenshot settings-hours", async ({ page }) => {
   await page.goto("/?seedDay=1");
   await page.evaluate(() => localStorage.clear());
   await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
   await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
-  await expect(page.getByRole("dialog").getByText(S.settingsHoursTab)).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(S.settingsHoursTab, { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("listitem")).toHaveCount(7);
   await shoot(page, "settings-hours", false);
+});
+
+test("@screenshot settings-services", async ({ page }) => {
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsServicesTab, exact: true }).click();
+  // One service stopped, so the capture shows both row states and counts.
+  const stopped = dialog.getByRole("listitem").filter({ hasText: "فحص شامل" }).getByRole("switch");
+  await stopped.click();
+  await expect(stopped).toHaveAttribute("aria-checked", "false");
+  await shoot(page, "settings-services", false);
 });
 
 test("@screenshot settings-staff", async ({ page }) => {
@@ -288,11 +312,30 @@ test("@screenshot receipt-print", async ({ page }) => {
 });
 
 test("@screenshot audit-sheet", async ({ page }) => {
+  // The real day: audit rows are stamped "now", so only today's log shows
+  // them (see support.ts's gotoRealDay). Three bookings, then one arrival
+  // (default dot), one cancellation (danger) and one no-show (warn).
+  await gotoRealDay(page);
   await selectPractitioner(page, SLOTS_DR);
+  for (const name of [PATIENTS.mona, PATIENTS.omar, PATIENTS.karim]) {
+    await openBookingSheet(page);
+    const booking = page.getByRole("dialog");
+    await booking.getByPlaceholder(S.bookingSearchPlaceholder).fill(name);
+    await pickSearchResult(booking, name);
+    await booking.getByRole("button", { name: /^\d{1,2}:\d{2}$/ }).first().click();
+    await booking.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
+    await expect(rowFor(page, name)).toContainText(S.statusBooked);
+  }
   await rowFor(page, PATIENTS.mona).locator("button").filter({ hasText: PATIENTS.mona }).click();
-  await expect(page.getByText(S.attendanceMarked)).toBeVisible();
-  await page.getByRole("button", { name: S.auditButtonLabel, exact: true }).click();
-  await expect(page.getByRole("dialog").getByText(S.auditSheetTitle)).toBeVisible();
+  await expect(rowFor(page, PATIENTS.mona)).toContainText(S.statusArrived);
+  await rowFor(page, PATIENTS.omar).getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
+  await page.getByRole("menuitem", { name: S.cancelMenuLabel, exact: true }).click();
+  await page.getByRole("button", { name: S.cancelReasonPatient, exact: true }).click();
+  await expect(rowFor(page, PATIENTS.omar)).toContainText(S.statusCancelled);
+  await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
+  await page.getByRole("menuitem", { name: S.noShowMenuLabel, exact: true }).click();
+  await expect(rowFor(page, PATIENTS.karim)).toContainText(S.statusNoShow);
+  await openAuditLog(page);
   await shoot(page, "audit-sheet", false);
 });
 
@@ -370,6 +413,12 @@ test("@screenshot gallery-togglechip", async ({ page }) => {
   await shootGallerySection(page, "gallery-togglechip", "togglechip");
 });
 
+test("@screenshot gallery-switch", async ({ page }) => {
+  await page.goto("/?gallery=1");
+  await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
+  await shootGallerySection(page, "gallery-switch", "switch");
+});
+
 test("@screenshot gallery-sheetpanel", async ({ page }) => {
   await page.goto("/?gallery=1");
   await expect(page.getByRole("heading", { name: galleryStrings.pageTitle })).toBeVisible();
@@ -396,4 +445,45 @@ test("@screenshot day-sheet-print", async ({ page }) => {
   await expect(page.getByText(S.printHeaderWarning)).toBeVisible();
   await shoot(page, "day-sheet-print", true);
   await page.emulateMedia({ media: null });
+});
+
+// Device activation: a plain "/" on a device with no real token shows the
+// activation card (the seeded demo device never holds one).
+test("@screenshot device-activation-form", async ({ page }) => {
+  await page.goto("/");
+  const card = page.getByRole("dialog", { name: registrationStrings.formAria });
+  await card.getByLabel(registrationStrings.codeLabel).fill("CLT-7F3K-9QRT-4XWM-2BCD");
+  await expect(card.getByLabel(registrationStrings.phoneLabel)).toBeVisible();
+  await shoot(page, "device-activation-form", false);
+});
+
+test("@screenshot activation-confirmation", async ({ page }) => {
+  const orgId = crypto.randomUUID();
+  const locationId = crypto.randomUUID();
+  await page.route("**/api/devices/register", async (route) => {
+    const body = JSON.parse(route.request().postData() ?? "{}") as { device_id: string };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        token: "1|screenshot-only-token",
+        device_id: body.device_id,
+        org_id: orgId,
+        location_id: locationId,
+        membership_id: crypto.randomUUID(),
+        organization: { id: orgId, name: "النور للعلاج الطبيعي", plan_tier: "small", created_at: new Date().toISOString() },
+        locations: [{ id: locationId, org_id: orgId, name: "فرع المعادي", address: "شارع 9", phone: "+20221234567", is_active: true }],
+        practitioners: [],
+        memberships: [],
+        users: [],
+      }),
+    });
+  });
+  await page.goto("/");
+  const card = page.getByRole("dialog", { name: registrationStrings.formAria });
+  await card.getByLabel(registrationStrings.codeLabel).fill("CLT-7F3K-9QRT-4XWM-2BCD");
+  await card.getByLabel(registrationStrings.phoneLabel).fill("01001234567");
+  await card.getByRole("button", { name: registrationStrings.submitLabel }).click();
+  await expect(card.getByText(`${registrationStrings.confirmationPrefix} النور للعلاج الطبيعي`, { exact: true })).toBeVisible();
+  await shoot(page, "activation-confirmation", false);
 });

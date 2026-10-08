@@ -154,13 +154,23 @@ interface DayScreenProps {
   /** Lifted to App.tsx: AppShell's sidebar is what opens this now, and needs the same flag to know it's the active section. */
   isSettingsOpen: boolean;
   onCloseSettings: () => void;
+  /** Lifted to App.tsx for the same reason as isSettingsOpen: the rail's "السجل" item opens the audit sheet and shows as active while it is open. */
+  isAuditOpen: boolean;
+  onCloseAudit: () => void;
   /** Reports this screen's own app-bar title up to App.tsx, which forwards it to AppShell — see AppShell.tsx's own doc comment. */
   onTitleChange: (title: string) => void;
   /** Reports this screen's own displayed day up to App.tsx, which forwards it to AppShell for its date block — the same lift as onTitleChange, and for the same reason: only the screen knows whether ?seedDay=1 has it pinned. */
   onTodayChange: (today: ClinicDay) => void;
 }
 
-export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChange, onTodayChange }: DayScreenProps) {
+export default function DayScreen({
+  isSettingsOpen,
+  onCloseSettings,
+  isAuditOpen,
+  onCloseAudit,
+  onTitleChange,
+  onTodayChange,
+}: DayScreenProps) {
   const [staticData, setStaticData] = useState<StaticData | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [selectedPractitionerId, setSelectedPractitionerIdState] = useState<string | null>(readStoredPractitionerId);
@@ -174,7 +184,6 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
   const [visitFormSheetVisitId, setVisitFormSheetVisitId] = useState<string | null>(null);
   const [isCashCloseOpen, setIsCashCloseOpen] = useState(false);
   const [isDaySheetOpen, setIsDaySheetOpen] = useState(false);
-  const [isAuditSheetOpen, setIsAuditSheetOpen] = useState(false);
   // Per visit id: blocks a row's primary button for ADVANCE_COOLDOWN_MS after
   // a status-advancing tap, so an accidental double-tap can't skip a status
   // — see advanceCooldown.ts.
@@ -1029,7 +1038,6 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
               onSendToEnd={handleSendToEnd}
               onOpenVisitForm={handleOpenVisitForm}
               onOpenDaySheet={practitioner.id === currentPractitionerId ? () => setIsDaySheetOpen(true) : undefined}
-              onOpenAudit={practitioner.id === currentPractitionerId ? () => setIsAuditSheetOpen(true) : undefined}
               onCallNextInQueue={practitioner.id === currentPractitionerId ? handleCallNextInQueue : undefined}
             />
           );
@@ -1122,12 +1130,12 @@ export default function DayScreen({ isSettingsOpen, onCloseSettings, onTitleChan
         />
       )}
 
-      {isAuditSheetOpen && selectedLocationId && currentPractitionerId && (
+      {isAuditOpen && selectedLocationId && currentPractitionerId && (
         <AuditSheet
           practitionerId={currentPractitionerId}
           locationId={selectedLocationId}
           today={today}
-          onDismiss={() => setIsAuditSheetOpen(false)}
+          onDismiss={onCloseAudit}
         />
       )}
 

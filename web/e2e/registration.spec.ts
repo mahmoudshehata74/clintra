@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { registrationStrings as S } from "../src/auth/registrationStrings";
-import { SIDEBAR } from "./support";
+import { AUTH, SIDEBAR } from "./support";
 
 // contract/pin-hash.json's own precomputed testVector — reused verbatim
 // rather than importing src/auth/pinHash.ts and calling hashPin() here:
@@ -83,8 +83,12 @@ test("an empty device activates, then unlocks with the owner's PIN into a workin
   await activationForm.getByLabel(S.codeLabel).fill("CLT-7F3K-9QRT-4XWM-2BCD");
   await activationForm.getByRole("button", { name: S.submitLabel }).click();
 
-  await expect(page.getByText(S.successTitle)).toBeVisible();
-  await page.getByRole("button", { name: S.continueLabel }).click();
+  // The confirmation names the organization registration just stored.
+  await expect(activationForm.getByText(`${S.confirmationPrefix} عيادة تجريبية`, { exact: true })).toBeVisible();
+  await activationForm.getByRole("button", { name: S.startLabel, exact: true }).click();
+
+  // "ابدأ" leads to the lock screen's picker ("دخول العيادة").
+  await expect(page.getByRole("dialog", { name: AUTH.lockOverlayAria }).getByText(AUTH.lockClinicPrompt)).toBeVisible();
 
   // The PIN screen now shows exactly the membership registration just
   // bootstrapped — proof db/registration.ts wrote rows LockScreen.tsx can
@@ -101,4 +105,64 @@ test("an empty device activates, then unlocks with the owner's PIN into a workin
   // since this device's org/location came from registration, not
   // db/seed.ts (whose own emptiness guard is what makes this safe).
   await expect(page.getByRole("button", { name: SIDEBAR.navDay })).toBeVisible();
+});
+
+test("the activation form asks for exactly the code, then the owner's phone — no SMS step", async ({ page }) => {
+  await page.goto("/");
+  const activationForm = page.getByRole("dialog", { name: S.formAria });
+  await expect(activationForm).toBeVisible();
+
+  const inputs = activationForm.locator("input");
+  await expect(inputs).toHaveCount(2);
+  await expect(inputs.nth(0)).toHaveAccessibleName(S.codeLabel);
+  await expect(inputs.nth(1)).toHaveAccessibleName(S.phoneLabel);
+  await expect(activationForm.getByText(S.codeHint, { exact: true })).toBeVisible();
+  // Not shown before activation (settled deviation).
+  await expect(activationForm.getByText(S.confirmationPrefix)).toHaveCount(0);
+});
+
+test("an incomplete code is refused on the code field before anything is sent", async ({ page }) => {
+  let requests = 0;
+  await page.route("**/api/devices/register", async (route) => {
+    requests += 1;
+    await route.abort();
+  });
+  await page.goto("/");
+  const activationForm = page.getByRole("dialog", { name: S.formAria });
+  await activationForm.getByLabel(S.codeLabel).fill("CLT-7F3K");
+  await activationForm.getByLabel(S.phoneLabel).fill("01001234567");
+  await activationForm.getByRole("button", { name: S.submitLabel }).click();
+
+  await expect(activationForm.getByText(S.invalidCode)).toBeVisible();
+  await expect(activationForm.getByLabel(S.codeLabel)).toHaveAttribute("aria-invalid", "true");
+  expect(requests).toBe(0);
+});
+
+test("a server refusal shows its own message for the whole form", async ({ page }) => {
+  await page.route("**/api/devices/register", async (route) => {
+    await route.fulfill({
+      status: 422,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "كود التفعيل ده مستخدم قبل كده" }),
+    });
+  });
+  await page.goto("/");
+  const activationForm = page.getByRole("dialog", { name: S.formAria });
+  await activationForm.getByLabel(S.codeLabel).fill("CLT-7F3K-9QRT-4XWM-2BCD");
+  await activationForm.getByLabel(S.phoneLabel).fill("01001234567");
+  await activationForm.getByRole("button", { name: S.submitLabel }).click();
+
+  await expect(activationForm.getByRole("alert")).toHaveText("كود التفعيل ده مستخدم قبل كده");
+  await expect(activationForm.getByRole("button", { name: S.submitLabel })).toBeEnabled();
+});
+
+test("a phone that does not normalize is refused on the phone field", async ({ page }) => {
+  await page.goto("/");
+  const activationForm = page.getByRole("dialog", { name: S.formAria });
+  await activationForm.getByLabel(S.codeLabel).fill("CLT-7F3K-9QRT-4XWM-2BCD");
+  await activationForm.getByLabel(S.phoneLabel).fill("123");
+  await activationForm.getByRole("button", { name: S.submitLabel }).click();
+
+  await expect(activationForm.getByText(S.invalidPhone)).toBeVisible();
+  await expect(activationForm.getByLabel(S.phoneLabel)).toHaveAttribute("aria-invalid", "true");
 });

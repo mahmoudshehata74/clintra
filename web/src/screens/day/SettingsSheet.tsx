@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { SheetPanelBody } from "../../components/ui/SheetPanel";
+import ToggleGroup from "../../components/ui/ToggleGroup";
+import { db } from "../../db/database";
+import { useLiveQuery } from "../../db/useLiveQuery";
 import ServicesPanel from "./ServicesPanel";
 import Sheet from "./Sheet";
-import SheetHeader from "./SheetHeader";
+import SheetCardHead from "./SheetCardHead";
 import StaffPanel from "./StaffPanel";
 import { dayScreenStrings } from "./strings";
 import WorkingHoursPanel from "./WorkingHoursPanel";
@@ -16,48 +18,60 @@ interface SettingsSheetProps {
   onDismiss: () => void;
 }
 
-function tabClassName(isActive: boolean): string {
-  return isActive
-    ? "rounded-[5px] bg-green-soft px-3 py-1 text-sm text-green"
-    : "rounded-[5px] bg-line-soft px-3 py-1 text-sm text-muted";
-}
+const TAB_OPTIONS: readonly { value: Panel; label: string }[] = [
+  { value: "hours", label: dayScreenStrings.settingsHoursTab },
+  { value: "services", label: dayScreenStrings.settingsServicesTab },
+  { value: "staff", label: dayScreenStrings.settingsStaffTab },
+];
 
 /**
- * The owner-only settings sheet (reference screens 15-17): one full-height
- * sheet, a segmented pill row switching between the three panels. Only ever
- * rendered when the acting membership is an owner (see DayScreen) — there is no
- * route to it otherwise.
+ * The owner-only settings sheet, prototype #s12–14: a `.c-head` (badge
+ * "الإعدادات", then what the open tab is about), the `.set-tabs` bar
+ * switching between the three panels, and the panel itself, which owns its
+ * own `.set-body` and `.runrow`. Only ever rendered when the acting
+ * membership is an owner (see DayScreen) — there is no route to it
+ * otherwise.
  */
 export default function SettingsSheet({ practitionerId, locationId, orgId, onDismiss }: SettingsSheetProps) {
   const [panel, setPanel] = useState<Panel>("hours");
 
+  const context = useLiveQuery(async () => {
+    const [practitioner, location] = await Promise.all([db.practitioners.get(practitionerId), db.locations.get(locationId)]);
+    return { practitionerName: practitioner?.full_name ?? "", locationName: location?.name ?? "" };
+  }, [practitionerId, locationId]);
+
+  // `.c-head h3` / `.sub` per tab, as the prototype words each: the
+  // practitioner whose week this is (with the location as context), the
+  // clinic's services, the staff.
+  const head =
+    panel === "hours"
+      ? {
+          title: context?.practitionerName ?? "",
+          subtitle: [dayScreenStrings.settingsHoursHeadSubtitle, context?.locationName].filter(Boolean).join(" · "),
+        }
+      : panel === "services"
+        ? { title: dayScreenStrings.settingsServicesHeadTitle, subtitle: undefined }
+        : { title: dayScreenStrings.settingsStaffTab, subtitle: undefined };
+
   return (
-    <Sheet onDismiss={onDismiss}>
-      <SheetHeader title={dayScreenStrings.settingsButtonLabel} onDismiss={onDismiss} />
+    <Sheet onDismiss={onDismiss} size="lg">
+      <SheetCardHead badge={dayScreenStrings.settingsButtonLabel} title={head.title} subtitle={head.subtitle} onDismiss={onDismiss} />
 
-      <SheetPanelBody>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => setPanel("hours")} className={tabClassName(panel === "hours")}>
-            {dayScreenStrings.settingsHoursTab}
-          </button>
-          <button type="button" onClick={() => setPanel("services")} className={tabClassName(panel === "services")}>
-            {dayScreenStrings.settingsServicesTab}
-          </button>
-          <button type="button" onClick={() => setPanel("staff")} className={tabClassName(panel === "staff")}>
-            {dayScreenStrings.settingsStaffTab}
-          </button>
-        </div>
+      {/* `.set-tabs` — the bar; the tabs themselves are the shared `.set-tab` ToggleGroup. */}
+      <div className="border-b border-hair bg-field px-[18px] py-2.5">
+        <ToggleGroup
+          variant="tab"
+          label={dayScreenStrings.settingsTabsGroupLabel}
+          value={panel}
+          onChange={setPanel}
+          options={TAB_OPTIONS}
+          className="overflow-x-auto"
+        />
+      </div>
 
-        <div className="overflow-y-auto">
-          {panel === "hours" && <WorkingHoursPanel practitionerId={practitionerId} locationId={locationId} />}
-          {panel === "services" && <ServicesPanel orgId={orgId} />}
-          {panel === "staff" && <StaffPanel orgId={orgId} />}
-
-          <div className="mt-6 flex justify-center border-t border-line pt-4">
-            <img src="/brand/clintra-wordmark.png" alt="Clintra" className="h-4 w-auto opacity-70" />
-          </div>
-        </div>
-      </SheetPanelBody>
+      {panel === "hours" && <WorkingHoursPanel practitionerId={practitionerId} locationId={locationId} />}
+      {panel === "services" && <ServicesPanel orgId={orgId} />}
+      {panel === "staff" && <StaffPanel orgId={orgId} />}
     </Sheet>
   );
 }

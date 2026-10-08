@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Ltr from "../../components/Ltr";
+import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import type { AuditLog, ClinicDay, Membership, Patient, User, Visit } from "../../db/types";
@@ -7,15 +8,16 @@ import { AuditAction } from "../../db/types";
 import { describeAuditVerb, describeVisitFormChange } from "../../domain/auditVerb";
 import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo } from "../../domain/time";
 import { formatActorLabel } from "./actorLabel";
+import { auditDotTone, type AuditDotTone } from "./auditDotTone";
 import {
   type AuditActionFilter,
   type AuditEntityFilter,
   filterAuditRows,
   isAuditRowInScope,
 } from "./auditLogFilters";
+import { computeElapsedLabel } from "./elapsedLabel";
 import Sheet from "./Sheet";
-import { SheetPanelBody } from "../../components/ui/SheetPanel";
-import SheetHeader from "./SheetHeader";
+import SheetCardHead from "./SheetCardHead";
 import { dayScreenStrings } from "./strings";
 
 interface AuditSheetProps {
@@ -30,6 +32,7 @@ interface AuditRowView {
   verb: string;
   description: string;
   actorLabel: string;
+  tone: AuditDotTone;
 }
 
 const ENTITY_FILTER_OPTIONS: readonly { value: AuditEntityFilter; label: string }[] = [
@@ -55,19 +58,22 @@ function payloadOf(row: Pick<AuditLog, "before" | "after">): Record<string, unkn
   return (row.after ?? row.before) as Record<string, unknown> | null;
 }
 
-// The reference's .tg.a (selected) / .tg.e (neutral) tag-pill language.
-function filterPillClassName(isSelected: boolean): string {
-  return isSelected
-    ? "rounded-[5px] bg-green-soft px-2 py-0.5 text-xs text-green"
-    : "rounded-[5px] bg-line-soft px-2 py-0.5 text-xs text-muted";
-}
+// `.aud-dot` / `.aud-dot.warn` / `.aud-dot.danger`: the fill and its 3px
+// wash ring, one complete class set per tone.
+const DOT_LOOK: Record<AuditDotTone, string> = {
+  default: "bg-green shadow-[0_0_0_3px_var(--color-green-wash)]",
+  warn: "bg-warning shadow-[0_0_0_3px_var(--color-warning-wash)]",
+  danger: "bg-danger shadow-[0_0_0_3px_var(--color-danger-wash)]",
+};
 
 /**
  * A full-height sheet listing today's audit_log rows for the current
  * practitioner+location, newest first — a timeline the doctor reads to
- * reconstruct what happened, not staff surveillance. The verb is the
- * primary text on every row; the actor is a muted line underneath, never
- * emphasized over the action itself.
+ * reconstruct what happened, not staff surveillance. Prototype #s11:
+ * `.c-head`, `.filts`/`.filt`, `.audit`, `.aud-row`, `.aud-dot`
+ * (+ `.warn`/`.danger`, see auditDotTone.ts), `.aud-txt .verb`/`.who`,
+ * `.aud-time`. The verb leads every row at the larger size; the actor is
+ * named on the smaller muted line under it, beside the row's context.
  */
 export default function AuditSheet({ practitionerId, locationId, today, onDismiss }: AuditSheetProps) {
   const [entityFilter, setEntityFilter] = useState<AuditEntityFilter>("all");
@@ -176,6 +182,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
           verb: describeAuditVerb(row),
           description: descriptionFor(row),
           actorLabel: actorLabelFor(row.actor_membership_id),
+          tone: auditDotTone(row),
         }));
     }, [practitionerId, locationId, today]) ?? [];
 
@@ -185,61 +192,77 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
     actionFilter,
   );
 
+  const now = new Date();
+
   return (
-    <Sheet onDismiss={onDismiss}>
-      <SheetHeader
+    <Sheet onDismiss={onDismiss} size="lg">
+      {/* `.c-head`: the title as before, with the count of events listed as `.sub`. */}
+      <SheetCardHead
         title={
           <>
             {dayScreenStrings.auditSheetTitle} — {formatCairoDisplayDate(today)}
           </>
         }
+        subtitle={
+          <>
+            <Ltr>{filteredRows.length}</Ltr> {dayScreenStrings.auditEventCountUnit}
+          </>
+        }
         onDismiss={onDismiss}
       />
 
-      <SheetPanelBody>
-        <div className="flex flex-wrap gap-2">
-          {ENTITY_FILTER_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setEntityFilter(option.value)}
-              className={filterPillClassName(option.value === entityFilter)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {ACTION_FILTER_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setActionFilter(option.value)}
-              className={filterPillClassName(option.value === actionFilter)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+      {/* `.filts` — the bar itself; each group is the shared `.filt` ToggleGroup. */}
+      <div className="flex flex-col gap-2 border-b border-hair bg-field px-[18px] py-3">
+        <ToggleGroup
+          variant="filter"
+          label={dayScreenStrings.auditFilterEntityGroupLabel}
+          value={entityFilter}
+          onChange={setEntityFilter}
+          options={ENTITY_FILTER_OPTIONS}
+        />
+        <ToggleGroup
+          variant="filter"
+          label={dayScreenStrings.auditFilterActionGroupLabel}
+          value={actionFilter}
+          onChange={setActionFilter}
+          options={ACTION_FILTER_OPTIONS}
+        />
+      </div>
 
-        <div className="flex flex-col divide-y divide-line-soft overflow-y-auto">
-          {filteredRows.length === 0 && <p className="py-3 text-muted">{dayScreenStrings.auditSheetEmpty}</p>}
-          {filteredRows.map(({ row, verb, description, actorLabel }) => (
-            <div key={row.id} className="py-2.5">
-              <div className="flex items-baseline justify-between gap-2">
-                <span>
-                  <span className="text-ink">{verb}</span>
-                  {description && <span className="text-muted"> — {description}</span>}
+      {/* `.audit` — a timeline of who did what: the verb leads, the actor follows. */}
+      {filteredRows.length === 0 ? (
+        <p className="px-[18px] py-[22px] text-center text-[12.5px] text-faint">{dayScreenStrings.auditSheetEmpty}</p>
+      ) : (
+        <ul className="flex flex-col">
+          {filteredRows.map(({ row, verb, description, actorLabel, tone }) => {
+            const elapsed = computeElapsedLabel(row.at, now.toISOString(), today, now);
+            return (
+              <li
+                key={row.id}
+                className="grid grid-cols-[auto_1fr_auto] items-center gap-[14px] border-b border-hair px-[18px] py-3 last:border-b-0 max-[600px]:px-3.5"
+              >
+                <span className={`h-[9px] w-[9px] rounded-full ${DOT_LOOK[tone]}`} aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-[13.5px] font-semibold text-text">{verb}</p>
+                  <p className="mt-px text-[11.5px] text-muted">
+                    <b className="font-semibold text-text">{actorLabel}</b>
+                    {description && <> · {description}</>}
+                  </p>
+                </div>
+                <span className="whitespace-nowrap text-end text-[11px] text-faint tabular-nums">
+                  <Ltr>{clockTimeInCairo(row.at)}</Ltr>
+                  {elapsed && (
+                    <>
+                      {" · "}
+                      {dayScreenStrings.auditElapsedPrefix} <Ltr>{elapsed}</Ltr>
+                    </>
+                  )}
                 </span>
-                <Ltr>
-                  <span className="text-sm text-muted">{clockTimeInCairo(row.at)}</span>
-                </Ltr>
-              </div>
-              <p className="mt-1 text-sm text-muted">{actorLabel}</p>
-            </div>
-          ))}
-        </div>
-      </SheetPanelBody>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </Sheet>
   );
 }

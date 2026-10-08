@@ -56,9 +56,8 @@ interface PractitionerColumnProps {
   onOpenInvoice: (invoiceId: string) => void;
   onSendToEnd: (visit: Visit) => void;
   onOpenVisitForm: (visit: Visit) => void;
-  /** The slots card's trailing actions ("ورقة الغد"/"السجل") — slots mode only. */
+  /** The slots card's trailing action ("ورقة الغد") — slots mode only. The audit log ("السجل") moved to AppShell's rail. */
   onOpenDaySheet?: () => void;
-  onOpenAudit?: () => void;
   /** The queue card's "استدعاء التالي" trailing action — advances the next waiting visit. */
   onCallNextInQueue?: () => void;
 }
@@ -91,7 +90,6 @@ export default function PractitionerColumn({
   onSendToEnd,
   onOpenVisitForm,
   onOpenDaySheet,
-  onOpenAudit,
   onCallNextInQueue,
 }: PractitionerColumnProps) {
   const scheduleState = resolveDayScheduleState(todaysSchedule, hasAnySchedule);
@@ -175,19 +173,10 @@ export default function PractitionerColumn({
           </>
         }
         action={
-          (onOpenDaySheet || onOpenAudit) && (
-            <div className="flex items-center gap-1.5">
-              {onOpenDaySheet && (
-                <Button variant="onDark" size="sm" onClick={onOpenDaySheet}>
-                  {dayScreenStrings.daySheetButtonLabel}
-                </Button>
-              )}
-              {onOpenAudit && (
-                <Button variant="onDark" size="sm" onClick={onOpenAudit}>
-                  {dayScreenStrings.auditButtonLabel}
-                </Button>
-              )}
-            </div>
+          onOpenDaySheet && (
+            <Button variant="onDark" size="sm" onClick={onOpenDaySheet}>
+              {dayScreenStrings.daySheetButtonLabel}
+            </Button>
           )
         }
       />

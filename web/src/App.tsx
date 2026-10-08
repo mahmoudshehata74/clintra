@@ -115,7 +115,14 @@ export default function App() {
   // navItemsFor), and the rail needs to know whether it's the currently
   // active item to apply aria-current and the active look — both read this
   // same flag, so it can't stay DayScreen's own local state.
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  //
+  // The audit log ("السجل") is lifted here for the same reason, so the rail
+  // can open it and show it as active. At most one of the two is open:
+  // picking one rail item closes the other's sheet, as picking "اليوم"
+  // closes both.
+  const [openSection, setOpenSection] = useState<"audit" | "settings" | null>(null);
+  const isSettingsOpen = openSection === "settings";
+  const isAuditOpen = openSection === "audit";
   const actingMembership = useActingMembership();
   // Reported up by DayScreen (its own subtitle, e.g. "يوم العيادة" or the
   // queue-mode variant) — the one piece of the app bar a screen supplies;
@@ -142,11 +149,11 @@ export default function App() {
     <>
       <InstallBanner />
       {authErrorDetected && (
-        // z-45: above the app bar/rail (z-40, see AppShell.tsx's own doc
-        // comment) so this warning stays visible over them, same as before
-        // the sheet-backdrop z-order change raised those to z-40 — still
+        // z-47: above the app bar/rail (z-40, see AppShell.tsx's own doc
+        // comment) and above an open sheet's panel (z-45, see Sheet.tsx), so
+        // no sheet can cover this warning or its re-activation action — still
         // below LockScreen's z-50.
-        <div className="fixed inset-x-0 top-0 z-[45] bg-danger px-4 py-2 text-center text-sm text-paper">
+        <div className="fixed inset-x-0 top-0 z-47 bg-danger px-4 py-2 text-center text-sm text-paper">
           الجهاز محتاج إعادة تفعيل — الاتصال بالخادم مرفوض
           <button
             type="button"
@@ -162,14 +169,16 @@ export default function App() {
       )}
       <AppShell
         role={actingMembership?.role ?? Role.Assistant}
-        activeItem={isSettingsOpen ? "settings" : "day"}
-        onSelect={(key) => setIsSettingsOpen(key === "settings")}
+        activeItem={openSection ?? "day"}
+        onSelect={(key) => setOpenSection(key === "day" ? null : key)}
         title={dayScreenTitle}
         today={dayScreenToday}
       >
         <DayScreen
           isSettingsOpen={isSettingsOpen}
-          onCloseSettings={() => setIsSettingsOpen(false)}
+          onCloseSettings={() => setOpenSection(null)}
+          isAuditOpen={isAuditOpen}
+          onCloseAudit={() => setOpenSection(null)}
           onTitleChange={setDayScreenTitle}
           onTodayChange={setDayScreenToday}
         />

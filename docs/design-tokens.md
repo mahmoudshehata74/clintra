@@ -54,12 +54,13 @@ where they align in columns.
 
 ## Legacy tokens
 
-`green-soft`, `red`, `line`, `line-soft`, and the radius `--radius-el`
-(8px) belong to the pre-prototype system. They stay only while screens that
-use them are not yet restyled, and each is deleted in the commit that
-migrates its last usage. `red-soft`, `amber`, `amber-soft`, `purple`,
-`purple-soft`, and `--radius-frame` (12px) reached zero usage and were
-removed.
+`green-soft`, `line`, and the radius `--radius-el` (8px) belong to the
+pre-prototype system. They stay only while screens that use them are not
+yet restyled — today only the visit form's text area
+(`web/src/screens/day/VisitFormSheet.tsx`) — and each is deleted in the
+commit that migrates its last usage. `red-soft`, `amber`, `amber-soft`,
+`purple`, `purple-soft`, `red`, `line-soft`, `--radius-frame` (12px) and the
+`--font-display` alias reached zero usage and were removed.
 
 ## Not yet enabled
 

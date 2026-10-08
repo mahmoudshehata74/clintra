@@ -417,13 +417,19 @@ export const dayScreenStrings = {
   // `.print-foot`'s own prefix, e.g. "طُبعت 7 سبتمبر 18:15".
   printedAtPrefix: "طُبعت",
 
-  // The day header's audit-log action ("السجل") and its sheet: today's
+  // The audit-log sheet (opened from AppShell's rail, "السجل"): today's
   // audit_log rows for the current practitioner+location, newest first, read
   // as a timeline of what happened rather than staff surveillance — see
   // domain/auditVerb.ts for how a row's verb is built from its before/after
   // diff, not just its entity name.
-  auditButtonLabel: "السجل",
   auditSheetTitle: "السجل",
+  // `.c-head .sub` — "{n} حدث", the count of events the list is showing.
+  auditEventCountUnit: "حدث",
+  // The two filter groups' accessible names (role="group" has none of its own).
+  auditFilterEntityGroupLabel: "تصفية حسب النوع",
+  auditFilterActionGroupLabel: "تصفية حسب الإجراء",
+  // `.aud-time`'s elapsed part, today only: "12:18 · من 3د".
+  auditElapsedPrefix: "من",
   auditSheetEmpty: "مفيش حركة النهاردة",
   auditFilterAll: "الكل",
   auditFilterEntityVisits: "الزيارات",
@@ -442,9 +448,14 @@ export const dayScreenStrings = {
   roleManager: "المدير",
   auditUnknownActor: "غير معروف",
 
-  // Settings (owner only). The entry pill and the three-panel sheet
-  // (reference screens 15-17).
+  // Settings (owner only): the three-panel sheet, prototype #s12-14. The
+  // label doubles as its `.c-head .badge`.
   settingsButtonLabel: "الإعدادات",
+  // The tabs' group name, and each tab's `.c-head` wording (the hours tab's
+  // title is the practitioner's own name).
+  settingsTabsGroupLabel: "أقسام الإعدادات",
+  settingsHoursHeadSubtitle: "مواعيد العمل الأسبوعية",
+  settingsServicesHeadTitle: "خدمات العيادة",
   settingsHoursTab: "مواعيد العمل",
   settingsServicesTab: "الخدمات",
   settingsStaffTab: "الموظفون",
@@ -456,9 +467,12 @@ export const dayScreenStrings = {
   hoursEndLabel: "لـ",
   hoursSlotMinutesLabel: "مدة الكشف (دقيقة)",
   hoursCapacityLabel: "السعة",
-  hoursEditAction: "غيّر",
+  hoursEditAction: "تعديل",
+  // `.set-row .mode`: "مواعيد 30د", "طابور · 20 مريض", "إجازة".
   hoursModeSlots: "مواعيد",
   hoursModeQueue: "طابور",
+  hoursModePatientsUnit: "مريض",
+  hoursModeDayOff: "إجازة",
   hoursEndBeforeStartError: "وقت النهاية لازم يكون بعد البداية",
   hoursInvalidSlotError: "مدة الكشف لازم تكون أكبر من صفر",
   hoursInvalidCapacityError: "السعة لازم تكون أكبر من صفر",
@@ -467,7 +481,14 @@ export const dayScreenStrings = {
   // Panel B — services.
   serviceDurationSuffix: "دقيقة",
   serviceActiveLabel: "مفعّلة",
-  serviceNewAction: "خدمة جديدة",
+  // `.svc-name`'s muted tag on a stopped service.
+  serviceInactiveTag: "موقوفة",
+  // A row's "تعديل" — opens that service's price overrides.
+  serviceEditAction: "تعديل",
+  serviceNewAction: "＋ خدمة جديدة",
+  // `.runrow .count`: "{a} نشطة · {i} موقوفة".
+  serviceCountActiveUnit: "نشطة",
+  serviceCountInactiveUnit: "موقوفة",
   serviceNameLabel: "الاسم",
   serviceDurationLabel: "المدة (دقيقة)",
   servicePriceLabel: "السعر (جنيه)",
@@ -475,27 +496,38 @@ export const dayScreenStrings = {
   serviceOverrideAddAction: "أضف سعر خاص",
   serviceOverrideTargetPractitioner: "طبيب",
   serviceOverrideTargetLocation: "فرع",
+  serviceOverrideTargetGroupLabel: "السعر الخاص لـ",
   serviceOverrideTargetError: "اختار طبيب أو فرع (واحد بس)",
   serviceOverrideDeleteAction: "حذف",
   servicePriceInvalidError: "السعر ده مش صحيح",
   serviceNameRequiredError: "لازم تكتب اسم الخدمة",
 
   // Panel C — staff and permissions.
-  staffNewAction: "موظف جديد",
+  staffNewAction: "＋ إضافة موظف",
   staffNameLabel: "الاسم",
   staffPhoneLabel: "رقم الموبايل",
   staffRoleLabel: "الصلاحية",
   staffLocationScopeLabel: "نطاق الفروع",
   staffPractitionerScopeLabel: "نطاق الأطباء",
-  staffPinLabel: "الرقم السري (٤ أرقام)",
+  staffPinLabel: "الرقم السري (4 أرقام)",
   staffNewPinLabel: "رقم سري جديد",
   scopeAll: "الكل",
   scopeListed: "محدد",
   scopeSelf: "نفسه",
   staffActiveLabel: "مفعّل",
+  staffInactiveBadge: "موقوف",
   staffLastOwnerError: "لازم يفضل مالك واحد نشط على الأقل",
+  // The note box under the staff list when the last active owner's switch is locked.
+  staffNoteLabel: "ملاحظة:",
+  staffLastOwnerNote: "العيادة لازم يكون ليها مالك واحد شغّال على الأقل",
+  // `.runrow .count`: "حد أدنى: 1 مالك".
+  staffMinimumPrefix: "حد أدنى:",
+  staffMinimumOwner: "1 مالك",
+  // The PIN status badge (settled deviation: never any digit of the PIN).
+  staffPinSetBadge: "مُعيّن ✓",
+  staffPinUnsetBadge: "غير مُعيّن",
   staffNameRequiredError: "لازم تكتب اسم الموظف",
-  staffPinLengthError: "الرقم السري لازم يكون ٤ أرقام",
+  staffPinLengthError: "الرقم السري لازم يكون 4 أرقام",
   staffPhoneInvalidError: "الرقم ده مش صحيح",
   staffPhoneTakenError: "الرقم ده مستخدم قبل كده",
   staffPractitionerRequiredError: "لازم تختار طبيب واحد",

@@ -49,6 +49,18 @@ const ICON_PATHS: Record<NavItem["key"], ReactNode> = {
       <line x1="17" y1="2" x2="17" y2="6" />
     </>
   ),
+  // A timeline: three dots on a rail, each with its line of text.
+  audit: (
+    <>
+      <line x1="6" y1="4" x2="6" y2="20" />
+      <circle cx="6" cy="7" r="1.5" />
+      <circle cx="6" cy="12" r="1.5" />
+      <circle cx="6" cy="17" r="1.5" />
+      <line x1="11" y1="7" x2="20" y2="7" />
+      <line x1="11" y1="12" x2="18" y2="12" />
+      <line x1="11" y1="17" x2="20" y2="17" />
+    </>
+  ),
   settings: (
     <>
       <line x1="4" y1="6" x2="20" y2="6" />
@@ -94,9 +106,9 @@ const ITEM_ACTIVE = "border-copper bg-white/[0.14] text-on-dark";
  * a sidebar at all; "navigation is a role-dependent sidebar" is a settled
  * deviation from it, per docs/design-rule.md).
  *
- * Items come from navItemsFor(role) — today "day" (every role) and
- * "settings" (owner only, the same gate the day screen's own settings entry
- * always used). Rendering is generic over whatever that returns, so a later
+ * Items come from navItemsFor(role) — today "day" and "audit" (every
+ * role) and "settings" (owner only, the same gate the day screen's own
+ * settings entry always used). Rendering is generic over whatever that returns, so a later
  * task that appends an item needs no change here, only an icon entry above.
  *
  * Below the `sm` breakpoint the rail becomes a fixed bottom bar instead of a

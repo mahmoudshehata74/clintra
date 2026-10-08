@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   gotoRealDay,
   gotoSeededDay,
+  openAuditLog,
   openBookingSheet,
   PATIENTS,
   pickSearchResult,
@@ -131,7 +132,7 @@ test("autosave creates then updates the same row, and the audit sheet shows the 
   await expect(dialog.getByText(S.visitFormSavedIndicator)).toBeVisible();
   await dialog.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
 
-  await page.getByRole("button", { name: S.auditButtonLabel, exact: true }).click();
+  await openAuditLog(page);
   const audit = page.getByRole("dialog");
   // One "registered" row from the create, one "edited" row from the update —
   // never two "registered" rows, which is what a second-row bug would show.
