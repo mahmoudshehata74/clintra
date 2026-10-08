@@ -237,7 +237,7 @@ test("services show duration, price, an active switch and the footer counts", as
   await expect(dialog.getByLabel(S.serviceNameLabel)).toHaveAttribute("aria-invalid", "true");
 });
 
-test("staff rows show the PIN status, never a digit, and the last owner's switch is locked with the note", async ({ page }) => {
+test("staff rows show the PIN and active status, never a digit, and the last owner's switch is locked with the note", async ({ page }) => {
   await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
   await openSettings(page);
   const dialog = page.getByRole("dialog");
@@ -252,30 +252,60 @@ test("staff rows show the PIN status, never a digit, and the last owner's switch
     await expect(row).not.toContainText(/[0-9٠-٩]/);
   }
 
+  // The row only shows the active state; the switch lives in the edit form.
+  for (const row of [ownerRow, assistantRow]) {
+    await expect(row.getByText(S.staffActiveLabel, { exact: true })).toBeVisible();
+    await expect(row.getByRole("switch")).toHaveCount(0);
+  }
+
+  await ownerRow.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
   const ownerSwitch = ownerRow.getByRole("switch");
   await expect(ownerSwitch).toBeDisabled();
   await expect(ownerSwitch).toHaveAttribute("aria-checked", "true");
   await expect(dialog.getByText(S.staffLastOwnerNote, { exact: true })).toBeVisible();
+  await ownerRow.getByRole("button", { name: S.settingsCancelAction, exact: true }).click();
+
+  await assistantRow.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
   await expect(assistantRow.getByRole("switch")).toBeEnabled();
 
   await expect(dialog.getByText(`${S.staffMinimumPrefix} ${S.staffMinimumOwner}`)).toBeVisible();
   await expect(dialog.getByRole("button", { name: S.staffNewAction, exact: true })).toBeVisible();
 });
 
-test("the staff switch deactivates and reactivates a member", async ({ page }) => {
+test("the staff active switch applies on save, not on tap, and reactivates the same way", async ({ page }) => {
   await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
   await openSettings(page);
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
 
-  const assistantSwitch = dialog.getByRole("listitem").filter({ hasText: S.roleAssistant }).getByRole("switch");
+  const assistantRow = dialog.getByRole("listitem").filter({ hasText: S.roleAssistant });
+  const readAssistantActive = async () =>
+    (await readStore<{ role: string; is_active: boolean }>(page, "memberships")).find((m) => m.role === "assistant")?.is_active;
+
+  // Flipping the switch alone changes nothing; Cancel discards it.
+  await assistantRow.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  const assistantSwitch = assistantRow.getByRole("switch");
   await assistantSwitch.click();
   await expect(assistantSwitch).toHaveAttribute("aria-checked", "false");
-  const memberships = await readStore<{ role: string; is_active: boolean }>(page, "memberships");
-  expect(memberships.find((m) => m.role === "assistant")?.is_active).toBe(false);
+  expect(await readAssistantActive()).toBe(true);
+  await assistantRow.getByRole("button", { name: S.settingsCancelAction, exact: true }).click();
+  await expect(assistantRow.getByText(S.staffActiveLabel, { exact: true })).toBeVisible();
+  expect(await readAssistantActive()).toBe(true);
 
+  // Save is what deactivates.
+  await assistantRow.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
   await assistantSwitch.click();
-  await expect(assistantSwitch).toHaveAttribute("aria-checked", "true");
+  await assistantRow.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(assistantRow.getByText(S.staffInactiveBadge, { exact: true })).toBeVisible();
+  expect(await readAssistantActive()).toBe(false);
+
+  // And Save is what reactivates.
+  await assistantRow.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  await expect(assistantSwitch).toHaveAttribute("aria-checked", "false");
+  await assistantSwitch.click();
+  await assistantRow.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(assistantRow.getByText(S.staffActiveLabel, { exact: true })).toBeVisible();
+  expect(await readAssistantActive()).toBe(true);
 });
 
 test("the new-staff form keeps its PIN masked and its validation", async ({ page }) => {

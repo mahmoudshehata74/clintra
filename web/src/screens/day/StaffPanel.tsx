@@ -52,9 +52,12 @@ function GroupHeading({ children }: { children: string }) {
  * Panel C, prototype #s14 (`.set-row.staff`, `.staff-name`, `.role`, the
  * dashed copper note box, `.runrow`): the org's staff. Each row shows the
  * member's PIN status as a badge — never any digit of the PIN (settled
- * deviation) — and their active switch. The last active owner's switch is
- * disabled, and the note under the list says why: the same rule
- * db/staffSettings.ts's updateMembership enforces ("last_owner").
+ * deviation) — and whether they are active, as a badge too. The active
+ * switch itself lives in the row's edit form and applies on Save, never on
+ * tap: deactivating a member locks them out and has no undo. The last
+ * active owner's switch is disabled there, and the note under the list says
+ * why: the same rule db/staffSettings.ts's updateMembership enforces
+ * ("last_owner").
  */
 export default function StaffPanel({ orgId }: { orgId: string }) {
   const data =
@@ -136,21 +139,15 @@ function StaffRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [role, setRole] = useState<Role>(membership.role);
+  const [isActive, setIsActive] = useState(membership.is_active);
   const [newPin, setNewPin] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
 
-  // Demoting the last active owner is refused before it is even tried.
-  const wouldRemoveLastOwner = isLocked && role !== Role.Owner;
+  // Demoting or deactivating the last active owner is refused before it is even tried.
+  const wouldRemoveLastOwner = isLocked && !(role === Role.Owner && isActive);
   const pinIsSet = hasPinSet(membership);
-
-  async function setActive(next: boolean) {
-    const result = await updateMembership(db, membership.id, { isActive: next });
-    if (!result.ok) {
-      setError(result.reason === "last_owner" ? dayScreenStrings.staffLastOwnerError : "");
-    }
-  }
 
   async function save() {
     if (newPin !== "" && !/^\d{4}$/.test(newPin)) {
@@ -159,6 +156,7 @@ function StaffRow({
     }
     const result = await updateMembership(db, membership.id, {
       role,
+      isActive,
       newPin: newPin === "" ? undefined : newPin,
     });
     if (!result.ok) {
@@ -177,6 +175,16 @@ function StaffRow({
       <div className="flex flex-col gap-[5px]">
         <GroupHeading>{dayScreenStrings.staffRoleLabel}</GroupHeading>
         <ToggleGroup variant="filter" label={dayScreenStrings.staffRoleLabel} value={role} onChange={setRole} options={ROLE_OPTIONS} />
+      </div>
+      <div className="flex items-center gap-2.5">
+        <Switch
+          checked={isActive}
+          disabled={isLocked}
+          aria-describedby={isLocked ? LAST_OWNER_NOTE_ID : undefined}
+          onCheckedChange={setIsActive}
+          label={`${dayScreenStrings.staffActiveLabel} · ${userName}`}
+        />
+        <GroupHeading>{dayScreenStrings.staffActiveLabel}</GroupHeading>
       </div>
       <Field label={dayScreenStrings.staffNewPinLabel} id={`staff-${membership.id}-pin`} error={pinError ?? undefined}>
         <TextInput
@@ -223,18 +231,21 @@ function StaffRow({
           {dayScreenStrings.staffPinUnsetBadge}
         </Badge>
       )}
-      <Switch
-        checked={membership.is_active}
-        disabled={isLocked}
-        aria-describedby={isLocked ? LAST_OWNER_NOTE_ID : undefined}
-        onCheckedChange={setActive}
-        label={`${dayScreenStrings.staffActiveLabel} · ${userName}`}
-      />
+      {membership.is_active ? (
+        <Badge appearance="solid" tone="eligible">
+          {dayScreenStrings.staffActiveLabel}
+        </Badge>
+      ) : (
+        <Badge appearance="soft" tone="neutral">
+          {dayScreenStrings.staffInactiveBadge}
+        </Badge>
+      )}
       {!editing && (
         <Button
           variant="outline"
           onClick={() => {
             setRole(membership.role);
+            setIsActive(membership.is_active);
             setNewPin("");
             setPinError(null);
             setError(null);

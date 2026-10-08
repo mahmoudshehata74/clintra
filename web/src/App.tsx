@@ -149,11 +149,11 @@ export default function App() {
     <>
       <InstallBanner />
       {authErrorDetected && (
-        // z-45: above the app bar/rail (z-40, see AppShell.tsx's own doc
-        // comment) so this warning stays visible over them, same as before
-        // the sheet-backdrop z-order change raised those to z-40 — still
+        // z-47: above the app bar/rail (z-40, see AppShell.tsx's own doc
+        // comment) and above an open sheet's panel (z-45, see Sheet.tsx), so
+        // no sheet can cover this warning or its re-activation action — still
         // below LockScreen's z-50.
-        <div className="fixed inset-x-0 top-0 z-[45] bg-danger px-4 py-2 text-center text-sm text-paper">
+        <div className="fixed inset-x-0 top-0 z-47 bg-danger px-4 py-2 text-center text-sm text-paper">
           الجهاز محتاج إعادة تفعيل — الاتصال بالخادم مرفوض
           <button
             type="button"

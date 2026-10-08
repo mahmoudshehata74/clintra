@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { SYNC_AUTH_ERROR_EVENT_NAME } from "../src/sync/engine";
 import { gotoSeededDay, OWNER_NAME, OWNER_PIN, PATIENTS, rowFor, S, SIDEBAR, selectPractitioner, SLOTS_DR } from "./support";
 
 // The owner, not the default assistant: settings only ever renders live for
@@ -107,4 +108,40 @@ test("the day grid renders as the prototype's single-column row list, not the ol
   // Each row sits below the previous one, never side by side.
   expect(second.y).toBeGreaterThan(first.y + first.height - 2);
   expect(third.y).toBeGreaterThan(second.y + second.height - 2);
+});
+
+test("the re-activation banner stays on top of an open sheet", async ({ page }) => {
+  // A short viewport, so the sheet reaches its height cap (top-6, see
+  // Sheet.tsx) and its drag handle lands inside the banner's strip — on a
+  // tall viewport the sheet ends far below the banner and nothing overlaps it.
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error("no viewport");
+  await page.setViewportSize({ width: viewport.width, height: 420 });
+
+  await sidebar(page).getByRole("button", { name: SIDEBAR.navSettings, exact: true }).click();
+  await expect(page.getByRole("dialog").getByText(S.settingsHoursTab, { exact: true })).toBeVisible();
+
+  // The same window event engine.ts dispatches on a 401 from the real transport.
+  await page.evaluate((eventName) => window.dispatchEvent(new Event(eventName)), SYNC_AUTH_ERROR_EVENT_NAME);
+  const banner = page.getByText("الجهاز محتاج إعادة تفعيل", { exact: false });
+  await expect(banner).toBeVisible();
+
+  const box = await banner.boundingBox();
+  if (!box) throw new Error("the re-activation banner has no layout box");
+  // Its centre, and every 2px down its vertical centre line, which crosses
+  // the strip the sheet's handle occupies.
+  const centreX = box.x + box.width / 2;
+  const points = [{ x: centreX, y: box.y + box.height / 2 }];
+  for (let y = box.y + 1; y < box.y + box.height; y += 2) {
+    points.push({ x: centreX, y });
+  }
+  const coveredAt = await banner.evaluate(
+    (element, at) =>
+      at.filter((point) => {
+        const hit = document.elementFromPoint(point.x, point.y);
+        return hit === null || !element.contains(hit);
+      }),
+    points,
+  );
+  expect(coveredAt).toEqual([]);
 });

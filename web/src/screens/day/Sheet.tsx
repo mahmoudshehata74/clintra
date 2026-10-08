@@ -36,7 +36,8 @@ interface SheetProps {
  *   visible while a sheet is open (the rail switches away from settings
  *   without an extra dismiss tap; the lock action stays reachable
  *   mid-booking).
- * - The panel sits ABOVE that chrome, at z-45, and below LockScreen's z-50.
+ * - The panel sits ABOVE that chrome, at z-45, and below App.tsx's
+ *   re-activation banner (z-47) and LockScreen's z-50.
  *   On a narrow viewport the app bar wraps to two rows (~104px), so a tall
  *   sheet that only cleared a single-row bar used to slide under it, its
  *   title clipped and its close button half hidden. Painting the panel

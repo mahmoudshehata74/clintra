@@ -515,6 +515,7 @@ export const dayScreenStrings = {
   scopeListed: "محدد",
   scopeSelf: "نفسه",
   staffActiveLabel: "مفعّل",
+  staffInactiveBadge: "موقوف",
   staffLastOwnerError: "لازم يفضل مالك واحد نشط على الأقل",
   // The note box under the staff list when the last active owner's switch is locked.
   staffNoteLabel: "ملاحظة:",
