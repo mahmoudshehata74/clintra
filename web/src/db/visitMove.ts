@@ -103,6 +103,7 @@ export async function moveVisit(db: ClintraDatabase, input: MoveVisitInput): Pro
               rescheduled_from: oldVisit.id,
               created_by: actor.id,
               created_at: now,
+              note: null,
             }
           : {
               id: id(),
@@ -126,6 +127,7 @@ export async function moveVisit(db: ClintraDatabase, input: MoveVisitInput): Pro
               rescheduled_from: oldVisit.id,
               created_by: actor.id,
               created_at: now,
+              note: null,
               rev: 1,
             };
 

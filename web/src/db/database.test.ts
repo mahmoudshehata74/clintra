@@ -1,3 +1,4 @@
+import Dexie from "dexie";
 import { beforeEach, describe, expect, it } from "vitest";
 import { id } from "../domain/id";
 import { VisitStatus } from "../domain/visitStatus";
@@ -35,6 +36,7 @@ function makeVisit(overrides: Partial<Visit>): Visit {
     rescheduled_from: null,
     created_by: "membership-1",
     created_at: new Date().toISOString(),
+    note: null,
     rev: 1,
     ...overrides,
   };
@@ -240,5 +242,34 @@ describe("users index", () => {
         is_active: true,
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe("version 14: visits.note backfill", () => {
+  it("backfills note: null on visits written before it, and keeps a note a row already carries", async () => {
+    const name = `clintra-db-upgrade-test-${crypto.randomUUID()}`;
+    // Every store exactly as the current schema declares it, opened at
+    // version 13 — i.e. a device's database just before this upgrade.
+    const stores = Object.fromEntries(
+      new ClintraDatabase(name).tables.map((table) => [
+        table.name,
+        [table.schema.primKey.src, ...table.schema.indexes.map((index) => index.src)].join(", "),
+      ]),
+    );
+    const legacy = new Dexie(name);
+    legacy.version(13).stores(stores);
+    const withoutNote: Partial<Visit> & Pick<Visit, "id"> = makeVisit({ position: 1 });
+    delete withoutNote.note;
+    const pulledWithNote = makeVisit({ position: 2, note: "حساسية بنسلين" });
+    await legacy.table("visits").bulkAdd([withoutNote, pulledWithNote]);
+    legacy.close();
+
+    const upgraded = new ClintraDatabase(name);
+    const visits = await upgraded.visits.toArray();
+
+    expect(upgraded.verno).toBe(14);
+    expect(visits.find((visit) => visit.id === withoutNote.id)).toHaveProperty("note", null);
+    expect(visits.find((visit) => visit.id === pulledWithNote.id)?.note).toBe("حساسية بنسلين");
+    upgraded.close();
   });
 });

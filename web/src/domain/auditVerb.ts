@@ -108,6 +108,8 @@ const INVOICE_TRANSITION_VERBS: Partial<Record<string, string>> = {
   [`${InvoiceStatus.Unpaid}->${InvoiceStatus.Void}`]: "ألغى الفاتورة",
 };
 
+const VISIT_NOTE_VERB = "عدّل ملاحظة الزيارة";
+
 const CREATE_VERBS: Partial<Record<string, string>> = {
   visits: "سجّل حجز",
   patients: "أضاف مريض",
@@ -138,7 +140,7 @@ const FALLBACK_UPDATE_VERBS: Partial<Record<string, string>> = {
  * reads "علّم وصول", never a generic "عدّل زيارة", because that genuinely is
  * a different, more specific thing than an arbitrary field edit. Falls back
  * to a plain per-entity edit verb only when no known, more specific pattern
- * matches — for a genuine field edit (e.g. a note), or for an entity this
+ * matches — for a genuine field edit (e.g. a service change), or for an entity this
  * table has no specific verbs for at all.
  */
 export function describeAuditVerb(row: AuditVerbRow): string {
@@ -187,6 +189,14 @@ export function describeAuditVerb(row: AuditVerbRow): string {
     const afterPosition = positionOf(row.after);
     if (beforePosition !== undefined && afterPosition !== undefined && beforePosition !== afterPosition) {
       return "غيّر ترتيب الدور";
+    }
+
+    // The doctor's quick note (db/visitNote.ts). Verb only — the note's own
+    // text never appears in the audit line. A missing field (an audit row
+    // written before visits.note existed) reads as null, so an older row
+    // never misreports a note edit.
+    if ((fieldOf(row.before, "note") ?? null) !== (fieldOf(row.after, "note") ?? null)) {
+      return VISIT_NOTE_VERB;
     }
   }
 

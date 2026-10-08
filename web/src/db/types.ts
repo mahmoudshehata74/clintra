@@ -202,6 +202,12 @@ export interface Visit {
   created_by: string;
   created_at: Instant;
   /**
+   * The doctor's quick free-text note on this visit — null when there is
+   * none, never an empty string (db/visitNote.ts's setVisitNote normalises
+   * that). Added in local database version 14; see docs/schema.md.
+   */
+  note: string | null;
+  /**
    * Mirrors the server's row-versioning column of the same name
    * (`enforce_row_rev()`, `2026_09_12_000012_add_row_versioning.php`) —
    * never assigned by this device, only ever overwritten by (a) the

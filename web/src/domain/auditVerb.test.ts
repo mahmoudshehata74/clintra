@@ -79,6 +79,47 @@ describe("describeAuditVerb", () => {
     expect(verb).toBe("غيّر ترتيب الدور");
   });
 
+  it("reports a note edit on a visit, without the note's text", () => {
+    const verb = describeAuditVerb({
+      entity: "visits",
+      action: AuditAction.Update,
+      before: visit({ status: VisitStatus.InRoom, note: null }),
+      after: visit({ status: VisitStatus.InRoom, note: "ضغط مرتفع" }),
+    });
+    expect(verb).toBe("عدّل ملاحظة الزيارة");
+    expect(verb).not.toContain("ضغط مرتفع");
+  });
+
+  it("reports clearing a visit's note as a note edit too", () => {
+    const verb = describeAuditVerb({
+      entity: "visits",
+      action: AuditAction.Update,
+      before: visit({ status: VisitStatus.InRoom, note: "ضغط مرتفع" }),
+      after: visit({ status: VisitStatus.InRoom, note: null }),
+    });
+    expect(verb).toBe("عدّل ملاحظة الزيارة");
+  });
+
+  it("does not read a missing note field (an audit row from before visits.note) as a note edit", () => {
+    const verb = describeAuditVerb({
+      entity: "visits",
+      action: AuditAction.Update,
+      before: visit({ status: VisitStatus.Booked }),
+      after: visit({ status: VisitStatus.Booked, note: null }),
+    });
+    expect(verb).toBe("عدّل الزيارة");
+  });
+
+  it("a status change still wins over a note change in the same write", () => {
+    const verb = describeAuditVerb({
+      entity: "visits",
+      action: AuditAction.Update,
+      before: visit({ status: VisitStatus.Booked, note: null }),
+      after: visit({ status: VisitStatus.Arrived, note: "وصل متأخر" }),
+    });
+    expect(verb).toBe("علّم وصول");
+  });
+
   it("falls back to a plain edit verb for a genuine field edit with no status or position change", () => {
     const verb = describeAuditVerb({
       entity: "patients",

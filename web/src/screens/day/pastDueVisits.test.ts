@@ -31,6 +31,7 @@ function slotVisit(overrides: Partial<Visit> = {}): Visit {
     rescheduled_from: null,
     created_by: "membership-1",
     created_at: new Date().toISOString(),
+    note: null,
     rev: 1,
     ...overrides,
   };

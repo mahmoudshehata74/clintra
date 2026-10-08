@@ -116,6 +116,7 @@ describe("searchPatients", () => {
         rescheduled_from: null,
         created_by: "membership-1",
         created_at: "2026-01-05T08:00:00.000Z",
+        note: null,
         rev: 1,
       },
       actorMembershipId: "membership-1",
