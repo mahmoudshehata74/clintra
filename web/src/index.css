@@ -138,9 +138,6 @@
 
 @theme {
   --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
-  /* Legacy alias: headings use the same family as body text. Removed once the
-     last `font-display` usage is migrated. */
-  --font-display: "IBM Plex Sans Arabic", system-ui, sans-serif;
 
   /* v1 tokens — docs/reference/clintra-prototype.html :root (light). See docs/design-tokens.md. */
   --color-paper: #eff3f1;
@@ -185,9 +182,7 @@
   /* Legacy tokens — still used by screens not yet restyled. Each is removed
      in the commit that migrates its last usage. Do not use in new code. */
   --color-green-soft: #e8f0ec;
-  --color-red: #b23a34;
   --color-line: #e2e3dc;
-  --color-line-soft: #edeee8;
   --radius-el: 8px;
 
   /* Brand tokens for logo surfaces only (wordmark/icon). */
