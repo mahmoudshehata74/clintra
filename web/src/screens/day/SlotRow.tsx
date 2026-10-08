@@ -102,13 +102,14 @@ export default function SlotRow({
   // `.until`'s "minutes since" text (in_room/no_show) is wall-clock-derived,
   // so nothing re-renders it on its own — this tick forces one every minute.
   const [, forceMinuteTick] = useState(0);
+  const isLive = visit !== undefined && LIVE_UNTIL_STATUSES.has(visit.status);
   useEffect(() => {
-    if (!visit || !LIVE_UNTIL_STATUSES.has(visit.status)) {
+    if (!isLive) {
       return;
     }
     const interval = setInterval(() => forceMinuteTick((tick) => tick + 1), 60_000);
     return () => clearInterval(interval);
-  }, [visit?.status]);
+  }, [isLive]);
 
   if (!visual || !visit) {
     return (

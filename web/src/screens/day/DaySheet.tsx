@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Ltr from "../../components/Ltr";
 import Button from "../../components/ui/Button";
 import { db } from "../../db/database";
@@ -98,14 +98,6 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
 
   const rows = selectDaySheetVisits(data.visits, data.isQueueMode);
 
-  function phoneOrPlaceholder(patient: Patient | undefined): string {
-    return patient?.phone ? formatEgyptianPhoneForDisplay(patient.phone) : dayScreenStrings.daySheetNoPhone;
-  }
-
-  function positionOrTime(visit: Visit): string {
-    return data.isQueueMode ? String(visit.position) : clockTimeInCairo(visit.scheduled_at!);
-  }
-
   const clinic = usePrintClinic(locationId);
   const dayLine = (
     <>
@@ -116,49 +108,15 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
   const now = new Date();
   const printedAt = `${dayScreenStrings.printedAtPrefix} ${formatCairoDisplayDate(todayInCairo(now))} ${clockTimeInCairo(now.toISOString())}`;
 
-  function PageBody({ headerNote }: { headerNote: string }) {
-    return (
-      <PrintPage>
-        <PrintHeaderNote>{headerNote}</PrintHeaderNote>
-        <PrintClinicBlock {...clinic} />
-        <PrintDayLine>{dayLine}</PrintDayLine>
-        <PrintTable>
-          <thead>
-            <tr>
-              <PrintTh>{dayScreenStrings.daySheetColumnTime}</PrintTh>
-              <PrintTh>{dayScreenStrings.daySheetColumnPatient}</PrintTh>
-              <PrintTh>{dayScreenStrings.daySheetColumnService}</PrintTh>
-              <PrintTh>{dayScreenStrings.daySheetColumnPhone}</PrintTh>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <PrintTd colSpan={4}>{dayScreenStrings.daySheetEmpty}</PrintTd>
-              </tr>
-            )}
-            {rows.map((visit) => {
-              const patient = data.patientsById.get(visit.patient_id);
-              const service = visit.service_id ? data.servicesById.get(visit.service_id) : undefined;
-              return (
-                <tr key={visit.id}>
-                  <PrintTd>
-                    <Ltr>{positionOrTime(visit)}</Ltr>
-                  </PrintTd>
-                  <PrintTd>{patient?.full_name ?? ""}</PrintTd>
-                  <PrintTd>{service?.name ?? ""}</PrintTd>
-                  <PrintTd mono>
-                    <Ltr>{phoneOrPlaceholder(patient)}</Ltr>
-                  </PrintTd>
-                </tr>
-              );
-            })}
-          </tbody>
-        </PrintTable>
-        <PrintFoot printedAt={printedAt} />
-      </PrintPage>
-    );
-  }
+  const pageBodyProps = {
+    rows,
+    patientsById: data.patientsById,
+    servicesById: data.servicesById,
+    isQueueMode: data.isQueueMode,
+    clinic,
+    dayLine,
+    printedAt,
+  };
 
   return (
     <>
@@ -174,16 +132,91 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
             }
           />
           <SheetPanelBody>
-            <PageBody headerNote={dayScreenStrings.printHeaderPlaceholder} />
+            <PageBody
+              headerNote={dayScreenStrings.printHeaderPlaceholder}
+              {...pageBodyProps}
+            />
           </SheetPanelBody>
         </Sheet>
       </div>
 
       {printRequested && (
         <div className="hidden print:block">
-          <PageBody headerNote={dayScreenStrings.printHeaderWarning} />
+          <PageBody headerNote={dayScreenStrings.printHeaderWarning} {...pageBodyProps} />
         </div>
       )}
     </>
+  );
+}
+
+function phoneOrPlaceholder(patient: Patient | undefined): string {
+  return patient?.phone ? formatEgyptianPhoneForDisplay(patient.phone) : dayScreenStrings.daySheetNoPhone;
+}
+
+function positionOrTime(visit: Visit, isQueueMode: boolean): string {
+  return isQueueMode ? String(visit.position) : clockTimeInCairo(visit.scheduled_at!);
+}
+
+interface PageBodyProps {
+  headerNote: string;
+  rows: Visit[];
+  patientsById: Map<string, Patient>;
+  servicesById: Map<string, Service>;
+  isQueueMode: boolean;
+  clinic: ReturnType<typeof usePrintClinic>;
+  dayLine: ReactNode;
+  printedAt: string;
+}
+
+function PageBody({
+  headerNote,
+  rows,
+  patientsById,
+  servicesById,
+  isQueueMode,
+  clinic,
+  dayLine,
+  printedAt,
+}: PageBodyProps) {
+  return (
+    <PrintPage>
+      <PrintHeaderNote>{headerNote}</PrintHeaderNote>
+      <PrintClinicBlock {...clinic} />
+      <PrintDayLine>{dayLine}</PrintDayLine>
+      <PrintTable>
+        <thead>
+          <tr>
+            <PrintTh>{dayScreenStrings.daySheetColumnTime}</PrintTh>
+            <PrintTh>{dayScreenStrings.daySheetColumnPatient}</PrintTh>
+            <PrintTh>{dayScreenStrings.daySheetColumnService}</PrintTh>
+            <PrintTh>{dayScreenStrings.daySheetColumnPhone}</PrintTh>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && (
+            <tr>
+              <PrintTd colSpan={4}>{dayScreenStrings.daySheetEmpty}</PrintTd>
+            </tr>
+          )}
+          {rows.map((visit) => {
+            const patient = patientsById.get(visit.patient_id);
+            const service = visit.service_id ? servicesById.get(visit.service_id) : undefined;
+            return (
+              <tr key={visit.id}>
+                <PrintTd>
+                  <Ltr>{positionOrTime(visit, isQueueMode)}</Ltr>
+                </PrintTd>
+                <PrintTd>{patient?.full_name ?? ""}</PrintTd>
+                <PrintTd>{service?.name ?? ""}</PrintTd>
+                <PrintTd mono>
+                  <Ltr>{phoneOrPlaceholder(patient)}</Ltr>
+                </PrintTd>
+              </tr>
+            );
+          })}
+        </tbody>
+      </PrintTable>
+      <PrintFoot printedAt={printedAt} />
+    </PrintPage>
   );
 }

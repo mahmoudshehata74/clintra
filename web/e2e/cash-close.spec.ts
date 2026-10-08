@@ -144,7 +144,7 @@ test("exporting CSV downloads a header row plus one row per invoice issued today
   for await (const chunk of stream) {
     chunks.push(chunk as Buffer);
   }
-  const content = Buffer.concat(chunks).toString("utf-8").replace(/^﻿/, "");
+  const content = Buffer.concat(chunks).toString("utf-8").replace(/^\uFEFF/, "");
   const lines = content.split("\r\n");
   expect(lines[0]).toBe("التاريخ,المريض,الخدمة,المبلغ,حالة الدفع");
   expect(lines[1]).toContain(PATIENTS.mona);
