@@ -11,6 +11,7 @@ import { useLiveQuery } from "../../db/useLiveQuery";
 import { voidInvoice } from "../../db/invoiceVoid";
 import { InvoiceStatus, PaymentMethod, type Invoice, type InvoiceItem, type Patient, type Payment, type Practitioner } from "../../db/types";
 import { formatInvoiceNumber, formatReceiptNumber } from "./invoiceNumber";
+import { STATUS_LABEL } from "./invoiceStatusLabel";
 import { PrintClinicBlock, PrintHeaderNote, PrintPage, PrintTable, PrintTd } from "./PrintPage";
 import Sheet from "./Sheet";
 import { usePrintClinic } from "./usePrintClinic";
@@ -32,13 +33,6 @@ interface InvoiceData {
   patient: Patient | undefined;
   practitioner: Practitioner | undefined;
 }
-
-export const STATUS_LABEL: Record<string, string> = {
-  [InvoiceStatus.Unpaid]: dayScreenStrings.invoiceStatusUnpaid,
-  [InvoiceStatus.Partial]: dayScreenStrings.invoiceStatusPartial,
-  [InvoiceStatus.Paid]: dayScreenStrings.invoiceStatusPaid,
-  [InvoiceStatus.Void]: dayScreenStrings.invoiceStatusVoid,
-};
 
 // `.inv-status` (unpaid/partial) / `.inv-status.paid` (paid) reproduced via
 // the shared Badge: both soft+warning. Paid is "eligible" per

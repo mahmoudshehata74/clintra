@@ -1,7 +1,7 @@
 import type { Invoice } from "../../db/types";
 import type { Piastres } from "../../domain/money";
 import type { ClinicDay } from "../../domain/time";
-import { STATUS_LABEL } from "./InvoiceSheet";
+import { STATUS_LABEL } from "./invoiceStatusLabel";
 
 export interface CsvInvoiceRow {
   invoice: Invoice;
