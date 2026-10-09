@@ -4,7 +4,7 @@ import Ltr from "../../components/Ltr";
 import Button from "../../components/ui/Button";
 import Field, { TextInput } from "../../components/ui/Field";
 import { SheetPanelBody, SheetPanelFoot } from "../../components/ui/SheetPanel";
-import { useActingMembership } from "../../auth/useActingMembership";
+import { useActingUser } from "../../auth/useActingMembership";
 import { closeCashForDay, computeExpectedCashTotal } from "../../db/cashClose";
 import { db } from "../../db/database";
 import { InvoiceStatus, type CashClose, type InvoiceItem, type Patient, type Schedule, type Service, type Visit } from "../../db/types";
@@ -103,11 +103,7 @@ export default function CashCloseSheet({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
 
-  const actingMembership = useActingMembership();
-  const actingUser = useLiveQuery(
-    async () => (actingMembership ? db.users.get(actingMembership.user_id) : undefined),
-    [actingMembership?.user_id],
-  );
+  const actingUser = useActingUser();
 
   const invoicesAtLocation =
     useLiveQuery(() => db.invoices.where("location_id").equals(locationId).toArray(), [locationId]) ?? [];

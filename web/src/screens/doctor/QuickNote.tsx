@@ -22,12 +22,14 @@ interface QuickNoteProps {
  *
  * "حفظ" is disabled while the draft, as setVisitNote would store it
  * (trimmed), equals the stored note; after a save, "اتحفظ" stays until the
- * text changes again.
+ * text changes again. A failed save keeps the draft and says so (role
+ * "alert") until the text changes or a later save succeeds.
  */
 export default function QuickNote({ visit }: QuickNoteProps) {
   const [draft, setDraft] = useState(visit.note ?? "");
   const [savedDraft, setSavedDraft] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const inputId = `quick-note-${visit.id}`;
   const matchesStored = draft.trim() === (visit.note ?? "");
 
@@ -36,8 +38,10 @@ export default function QuickNote({ visit }: QuickNoteProps) {
     try {
       await setVisitNote(db, visit.id, draft);
       setSavedDraft(draft);
+      setSaveFailed(false);
     } catch (error) {
       console.error(error);
+      setSaveFailed(true);
     } finally {
       setIsSaving(false);
     }
@@ -60,7 +64,10 @@ export default function QuickNote({ visit }: QuickNoteProps) {
         id={inputId}
         value={draft}
         placeholder={T.quickNotePlaceholder}
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          setSaveFailed(false);
+        }}
         className="min-w-40 flex-1 rounded-control border-[1.5px] border-rule bg-card px-3 py-[7px] text-[13px] text-text placeholder:text-faint focus:border-copper focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-copper)_15%,transparent)] focus:outline-none"
       />
       {savedDraft === draft && (
@@ -75,6 +82,11 @@ export default function QuickNote({ visit }: QuickNoteProps) {
       >
         {T.quickNoteSave}
       </button>
+      {saveFailed && (
+        <p role="alert" className="basis-full text-[11px] text-danger">
+          {T.quickNoteSaveFailed}
+        </p>
+      )}
     </form>
   );
 }

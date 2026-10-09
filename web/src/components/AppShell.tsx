@@ -1,9 +1,7 @@
 import type { ReactNode } from "react";
 import { authStrings } from "../auth/authStrings";
 import { clearActiveSession } from "../auth/session";
-import { useActingMembership } from "../auth/useActingMembership";
-import { db } from "../db/database";
-import { useLiveQuery } from "../db/useLiveQuery";
+import { useActingUser } from "../auth/useActingMembership";
 import { navItemsFor, type NavItem } from "../domain/navigation";
 import type { Role } from "../domain/role";
 import type { ClinicDay } from "../domain/time";
@@ -168,11 +166,7 @@ function BrandLogo() {
  * that away from the real current day).
  */
 function AppBar({ title, today, whoName }: { title: ReactNode; today: ClinicDay; whoName?: string }) {
-  const actingMembership = useActingMembership();
-  const actingUser = useLiveQuery(
-    async () => (actingMembership ? db.users.get(actingMembership.user_id) : undefined),
-    [actingMembership?.user_id],
-  );
+  const actingUser = useActingUser();
   const { dateLine, weekdayLine } = formatAppBarDate(today);
   const shownName = whoName ?? actingUser?.full_name;
 

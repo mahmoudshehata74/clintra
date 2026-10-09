@@ -130,22 +130,23 @@ export default function App() {
   // The doctor's day (rail item "شاشة الطبيب") replaces the day screen's
   // grid while it is selected. It belongs to the acting membership's own
   // practitioner, so it needs that membership — but useActingMembership is
-  // undefined while locked, and the screen must stay mounted under the lock
-  // overlay (as the day screen does) so a half-typed note survives an idle
-  // lock. So the last unlocked membership is remembered (React's
-  // adjust-state-while-rendering pattern) and used while locked; once
-  // someone unlocks, theirs decides — a membership with no practitioner_id
-  // never sees the screen, and falls back to the day.
+  // undefined while locked (and, right after an unlock, until its row
+  // loads), and the screen must stay mounted under the lock overlay (as the
+  // day screen does) so a half-typed note survives an idle lock. So the last
+  // unlocked membership is remembered (React's adjust-state-while-rendering
+  // pattern) and stands in while there is no session, or while the session
+  // is that same membership's again and its row is still loading. Once
+  // anyone else's session starts, only their own membership counts —
+  // useActingMembership never returns a row from another session
+  // (membershipForSession), so a membership with no practitioner_id never
+  // sees the screen, not even for one render, and falls back to the day.
   const [isDoctorViewSelected, setIsDoctorViewSelected] = useState(false);
   const [lastUnlockedMembership, setLastUnlockedMembership] = useState(actingMembership);
   if (actingMembership && actingMembership !== lastUnlockedMembership) {
     setLastUnlockedMembership(actingMembership);
   }
-  // Right after an unlock, useActingMembership is briefly undefined again
-  // while its live query loads the new session's row; if that session is
-  // the same membership as before the lock, keep showing what it saw.
-  const isSameMemberResuming = activeMembershipId !== null && activeMembershipId === lastUnlockedMembership?.id;
-  const viewingMembership = isLocked || (!actingMembership && isSameMemberResuming) ? lastUnlockedMembership : actingMembership;
+  const canStandIn = activeMembershipId === null || activeMembershipId === lastUnlockedMembership?.id;
+  const viewingMembership = actingMembership ?? (canStandIn ? lastUnlockedMembership : undefined);
   const doctorPractitionerId = viewingMembership?.practitioner_id ?? null;
   const isDoctorViewShown = isDoctorViewSelected && doctorPractitionerId !== null;
   const [doctorPractitionerName, setDoctorPractitionerName] = useState<string | undefined>(undefined);

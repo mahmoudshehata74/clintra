@@ -118,12 +118,12 @@ test("the quick note saves, survives a reload, and is audited without its text",
   await note.fill("حساسية من البنسلين");
   await expect(save).toBeEnabled();
   await save.click();
-  await expect(hero(page).getByText(DOCTOR.quickNoteSaved)).toBeVisible();
+  await expect(hero(page).getByText(DOCTOR.quickNoteSaved, { exact: true })).toBeVisible();
   await expect(save).toBeDisabled();
 
   // Typing again clears the saved status.
   await note.fill("حساسية من البنسلين.");
-  await expect(hero(page).getByText(DOCTOR.quickNoteSaved)).toHaveCount(0);
+  await expect(hero(page).getByText(DOCTOR.quickNoteSaved, { exact: true })).toHaveCount(0);
   await note.fill("حساسية من البنسلين");
   await expect(save).toBeDisabled();
 
@@ -229,4 +229,79 @@ test("on mobile, the last day-list row clears the bottom nav once scrolled to th
   expect(rowBox).not.toBeNull();
   expect(navBox).not.toBeNull();
   expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(navBox!.y);
+});
+
+/**
+ * Removes (or puts back) the owner's membership row straight in IndexedDB,
+ * the way other specs reach the store directly. A raw IndexedDB write is not
+ * seen by Dexie's live queries in the page, so the screen does not change —
+ * but the write path's resolveActingMembership reads the row fresh, finds
+ * the session's membership missing and throws, which is a real setVisitNote
+ * failure rather than a test-only hook.
+ */
+async function setOwnerMembershipPresent(page: Page, present: boolean, saved?: unknown): Promise<unknown> {
+  return page.evaluate(
+    async ({ present, saved }) => {
+      const req = indexedDB.open("clintra");
+      const database: IDBDatabase = await new Promise((resolve, reject) => {
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      try {
+        const store = database.transaction("memberships", "readwrite").objectStore("memberships");
+        if (present) {
+          await new Promise((resolve, reject) => {
+            const put = store.put(saved);
+            put.onsuccess = () => resolve(undefined);
+            put.onerror = () => reject(put.error);
+          });
+          return saved;
+        }
+        const rows: { id: string; role: string }[] = await new Promise((resolve, reject) => {
+          const getAll = store.getAll();
+          getAll.onsuccess = () => resolve(getAll.result);
+          getAll.onerror = () => reject(getAll.error);
+        });
+        const owner = rows.find((row) => row.role === "owner");
+        await new Promise((resolve, reject) => {
+          const del = store.delete(owner!.id);
+          del.onsuccess = () => resolve(undefined);
+          del.onerror = () => reject(del.error);
+        });
+        return owner;
+      } finally {
+        database.close();
+      }
+    },
+    { present, saved },
+  );
+}
+
+test("a failed note save says so, keeps the draft, and clears once a later save succeeds", async ({ page }) => {
+  await twoWaiting(page);
+  await brief(page).getByRole("button", { name: DOCTOR.callIn, exact: true }).click();
+  await expect(hero(page)).toContainText(PATIENTS.mona);
+
+  const note = hero(page).getByPlaceholder(DOCTOR.quickNotePlaceholder);
+  const save = hero(page).getByRole("button", { name: DOCTOR.quickNoteSave, exact: true });
+  const owner = await setOwnerMembershipPresent(page, false);
+
+  await note.fill("ضغط عالي");
+  await save.click();
+  await expect(hero(page).getByRole("alert")).toHaveText(DOCTOR.quickNoteSaveFailed);
+  await expect(note).toHaveValue("ضغط عالي");
+  await expect(hero(page).getByText(DOCTOR.quickNoteSaved, { exact: true })).toHaveCount(0);
+
+  // Typing clears the error.
+  await note.fill("ضغط عالي جدًا");
+  await expect(hero(page).getByRole("alert")).toHaveCount(0);
+
+  // Failing again, then saving once the write path works again: the error goes and the save shows.
+  await save.click();
+  await expect(hero(page).getByRole("alert")).toHaveText(DOCTOR.quickNoteSaveFailed);
+  await setOwnerMembershipPresent(page, true, owner);
+  await save.click();
+  await expect(hero(page).getByText(DOCTOR.quickNoteSaved, { exact: true })).toBeVisible();
+  await expect(hero(page).getByRole("alert")).toHaveCount(0);
+  await expect(note).toHaveValue("ضغط عالي جدًا");
 });

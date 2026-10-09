@@ -35,6 +35,7 @@ export const doctorDayStrings = {
   quickNotePlaceholder: "ملاحظة على الزيارة دي…",
   quickNoteSave: "حفظ",
   quickNoteSaved: "اتحفظ",
+  quickNoteSaveFailed: "ما اتحفظتش الملاحظة، جرّب تاني",
 
   // `.brief` — next patient
   briefNextHeading: "التالي في الكشف",
