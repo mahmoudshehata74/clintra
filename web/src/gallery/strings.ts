@@ -187,19 +187,20 @@ export interface MdOnlyButtonDemo {
 }
 
 // Labels are the prototype's own button text (docs/reference/clintra-prototype.html),
-// per variant: .run, .pill, .pill.danger, .sb, .sb.copper (the .who nested
+// per variant: .run, .pill, .pill.danger, .doc-item.done .go, .sb, .sb.copper (the .who nested
 // span's text folded into one plain string), .set-row .edit,
 // .slot.empty .quick. Exported (not inlined in ButtonsSection.tsx) so
 // gallery.spec.ts asserts against these same labels rather than a second,
 // hand-copied list.
 //
 // Split in two per surface, matching Button.tsx's own split: only
-// primary/secondary/danger and onDark have a reference-defined compact
+// primary/secondary/danger/muted and onDark have a reference-defined compact
 // (sm) form; onDarkCopper/outline/dashed render md only.
 export const LIGHT_SURFACE_SM_BUTTON_DEMOS: readonly SmCapableButtonDemo[] = [
   { variant: "primary", heading: "أساسي", label: "احجز مريض جديد" },
   { variant: "secondary", heading: "ثانوي", label: "مريض جه دلوقتي" },
   { variant: "danger", heading: "خطر", label: "إلغاء الفاتورة" },
+  { variant: "muted", heading: "خافت", label: "راجع" },
 ];
 
 export const LIGHT_SURFACE_MD_ONLY_BUTTON_DEMOS: readonly MdOnlyButtonDemo[] = [

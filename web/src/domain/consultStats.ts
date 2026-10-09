@@ -24,12 +24,17 @@ export function countCompletedConsultations(visits: readonly Visit[]): number {
  * completed visit in the list has both started_at and ended_at recorded.
  */
 export function computeMedianConsultMinutes(visits: readonly Visit[]): number | null {
-  const durations = completedDurationsInMinutes(visits).sort((a, b) => a - b);
-  if (durations.length === 0) {
+  return computeRoundedMedian(completedDurationsInMinutes(visits));
+}
+
+/** The median of a list of minute counts, rounded to a whole minute; null for an empty list. */
+export function computeRoundedMedian(values: readonly number[]): number | null {
+  const sorted = [...values].sort((a, b) => a - b);
+  if (sorted.length === 0) {
     return null;
   }
 
-  const middle = Math.floor(durations.length / 2);
-  const median = durations.length % 2 === 0 ? (durations[middle - 1] + durations[middle]) / 2 : durations[middle];
+  const middle = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
   return Math.round(median);
 }

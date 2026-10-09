@@ -7,6 +7,7 @@ import {
   EMPTY_VISIT_FORM_VALUES,
   findGeneralFormDefinition,
   findVisitFormData,
+  readVisitFormValues,
   saveVisitFormField,
   type VisitFormFieldKey,
   type VisitFormFieldValues,
@@ -78,7 +79,7 @@ export default function VisitFormSheet({ visitId, onDismiss }: VisitFormSheetPro
       findGeneralFormDefinition(db),
     ]);
     const existing = await findVisitFormData(db, visitId, formDefinition.id);
-    const rowValues = (existing?.data as VisitFormFieldValues | undefined) ?? EMPTY_VISIT_FORM_VALUES;
+    const rowValues = readVisitFormValues(existing);
     return { visit, patient, formDefinitionId: formDefinition.id, values: rowValues };
   }, [visitId]);
 

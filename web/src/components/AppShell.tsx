@@ -1,9 +1,7 @@
 import type { ReactNode } from "react";
 import { authStrings } from "../auth/authStrings";
 import { clearActiveSession } from "../auth/session";
-import { useActingMembership } from "../auth/useActingMembership";
-import { db } from "../db/database";
-import { useLiveQuery } from "../db/useLiveQuery";
+import { useActingUser } from "../auth/useActingMembership";
 import { navItemsFor, type NavItem } from "../domain/navigation";
 import type { Role } from "../domain/role";
 import type { ClinicDay } from "../domain/time";
@@ -14,12 +12,20 @@ import { appBarStrings, sidebarStrings } from "./strings";
 
 interface AppShellProps {
   role: Role;
+  /** The acting membership is tied to a practitioner — the rail then offers that practitioner's own day (navItemsFor). */
+  hasPractitioner: boolean;
   activeItem: NavItem["key"];
   onSelect: (key: NavItem["key"]) => void;
   /** The current screen's own title — e.g. "يوم العيادة". */
   title: ReactNode;
   /** The day currently on screen — one source with the grid below it, since a dev-only affordance can pin it away from the real current day. */
   today: ClinicDay;
+  /**
+   * Overrides the app bar's "who" name (and its avatar initial), which is
+   * otherwise the acting user's own name — the doctor's day shows the
+   * practitioner whose day it is (reference screen 9's `.appbar .who`).
+   */
+  whoName?: string;
   children: ReactNode;
 }
 
@@ -47,6 +53,14 @@ const ICON_PATHS: Record<NavItem["key"], ReactNode> = {
       <line x1="3" y1="9" x2="21" y2="9" />
       <line x1="7" y1="2" x2="7" y2="6" />
       <line x1="17" y1="2" x2="17" y2="6" />
+    </>
+  ),
+  // A stethoscope: two ear tubes joining into one, ending in the chest piece.
+  doctor: (
+    <>
+      <path d="M6 3v5a5 5 0 0 0 10 0V3" />
+      <path d="M11 13v3a4 4 0 0 0 8 0v-2" />
+      <circle cx="19" cy="12" r="2" />
     </>
   ),
   // A timeline: three dots on a rail, each with its line of text.
@@ -106,8 +120,9 @@ const ITEM_ACTIVE = "border-copper bg-white/[0.14] text-on-dark";
  * a sidebar at all; "navigation is a role-dependent sidebar" is a settled
  * deviation from it, per docs/design-rule.md).
  *
- * Items come from navItemsFor(role) — today "day" and "audit" (every
- * role) and "settings" (owner only, the same gate the day screen's own
+ * Items come from navItemsFor(role, hasPractitioner) — today "day" and
+ * "audit" (every role), "doctor" (a membership tied to a practitioner) and
+ * "settings" (owner only, the same gate the day screen's own
  * settings entry always used). Rendering is generic over whatever that returns, so a later
  * task that appends an item needs no change here, only an icon entry above.
  *
@@ -150,13 +165,10 @@ function BrandLogo() {
  * day the screen below it is actually showing (a dev-only affordance can pin
  * that away from the real current day).
  */
-function AppBar({ title, today }: { title: ReactNode; today: ClinicDay }) {
-  const actingMembership = useActingMembership();
-  const actingUser = useLiveQuery(
-    async () => (actingMembership ? db.users.get(actingMembership.user_id) : undefined),
-    [actingMembership?.user_id],
-  );
+function AppBar({ title, today, whoName }: { title: ReactNode; today: ClinicDay; whoName?: string }) {
+  const actingUser = useActingUser();
   const { dateLine, weekdayLine } = formatAppBarDate(today);
+  const shownName = whoName ?? actingUser?.full_name;
 
   return (
     <header className="sticky top-0 z-40 flex flex-wrap items-center gap-3.5 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[11px] text-on-dark shadow-m print:hidden">
@@ -175,12 +187,12 @@ function AppBar({ title, today }: { title: ReactNode; today: ClinicDay }) {
 
       <SyncStatusChip />
 
-      {actingUser && (
+      {shownName && (
         <div className="flex items-center gap-2 rounded-control border border-white/[0.14] bg-white/[0.06] px-3 py-[5px] text-xs text-on-dark">
           <span className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[11px] font-bold text-white">
-            {actingUser.full_name.charAt(0)}
+            {shownName.charAt(0)}
           </span>
-          <span>{actingUser.full_name}</span>
+          <span>{shownName}</span>
         </div>
       )}
 
@@ -196,8 +208,17 @@ function AppBar({ title, today }: { title: ReactNode; today: ClinicDay }) {
   );
 }
 
-export default function AppShell({ role, activeItem, onSelect, title, today, children }: AppShellProps) {
-  const items = navItemsFor(role);
+export default function AppShell({
+  role,
+  hasPractitioner,
+  activeItem,
+  onSelect,
+  title,
+  today,
+  whoName,
+  children,
+}: AppShellProps) {
+  const items = navItemsFor(role, hasPractitioner);
 
   return (
     <div className="flex min-h-screen flex-col-reverse sm:flex-row">
@@ -229,7 +250,7 @@ export default function AppShell({ role, activeItem, onSelect, title, today, chi
         })}
       </nav>
       <div className="min-w-0 flex-1 pb-16 sm:pb-0">
-        <AppBar title={title} today={today} />
+        <AppBar title={title} today={today} whoName={whoName} />
         {children}
       </div>
     </div>

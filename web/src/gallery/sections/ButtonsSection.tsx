@@ -16,7 +16,7 @@ interface SmCapableRowProps extends SmCapableButtonDemo {
   onEnabledMdClick?: () => void;
 }
 
-/** md + sm, each enabled and disabled — the four variants with a reference-defined compact form. */
+/** md + sm, each enabled and disabled — the variants with a reference-defined compact form. */
 function SmCapableButtonRow({ variant, heading, label, onEnabledMdClick }: SmCapableRowProps) {
   return (
     <div className="flex flex-col gap-2">

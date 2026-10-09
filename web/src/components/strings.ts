@@ -11,6 +11,7 @@ export const installBannerStrings = {
 export const sidebarStrings = {
   navAriaLabel: "التنقل الرئيسي",
   navDay: "اليوم",
+  navDoctor: "شاشة الطبيب",
   navAudit: "السجل",
   navSettings: "الإعدادات",
 } as const;
