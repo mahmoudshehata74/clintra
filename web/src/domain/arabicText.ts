@@ -56,3 +56,38 @@ export function normalizeArabicText(input: string): string {
     .trim()
     .toLowerCase();
 }
+
+/** The four shapes a counted Arabic phrase takes — see arabicCount. */
+export interface ArabicCountForms {
+  /** The whole phrase for one, no numeral: "زيارة سابقة", "مريض واحد في الصالة". */
+  one: string;
+  /** The whole phrase for two, no numeral (the dual): "زيارتين سابقتين". */
+  two: string;
+  /** After the numeral, for 3–10 (plural): "زيارات سابقة". */
+  few: string;
+  /** After the numeral, from 11 up (singular again): "زيارة سابقة". */
+  many: string;
+}
+
+/** A counted phrase: `numeral` is null when the words already carry the count (one, two). */
+export interface ArabicCount {
+  numeral: number | null;
+  words: string;
+}
+
+/**
+ * Arabic count agreement: the singular and the dual stand alone without a
+ * numeral ("زيارة سابقة", "زيارتين سابقتين"), 3–10 take the plural after
+ * the numeral ("5 زيارات سابقة"), and 11 up take the singular again ("12
+ * زيارة سابقة"). Zero is the caller's to omit or word differently; it is
+ * returned with the numeral and the 11+ form, so it never reads as one.
+ */
+export function arabicCount(count: number, forms: ArabicCountForms): ArabicCount {
+  if (count === 1) {
+    return { numeral: null, words: forms.one };
+  }
+  if (count === 2) {
+    return { numeral: null, words: forms.two };
+  }
+  return { numeral: count, words: count >= 3 && count <= 10 ? forms.few : forms.many };
+}

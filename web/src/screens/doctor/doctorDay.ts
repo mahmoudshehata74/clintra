@@ -1,10 +1,12 @@
 import type { Invoice, Patient, Service, Visit } from "../../db/types";
 import type { VisitFormFieldValues } from "../../db/visitForm";
 import { computeMedianConsultMinutes, computeRoundedMedian } from "../../domain/consultStats";
-import { cairoYear, clockTimeInCairo, todayInCairo, type ClinicDay, type ClockTime } from "../../domain/time";
+import type { ArabicCountForms } from "../../domain/arabicText";
+import { cairoYear, clockTimeInCairo, todayInCairo, type ClinicDay, type ClockTime, type Instant } from "../../domain/time";
 import { canTransitionVisitStatus } from "../../domain/transitions";
 import { occupiesSlot, VisitStatus } from "../../domain/visitStatus";
 import { selectDaySheetVisits } from "../day/daySheetVisits";
+import { computeElapsedLabel } from "../day/elapsedLabel";
 import { computeQueueExpectedFinishTime, computeQueueSummary } from "../day/queueSummary";
 import { doctorDayStrings as T } from "./strings";
 
@@ -197,6 +199,8 @@ export interface LastVisitSummary {
   /** Null when empty, so the part is omitted rather than rendered blank. */
   complaint: string | null;
   diagnosis: string | null;
+  /** Neither part was recorded — the block keeps its header and says so instead of rendering empty. */
+  nothingRecorded: boolean;
 }
 
 /** The last-visit block's content, or null (block omitted) when the patient has no prior completed visit. */
@@ -211,11 +215,14 @@ export function summarizeLastVisit(
     return null;
   }
   const values = formValuesByVisitId.get(last.id);
+  const complaint = nonEmpty(values?.complaint);
+  const diagnosis = nonEmpty(values?.diagnosis);
   return {
     visit: last,
     relativeTime: formatRelativeVisitTime(last.visit_date, today),
-    complaint: nonEmpty(values?.complaint),
-    diagnosis: nonEmpty(values?.diagnosis),
+    complaint,
+    diagnosis,
+    nothingRecorded: complaint === null && diagnosis === null,
   };
 }
 
@@ -375,41 +382,36 @@ export function computeAge(birthYear: number | null, now: Date): number | null {
   return birthYear === null ? null : cairoYear(now.toISOString()) - birthYear;
 }
 
-export interface CountForms {
-  one: string;
-  two: string;
-  few: string;
-  many: string;
-}
-
-/**
- * A counted Arabic noun: singular for 1, dual for 2, plural for 3–10 and
- * the singular again from 11 up ("11 زيارة"). The numeral is the caller's
- * to render (it is usually bold), so this returns the noun only.
- */
-export function countNoun(count: number, forms: CountForms): string {
-  if (count === 1) {
-    return forms.one;
-  }
-  if (count === 2) {
-    return forms.two;
-  }
-  return count >= 3 && count <= 10 ? forms.few : forms.many;
-}
-
-export const PRIOR_VISIT_FORMS: CountForms = {
+export const PRIOR_VISIT_FORMS: ArabicCountForms = {
   one: T.priorVisitOne,
   two: T.priorVisitTwo,
   few: T.priorVisitFew,
   many: T.priorVisitMany,
 };
-export const VISIT_FORMS: CountForms = { one: T.visitOne, two: T.visitTwo, few: T.visitFew, many: T.visitMany };
-export const PATIENT_FORMS: CountForms = {
-  one: T.patientOne,
-  two: T.patientTwo,
-  few: T.patientFew,
-  many: T.patientMany,
+export const TOTAL_VISITS_FORMS: ArabicCountForms = {
+  one: T.totalVisitsOne,
+  two: T.totalVisitsTwo,
+  few: T.totalVisitsFew,
+  many: T.totalVisitsMany,
 };
+export const WAITING_COUNT_FORMS: ArabicCountForms = {
+  one: T.waitingCountOne,
+  two: T.waitingCountTwo,
+  few: T.waitingCountFew,
+  many: T.waitingCountMany,
+};
+
+/** How long since an instant, for "دخل من 12د" / "في الكشف من 12د": under a minute reads as "just now" instead of "0د". */
+export type SinceLabel = { kind: "just_now" } | { kind: "elapsed"; label: string };
+
+/** Null off the live day, the same gate computeElapsedLabel applies. */
+export function computeSinceLabel(fromInstant: Instant, today: ClinicDay, now: Date): SinceLabel | null {
+  const label = computeElapsedLabel(fromInstant, now.toISOString(), today, now);
+  if (label === null) {
+    return null;
+  }
+  return now.getTime() - new Date(fromInstant).getTime() < 60_000 ? { kind: "just_now" } : { kind: "elapsed", label };
+}
 
 function daysBetween(from: ClinicDay, to: ClinicDay): number {
   const toUtc = (day: ClinicDay) => {

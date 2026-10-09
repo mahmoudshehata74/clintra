@@ -21,7 +21,8 @@ import {
   settleCooldown,
   type CooldownState,
 } from "../day/advanceCooldown";
-import { computeElapsedLabel, formatElapsedMinutes } from "../day/elapsedLabel";
+import { arabicCount, type ArabicCountForms } from "../../domain/arabicText";
+import { formatElapsedMinutes } from "../day/elapsedLabel";
 import VisitFormSheet from "../day/VisitFormSheet";
 import {
   canCallIn,
@@ -30,7 +31,6 @@ import {
   computeDayList,
   computeMomentum,
   computeWaitingRoom,
-  countNoun,
   countPriorCompletedVisits,
   dayListAction,
   endedAtClock,
@@ -39,10 +39,11 @@ import {
   findNextPatient,
   hasMissingDiagnosis,
   lastInvoiceStateLabel,
-  PATIENT_FORMS,
+  computeSinceLabel,
   PRIOR_VISIT_FORMS,
   summarizeLastVisit,
-  VISIT_FORMS,
+  TOTAL_VISITS_FORMS,
+  WAITING_COUNT_FORMS,
   waitingWord,
   type AttentionItem,
   type LastVisitSummary,
@@ -251,7 +252,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
   }
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-3.5 px-6 py-6 pb-16 print:hidden">
+    <main className="mx-auto flex max-w-3xl flex-col gap-3.5 px-6 pt-6 pb-16 print:hidden">
       {momentum && <MomentumBar momentum={momentum} isQueueMode={isQueueMode} />}
 
       {current ? (
@@ -362,6 +363,23 @@ function minutes(value: number): string {
   return formatElapsedMinutes(value);
 }
 
+/** A counted phrase from arabicCount, its numeral (when it has one) bold. */
+function CountedPhrase({ count, forms }: { count: number; forms: ArabicCountForms }) {
+  const { numeral, words } = arabicCount(count, forms);
+  return (
+    <>
+      {numeral !== null && (
+        <>
+          <b>
+            <Ltr>{numeral}</Ltr>
+          </b>{" "}
+        </>
+      )}
+      {words}
+    </>
+  );
+}
+
 function MomentumBar({ momentum, isQueueMode }: { momentum: MomentumSummary; isQueueMode: boolean }) {
   const look = momentum.isLate ? MOMENTUM_LOOK.late : MOMENTUM_LOOK.ok;
   return (
@@ -450,7 +468,7 @@ function CurrentPatientHero({
   onComplete,
 }: CurrentPatientHeroProps) {
   const name = patient?.full_name ?? "";
-  const entered = visit.started_at ? computeElapsedLabel(visit.started_at, now.toISOString(), today, now) : null;
+  const entered = visit.started_at ? computeSinceLabel(visit.started_at, today, now) : null;
   const age = ageSuffix(patient, now);
   const metaParts: ReactNode[] = [];
   if (serviceName) {
@@ -459,20 +477,23 @@ function CurrentPatientHero({
   if (entered) {
     metaParts.push(
       <span key="entered">
-        {T.heroEnteredPrefix}{" "}
-        <b>
-          <Ltr>{entered}</Ltr>
-        </b>
+        {entered.kind === "just_now" ? (
+          T.heroEnteredNow
+        ) : (
+          <>
+            {T.heroEnteredPrefix}{" "}
+            <b>
+              <Ltr>{entered.label}</Ltr>
+            </b>
+          </>
+        )}
       </span>,
     );
   }
   if (priorVisitCount > 0) {
     metaParts.push(
       <span key="prior">
-        <b>
-          <Ltr>{priorVisitCount}</Ltr>
-        </b>{" "}
-        {countNoun(priorVisitCount, PRIOR_VISIT_FORMS)}
+        <CountedPhrase count={priorVisitCount} forms={PRIOR_VISIT_FORMS} />
       </span>,
     );
   }
@@ -524,10 +545,10 @@ function CurrentPatientHero({
   );
 }
 
-/** `شكوى: <b>…</b> · التشخيص: <dx>…</dx>`, each part omitted when empty. */
+/** `شكوى: <b>…</b> · التشخيص: <dx>…</dx>`, each part omitted when empty — or one muted line when neither was recorded. */
 function LastVisitParts({ summary, diagnosisLabel }: { summary: LastVisitSummary; diagnosisLabel: string }) {
-  if (!summary.complaint && !summary.diagnosis) {
-    return null;
+  if (summary.nothingRecorded) {
+    return <div className="text-muted">{T.lastVisitNothingRecorded}</div>;
   }
   return (
     <div>
@@ -591,7 +612,7 @@ function NextPatientBrief({
   }
 
   const { visit, hasArrived } = next;
-  const arrivedFor = hasArrived && visit.arrived_at ? computeElapsedLabel(visit.arrived_at, now.toISOString(), today, now) : null;
+  const arrivedFor = hasArrived && visit.arrived_at ? computeSinceLabel(visit.arrived_at, today, now) : null;
   const lastVisit = summarizeLastVisit(historyVisits, visit, formValuesByVisitId, today);
   const totalWithYou = countPriorCompletedVisits(historyVisits, visit, practitionerId);
   const svcParts: ReactNode[] = [];
@@ -614,7 +635,13 @@ function NextPatientBrief({
   if (arrivedFor) {
     svcParts.push(
       <span key="arrived">
-        {T.briefArrivedPrefix} <Ltr>{arrivedFor}</Ltr>
+        {arrivedFor.kind === "just_now" ? (
+          T.briefArrivedNow
+        ) : (
+          <>
+            {T.briefArrivedPrefix} <Ltr>{arrivedFor.label}</Ltr>
+          </>
+        )}
       </span>,
     );
   }
@@ -654,14 +681,7 @@ function NextPatientBrief({
             )}
             {(totalWithYou > 0 || lastInvoice) && (
               <div className="mt-1 text-[11px] text-muted [&>b]:font-bold [&>b]:text-text [&>b]:tabular-nums">
-                {totalWithYou > 0 && (
-                  <>
-                    <b>
-                      <Ltr>{totalWithYou}</Ltr>
-                    </b>{" "}
-                    {countNoun(totalWithYou, VISIT_FORMS)} {T.briefTotalVisitsSuffix}
-                  </>
-                )}
+                {totalWithYou > 0 && <CountedPhrase count={totalWithYou} forms={TOTAL_VISITS_FORMS} />}
                 {totalWithYou > 0 && lastInvoice && " · "}
                 {lastInvoice && (
                   <>
@@ -749,10 +769,7 @@ function WaitingRoomCard({ waitingRoom, isQueueMode, patientOf, serviceNameOf }:
             })}
           </ul>
           <div className="border-t border-dashed border-hair bg-field px-3.5 py-[9px] text-center text-[11px] text-muted [&>b]:font-bold [&>b]:text-text">
-            <b>
-              <Ltr>{rows.length}</Ltr>
-            </b>{" "}
-            {countNoun(rows.length, PATIENT_FORMS)} {T.waitingInRoomSuffix}
+            <CountedPhrase count={rows.length} forms={WAITING_COUNT_FORMS} />
             {longCount > 0 && (
               <>
                 {" · "}
@@ -886,7 +903,6 @@ function DayListRow({
   const isDone = visit.status === VisitStatus.Completed;
   const isCurrent = visit.status === VisitStatus.InRoom;
   const numLook = isCurrent ? NUM_LOOK.current : isDone ? NUM_LOOK.done : NUM_LOOK.rest;
-  const nowIso = now.toISOString();
 
   const meta: ReactNode[] = [];
   if (serviceName) {
@@ -905,14 +921,16 @@ function DayListRow({
       meta.push(<span className="font-semibold text-warning">{T.dayListMissingDiagnosis}</span>);
     }
   } else if (isCurrent) {
-    const entered = visit.started_at ? computeElapsedLabel(visit.started_at, nowIso, today, now) : null;
+    const entered = visit.started_at ? computeSinceLabel(visit.started_at, today, now) : null;
     meta.push(
-      entered ? (
-        <>
-          {T.dayListInRoomPrefix} <Ltr>{entered}</Ltr>
-        </>
-      ) : (
+      entered === null ? (
         T.heroLabel
+      ) : entered.kind === "just_now" ? (
+        T.dayListInRoomNow
+      ) : (
+        <>
+          {T.dayListInRoomPrefix} <Ltr>{entered.label}</Ltr>
+        </>
       ),
     );
     if (previousVisitLabel) {
@@ -924,11 +942,11 @@ function DayListRow({
     }
   } else {
     if (visit.status === VisitStatus.Arrived) {
-      const since = computeElapsedLabel(visit.arrived_at ?? visit.created_at, nowIso, today, now);
+      const since = computeSinceLabel(visit.arrived_at ?? visit.created_at, today, now);
       meta.push(
         since ? (
           <>
-            {waitingWord(patient)} {T.dayListWaitingFor} <Ltr>{since}</Ltr>
+            {waitingWord(patient)} {since.kind === "just_now" ? "" : <>{T.dayListWaitingFor} <Ltr>{since.label}</Ltr></>}
           </>
         ) : (
           waitingWord(patient)
@@ -970,7 +988,7 @@ function DayListRow({
       </div>
       <div className="flex flex-col items-end gap-1">
         {action === "review" && (
-          <Button variant="secondary" size="sm" onClick={onOpenVisitForm}>
+          <Button variant="muted" size="sm" onClick={onOpenVisitForm}>
             {T.dayListReview}
           </Button>
         )}

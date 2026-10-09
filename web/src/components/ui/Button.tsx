@@ -5,7 +5,7 @@ export type ButtonSize = "md" | "sm";
 // The reference only ever defines a compact form for these four (see the
 // doc comment below) — the other three stop at their own single size.
 // Exported so the gallery's demo data can be typed against the same split.
-export type SmCapableVariant = "primary" | "secondary" | "danger" | "onDark";
+export type SmCapableVariant = "primary" | "secondary" | "danger" | "muted" | "onDark";
 export type MdOnlyVariant = "onDarkCopper" | "outline" | "dashed";
 export type ButtonVariant = SmCapableVariant | MdOnlyVariant;
 
@@ -49,13 +49,14 @@ const DARK_SURFACE_FOCUS = "focus-visible:ring-offset-ink";
 
 interface SizeClasses {
   md: string;
-  /** Present only for the four variants SmCapableVariant names. */
+  /** Present only for the variants SmCapableVariant names. */
   sm?: string;
 }
 
 /**
  * Prototype source per variant (docs/reference/clintra-prototype.html):
  * primary = .run, secondary = .pill, danger = .pill.danger,
+ * muted = .doc-item.done .go (the colours a finished row's action takes),
  * onDark = .sb (md) / .app-btn (sm), onDarkCopper = .sb.copper,
  * outline = .set-row .edit, dashed = .slot.empty .quick.
  *
@@ -70,8 +71,9 @@ interface SizeClasses {
  * sm exists only where the reference itself defines a compact form:
  * .brief-act .run / .brief-act .pill for primary/secondary/danger (danger
  * inherits .pill's own padding/font-size, since .brief-act .pill still
- * matches an element carrying both the pill and danger classes), and
- * .app-btn for onDark. onDarkCopper, outline and dashed have no such rule
+ * matches an element carrying both the pill and danger classes; muted
+ * follows danger, carrying .doc-item.done .go's colours), and .app-btn for
+ * onDark. onDarkCopper, outline and dashed have no such rule
  * in the reference, so they have no sm — ButtonVariantSizeProps makes
  * requesting one for those three a type error rather than inventing a size
  * the design doesn't define.
@@ -88,6 +90,12 @@ const VARIANT_SIZE_CLASSES: Record<ButtonVariant, SizeClasses> = {
   danger: {
     md: "border-[1.5px] border-danger-line bg-danger-wash px-3.5 py-2 text-[12.5px] font-semibold text-danger",
     sm: "border-[1.5px] border-danger-line bg-danger-wash px-3 py-2 text-[11.5px] font-semibold text-danger",
+  },
+  // .doc-item.done .go's field/rule/muted colours on secondary's own
+  // metrics in both sizes — the same relationship danger has to secondary.
+  muted: {
+    md: "border-[1.5px] border-rule bg-field px-3.5 py-2 text-[12.5px] font-semibold text-muted",
+    sm: "border-[1.5px] border-rule bg-field px-3 py-2 text-[11.5px] font-semibold text-muted",
   },
   onDark: {
     md: "gap-[7px] border border-white/[0.16] bg-white/[0.09] px-[13px] py-1.5 text-xs font-semibold text-on-dark",

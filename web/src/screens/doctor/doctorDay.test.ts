@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Invoice, Service, Visit } from "../../db/types";
 import type { VisitFormFieldValues } from "../../db/visitForm";
+import { arabicCount } from "../../domain/arabicText";
 import { cairoInstant, type ClockTime } from "../../domain/time";
 import { VisitSource } from "../../domain/visitSource";
 import { VisitStatus } from "../../domain/visitStatus";
@@ -11,7 +12,6 @@ import {
   computeDayList,
   computeMomentum,
   computeWaitingRoom,
-  countNoun,
   countPriorCompletedVisits,
   dayListAction,
   findCurrentVisit,
@@ -21,9 +21,11 @@ import {
   hasMissingDiagnosis,
   lastInvoiceStateLabel,
   LONG_WAIT_MINUTES,
-  PATIENT_FORMS,
+  computeSinceLabel,
   PRIOR_VISIT_FORMS,
   summarizeLastVisit,
+  TOTAL_VISITS_FORMS,
+  WAITING_COUNT_FORMS,
   waitingWord,
 } from "./doctorDay";
 import { doctorDayStrings as T } from "./strings";
@@ -277,6 +279,7 @@ describe("patient history", () => {
       relativeTime: "قبل 7 أيام",
       complaint: "صداع",
       diagnosis: null,
+      nothingRecorded: false,
     });
     // The older visit wins once the recent one is gone, even with another practitioner.
     expect(summarizeLastVisit([current, old], current, forms, TODAY)).toMatchObject({
@@ -285,6 +288,18 @@ describe("patient history", () => {
       complaint: null,
       diagnosis: "شد عضلي",
     });
+  });
+
+  it("keeps the block, flagged nothingRecorded, when the prior visit has neither complaint nor diagnosis", () => {
+    const blank = new Map<string, VisitFormFieldValues>([[recent.id, { complaint: " ", diagnosis: "" }]]);
+    expect(summarizeLastVisit(history, current, blank, TODAY)).toMatchObject({
+      visit: recent,
+      complaint: null,
+      diagnosis: null,
+      nothingRecorded: true,
+    });
+    // No form row at all reads the same way.
+    expect(summarizeLastVisit(history, current, NO_FORMS, TODAY)?.nothingRecorded).toBe(true);
   });
 
   it("returns null (block omitted) without a prior completed visit", () => {
@@ -464,25 +479,52 @@ describe("computeAge", () => {
   });
 });
 
-describe("countNoun", () => {
+describe("counted phrases", () => {
+  const phrase = (count: number, forms: Parameters<typeof arabicCount>[1]) => {
+    const { numeral, words } = arabicCount(count, forms);
+    return numeral === null ? words : `${numeral} ${words}`;
+  };
+
   it.each([
     [1, "زيارة سابقة"],
     [2, "زيارتين سابقتين"],
-    [3, "زيارات سابقة"],
-    [10, "زيارات سابقة"],
-    [11, "زيارة سابقة"],
-    [25, "زيارة سابقة"],
-  ])("prior visits: %i → %s", (count, noun) => {
-    expect(countNoun(count, PRIOR_VISIT_FORMS)).toBe(noun);
+    [3, "3 زيارات سابقة"],
+    [10, "10 زيارات سابقة"],
+    [11, "11 زيارة سابقة"],
+  ])("prior visits: %i → %s", (count, expected) => {
+    expect(phrase(count, PRIOR_VISIT_FORMS)).toBe(expected);
   });
 
   it.each([
-    [1, "مريض"],
-    [2, "مريضين"],
-    [3, "مرضى"],
-    [12, "مريض"],
-  ])("patients: %i → %s", (count, noun) => {
-    expect(countNoun(count, PATIENT_FORMS)).toBe(noun);
+    [1, "زيارة واحدة إجمالي عندك"],
+    [2, "زيارتين إجمالي عندك"],
+    [4, "4 زيارات إجمالي عندك"],
+    [15, "15 زيارة إجمالي عندك"],
+  ])("total visits: %i → %s", (count, expected) => {
+    expect(phrase(count, TOTAL_VISITS_FORMS)).toBe(expected);
+  });
+
+  it.each([
+    [1, "مريض واحد في الصالة"],
+    [2, "مريضين في الصالة"],
+    [3, "3 مرضى في الصالة"],
+    [12, "12 مريض في الصالة"],
+  ])("waiting room: %i → %s", (count, expected) => {
+    expect(phrase(count, WAITING_COUNT_FORMS)).toBe(expected);
+  });
+});
+
+describe("computeSinceLabel", () => {
+  it("reads as just now under one minute, then as elapsed minutes", () => {
+    expect(computeSinceLabel(at("10:00"), TODAY, new Date(new Date(at("10:00")).getTime() + 59_000))).toEqual({
+      kind: "just_now",
+    });
+    expect(computeSinceLabel(at("10:00"), TODAY, nowAt("10:01"))).toEqual({ kind: "elapsed", label: "1د" });
+    expect(computeSinceLabel(at("10:00"), TODAY, nowAt("10:12"))).toEqual({ kind: "elapsed", label: "12د" });
+  });
+
+  it("is null off the live day", () => {
+    expect(computeSinceLabel(at("10:00"), TODAY, new Date(at("10:00", "2026-10-12")))).toBeNull();
   });
 });
 

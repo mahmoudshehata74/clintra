@@ -191,13 +191,24 @@ export async function pickSearchResult(scope: Locator, patientName: string): Pro
     .click();
 }
 
-/** Books an existing patient into the first open slot through the booking sheet, waiting for their row. */
-export async function bookFirstOpenSlot(page: Page, name: string): Promise<void> {
+/**
+ * Books an existing patient into the first open slot through the booking
+ * sheet, waiting for their row. `service` picks the service by name; without
+ * it the sheet's own default stands, and that default is the first active
+ * service in table order — which follows the services' random UUIDs, so a
+ * capture or assertion that shows the service must always name one.
+ */
+export async function bookFirstOpenSlot(page: Page, name: string, service?: string): Promise<void> {
   await openBookingSheet(page);
   const dialog = page.getByRole("dialog");
   await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(name);
   await pickSearchResult(dialog, name);
   await dialog.getByRole("button", { name: /^\d{1,2}:\d{2}$/ }).first().click();
+  if (service) {
+    const option = dialog.getByRole("button", { name: new RegExp(`^${service} ·`) });
+    await option.click();
+    await expect(option).toHaveAttribute("aria-pressed", "true");
+  }
   await dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(rowFor(page, name)).toBeVisible();

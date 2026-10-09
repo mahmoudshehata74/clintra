@@ -54,8 +54,18 @@ test.afterEach(async ({ page }) => {
 // its end state before capturing. Without it a capture taken right after a
 // click (e.g. the rail's 150ms active-item colour fade) shows the
 // in-between frame, which reads as a faded, half-active control.
+//
+// A full-page capture also starts from the top: the page's sticky app bar and
+// fixed mobile bottom bar are drawn where the viewport sits at capture time,
+// so a page left scrolled by an earlier click (a row scrolled into view) once
+// put both bars mid-image. Polled rather than assumed, since scrollTo can
+// settle a frame later.
 async function shoot(page: Page, surface: string, fullPage: boolean): Promise<void> {
   const project = test.info().project.name;
+  if (fullPage) {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  }
   await page.screenshot({ path: `${OUT_DIR}/${surface}-${project}.png`, fullPage, animations: "disabled" });
 }
 
@@ -495,43 +505,87 @@ test("@screenshot activation-confirmation", async ({ page }) => {
 });
 
 // The doctor's day mid-morning on the real day, with the page clock pinned
-// and stepped forward so the wall-clock figures read like a real morning:
-// منى seen 09:00–09:18 (diagnosis filled; her invoice still unpaid — the one
-// attention item), كريم arrived 09:05 and waiting past the alert line,
-// ياسمين (a seeded past visit) called in at 09:42, عمر booked for later.
-// Every visit is built through the app's own write paths.
+// and stepped forward so the wall-clock figures read like a real morning.
+// Every visit is built through the app's own write paths, and every service
+// is picked by name (see bookFirstOpenSlot), so desktop and mobile render
+// identical data.
+//
+// First, on the seeded Monday (?seedDay=1): ياسمين's seeded completed visit
+// gets a complaint and diagnosis (her full last-visit block below), and
+// كريم's seeded arrived visit is seen and closed (his visit with this
+// practitioner and its unpaid invoice — the brief's count and invoice line).
+// Then on the real day: منى seen 09:00–09:18 with no diagnosis and nothing
+// paid (one attention item of each kind), عمر arrived 09:05 and waiting past
+// the alert line, ياسمين called in at 09:28, كريم arrived 09:33 (the short
+// waiter, and next), هدى booked for later.
 test("@screenshot doctor-day", async ({ page }) => {
   const day = todayInCairo();
   const at = (time: ClockTime) => new Date(cairoInstant(day, time));
+  const service = "كشف عام";
   await page.clock.install({ time: at("08:30") });
+
+  await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
+  await fillVisitForm(page, PATIENTS.yasmin, "آلام أسفل الظهر بعد رفع حاجة تقيلة", "شد عضلي حاد");
+  await advanceRowTo(page, PATIENTS.karim, S.statusInRoom);
+  await advanceRowTo(page, PATIENTS.karim, S.statusCompleted);
+  await fillVisitForm(page, PATIENTS.karim, "ألم في الركبة اليمنى", "التهاب أوتار");
+
   await gotoRealDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
   await selectPractitioner(page, SLOTS_DR);
-  for (const name of [PATIENTS.mona, PATIENTS.karim, PATIENTS.yasmin, PATIENTS.omar]) {
-    await bookFirstOpenSlot(page, name);
+  for (const name of [PATIENTS.mona, PATIENTS.yasmin, PATIENTS.karim, PATIENTS.omar, PATIENTS.hoda]) {
+    await bookFirstOpenSlot(page, name, service);
   }
 
   await page.clock.setSystemTime(at("09:00"));
   await advanceRowTo(page, PATIENTS.mona, S.statusArrived);
   await advanceRowTo(page, PATIENTS.mona, S.statusInRoom);
   await page.clock.setSystemTime(at("09:05"));
-  await advanceRowTo(page, PATIENTS.karim, S.statusArrived);
+  await advanceRowTo(page, PATIENTS.omar, S.statusArrived);
   await page.clock.setSystemTime(at("09:18"));
   await advanceRowTo(page, PATIENTS.mona, S.statusCompleted);
-  await rowFor(page, PATIENTS.mona).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
-  const form = page.getByRole("dialog");
-  await form.getByPlaceholder(S.visitFormDiagnosisPlaceholder).fill("التهاب حلق");
-  await form.getByPlaceholder(S.visitFormDiagnosisPlaceholder).blur();
-  await expect(form.getByText(S.visitFormSavedIndicator)).toBeVisible();
-  await form.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
-  await expect(form).toBeHidden();
-  await page.clock.setSystemTime(at("09:30"));
+  await page.clock.setSystemTime(at("09:25"));
   await advanceRowTo(page, PATIENTS.yasmin, S.statusArrived);
-  await page.clock.setSystemTime(at("09:42"));
+  await page.clock.setSystemTime(at("09:28"));
   await advanceRowTo(page, PATIENTS.yasmin, S.statusInRoom);
+  await page.clock.setSystemTime(at("09:33"));
+  await advanceRowTo(page, PATIENTS.karim, S.statusArrived);
+  await page.clock.setSystemTime(at("09:42"));
 
   await openDoctorDay(page);
-  await expect(doctorSection(page, DOCTOR.heroLabel)).toContainText(PATIENTS.yasmin);
-  await expect(doctorSection(page, DOCTOR.waitingHeading)).toContainText(DOCTOR.waitingAboveThreshold);
-  await expect(doctorSection(page, DOCTOR.attentionHeading).getByRole("listitem")).toHaveCount(1);
+  const hero = doctorSection(page, DOCTOR.heroLabel);
+  await expect(hero).toContainText(PATIENTS.yasmin);
+  await expect(hero).toContainText("شد عضلي حاد");
+  const brief = doctorSection(page, DOCTOR.briefNextHeading);
+  await expect(brief).toContainText(PATIENTS.karim);
+  await expect(brief).toContainText(DOCTOR.totalVisitsOne);
+  await expect(brief).toContainText(DOCTOR.invoiceUnpaid);
+  const waiting = doctorSection(page, DOCTOR.waitingHeading);
+  await expect(waiting.getByRole("listitem")).toHaveCount(2);
+  await expect(waiting).toContainText(DOCTOR.waitingAboveThreshold);
+  const attention = doctorSection(page, DOCTOR.attentionHeading);
+  await expect(attention.getByRole("listitem")).toHaveCount(2);
+  await expect(attention).toContainText(DOCTOR.attentionMissingDiagnosisTitle);
+  await expect(attention).toContainText(DOCTOR.invoiceUnpaid);
   await shoot(page, "doctor-day", true);
 });
+
+/** Opens a day-grid row's visit form, fills both fields (each autosaves on blur), and closes it. */
+async function fillVisitForm(page: Page, patientName: string, complaint: string, diagnosis: string): Promise<void> {
+  await rowFor(page, patientName).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
+  const form = page.getByRole("dialog");
+  for (const [label, placeholder, value] of [
+    [S.visitFormComplaintLabel, S.visitFormComplaintPlaceholder, complaint],
+    [S.visitFormDiagnosisLabel, S.visitFormDiagnosisPlaceholder, diagnosis],
+  ] as const) {
+    const field = form.getByPlaceholder(placeholder);
+    await field.fill(value);
+    await field.blur();
+    // Each field's own "اتحفظ" sits next to its own label, so the second
+    // save is waited for on its own rather than on the first one's indicator.
+    const labelRow = form.locator("div").filter({ has: page.getByText(label, { exact: true }) }).last();
+    await expect(labelRow.getByText(S.visitFormSavedIndicator)).toBeVisible();
+  }
+  await form.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
+  await expect(form).toBeHidden();
+}

@@ -17,6 +17,7 @@ export const doctorDayStrings = {
   // `.doc-hero`
   heroLabel: "في الكشف الآن",
   heroEnteredPrefix: "دخل من",
+  heroEnteredNow: "دخل دلوقتي",
   heroOpenVisitForm: "افتح ملف الزيارة",
   heroCloseVisit: "قفل الزيارة",
   heroEmpty: "مفيش مريض في الكشف دلوقتي",
@@ -27,6 +28,7 @@ export const doctorDayStrings = {
   lastVisitComplaint: "شكوى:",
   lastVisitDiagnosisHero: "التشخيص:",
   lastVisitDiagnosisBrief: "تشخيص:",
+  lastVisitNothingRecorded: "ما اتسجّلش شكوى ولا تشخيص",
 
   // `.quick-note`
   quickNoteLabel: "ملاحظة سريعة",
@@ -40,8 +42,8 @@ export const doctorDayStrings = {
   briefTagNotArrived: "لسه ما وصلش",
   briefExpectedPrefix: "متوقع",
   briefArrivedPrefix: "وصل من",
+  briefArrivedNow: "وصل دلوقتي",
   briefQueueNumberPrefix: "نمرة",
-  briefTotalVisitsSuffix: "إجمالي عندك",
   briefLastInvoicePrefix: "آخر فاتورة",
   briefNoNext: "مفيش حد تاني النهارده",
   callIn: "استدعِ للكشف",
@@ -58,7 +60,6 @@ export const doctorDayStrings = {
   waitingLongestPrefix: "أطول انتظار",
   waitingWordNeutral: "مستني",
   waitingWordFemale: "مستنية",
-  waitingInRoomSuffix: "في الصالة",
   waitingAboveThreshold: "فوق حد التنبيه",
   waitingEmpty: "مفيش حد مستني",
 
@@ -80,6 +81,7 @@ export const doctorDayStrings = {
   dayListEmpty: "مفيش زيارات النهارده",
   dayListFinishedAt: "خلصت",
   dayListInRoomPrefix: "في الكشف من",
+  dayListInRoomNow: "في الكشف دلوقتي",
   dayListPreviousVisit: "الزيارة السابقة",
   dayListWaitingFor: "من",
   dayListMissingDiagnosis: "تشخيص فاضي",
@@ -100,17 +102,18 @@ export const doctorDayStrings = {
   monthFew: "شهور",
   monthMany: "شهر",
 
-  // Counted nouns (formatCount).
+  // Counted phrases (domain/arabicText.ts's arabicCount): one and two are
+  // whole phrases without a numeral; few (3–10) and many (11+) follow one.
   priorVisitOne: "زيارة سابقة",
   priorVisitTwo: "زيارتين سابقتين",
   priorVisitFew: "زيارات سابقة",
   priorVisitMany: "زيارة سابقة",
-  visitOne: "زيارة",
-  visitTwo: "زيارتين",
-  visitFew: "زيارات",
-  visitMany: "زيارة",
-  patientOne: "مريض",
-  patientTwo: "مريضين",
-  patientFew: "مرضى",
-  patientMany: "مريض",
+  totalVisitsOne: "زيارة واحدة إجمالي عندك",
+  totalVisitsTwo: "زيارتين إجمالي عندك",
+  totalVisitsFew: "زيارات إجمالي عندك",
+  totalVisitsMany: "زيارة إجمالي عندك",
+  waitingCountOne: "مريض واحد في الصالة",
+  waitingCountTwo: "مريضين في الصالة",
+  waitingCountFew: "مرضى في الصالة",
+  waitingCountMany: "مريض في الصالة",
 } as const;

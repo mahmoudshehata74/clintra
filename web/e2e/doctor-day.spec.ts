@@ -208,3 +208,25 @@ test("leaving for the day screen and back keeps the day screen's own state", asy
   await backToDay(page);
   await expect(rowFor(page, PATIENTS.mona)).toContainText(S.statusArrived);
 });
+
+test("on mobile, the last day-list row clears the bottom nav once scrolled to the end", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "the rail is a fixed bottom bar only below the sm breakpoint");
+  await twoWaiting(page);
+  const lastRow = dayList(page).getByRole("listitem").last();
+  await expect(lastRow).toContainText(PATIENTS.karim);
+
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => Math.ceil(window.scrollY + window.innerHeight) >= document.documentElement.scrollHeight,
+      ),
+    )
+    .toBe(true);
+
+  const rowBox = await lastRow.boundingBox();
+  const navBox = await sidebar(page).boundingBox();
+  expect(rowBox).not.toBeNull();
+  expect(navBox).not.toBeNull();
+  expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(navBox!.y);
+});

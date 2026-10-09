@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeArabicText } from "./arabicText";
+import { arabicCount, normalizeArabicText } from "./arabicText";
 
 describe("normalizeArabicText", () => {
   it("strips tashkeel so a diacritised word matches its bare form", () => {
@@ -58,5 +58,23 @@ describe("normalizeArabicText", () => {
   it("collapses a run of whitespace, including non-breaking space, to a single space", () => {
     expect(normalizeArabicText("محمد   علي")).toBe(normalizeArabicText("محمد علي"));
     expect(normalizeArabicText("محمد  علي")).toBe(normalizeArabicText("محمد علي"));
+  });
+});
+
+describe("arabicCount", () => {
+  const forms = { one: "مريض واحد في الصالة", two: "مريضين في الصالة", few: "مرضى في الصالة", many: "مريض في الصالة" };
+
+  it.each([
+    [1, null, "مريض واحد في الصالة"],
+    [2, null, "مريضين في الصالة"],
+    [3, 3, "مرضى في الصالة"],
+    [7, 7, "مرضى في الصالة"],
+    [10, 10, "مرضى في الصالة"],
+    [11, 11, "مريض في الصالة"],
+    [25, 25, "مريض في الصالة"],
+    [100, 100, "مريض في الصالة"],
+    [0, 0, "مريض في الصالة"],
+  ])("%i → numeral %s, %s", (count, numeral, words) => {
+    expect(arabicCount(count, forms)).toEqual({ numeral, words });
   });
 });
