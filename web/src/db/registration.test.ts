@@ -26,6 +26,7 @@ function makeSuccessBody(overrides: Record<string, unknown> = {}) {
     org_id: orgId,
     location_id: locationId,
     membership_id: membershipId,
+    series: 2,
     organization: { id: orgId, name: "عيادة تجريبية", plan_tier: "small", created_at: "2026-09-07T06:00:00.000Z" },
     locations: [
       { id: locationId, org_id: orgId, name: "الفرع الرئيسي", address: "شارع", phone: "+20221234567", is_active: true },
@@ -73,6 +74,16 @@ describe("registerDevice", () => {
     expect(await db.practitioners.get("practitioner-1")).toMatchObject({ full_name: "د. أحمد" });
     expect(await db.memberships.get(body.membership_id)).toMatchObject({ rev: 1, pin_hash: "hash" });
     expect(await db.users.get("user-1")).toMatchObject({ full_name: "منى الشريف" });
+  });
+
+  it("stores the device's number series from the response", async () => {
+    const body = makeSuccessBody();
+    const fetchImpl = vi.fn(async () => jsonResponse(200, body));
+
+    await registerDevice(db, { phone: "01001234567", activationCode: "CLT-7F3K-9QRT-4XWM-2BCD" }, fetchImpl);
+
+    const [device] = await db.device.toArray();
+    expect(device.series).toBe(2);
   });
 
   it("the bootstrap writes no sync_ops — these are server-authoritative rows, not this device's own writes", async () => {
@@ -167,6 +178,7 @@ describe("isDeviceRegistered", () => {
       pull_cursor: null,
       membership_id: null,
       token: null,
+      series: 1,
     });
 
     expect(await isDeviceRegistered(db)).toBe(false);

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { id } from "../domain/id";
 import { VisitSource } from "../domain/visitSource";
 import { VisitStatus } from "../domain/visitStatus";
@@ -8,6 +8,7 @@ import { getDeviceId } from "../db/deviceRegistration";
 import { AuditAction, type SyncOp, type Visit } from "../db/types";
 import { FakeTransport } from "./fakeTransport";
 import {
+  DEVICE_SERIES_CONFLICT_REASON,
   describeFailedOpEscalation,
   isServerUnreachable,
   resetTransportHealthForTests,
@@ -289,6 +290,7 @@ describe("startSyncEngine", () => {
       pull_cursor: null,
       membership_id: null,
       token: null,
+      series: 1,
     });
 
     let concurrentCalls = 0;
@@ -421,6 +423,7 @@ describe("runPullCycle", () => {
       pull_cursor: null,
       membership_id: null,
       token: null,
+      series: 1,
     });
   });
 
@@ -506,6 +509,7 @@ describe("runPullCycle: bootstrap gating (docs/dry-run.md's scenario 17)", () =>
       pull_cursor: null,
       membership_id: null,
       token: null,
+      series: 1,
     });
     const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
     const bootstrapPages: Record<string, PullSinceResult> = {
@@ -543,6 +547,7 @@ describe("runPullCycle: bootstrap gating (docs/dry-run.md's scenario 17)", () =>
       pull_cursor: "5",
       membership_id: null,
       token: null,
+      series: 1,
     });
     const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
     transport.pullOutcomeFor = () => ({ cursor: "5", hasMore: false, changes: [] });
@@ -562,6 +567,7 @@ describe("runPullCycle: bootstrap gating (docs/dry-run.md's scenario 17)", () =>
       pull_cursor: null,
       membership_id: null,
       token: null,
+      series: 1,
     });
     const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
     transport.pullBootstrapOutcomeFor = () => {
@@ -609,6 +615,7 @@ describe("SyncAuthError: a 401 is surfaced, never left to throw uncaught into a 
       pull_cursor: null,
       membership_id: null,
       token: null,
+      series: 1,
     });
     const transport: SyncTransport = {
       pushOps: async () => [],
@@ -637,6 +644,7 @@ describe("isServerUnreachable: the sync chip's fourth state (docs/sync-plan.md's
       pull_cursor: "0",
       membership_id: null,
       token: null,
+      series: 1,
     });
   }
 
@@ -705,5 +713,90 @@ describe("isServerUnreachable: the sync chip's fourth state (docs/sync-plan.md's
     await runPullCycle(db, authFailing);
 
     expect(isServerUnreachable()).toBe(false);
+  });
+});
+
+describe("runPullCycle: device_series", () => {
+  async function addDevice(series: number | null, pullCursor: string | null) {
+    await db.device.add({
+      id: getDeviceId(),
+      org_id: "org-1",
+      location_id: "location-1",
+      registered_at: new Date().toISOString(),
+      pull_cursor: pullCursor,
+      membership_id: "membership-1",
+      token: "1|token",
+      series,
+    });
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("stores the series a bootstrap page reports while this device's own is still null", async () => {
+    await addDevice(null, null);
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    transport.pullBootstrapOutcomeFor = () => ({ cursor: "3:", hasMore: false, changes: [], deviceSeries: 2 });
+
+    await runPullCycle(db, transport);
+
+    expect((await db.device.get(getDeviceId()))?.series).toBe(2);
+  });
+
+  it("stores the series a pull page reports while this device's own is still null", async () => {
+    await addDevice(null, "5");
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    transport.pullOutcomeFor = () => ({ cursor: "6", hasMore: false, changes: [], deviceSeries: 3 });
+
+    await runPullCycle(db, transport);
+
+    expect(transport.bootstrapCalls).toEqual([]);
+    expect((await db.device.get(getDeviceId()))?.series).toBe(3);
+  });
+
+  it("leaves the series alone when a page reports none", async () => {
+    await addDevice(null, "5");
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    transport.pullOutcomeFor = () => ({ cursor: "6", hasMore: false, changes: [], deviceSeries: null });
+
+    await runPullCycle(db, transport);
+
+    expect((await db.device.get(getDeviceId()))?.series).toBeNull();
+  });
+
+  it("never overwrites a different non-null series: logs it and leaves exactly one open review, not one per cycle", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    await addDevice(1, "5");
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    transport.pullOutcomeFor = () => ({ cursor: "6", hasMore: false, changes: [], deviceSeries: 2 });
+
+    await runPullCycle(db, transport);
+    await runPullCycle(db, transport);
+
+    expect((await db.device.get(getDeviceId()))?.series).toBe(1);
+    expect(consoleError).toHaveBeenCalled();
+    const reviews = await db.sync_review.toArray();
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]).toMatchObject({
+      entity: "device",
+      entity_id: getDeviceId(),
+      reason: DEVICE_SERIES_CONFLICT_REASON,
+      needs_review: true,
+      payload: { stored_series: 1, server_series: 2 },
+    });
+    // No op stands behind it, so nothing is ever held back or resent for it.
+    expect(await db.sync_ops.get(reviews[0].op_id)).toBeUndefined();
+  });
+
+  it("does nothing when the reported series is the one already stored", async () => {
+    await addDevice(2, "5");
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    transport.pullOutcomeFor = () => ({ cursor: "6", hasMore: false, changes: [], deviceSeries: 2 });
+
+    await runPullCycle(db, transport);
+
+    expect((await db.device.get(getDeviceId()))?.series).toBe(2);
+    expect(await db.sync_review.count()).toBe(0);
   });
 });

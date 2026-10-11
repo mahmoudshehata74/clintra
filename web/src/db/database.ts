@@ -327,6 +327,55 @@ export class ClintraDatabase extends Dexie {
             .map((visit) => tx.table("visits").update(visit.id, { note: null })),
         );
       });
+
+    // Per-device number series (docs/schema.md's v16 additions; the server's
+    // 2026_09_12_000024_add_device_number_series.php): every device mints
+    // invoice and receipt numbers only inside its own series, so the unique
+    // indexes gain `series` — [location_id+issued_year+series+number] and
+    // [location_id+series+receipt_number]. Existing data stays unique under
+    // them: every row written before this version gets series 1 below, and
+    // rows that were unique on the old key are still unique once the same
+    // value, 1, is added to every one of them.
+    //
+    // - invoices, payments: series = 1 on every existing row — the same
+    //   value the server's own migration gives every row it already holds.
+    //   An unsent invoice/payment op's payload is the row as it was written,
+    //   so it gets the same series = 1, keeping the op and its row in step.
+    // - device: series stays null — the server has not said what this
+    //   device's series is yet, and minting refuses until it does
+    //   (sync/engine.ts records it from the next pull or bootstrap). The one
+    //   exception is the seed/demo device (no token: bound by
+    //   db/deviceRegistration.ts's fallback, never talks to a server), which
+    //   is series 1, as that fallback writes it from now on.
+    this.version(15)
+      .stores({
+        invoices: "id, location_id, visit_id, &[location_id+issued_year+series+number]",
+        payments: "id, invoice_id, location_id, &[location_id+series+receipt_number]",
+      })
+      .upgrade(async (tx) => {
+        for (const tableName of ["invoices", "payments"] as const) {
+          const rows = await tx.table(tableName).toArray();
+          await Promise.all(rows.map((row) => tx.table(tableName).update(row.id, { series: 1 })));
+        }
+
+        const ops = await tx.table("sync_ops").toArray();
+        await Promise.all(
+          ops
+            .filter(
+              (op) =>
+                (op.entity === "invoices" || op.entity === "payments") &&
+                op.synced_at === null &&
+                op.payload !== null &&
+                op.payload.series === undefined,
+            )
+            .map((op) => tx.table("sync_ops").update(op.op_id, { payload: { ...op.payload, series: 1 } })),
+        );
+
+        const devices = await tx.table("device").toArray();
+        await Promise.all(
+          devices.map((device) => tx.table("device").update(device.id, { series: device.token === null ? 1 : null })),
+        );
+      });
   }
 }
 

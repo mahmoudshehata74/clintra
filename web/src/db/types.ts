@@ -248,7 +248,7 @@ export interface Invoice {
   id: string;
   org_id: string;
   location_id: string;
-  /** Sequential per location per calendar year (see issued_year). */
+  /** Sequential per location per calendar year within one device's series (see issued_year and series). */
   number: number;
   /**
    * The Africa/Cairo calendar year `number` is scoped to (see
@@ -258,6 +258,15 @@ export interface Invoice {
    * Added alongside that index in local database version 7.
    */
   issued_year: number;
+  /**
+   * The number series of the device that minted `number` (its
+   * DeviceRegistration.series): each device numbers only inside its own
+   * series, so two devices at one location can never mint the same
+   * invoice number, and a printed number never changes. 1 for every row
+   * written before local database version 15. See docs/schema.md's v16
+   * additions.
+   */
+  series: number;
   patient_id: string;
   practitioner_id: string;
   visit_id: string | null;
@@ -302,8 +311,10 @@ export interface Payment {
   location_id: string;
   amount: Piastres;
   method: PaymentMethod;
-  /** Sequential per location, across all time — never reused, never per-invoice or per-year. */
+  /** Sequential per location within one device's series, across all time — never reused, never per-invoice or per-year. */
   receipt_number: string;
+  /** The minting device's number series — see Invoice.series. */
+  series: number;
   note: string | null;
   /**
    * True when a cash_close already existed for this payment's location and
@@ -464,6 +475,16 @@ export interface DeviceRegistration {
    * Added in database version 13.
    */
   token: string | null;
+  /**
+   * This device's number series at its location, assigned by
+   * POST /api/devices/register (or learned from the next pull or bootstrap,
+   * for a device registered before series existed). Invoice and receipt
+   * numbers are minted only inside it (db/visitCompletion.ts,
+   * db/payments.ts). Null until the server has said — minting then refuses
+   * (device_series_unknown) rather than guess. The seed/demo device, which
+   * never talks to a server, is series 1. Added in database version 15.
+   */
+  series: number | null;
 }
 
 // Declared now, unused in v1, no screens.

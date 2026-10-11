@@ -77,11 +77,13 @@ export class HttpTransport implements SyncTransport {
       cursor: string;
       has_more: boolean;
       rows: Array<{ entity: string; entity_id: string; rev: number; payload: Record<string, unknown> | null }>;
+      device_series?: number | null;
     };
 
     return {
       cursor: body.cursor,
       hasMore: body.has_more,
+      deviceSeries: body.device_series,
       changes: body.rows.map((row) => ({
         entity: row.entity,
         entity_id: row.entity_id,
@@ -97,11 +99,13 @@ export class HttpTransport implements SyncTransport {
       cursor: string;
       has_more: boolean;
       rows: Array<{ entity: string; entity_id: string; rev: number; payload: Record<string, unknown> | null }>;
+      device_series?: number | null;
     };
 
     return {
       cursor: body.cursor,
       hasMore: body.has_more,
+      deviceSeries: body.device_series,
       changes: body.rows.map((row) => ({
         entity: row.entity,
         entity_id: row.entity_id,

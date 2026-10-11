@@ -10,7 +10,7 @@ import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo } from "../../do
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { voidInvoice } from "../../db/invoiceVoid";
 import { InvoiceStatus, PaymentMethod, type Invoice, type InvoiceItem, type Patient, type Payment, type Practitioner } from "../../db/types";
-import { formatInvoiceNumber, formatReceiptNumber } from "./invoiceNumber";
+import { formatBareInvoiceNumber, formatBareReceiptNumber, formatInvoiceNumber, formatReceiptNumber } from "./invoiceNumber";
 import { STATUS_LABEL } from "./invoiceStatusLabel";
 import { PrintClinicBlock, PrintHeaderNote, PrintPage, PrintTable, PrintTd } from "./PrintPage";
 import Sheet from "./Sheet";
@@ -241,7 +241,7 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
                         {METHOD_LABEL[payment.method]}
                       </span>
                       <span className="font-mono text-[11px] tabular-nums text-faint">
-                        <Ltr>{formatReceiptNumber(payment.receipt_number)}</Ltr> · <Ltr>{clockTimeInCairo(payment.created_at)}</Ltr>
+                        <Ltr>{formatReceiptNumber(payment)}</Ltr> · <Ltr>{clockTimeInCairo(payment.created_at)}</Ltr>
                       </span>
                       <button
                         type="button"
@@ -286,7 +286,7 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
             <PrintClinicBlock {...clinic} />
             <h2 className="mb-4 text-center text-lg font-semibold text-black">{dayScreenStrings.printInvoiceTitle}</h2>
             <p className="text-black">
-              {dayScreenStrings.invoiceNumberLabel}: {invoice.number}
+              {dayScreenStrings.invoiceNumberLabel}: {formatBareInvoiceNumber(invoice)}
             </p>
             <p className="text-black">
               {dayScreenStrings.invoicePatientLabel}: {patient?.full_name ?? ""}
@@ -330,14 +330,14 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
             <PrintHeaderNote>{dayScreenStrings.printHeaderWarning}</PrintHeaderNote>
             <PrintClinicBlock {...clinic} />
             <p className="mt-4 text-center text-sm text-black/60">{dayScreenStrings.paymentReceiptNumberPrefix}</p>
-            <h2 className="text-center text-2xl font-semibold text-black">{printTarget.payment.receipt_number}</h2>
+            <h2 className="text-center text-2xl font-semibold text-black">{formatBareReceiptNumber(printTarget.payment)}</h2>
             <p className="mt-6 text-center text-4xl font-semibold text-black">
               {formatMoneyAmount(printTarget.payment.amount)}
             </p>
             <div className="mt-6 flex flex-col gap-1 text-sm">
               <p className="flex justify-between text-black">
                 <span className="text-black/60">{dayScreenStrings.invoiceNumberLabel}</span>
-                <span>{invoice.number}</span>
+                <span>{formatBareInvoiceNumber(invoice)}</span>
               </p>
               <p className="flex justify-between text-black">
                 <span className="text-black/60">{dayScreenStrings.invoicePatientLabel}</span>

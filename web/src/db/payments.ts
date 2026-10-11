@@ -3,6 +3,7 @@ import type { Piastres } from "../domain/money";
 import { todayInCairo } from "../domain/time";
 import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
+import { getMintingSeries } from "./deviceRegistration";
 import { runAtomicMutations } from "./mutate";
 import { AuditAction, InvoiceStatus, type Invoice, type Payment, type PaymentMethod } from "./types";
 
@@ -32,12 +33,16 @@ export type RecordPaymentResult =
  * stale snapshot could let two payments together overpay an invoice.
  *
  * receipt_number is reserved the same way invoice numbers are (see
- * db/visitCompletion.ts): read the current max for this location inside the
- * transaction and add one, so IndexedDB's serialization of overlapping
- * readwrite transactions on the payments store rules out a race.
+ * db/visitCompletion.ts): within this device's own number series, read the
+ * current max for this location and series inside the transaction and add
+ * one, so IndexedDB's serialization of overlapping readwrite transactions on
+ * the payments store rules out a race on this device, and the series rules
+ * one out against every other device. Throws device_series_unknown, with
+ * nothing written, while this device does not know its series yet.
  */
 export async function recordPayment(db: ClintraDatabase, input: RecordPaymentInput): Promise<RecordPaymentResult> {
   const actor = await resolveActingMembership(db);
+  const series = await getMintingSeries(db);
 
   return runAtomicMutations(db, [db.invoices, db.payments, db.cash_close], async (write) => {
     const invoice = await db.invoices.get(input.invoiceId);
@@ -68,7 +73,9 @@ export async function recordPayment(db: ClintraDatabase, input: RecordPaymentInp
 
     const paymentsAtLocation = await db.payments.where("location_id").equals(invoice.location_id).toArray();
     const nextReceiptNumber =
-      paymentsAtLocation.reduce((max, payment) => Math.max(max, Number(payment.receipt_number)), 0) + 1;
+      paymentsAtLocation
+        .filter((payment) => payment.series === series)
+        .reduce((max, payment) => Math.max(max, Number(payment.receipt_number)), 0) + 1;
 
     const payment: Payment = {
       id: id(),
@@ -77,6 +84,7 @@ export async function recordPayment(db: ClintraDatabase, input: RecordPaymentInp
       amount: input.amount,
       method: input.method,
       receipt_number: String(nextReceiptNumber),
+      series,
       note: input.note,
       after_close: Boolean(closedForToday),
       created_by: actor.id,

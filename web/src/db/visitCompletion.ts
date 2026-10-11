@@ -7,6 +7,7 @@ import { canTransitionVisitStatus } from "../domain/transitions";
 import { VisitStatus } from "../domain/visitStatus";
 import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
+import { getMintingSeries } from "./deviceRegistration";
 import { runAtomicMutations } from "./mutate";
 import { AuditAction, InvoiceStatus, type DayState, type Invoice, type InvoiceItem, type Visit } from "./types";
 
@@ -38,19 +39,27 @@ export interface CompleteVisitResult {
  * validation gap: surfaced in the task report for a decision on whether to
  * guard against it.
  *
- * The invoice number is reserved inside this same transaction by reading the
- * current max for (location_id, issued_year) and adding one — never
- * computed outside the transaction and written separately, which is what
- * makes two visits completing at the same instant at the same location safe:
- * IndexedDB serializes overlapping readwrite transactions on the invoices
- * store, so the second transaction's read never runs until the first has
- * already committed its own invoice row.
+ * The invoice number is minted inside this device's own number series
+ * (docs/schema.md's v16 additions): reserved inside this same transaction by
+ * reading the current max for (location_id, issued_year, series) and adding
+ * one — never computed outside the transaction and written separately, which
+ * is what makes two visits completing at the same instant on this device
+ * safe: IndexedDB serializes overlapping readwrite transactions on the
+ * invoices store, so the second transaction's read never runs until the
+ * first has already committed its own invoice row. Another device at the
+ * same location mints in a different series, so it can never take the same
+ * number, offline or not.
+ *
+ * A device that does not know its series yet (device_series_unknown, see
+ * getMintingSeries) is refused before the transaction starts: nothing is
+ * written, so the visit stays where it was, with no invoice.
  */
 export async function completeVisitWithInvoice(
   db: ClintraDatabase,
   visitId: string,
 ): Promise<CompleteVisitResult> {
   const actor = await resolveActingMembership(db);
+  const series = await getMintingSeries(db);
 
   return runAtomicMutations(
     db,
@@ -91,7 +100,7 @@ export async function completeVisitWithInvoice(
       const invoicesAtLocation = await db.invoices.where("location_id").equals(before.location_id).toArray();
       const number =
         invoicesAtLocation
-          .filter((invoice) => invoice.issued_year === issuedYear)
+          .filter((invoice) => invoice.issued_year === issuedYear && invoice.series === series)
           .reduce((max, invoice) => Math.max(max, invoice.number), 0) + 1;
 
       const total: Piastres = service ? unitPrice : (0 as Piastres);
@@ -101,6 +110,7 @@ export async function completeVisitWithInvoice(
         location_id: before.location_id,
         number,
         issued_year: issuedYear,
+        series,
         patient_id: before.patient_id,
         practitioner_id: before.practitioner_id,
         visit_id: before.id,

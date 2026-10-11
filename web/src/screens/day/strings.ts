@@ -120,6 +120,11 @@ export const dayScreenStrings = {
   // Shown in the toast when the tapped slot was taken by another booking a
   // moment earlier; nothing is written and there is no undo to offer.
   bookingSlotTakenError: "الميعاد ده اتحجز لسه من ثانية",
+  // Shown (the day screen's toast, the payment sheet's field error, the
+  // doctor screen's alert line) when this device does not know its own
+  // invoice/receipt number series yet (db/deviceRegistration.ts's
+  // getMintingSeries); nothing is written.
+  deviceSeriesUnknownError: "الجهاز ده محتاج يتصل بالإنترنت مرة واحدة قبل ما يطلّع فواتير أو إيصالات",
   // Prefixes the typed search text on the always-present "create new
   // patient" row, e.g. "+ مريض جديد باسم «أحم»" — shown as the list's last
   // row whether or not any real match was found, not only on zero results.

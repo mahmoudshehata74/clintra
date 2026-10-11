@@ -93,6 +93,7 @@ describe("invoices index", () => {
       location_id: LOCATION_ID,
       number: 1,
       issued_year: 2026,
+      series: 1,
       patient_id: PATIENT_ID,
       practitioner_id: PRACTITIONER_ID,
       visit_id: null,
@@ -116,6 +117,12 @@ describe("invoices index", () => {
 
     await expect(db.invoices.add(makeInvoice({ number: 1, issued_year: 2027 }))).resolves.toBeTruthy();
   });
+
+  it("allows the same location, year and number in another device's series", async () => {
+    await db.invoices.add(makeInvoice({ number: 1, issued_year: 2026, series: 1 }));
+
+    await expect(db.invoices.add(makeInvoice({ number: 1, issued_year: 2026, series: 2 }))).resolves.toBeTruthy();
+  });
 });
 
 describe("payments index", () => {
@@ -127,6 +134,7 @@ describe("payments index", () => {
       amount: 100 as Piastres,
       method: "cash" as const,
       receipt_number: "1",
+      series: 1,
       note: null,
       after_close: false,
       created_by: "membership-1",
@@ -136,6 +144,26 @@ describe("payments index", () => {
 
     await db.payments.add(payment);
     await expect(db.payments.add({ ...payment, id: id(), invoice_id: "invoice-2" })).rejects.toThrow();
+  });
+
+  it("allows the same location and receipt_number in another device's series", async () => {
+    const payment = {
+      id: id(),
+      invoice_id: "invoice-1",
+      location_id: LOCATION_ID,
+      amount: 100 as Piastres,
+      method: "cash" as const,
+      receipt_number: "1",
+      series: 1,
+      note: null,
+      after_close: false,
+      created_by: "membership-1",
+      created_at: new Date().toISOString(),
+      rev: 1,
+    };
+
+    await db.payments.add(payment);
+    await expect(db.payments.add({ ...payment, id: id(), series: 2 })).resolves.toBeTruthy();
   });
 });
 
@@ -267,9 +295,109 @@ describe("version 14: visits.note backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const visits = await upgraded.visits.toArray();
 
-    expect(upgraded.verno).toBe(14);
+    expect(upgraded.verno).toBe(15);
     expect(visits.find((visit) => visit.id === withoutNote.id)).toHaveProperty("note", null);
     expect(visits.find((visit) => visit.id === pulledWithNote.id)?.note).toBe("حساسية بنسلين");
+    upgraded.close();
+  });
+});
+
+describe("version 15: number series backfill", () => {
+  it("backfills series 1 on invoices, payments and unsent ops, sets only the seed device's series, and moves the unique indexes onto series", async () => {
+    const name = `clintra-db-upgrade-test-${crypto.randomUUID()}`;
+    // Every store as the current schema declares it, except invoices and
+    // payments at their version-14 indexes — a device's database just
+    // before this upgrade.
+    const stores: Record<string, string> = Object.fromEntries(
+      new ClintraDatabase(name).tables.map((table) => [
+        table.name,
+        [table.schema.primKey.src, ...table.schema.indexes.map((index) => index.src)].join(", "),
+      ]),
+    );
+    stores.invoices = "id, location_id, visit_id, &[location_id+issued_year+number]";
+    stores.payments = "id, invoice_id, location_id, &[location_id+receipt_number]";
+    const legacy = new Dexie(name);
+    legacy.version(14).stores(stores);
+
+    const invoiceBase = {
+      org_id: ORG_ID,
+      location_id: LOCATION_ID,
+      issued_year: 2026,
+      patient_id: PATIENT_ID,
+      practitioner_id: PRACTITIONER_ID,
+      visit_id: null,
+      total: 0,
+      paid: 0,
+      status: InvoiceStatus.Unpaid,
+      issued_at: "2026-09-07T06:00:00.000Z",
+      rev: 1,
+    };
+    await legacy.table("invoices").bulkAdd([
+      { ...invoiceBase, id: "invoice-1", number: 1 },
+      { ...invoiceBase, id: "invoice-2", number: 2 },
+    ]);
+    const paymentBase = {
+      invoice_id: "invoice-1",
+      location_id: LOCATION_ID,
+      amount: 100,
+      method: "cash",
+      note: null,
+      after_close: false,
+      created_by: "membership-1",
+      created_at: "2026-09-07T06:00:00.000Z",
+      rev: 1,
+    };
+    await legacy.table("payments").bulkAdd([
+      { ...paymentBase, id: "payment-1", receipt_number: "1" },
+      { ...paymentBase, id: "payment-2", receipt_number: "2" },
+    ]);
+    const deviceBase = {
+      org_id: ORG_ID,
+      location_id: LOCATION_ID,
+      registered_at: "2026-09-07T06:00:00.000Z",
+      pull_cursor: null,
+    };
+    await legacy.table("device").bulkAdd([
+      { ...deviceBase, id: "seed-device", membership_id: null, token: null },
+      { ...deviceBase, id: "registered-device", membership_id: "membership-1", token: "1|token" },
+    ]);
+    const opBase = {
+      action: "create",
+      device_id: "registered-device",
+      created_at: "2026-09-07T06:00:00.000Z",
+      base_rev: null,
+      failure_count: 0,
+      next_retry_at: null,
+    };
+    await legacy.table("sync_ops").bulkAdd([
+      { ...opBase, op_id: "op-unsent-invoice", entity: "invoices", entity_id: "invoice-2", payload: { id: "invoice-2", number: 2 }, synced_at: null },
+      { ...opBase, op_id: "op-sent-invoice", entity: "invoices", entity_id: "invoice-1", payload: { id: "invoice-1", number: 1 }, synced_at: "2026-09-07T06:01:00.000Z" },
+      { ...opBase, op_id: "op-unsent-payment", entity: "payments", entity_id: "payment-2", payload: { id: "payment-2", receipt_number: "2" }, synced_at: null },
+      { ...opBase, op_id: "op-unsent-visit", entity: "visits", entity_id: "visit-1", payload: { id: "visit-1" }, synced_at: null },
+    ]);
+    legacy.close();
+
+    const upgraded = new ClintraDatabase(name);
+
+    expect(upgraded.verno).toBe(15);
+    expect((await upgraded.invoices.toArray()).map((invoice) => invoice.series)).toEqual([1, 1]);
+    expect((await upgraded.payments.toArray()).map((payment) => payment.series)).toEqual([1, 1]);
+    expect((await upgraded.device.get("seed-device"))?.series).toBe(1);
+    expect((await upgraded.device.get("registered-device"))?.series).toBeNull();
+
+    expect((await upgraded.sync_ops.get("op-unsent-invoice"))?.payload).toEqual({ id: "invoice-2", number: 2, series: 1 });
+    expect((await upgraded.sync_ops.get("op-unsent-payment"))?.payload).toEqual({ id: "payment-2", receipt_number: "2", series: 1 });
+    expect((await upgraded.sync_ops.get("op-sent-invoice"))?.payload).toEqual({ id: "invoice-1", number: 1 });
+    expect((await upgraded.sync_ops.get("op-unsent-visit"))?.payload).toEqual({ id: "visit-1" });
+
+    // The new indexes: the same number is free in another series, still
+    // taken in series 1.
+    const fresh = { ...invoiceBase, total: 0 as Piastres, paid: 0 as Piastres, number: 1 };
+    await expect(upgraded.invoices.add({ ...fresh, id: "invoice-3", series: 2 })).resolves.toBe("invoice-3");
+    await expect(upgraded.invoices.add({ ...fresh, id: "invoice-4", series: 1 })).rejects.toThrow();
+    const freshPayment = { ...paymentBase, amount: 100 as Piastres, method: "cash" as const, receipt_number: "1" };
+    await expect(upgraded.payments.add({ ...freshPayment, id: "payment-3", series: 2 })).resolves.toBe("payment-3");
+    await expect(upgraded.payments.add({ ...freshPayment, id: "payment-4", series: 1 })).rejects.toThrow();
     upgraded.close();
   });
 });

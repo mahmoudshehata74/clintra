@@ -11,6 +11,8 @@ interface RegisterDeviceResponseBody {
   org_id: string;
   location_id: string;
   membership_id: string;
+  /** This device's number series at its location (docs/schema.md's v16 additions). */
+  series: number;
   organization: Organization;
   locations: Location[];
   practitioners: Practitioner[];
@@ -119,6 +121,9 @@ async function bootstrapFromRegistration(db: ClintraDatabase, response: Register
         registered_at: new Date().toISOString(),
         pull_cursor: null,
         token: response.token,
+        // Null only if a server predating number series answered; the
+        // next pull or bootstrap then supplies it (sync/engine.ts).
+        series: response.series ?? null,
       });
     },
   );

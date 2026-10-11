@@ -4,7 +4,7 @@ import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Card, { CardHead } from "../../components/ui/Card";
 import { db } from "../../db/database";
-import { getDeviceBinding } from "../../db/deviceRegistration";
+import { getDeviceBinding, isDeviceSeriesUnknown } from "../../db/deviceRegistration";
 import type { Invoice, Patient, Practitioner, Service, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitCompleted, markVisitInRoom } from "../../db/visitAttendance";
@@ -23,6 +23,7 @@ import {
 } from "../day/advanceCooldown";
 import { arabicCount, type ArabicCountForms } from "../../domain/arabicText";
 import { formatElapsedMinutes } from "../day/elapsedLabel";
+import { dayScreenStrings } from "../day/strings";
 import VisitFormSheet from "../day/VisitFormSheet";
 import {
   canCallIn,
@@ -92,6 +93,10 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
   const [locationId, setLocationId] = useState<string | null>(null);
   const [visitFormVisitId, setVisitFormVisitId] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState<CooldownState>(EMPTY_COOLDOWN_STATE);
+  // The one advance failure this screen explains rather than only logging:
+  // completing cannot mint an invoice number yet (device_series_unknown), so
+  // nothing was written and the patient is still in the room.
+  const [advanceError, setAdvanceError] = useState<string | null>(null);
   // Waits and "دخل من" are wall-clock-derived; nothing re-renders them on
   // its own, so this ticks once a minute (SlotRow.tsx's own pattern).
   const [, forceMinuteTick] = useState(0);
@@ -188,9 +193,14 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
     window.setTimeout(() => {
       setCooldown((prev) => elapseCooldown(prev, visit.id));
     }, ADVANCE_COOLDOWN_MS);
+    setAdvanceError(null);
     try {
       await write(visit.id);
     } catch (error) {
+      if (isDeviceSeriesUnknown(error)) {
+        setAdvanceError(dayScreenStrings.deviceSeriesUnknownError);
+        return;
+      }
       console.error(error);
     } finally {
       setCooldown((prev) => settleCooldown(prev, visit.id));
@@ -276,6 +286,11 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
           <p className="me-auto text-[15px] font-semibold text-muted">{T.heroEmpty}</p>
           {next && callButton(next.visit, T.callIn, "primary", "md")}
         </section>
+      )}
+      {advanceError && (
+        <p role="alert" className="text-[13px] font-semibold text-danger">
+          {advanceError}
+        </p>
       )}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

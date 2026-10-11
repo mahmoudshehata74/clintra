@@ -5,6 +5,7 @@ import { InvoiceStatus } from "./types";
 import { VisitSource } from "../domain/visitSource";
 import { VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "./database";
+import { DEVICE_SERIES_UNKNOWN, getDeviceBinding } from "./deviceRegistration";
 import { markVisitInRoom } from "./visitAttendance";
 import { seedDatabase } from "./seed";
 import type { Visit } from "./types";
@@ -252,5 +253,53 @@ describe("completeVisitWithInvoice", () => {
       .equals([practitioner.id, location.id, "2026-09-07"])
       .first();
     expect(dayState?.avg_consult_minutes).toBe(12);
+  });
+});
+
+describe("completeVisitWithInvoice: the device's own number series", () => {
+  async function setDeviceSeries(series: number | null) {
+    const device = await getDeviceBinding(db);
+    await db.device.update(device.id, { series });
+  }
+
+  it("numbers each series independently at one location, even interleaved", async () => {
+    await seedDatabase(db);
+
+    const minted: Array<[number, number]> = [];
+    for (const series of [1, 2, 1, 2, 2, 1]) {
+      await setDeviceSeries(series);
+      const visit = await makeInRoomVisit();
+      const { invoice } = await completeVisitWithInvoice(db, visit.id);
+      minted.push([invoice.series, invoice.number]);
+    }
+
+    expect(minted).toEqual([
+      [1, 1],
+      [2, 1],
+      [1, 2],
+      [2, 2],
+      [2, 3],
+      [1, 3],
+    ]);
+    const stored = await db.invoices.toArray();
+    expect(stored.map((invoice) => [invoice.series, invoice.number]).sort()).toEqual(minted.slice().sort());
+  });
+
+  it("refuses with device_series_unknown while the series is null, and writes nothing: the visit stays in_room with no invoice", async () => {
+    await seedDatabase(db);
+    const visit = await makeInRoomVisit();
+    await setDeviceSeries(null);
+    const auditRowsBefore = await db.audit_log.count();
+    const syncOpsBefore = await db.sync_ops.count();
+
+    await expect(completeVisitWithInvoice(db, visit.id)).rejects.toThrow(DEVICE_SERIES_UNKNOWN);
+
+    const after = await db.visits.get(visit.id);
+    expect(after?.status).toBe(VisitStatus.InRoom);
+    expect(after?.ended_at).toBeNull();
+    expect(await db.invoices.where("visit_id").equals(visit.id).count()).toBe(0);
+    expect(await db.invoice_items.count()).toBe(0);
+    expect(await db.audit_log.count()).toBe(auditRowsBefore);
+    expect(await db.sync_ops.count()).toBe(syncOpsBefore);
   });
 });

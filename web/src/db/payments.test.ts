@@ -6,6 +6,7 @@ import { markVisitArrived, markVisitInRoom } from "./visitAttendance";
 import { seedDatabase } from "./seed";
 import { completeVisitWithInvoice } from "./visitCompletion";
 import { recordPayment } from "./payments";
+import { DEVICE_SERIES_UNKNOWN, getDeviceBinding } from "./deviceRegistration";
 
 let db: ClintraDatabase;
 
@@ -187,5 +188,48 @@ describe("recordPayment", () => {
 
     expect(result.ok).toBe(true);
     expect(result.ok && result.payment.after_close).toBe(true);
+  });
+});
+
+describe("recordPayment: the device's own number series", () => {
+  async function setDeviceSeries(series: number | null) {
+    const device = await getDeviceBinding(db);
+    await db.device.update(device.id, { series });
+  }
+
+  it("numbers receipts per series independently at one location, even interleaved", async () => {
+    const invoice = await seedUnpaidInvoice();
+
+    const minted: Array<[number, string]> = [];
+    for (const series of [2, 1, 2, 2, 1]) {
+      await setDeviceSeries(series);
+      const result = await recordPayment(db, { invoiceId: invoice.id, amount: 1 as typeof invoice.total, method: PaymentMethod.Cash, note: null });
+      if (!result.ok) throw new Error(`expected success, got ${result.reason}`);
+      minted.push([result.payment.series, result.payment.receipt_number]);
+    }
+
+    expect(minted).toEqual([
+      [2, "1"],
+      [1, "1"],
+      [2, "2"],
+      [2, "3"],
+      [1, "2"],
+    ]);
+  });
+
+  it("refuses with device_series_unknown while the series is null, and writes nothing", async () => {
+    const invoice = await seedUnpaidInvoice();
+    await setDeviceSeries(null);
+    const auditRowsBefore = await db.audit_log.count();
+
+    await expect(
+      recordPayment(db, { invoiceId: invoice.id, amount: invoice.total, method: PaymentMethod.Cash, note: null }),
+    ).rejects.toThrow(DEVICE_SERIES_UNKNOWN);
+
+    expect(await db.payments.count()).toBe(0);
+    const unchanged = await db.invoices.get(invoice.id);
+    expect(unchanged?.paid).toBe(0);
+    expect(unchanged?.status).toBe(InvoiceStatus.Unpaid);
+    expect(await db.audit_log.count()).toBe(auditRowsBefore);
   });
 });

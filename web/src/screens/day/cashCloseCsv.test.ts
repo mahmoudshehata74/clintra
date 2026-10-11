@@ -13,6 +13,7 @@ function invoiceFixture(overrides: Partial<Invoice> = {}): Invoice {
     location_id: "location-1",
     number: 1,
     issued_year: 2026,
+    series: 1,
     patient_id: "patient-1",
     practitioner_id: "practitioner-1",
     visit_id: "visit-1",
