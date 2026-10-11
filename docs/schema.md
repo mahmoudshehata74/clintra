@@ -269,10 +269,15 @@ stored field, since a compound unique index needs an actual key path, not a
 value derived from another field on read), and the local store's index is
 `&[location_id+issued_year+number]`. The number itself is reserved inside the
 same transaction that writes the invoice (see `db/visitCompletion.ts`), so
-concurrent completions at the same location never collide or leave a gap:
+concurrent completions *on one device* never collide or leave a gap:
 IndexedDB serializes overlapping readwrite transactions on the same store, so
 the second transaction's read of the current max number never runs until the
-first has already committed its own row.
+first has already committed its own row. *Correction:* this paragraph used to
+say concurrent completions "at the same location" never collide. That holds
+only within one device's own IndexedDB: two devices at one location each read
+their own local max, so both minted the same next number while offline, and
+the second push died on the server's unique index. The v16 additions below
+fix this with a per-device number series.
 
 `invoices.visit_id` and `invoices.location_id` are now indexed (plain, not
 unique) — the former so a screen can look up a visit's invoice, the latter for
@@ -602,6 +607,63 @@ pulled from an already-migrated server) untouched. No index: a note is only
 ever read and written by primary key with the rest of its visit. Versions
 1-13 are unchanged.
 
+## v16 additions
+
+### Per-device number series: device.series, invoices.series, payments.series
+
+Owner decision. Every device at a location holds a number series — 1, 2, 3
+... per location, assigned once at registration and never reused (a revoked
+device keeps its own) — and mints invoice and receipt numbers only inside
+it. Two devices can therefore never mint the same number, offline or not,
+and a printed number never changes.
+
+- `device.series` (smallint; server-side NOT NULL and unique per
+  `location_id`). Assigned by `register_device(jsonb)`: max + 1 across every
+  device ever registered at the code's location, revoked ones included,
+  serialised per location by a transaction-scoped advisory lock
+  (`api/docs/rls.md`'s "Per-device number series"). Returned as `series` in
+  the registration response, and as `device_series` on every
+  `GET /api/sync/pull` and `GET /api/sync/bootstrap` page, so a device
+  registered before this change learns its series on its next pull. Server
+  migration (`2026_09_12_000024_add_device_number_series.php`): existing
+  devices are numbered per `location_id` in `registered_at` order, then
+  `id`. Local store (database version 15): nullable — null until the server
+  has said; the seed/demo device (no token, never talks to a server) is 1.
+  The sync engine stores a reported series only over null; a different
+  non-null value is never written over the stored one — it is logged and
+  left as one `sync_review` row (entity `device`, reason
+  `device_series_conflict`) for support.
+- `invoices.series`, `payments.series` (smallint, NOT NULL, no default):
+  the series of the device that minted the row. Every row that existed
+  before this version is series 1, on the server and in every local store
+  (an unsent invoice or payment op's payload gets the same 1 locally).
+- **Unique indexes.** Server: `UNIQUE (location_id, issued_year, series,
+  number)` on `invoices` and `UNIQUE (location_id, series, receipt_number)`
+  on `payments`, replacing the v7 keys. Local (database version 15):
+  `&[location_id+issued_year+series+number]` and
+  `&[location_id+series+receipt_number]`. Existing rows stay unique: they
+  were unique on the old key, and each gains the same series, 1.
+- **Minting rule.** The next invoice number is the max `number` for
+  (`location_id`, `issued_year`, this device's series) + 1; the next receipt
+  number is the max `receipt_number` for (`location_id`, this device's
+  series) + 1 — both read inside the write's own transaction, as in v7. A
+  device whose series is still null refuses to mint
+  (`device_series_unknown`) before anything is written, and the screen says
+  "الجهاز ده محتاج يتصل بالإنترنت مرة واحدة قبل ما يطلّع فواتير أو إيصالات".
+  The push endpoint rejects a create whose `series` is not the pushing
+  device's own (`series_mismatch`) and an update that changes `series`,
+  `number`, `issued_year` or `receipt_number` (`number_immutable`); a create
+  that still collides on the number key is `conflict_number_taken`, never
+  `conflict_already_exists`.
+- **Display rule** (`web/src/screens/day/invoiceNumber.ts`). Series 1
+  renders exactly as before ("INV-2026-0043", "RCP-1189"); series n ≥ 2
+  adds its letter, bijective base 26 with 1 = A, so 2 → B … 26 → Z,
+  27 → AA, 28 → AB … ("INV-2026-B-0043", "RCP-B-1189"). The printed invoice
+  and receipt and the audit log show the bare form, without the INV-/RCP-
+  prefix ("43", "B-43"), as they always showed the bare number. Every place
+  that shows or prints an invoice or receipt number goes through these
+  formatters.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.
@@ -609,9 +671,12 @@ ever read and written by primary key with the rest of its visit. Versions
   `is_overbooked` is true.
 - An invoice `number` is unique per location per calendar year (Africa/Cairo;
   see v7 additions — this line previously said "per location" only, which was
-  an error in this document, not the implementation it now matches).
+  an error in this document, not the implementation it now matches) within
+  the minting device's number series (v16 additions).
 - A payment's `receipt_number` is unique per location, across all time (never
-  reused, never scoped to a year or a single invoice).
+  reused, never scoped to a year or a single invoice), within the minting
+  device's number series (v16 additions).
+- A device's number series is unique per location and never reused.
 - A `cash_close` is unique per location per day.
 - Practitioner availability is computed across all locations: a practitioner
   booked at a time in one location is busy in every other location.

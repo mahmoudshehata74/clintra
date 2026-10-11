@@ -60,6 +60,10 @@ listed under "Screen 9 (doctor day)" below.
 - `prescriptions` numbered `RX-{issued_year}-{sequence}`, sequential per
   location per calendar year, reserved with the same mechanism as invoice
   numbers (`prescriptions.issued_year` is a stored field).
+- Per-device number series (owner decision): every device at a location
+  gets its own series at registration and mints invoice and receipt numbers
+  only inside it, so two devices never collide (`docs/schema.md`'s v16
+  additions); prescriptions (RX) will reuse the same series rule.
 - `messages` + `message_templates`; templates seeded by migration. A message
   row records `attempted_at`; "sent" is marked manually. WhatsApp opens
   `wa.me`, SMS opens `sms:`. No messaging provider in v1.

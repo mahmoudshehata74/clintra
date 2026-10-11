@@ -269,11 +269,27 @@ the invoice total. Check the other device sees the invoice with a
 matching total and invoice number.
 
 **Expected:** invoice number and total match exactly on both devices.
-Invoice numbers are sequential per location per year
-(`docs/schema.md`'s "invoices" — record if you ever see two devices both
-believe they minted the *same* invoice number for two different
-invoices; that would be a real conflict this document doesn't otherwise
-exercise).
+Each device mints in its own number series (`docs/schema.md`'s v16
+additions): Device 1 registered first, so it is series 1 and its invoices
+read exactly as before ("INV-2026-0001"); Device 2 is series 2, so an
+invoice it mints reads "INV-2026-B-0001". Complete one visit on each
+device — ideally both while offline, then reconnect both — and check:
+
+- Both invoices reach the server and both devices: neither push is
+  rejected, and nothing new appears in sync review.
+- The two numbers differ by the series letter (e.g. "INV-2026-0003" and
+  "INV-2026-B-0001"); each device's own numbers run 1, 2, 3 … in its own
+  series, independent of the other device.
+- In Postgres, scoped as in scenario 1:
+  `SELECT id, location_id, series FROM device;` shows series 1 and 2 at
+  the location, and `SELECT number, issued_year, series FROM invoices;`
+  shows each invoice under its minting device's series.
+
+**Record if** a push comes back `series_mismatch`, `number_immutable` or
+`conflict_number_taken` (visible as a sync-review row), or if either device
+shows "الجهاز ده محتاج يتصل بالإنترنت مرة واحدة قبل ما يطلّع فواتير أو
+إيصالات" after it has synced at least once — a device that has talked to the
+server always knows its series.
 
 ### Scenario 8 — Payment and receipt
 
@@ -282,6 +298,14 @@ less than the full total (a partial payment), then check Device 2 shows
 the same payment with the same receipt number ("إيصال رقم N"). Print/view
 the receipt ("إيصال الفاتورة") on Device 2 and confirm the amount and
 method match what Device 1 recorded.
+
+Then record a second partial payment from Device 2. Receipt numbers follow
+the same per-device series as invoices: Device 1's receipts read "RCP-1",
+"RCP-2" … and Device 2's "RCP-B-1", "RCP-B-2" …; the printed receipt and
+the audit log show the bare number ("1", "B-1"). Check both payments appear
+on both devices with those numbers, that neither device's push was
+rejected, and that `SELECT receipt_number, series FROM payments;` (scoped
+as in scenario 1) shows each receipt under its minting device's series.
 
 ### Scenario 9 — Close the cash drawer
 
