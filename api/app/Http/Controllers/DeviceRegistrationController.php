@@ -126,6 +126,10 @@ class DeviceRegistrationController extends Controller
             'org_id' => $result['org_id'],
             'location_id' => $result['location_id'],
             'membership_id' => $result['membership_id'],
+            // The device's own number series (docs/schema.md's v16
+            // additions) — it mints invoice and receipt numbers only
+            // inside it.
+            'series' => $result['series'],
             'organization' => $result['organization'],
             'locations' => $result['locations'],
             'practitioners' => $result['practitioners'],

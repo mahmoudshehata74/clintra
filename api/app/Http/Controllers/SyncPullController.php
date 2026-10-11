@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\PullSyncOpsRequest;
+use App\Support\Sync\DeviceSeries;
 use App\Support\Sync\SyncPuller;
 use Illuminate\Http\JsonResponse;
 
@@ -33,6 +34,12 @@ class SyncPullController extends Controller
             ], 422);
         }
 
-        return response()->json($this->puller->pull($since));
+        // device_series rides on every page so a device registered before
+        // number series existed learns its own on its next pull
+        // (docs/schema.md's v16 additions).
+        return response()->json([
+            ...$this->puller->pull($since),
+            'device_series' => DeviceSeries::of($request->attributes->get('device_id')),
+        ]);
     }
 }

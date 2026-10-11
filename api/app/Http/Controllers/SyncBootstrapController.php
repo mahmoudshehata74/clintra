@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\SyncBootstrapRequest;
+use App\Support\Sync\DeviceSeries;
 use App\Support\Sync\SyncBootstrapPuller;
 use Illuminate\Http\JsonResponse;
 
@@ -22,6 +23,11 @@ class SyncBootstrapController extends Controller
     {
         $cursor = $request->validated()['cursor'] ?? null;
 
-        return response()->json($this->puller->pull($cursor));
+        // Same as GET /api/sync/pull: the requesting device's own series
+        // (docs/schema.md's v16 additions).
+        return response()->json([
+            ...$this->puller->pull($cursor),
+            'device_series' => DeviceSeries::of($request->attributes->get('device_id')),
+        ]);
     }
 }
