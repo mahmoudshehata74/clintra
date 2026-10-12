@@ -86,8 +86,13 @@ export interface Practitioner {
   user_id: string | null;
   full_name: string;
   specialty_id: string;
+  /** Trimmed; "" means no title (domain/practitionerProfile.ts). */
   title: string;
   is_active: boolean;
+  /** The medical syndicate registration number, trimmed; null when none is on record (docs/schema.md's v18 additions). */
+  syndicate_number: string | null;
+  /** Server-assigned; see docs/schema.md's v12 additions. */
+  rev: number;
 }
 
 /** Natural key is the composite practitioner_id + location_id; `id` added as the Dexie primary key. */

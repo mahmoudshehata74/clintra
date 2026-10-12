@@ -443,6 +443,7 @@ export const dayScreenStrings = {
   auditFilterEntityPayments: "الدفعات",
   auditFilterEntityCashClose: "إغلاق الصندوق",
   auditFilterEntityVisitFormData: "الزيارة (النموذج)",
+  auditFilterEntitySettings: "الإعدادات",
   auditFilterActionCreate: "إنشاء",
   auditFilterActionUpdate: "تعديل",
   auditFilterActionDelete: "حذف",

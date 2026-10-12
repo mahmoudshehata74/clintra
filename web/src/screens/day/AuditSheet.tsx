@@ -44,6 +44,7 @@ const ENTITY_FILTER_OPTIONS: readonly { value: AuditEntityFilter; label: string 
   { value: "payments", label: dayScreenStrings.auditFilterEntityPayments },
   { value: "cash_close", label: dayScreenStrings.auditFilterEntityCashClose },
   { value: "visit_form_data", label: dayScreenStrings.auditFilterEntityVisitFormData },
+  { value: "settings", label: dayScreenStrings.auditFilterEntitySettings },
 ];
 
 const ACTION_FILTER_OPTIONS: readonly { value: AuditActionFilter; label: string }[] = [
@@ -62,6 +63,7 @@ const AUDITED_ENTITIES = new Set([
   "visit_form_data",
   "prescriptions",
   "prescription_items",
+  "practitioners",
 ]);
 
 function payloadOf(row: Pick<AuditLog, "before" | "after">): Record<string, unknown> | null {
@@ -151,6 +153,11 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
           return prescription
             ? prescription.location_id === locationId && prescription.practitioner_id === practitionerId
             : false;
+        }
+        // A practitioner's own row carries neither field, only its id: it
+        // is in scope on that practitioner's log, at any location.
+        if (row.entity === "practitioners") {
+          return row.entity_id === practitionerId;
         }
         return isAuditRowInScope(row, practitionerId, locationId);
       }

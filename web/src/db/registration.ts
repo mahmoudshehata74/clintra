@@ -15,7 +15,8 @@ interface RegisterDeviceResponseBody {
   series: number;
   organization: Organization;
   locations: Location[];
-  practitioners: Practitioner[];
+  /** syndicate_number and rev arrive from 2026_09_12_000028 on; absent from an older server. */
+  practitioners: (Omit<Practitioner, "syndicate_number" | "rev"> & Partial<Pick<Practitioner, "syndicate_number" | "rev">>)[];
   memberships: Membership[];
   users: User[];
 }
@@ -100,8 +101,8 @@ export async function registerDevice(
  * db/seed.ts's identical reasoning for its own demo data, and
  * api/docs/rls.md's "The sync endpoint is accept-or-reject only" for why
  * a device inventing history for a row it was only ever handed is the
- * same class of problem in reverse). Each membership row already carries
- * its real server `rev`, straight from the response.
+ * same class of problem in reverse). Each membership and practitioner row
+ * already carries its real server `rev`, straight from the response.
  */
 async function bootstrapFromRegistration(db: ClintraDatabase, response: RegisterDeviceResponseBody): Promise<void> {
   await db.transaction(
@@ -110,7 +111,16 @@ async function bootstrapFromRegistration(db: ClintraDatabase, response: Register
     async () => {
       await db.organizations.put(response.organization);
       await db.locations.bulkPut(response.locations);
-      await db.practitioners.bulkPut(response.practitioners);
+      // Each practitioner carries its syndicate number and real server
+      // rev (2026_09_12_000028); a server predating them is answered as
+      // version 17's backfill would: no number, rev 1.
+      await db.practitioners.bulkPut(
+        response.practitioners.map((practitioner) => ({
+          ...practitioner,
+          syndicate_number: practitioner.syndicate_number ?? null,
+          rev: practitioner.rev ?? 1,
+        })),
+      );
       await db.memberships.bulkPut(response.memberships);
       await db.users.bulkPut(response.users);
       await db.device.put({

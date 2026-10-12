@@ -15,6 +15,7 @@ const ENTITY_LABELS: Record<string, string> = {
   memberships: "موظف",
   patients: "مريض",
   payments: "دفعة",
+  practitioners: "بيانات طبيب",
   prescription_items: "دواء في وصفة",
   prescriptions: "وصفة",
   schedules: "مواعيد العمل",
@@ -38,6 +39,8 @@ const REASON_LABELS: Record<string, string> = {
   conflict_number_taken: "الرقم ده متسجّل قبل كده على السيرفر",
   conflict_visit_has_prescription: "الزيارة دي ليها وصفة بالفعل من جهاز تاني",
   prescription_printed: "الوصفة دي اتطبعت، مينفعش تتعدّل",
+  practitioner_not_editable: "بيانات الطبيب دي مينفعش تتغيّر من الجهاز، غير الاسم واللقب ورقم النقابة",
+  practitioner_profile_invalid: "بيانات الطبيب دي ناقصة أو غلط: الاسم مطلوب ورقم النقابة 50 حرف بالكتير",
   conflict: "فيه تعارض في البيانات",
 };
 

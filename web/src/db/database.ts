@@ -401,6 +401,34 @@ export class ClintraDatabase extends Dexie {
       prescriptions: "id, &visit_id, location_id, patient_id, &[location_id+issued_year+series+number]",
       prescription_items: "id, prescription_id",
     });
+
+    // Practitioners sync, with name, title and syndicate number editable
+    // (db/practitioners.ts; the server's
+    // 2026_09_12_000027_add_profile_and_rev_to_practitioners.php;
+    // docs/schema.md's v18 additions). No index — both new fields are only
+    // ever read and written by primary key with the rest of the row — so
+    // this is backfill only:
+    // - syndicate_number: null ("none on record") on every row without one.
+    // - rev: 1, by version 12's convention — 1 is what the server's trigger
+    //   gives a new row and what its own migration gave every existing
+    //   practitioner (DEFAULT 1), so a practitioner never edited on the
+    //   server matches exactly; one that was fails safely, as a single
+    //   reviewable conflict_stale_rev, never a 422 (base_rev must be >= 1).
+    // A row that already carries either field (pulled whole from an
+    // already-migrated server, sync/engine.ts) is left as it is.
+    this.version(17)
+      .stores({})
+      .upgrade(async (tx) => {
+        const practitioners = await tx.table("practitioners").toArray();
+        await Promise.all(
+          practitioners.map((practitioner) =>
+            tx.table("practitioners").update(practitioner.id, {
+              syndicate_number: practitioner.syndicate_number === undefined ? null : practitioner.syndicate_number,
+              rev: practitioner.rev === undefined ? 1 : practitioner.rev,
+            }),
+          ),
+        );
+      });
   }
 }
 
