@@ -16,9 +16,11 @@ import { sidebarStrings } from "../src/components/strings";
 import { addDaysToClinicDay, mostRecentWeekdayOnOrBefore, todayInCairo } from "../src/domain/time";
 import { dayScreenStrings } from "../src/screens/day/strings";
 import { doctorDayStrings } from "../src/screens/doctor/strings";
+import { visitWorkspaceStrings } from "../src/screens/visit/strings";
 
 export const S = dayScreenStrings;
 export const DOCTOR = doctorDayStrings;
+export const VISIT = visitWorkspaceStrings;
 export const AUTH = authStrings;
 export const SIDEBAR = sidebarStrings;
 export { DEV_SEED_PINS };

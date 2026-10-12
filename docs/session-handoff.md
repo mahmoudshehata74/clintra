@@ -71,6 +71,13 @@ Owner decisions it implements:
 5. Removing every item keeps the numbered prescription; an empty one cannot be
    printed (`prescription_empty`), and the skipped number is acceptable.
 
+10 visit form (step 6): done — `web/src/screens/visit/` (VisitWorkspace,
+pure helpers in `workspace.ts`), hosted by VisitFormSheet (same entry points)
+and by the rail page "الزيارة الحالية"; prescription editing goes through
+`db/prescriptions.ts`. The legacy tokens (`green-soft`, `line`,
+`--radius-el`) had no use left and are retired. The owner decisions it
+implements are listed under "Screen 10 (visit workspace)" below.
+
 ## Data decisions for the rebuild
 - `visits.note text NULL` — the doctor's quick note.
 - `practitioners.syndicate_number varchar(50) NULL` — hidden when empty.
@@ -106,6 +113,16 @@ Owner decisions it implements:
 - h. "مستني"/"مستنية" from `patients.gender` (`female`), neutral "مستني" otherwise.
 - i. Age is the current Cairo year minus `birth_year`, omitted when unknown.
 - j. Relative time: days under 14, weeks under 60 days, months after that, with Arabic singular/dual/plural forms.
+
+### Screen 10 (visit workspace) — owner decisions over the prototype
+- a. No `.visit-aside`: one `.visit-main` column; the field hint is only the autosave "اتحفظ"; autosave stays per field, on blur, focus-preserving.
+- b. `.pt-summary`: avatar initial, name · age (omitted without birth_year), local mono LTR phone when present, "N زيارات · آخر زيارة قبل …" omitting empty parts; no `.quick` buttons until screen 18, no `.plan-badge` until screen 17.
+- c. `.visit-history`: the last three completed visits before this one, any practitioner on the device, newest first — d/m, diagnosis (else complaint, else "من غير تشخيص"), " — " first two drug names then "+N"; heading by real count; hidden without a prior visit.
+- d. Complaint and diagnosis are the shared Field + TextArea, saved as before.
+- e. `.rx-section` with arabicCount ("دواء واحد"/"دوائين"/"3 أدوية"/"11 دواء"); item = LTR name + "instructions · duration" (note muted), tap to edit in place, "حذف", "＋ أضف دواء" inline form; writer errors mapped to Arabic; read-only when not the visit's practitioner, not prescribable, or printed ("الوصفة اتطبعت ومش ممكن تتعدّل"); hidden for a non-prescriber with no drug; no print button.
+- f. `.runrow`: "قفل الزيارة" only while in_room through the caller's own completion path and cooldown; "حفظ ومتابعة لاحقًا" waits for the field save and closes; `.count` live while in_room, final once completed, "أقل من دقيقة" under one minute.
+- g. One VisitWorkspace for VisitFormSheet and the "الزيارة الحالية" rail page (nav key `visit`, practitioner memberships only, after "شاشة الطبيب"): the practitioner's in_room visit today or "مفيش زيارة مفتوحة دلوقتي" with "افتح شاشة الطبيب"; stays mounted under the idle lock on the guarded acting membership.
+- h. The legacy tokens are retired from `@theme` and `docs/design-tokens.md` (zero uses in web/src); dark mode stays off.
 
 ## Standing rules for the rebuild
 - Existing logic and behaviour do not change; vitest and e2e stay green at

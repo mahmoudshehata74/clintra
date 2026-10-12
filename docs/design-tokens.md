@@ -52,16 +52,6 @@ IBM Plex Sans Arabic only, weights 300–700, for headings and body. All
 numbers render as Latin digits with `font-variant-numeric: tabular-nums`
 where they align in columns.
 
-## Legacy tokens
-
-`green-soft`, `line`, and the radius `--radius-el` (8px) belong to the
-pre-prototype system. They stay only while screens that use them are not
-yet restyled — today only the visit form's text area
-(`web/src/screens/day/VisitFormSheet.tsx`) — and each is deleted in the
-commit that migrates its last usage. `red-soft`, `amber`, `amber-soft`,
-`purple`, `purple-soft`, `red`, `line-soft`, `--radius-frame` (12px) and the
-`--font-display` alias reached zero usage and were removed.
-
 ## Not yet enabled
 
 Dark mode. The prototype defines dark values; they are enabled in a separate

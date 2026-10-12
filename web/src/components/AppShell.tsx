@@ -63,6 +63,16 @@ const ICON_PATHS: Record<NavItem["key"], ReactNode> = {
       <circle cx="19" cy="12" r="2" />
     </>
   ),
+  // A clipboard: the visit's own record, its clip on top and three lines.
+  visit: (
+    <>
+      <rect x="5" y="4" width="14" height="17" rx="2" />
+      <path d="M9 4V3h6v1" />
+      <line x1="9" y1="10" x2="15" y2="10" />
+      <line x1="9" y1="14" x2="15" y2="14" />
+      <line x1="9" y1="18" x2="13" y2="18" />
+    </>
+  ),
   // A timeline: three dots on a rail, each with its line of text.
   audit: (
     <>
@@ -121,7 +131,7 @@ const ITEM_ACTIVE = "border-copper bg-white/[0.14] text-on-dark";
  * deviation from it, per docs/design-rule.md).
  *
  * Items come from navItemsFor(role, hasPractitioner) — today "day" and
- * "audit" (every role), "doctor" (a membership tied to a practitioner) and
+ * "audit" (every role), "doctor" and "visit" (a membership tied to a practitioner) and
  * "settings" (owner only, the same gate the day screen's own
  * settings entry always used). Rendering is generic over whatever that returns, so a later
  * task that appends an item needs no change here, only an icon entry above.

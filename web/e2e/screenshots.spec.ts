@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { formatEgyptianPhoneForDisplay } from "../src/domain/phone";
 import { cairoInstant, todayInCairo, type ClockTime } from "../src/domain/time";
 import {
   advanceRowTo,
@@ -22,8 +23,10 @@ import {
   rowFor,
   S,
   selectPractitioner,
+  SIDEBAR,
   SLOTS_DR,
   QUEUE_DR,
+  VISIT,
 } from "./support";
 import { registrationStrings } from "../src/auth/registrationStrings";
 import { galleryStrings } from "../src/gallery/strings";
@@ -589,3 +592,181 @@ async function fillVisitForm(page: Page, patientName: string, complaint: string,
   await form.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
   await expect(form).toBeHidden();
 }
+
+const KARIM_BIRTH_YEAR = 1992;
+const KARIM_PHONE = "+201001234567";
+const KARIM_AGE = Number(todayInCairo().slice(0, 4)) - KARIM_BIRTH_YEAR;
+
+/**
+ * Fixture data the app has no screen for yet (a patient's birth year and
+ * phone; a visit on another day), written straight into IndexedDB the way
+ * other specs reach the store. Patients and practitioners are picked by
+ * name. Resolves to how many rows each step updated.
+ */
+async function adjustKarimFixture(page: Page): Promise<{ patients: number; visits: number }> {
+  return page.evaluate(
+    async ({ patientName, practitionerName, birthYear, phone, shiftDays }) => {
+      const req = indexedDB.open("clintra");
+      const database: IDBDatabase = await new Promise((resolve, reject) => {
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      const all = <T,>(store: IDBObjectStore): Promise<T[]> =>
+        new Promise((resolve, reject) => {
+          const getAll = store.getAll();
+          getAll.onsuccess = () => resolve(getAll.result as T[]);
+          getAll.onerror = () => reject(getAll.error);
+        });
+      const put = (store: IDBObjectStore, row: unknown): Promise<void> =>
+        new Promise((resolve, reject) => {
+          const request = store.put(row);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+        });
+      type Row = Record<string, unknown>;
+      try {
+        const tx = database.transaction(["patients", "practitioners", "visits"], "readwrite");
+        const patients = (await all<Row>(tx.objectStore("patients"))).filter((row) => row.full_name === patientName);
+        const practitioners = (await all<Row>(tx.objectStore("practitioners"))).filter(
+          (row) => row.full_name === practitionerName,
+        );
+        for (const patient of patients) {
+          await put(tx.objectStore("patients"), { ...patient, birth_year: birthYear, phone });
+        }
+        const shiftMs = shiftDays * 86_400_000;
+        const shiftInstant = (value: unknown) =>
+          typeof value === "string" ? new Date(new Date(value).getTime() + shiftMs).toISOString() : value;
+        const visits = (await all<Row>(tx.objectStore("visits"))).filter(
+          (row) =>
+            patients.some((patient) => patient.id === row.patient_id) &&
+            practitioners.some((practitioner) => practitioner.id === row.practitioner_id) &&
+            row.status === "completed",
+        );
+        for (const visit of visits) {
+          const [year, month, date] = String(visit.visit_date).split("-").map(Number);
+          const day = new Date(Date.UTC(year, month - 1, date) + shiftMs).toISOString().slice(0, 10);
+          await put(tx.objectStore("visits"), {
+            ...visit,
+            visit_date: day,
+            scheduled_at: shiftInstant(visit.scheduled_at),
+            unique_scheduled_at: shiftInstant(visit.unique_scheduled_at),
+            arrived_at: shiftInstant(visit.arrived_at),
+            started_at: shiftInstant(visit.started_at),
+            ended_at: shiftInstant(visit.ended_at),
+          });
+        }
+        return { patients: patients.length, visits: visits.length };
+      } finally {
+        database.close();
+      }
+    },
+    {
+      patientName: PATIENTS.karim,
+      practitionerName: QUEUE_DR,
+      birthYear: KARIM_BIRTH_YEAR,
+      phone: KARIM_PHONE,
+      shiftDays: -21,
+    },
+  );
+}
+
+// The visit workspace (screen 10) for كريم, in the room on the real day
+// since 09:00, with a two-visit history on two different days. On the
+// seeded Monday first: his seeded queue visit (completed with سلمى) gets a
+// diagnosis and is then moved three weeks earlier, he gets a birth year and
+// a phone, and his seeded arrived slots visit is seen, closed, diagnosed and
+// given two drugs. Every service and patient is picked by name and the
+// clock is pinned, so desktop and mobile render the same data.
+async function karimWorkspaceWithHistory(page: Page): Promise<void> {
+  const day = todayInCairo();
+  const at = (time: ClockTime) => new Date(cairoInstant(day, time));
+  await page.clock.install({ time: at("08:30") });
+
+  await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, QUEUE_DR);
+  await fillVisitForm(page, PATIENTS.karim, "ألم في الركبة بعد الجري", "إجهاد عضلي");
+  expect(await adjustKarimFixture(page)).toEqual({ patients: 1, visits: 1 });
+  await selectPractitioner(page, SLOTS_DR);
+  await advanceRowTo(page, PATIENTS.karim, S.statusInRoom);
+  await advanceRowTo(page, PATIENTS.karim, S.statusCompleted);
+  await fillVisitForm(page, PATIENTS.karim, "ألم في الركبة اليمنى", "التهاب أوتار");
+  await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
+  const earlier = page.getByRole("dialog");
+  await addDrug(earlier, "Diclofenac 50mg", "قرص مرتين يوميًا بعد الأكل", "5 أيام");
+  await addDrug(earlier, "Voltaren Gel", "دهان موضعي على الركبة", "");
+  await earlier.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
+  await expect(earlier).toBeHidden();
+
+  await gotoRealDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
+  await bookFirstOpenSlot(page, PATIENTS.karim, "كشف عام");
+  await page.clock.setSystemTime(at("09:00"));
+  await advanceRowTo(page, PATIENTS.karim, S.statusArrived);
+  await advanceRowTo(page, PATIENTS.karim, S.statusInRoom);
+  // Half a minute past, so the seconds the taps above took never round the
+  // session length down to 13 on a slower run.
+  await page.clock.setSystemTime(new Date(at("09:14").getTime() + 30_000));
+}
+
+/** Fills the workspace's two fields and three drugs, waiting for each save. */
+async function fillWorkspace(scope: ReturnType<Page["getByRole"]>): Promise<void> {
+  for (const [key, placeholder, value] of [
+    ["complaint", S.visitFormComplaintPlaceholder, "ألم مستمر في الركبة اليمنى من 5 أيام، يزيد مع الحركة"],
+    ["diagnosis", S.visitFormDiagnosisPlaceholder, "التهاب وتر الرضفة، حاد"],
+  ] as const) {
+    const field = scope.getByPlaceholder(placeholder);
+    await field.fill(value);
+    await field.blur();
+    // Each field's own "اتحفظ" hint (Field's `${id}-hint`).
+    await expect(scope.locator(`#visit-form-${key}-hint`)).toHaveText(S.visitFormSavedIndicator);
+  }
+  await addDrug(scope, "Diclofenac 50mg", "قرص مرتين يوميًا بعد الأكل", "7 أيام");
+  await addDrug(scope, "Paracetamol 500mg", "قرص عند الألم، بحد أقصى 4 مرات يوميًا", "");
+  await addDrug(scope, "Voltaren Gel", "دهان موضعي 3 مرات يوميًا على الركبة", "أسبوعين");
+  const history = scope.getByRole("region", { name: VISIT.historyTwo, exact: true });
+  await expect(history).toBeVisible();
+  // Each row leads with its d/m date run.
+  const dates = await history
+    .getByRole("listitem")
+    .evaluateAll((rows) => rows.map((row) => row.querySelector("bdi")?.textContent ?? ""));
+  expect(new Set(dates).size).toBe(2);
+  await expect(scope).toContainText(`${KARIM_AGE} ${VISIT.ageUnit}`);
+  await expect(scope).toContainText(formatEgyptianPhoneForDisplay(KARIM_PHONE));
+  await expect(scope.getByText(S.visitFormSavedIndicator)).toHaveCount(0);
+}
+
+async function addDrug(
+  scope: ReturnType<Page["getByRole"]>,
+  name: string,
+  instructions: string,
+  duration: string,
+): Promise<void> {
+  await scope.getByRole("button", { name: VISIT.rxAdd, exact: true }).click();
+  await scope.getByLabel(VISIT.rxNameLabel, { exact: true }).fill(name);
+  await scope.getByLabel(VISIT.rxInstructionsLabel, { exact: true }).fill(instructions);
+  await scope.getByLabel(VISIT.rxDurationLabel, { exact: true }).fill(duration);
+  await scope.getByRole("button", { name: VISIT.rxAddConfirm, exact: true }).click();
+  await expect(
+    scope.getByRole("region", { name: VISIT.rxHeading, exact: true }).getByRole("listitem").filter({ hasText: name }),
+  ).toBeVisible();
+  await expect(scope.getByRole("button", { name: VISIT.rxAdd, exact: true })).toBeVisible();
+}
+
+test("@screenshot visit-workspace-sheet", async ({ page }) => {
+  await karimWorkspaceWithHistory(page);
+  await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  await fillWorkspace(sheet);
+  // The sheet scrolls inside its own dialog element; capture it from the top.
+  await sheet.evaluate((element) => element.scrollTo(0, 0));
+  await expect.poll(() => sheet.evaluate((element) => element.scrollTop)).toBe(0);
+  await shoot(page, "visit-workspace-sheet", false);
+});
+
+test("@screenshot current-visit", async ({ page }) => {
+  await karimWorkspaceWithHistory(page);
+  await page.getByRole("navigation", { name: SIDEBAR.navAriaLabel }).getByRole("button", { name: SIDEBAR.navVisit, exact: true }).click();
+  const main = page.getByRole("main");
+  await fillWorkspace(main);
+  await shoot(page, "current-visit", true);
+});

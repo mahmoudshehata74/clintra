@@ -7,7 +7,7 @@ import {
   getLastActiveMembershipId,
   subscribeSession,
 } from "./auth/session";
-import { useActingMembership } from "./auth/useActingMembership";
+import { useActingMembership, useGuardedActingMembership } from "./auth/useActingMembership";
 import { useIdleLock } from "./auth/useIdleLock";
 import AppShell from "./components/AppShell";
 import InstallBanner from "./components/InstallBanner";
@@ -20,6 +20,8 @@ import DayScreen from "./screens/day/DayScreen";
 import DoctorDayScreen from "./screens/doctor/DoctorDayScreen";
 import { doctorDayStrings } from "./screens/doctor/strings";
 import { dayScreenStrings } from "./screens/day/strings";
+import CurrentVisitScreen from "./screens/visit/CurrentVisitScreen";
+import { visitWorkspaceStrings } from "./screens/visit/strings";
 import { SYNC_AUTH_ERROR_EVENT_NAME, startSyncEngine, type SyncEngineHandle } from "./sync/engine";
 import { FakeTransport } from "./sync/fakeTransport";
 import { selectSyncTransport } from "./sync/httpTransport";
@@ -127,28 +129,21 @@ export default function App() {
   const isAuditOpen = openSection === "audit";
   const actingMembership = useActingMembership();
 
-  // The doctor's day (rail item "شاشة الطبيب") replaces the day screen's
-  // grid while it is selected. It belongs to the acting membership's own
-  // practitioner, so it needs that membership — but useActingMembership is
-  // undefined while locked (and, right after an unlock, until its row
-  // loads), and the screen must stay mounted under the lock overlay (as the
-  // day screen does) so a half-typed note survives an idle lock. So the last
-  // unlocked membership is remembered (React's adjust-state-while-rendering
-  // pattern) and stands in while there is no session, or while the session
-  // is that same membership's again and its row is still loading. Once
-  // anyone else's session starts, only their own membership counts —
-  // useActingMembership never returns a row from another session
-  // (membershipForSession), so a membership with no practitioner_id never
-  // sees the screen, not even for one render, and falls back to the day.
-  const [isDoctorViewSelected, setIsDoctorViewSelected] = useState(false);
-  const [lastUnlockedMembership, setLastUnlockedMembership] = useState(actingMembership);
-  if (actingMembership && actingMembership !== lastUnlockedMembership) {
-    setLastUnlockedMembership(actingMembership);
-  }
-  const canStandIn = activeMembershipId === null || activeMembershipId === lastUnlockedMembership?.id;
-  const viewingMembership = actingMembership ?? (canStandIn ? lastUnlockedMembership : undefined);
+  // The doctor's day (rail item "شاشة الطبيب") and the current visit
+  // ("الزيارة الحالية") each replace the day screen's grid while selected.
+  // Both belong to the acting membership's own practitioner, so they need
+  // that membership — but useActingMembership is undefined while locked,
+  // and these screens must stay mounted under the lock overlay (as the day
+  // screen does) so half-typed text survives an idle lock. So they read the
+  // guarded membership (useGuardedActingMembership), which keeps standing in
+  // for the last unlocked member until anyone else's session starts; a
+  // membership with no practitioner_id never sees either screen, not even
+  // for one render, and falls back to the day.
+  const [selectedView, setSelectedView] = useState<"day" | "doctor" | "visit">("day");
+  const viewingMembership = useGuardedActingMembership();
   const doctorPractitionerId = viewingMembership?.practitioner_id ?? null;
-  const isDoctorViewShown = isDoctorViewSelected && doctorPractitionerId !== null;
+  const isDoctorViewShown = selectedView === "doctor" && doctorPractitionerId !== null;
+  const isVisitViewShown = selectedView === "visit" && doctorPractitionerId !== null;
   const [doctorPractitionerName, setDoctorPractitionerName] = useState<string | undefined>(undefined);
   const handlePractitionerName = useCallback((name: string) => setDoctorPractitionerName(name), []);
   // Reported up by DayScreen (its own subtitle, e.g. "يوم العيادة" or the
@@ -197,22 +192,28 @@ export default function App() {
       <AppShell
         role={actingMembership?.role ?? Role.Assistant}
         hasPractitioner={Boolean(actingMembership?.practitioner_id)}
-        activeItem={isDoctorViewShown ? "doctor" : (openSection ?? "day")}
+        activeItem={isDoctorViewShown ? "doctor" : isVisitViewShown ? "visit" : (openSection ?? "day")}
         onSelect={(key) => {
           // The audit and settings sheets open over the day screen, so
-          // picking either (or "اليوم") leaves the doctor's day.
-          setIsDoctorViewSelected(key === "doctor");
-          setOpenSection(key === "day" || key === "doctor" ? null : key);
+          // picking either (or "اليوم") leaves the doctor's day and the visit.
+          setSelectedView(key === "doctor" || key === "visit" ? key : "day");
+          setOpenSection(key === "audit" || key === "settings" ? key : null);
         }}
-        title={isDoctorViewShown ? doctorDayStrings.appBarTitle : dayScreenTitle}
+        title={
+          isDoctorViewShown
+            ? doctorDayStrings.appBarTitle
+            : isVisitViewShown
+              ? visitWorkspaceStrings.currentVisitTitle
+              : dayScreenTitle
+        }
         today={dayScreenToday}
         whoName={isDoctorViewShown ? doctorPractitionerName : undefined}
       >
-        {/* The day screen stays mounted (hidden) under the doctor's day: it
-            owns the seed/boot load, the day actually on screen
-            (onTodayChange, which the doctor's day reads) and any sheet
-            left open, none of which should restart on switching views. */}
-        <div className={isDoctorViewShown ? "hidden" : undefined}>
+        {/* The day screen stays mounted (hidden) under the doctor's day and
+            the current visit: it owns the seed/boot load, the day actually
+            on screen (onTodayChange, which both read) and any sheet left
+            open, none of which should restart on switching views. */}
+        <div className={isDoctorViewShown || isVisitViewShown ? "hidden" : undefined}>
           <DayScreen
             isSettingsOpen={isSettingsOpen}
             onCloseSettings={() => setOpenSection(null)}
@@ -227,6 +228,13 @@ export default function App() {
             practitionerId={doctorPractitionerId}
             today={dayScreenToday}
             onPractitionerName={handlePractitionerName}
+          />
+        )}
+        {isVisitViewShown && (
+          <CurrentVisitScreen
+            practitionerId={doctorPractitionerId}
+            today={dayScreenToday}
+            onOpenDoctorDay={() => setSelectedView("doctor")}
           />
         )}
       </AppShell>
