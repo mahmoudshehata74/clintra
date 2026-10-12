@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AuditAction, type SyncReview } from "../db/types";
 import { describeReviewFieldDiffs, describeSyncReview } from "./reviewSummary";
+import { SYNCABLE_TABLES } from "./syncableTables";
 
 function makeReview(overrides: Partial<SyncReview> = {}): SyncReview {
   return {
@@ -24,7 +25,23 @@ describe("describeSyncReview", () => {
   });
 
   it("falls back to the raw entity name when unrecognised", () => {
-    expect(describeSyncReview(makeReview({ entity: "invoices" }))).toContain("invoices");
+    expect(describeSyncReview(makeReview({ entity: "some_future_table" }))).toContain("some_future_table");
+  });
+
+  it.each(SYNCABLE_TABLES)("labels the syncable table %s in Arabic, never by its raw name", (entity) => {
+    const description = describeSyncReview(makeReview({ entity }));
+    expect(description).not.toContain(entity);
+    expect(description.split(" — ")[0]).toMatch(/^[\u0600-\u06FF ]+$/);
+  });
+
+  it.each([
+    ["series_mismatch", "الرقم ده مش من سلسلة أرقام الجهاز ده"],
+    ["number_immutable", "الرقم ده اتطبع، مينفعش يتغيّر"],
+    ["conflict_number_taken", "الرقم ده متسجّل قبل كده على السيرفر"],
+    ["conflict_visit_has_prescription", "الزيارة دي ليها وصفة بالفعل من جهاز تاني"],
+    ["prescription_printed", "الوصفة دي اتطبعت، مينفعش تتعدّل"],
+  ])("labels %s in Arabic", (reason, label) => {
+    expect(describeSyncReview(makeReview({ entity: "prescriptions", reason }))).toBe(`وصفة — ${label}`);
   });
 
   it("never shows the raw reason code when unrecognised — a stable reference code instead", () => {

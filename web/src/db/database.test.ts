@@ -4,6 +4,7 @@ import { id } from "../domain/id";
 import { VisitStatus } from "../domain/visitStatus";
 import { VisitSource } from "../domain/visitSource";
 import type { Piastres } from "../domain/money";
+import { SYNCABLE_TABLES } from "../sync/syncableTables";
 import { ClintraDatabase } from "./database";
 import { InvoiceStatus, type Invoice, type Visit } from "./types";
 
@@ -295,7 +296,7 @@ describe("version 14: visits.note backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const visits = await upgraded.visits.toArray();
 
-    expect(upgraded.verno).toBe(15);
+    expect(upgraded.verno).toBe(16);
     expect(visits.find((visit) => visit.id === withoutNote.id)).toHaveProperty("note", null);
     expect(visits.find((visit) => visit.id === pulledWithNote.id)?.note).toBe("حساسية بنسلين");
     upgraded.close();
@@ -379,7 +380,7 @@ describe("version 15: number series backfill", () => {
 
     const upgraded = new ClintraDatabase(name);
 
-    expect(upgraded.verno).toBe(15);
+    expect(upgraded.verno).toBe(16);
     expect((await upgraded.invoices.toArray()).map((invoice) => invoice.series)).toEqual([1, 1]);
     expect((await upgraded.payments.toArray()).map((payment) => payment.series)).toEqual([1, 1]);
     expect((await upgraded.device.get("seed-device"))?.series).toBe(1);
@@ -399,5 +400,15 @@ describe("version 15: number series backfill", () => {
     await expect(upgraded.payments.add({ ...freshPayment, id: "payment-3", series: 2 })).resolves.toBe("payment-3");
     await expect(upgraded.payments.add({ ...freshPayment, id: "payment-4", series: 1 })).rejects.toThrow();
     upgraded.close();
+  });
+});
+
+describe("syncable tables", () => {
+  it("every table the sync endpoints carry is a local store", () => {
+    const local = new ClintraDatabase(`clintra-db-syncable-test-${crypto.randomUUID()}`);
+    const storeNames = local.tables.map((table) => table.name);
+    for (const table of SYNCABLE_TABLES) {
+      expect(storeNames).toContain(table);
+    }
   });
 });

@@ -110,12 +110,18 @@ const INVOICE_TRANSITION_VERBS: Partial<Record<string, string>> = {
 
 const VISIT_NOTE_VERB = "عدّل ملاحظة الزيارة";
 
+// The first print of a prescription (db/prescriptions.ts's
+// markPrescriptionPrinted): the one update that sets printed_at.
+const PRESCRIPTION_PRINT_VERB = "طبع الوصفة";
+
 const CREATE_VERBS: Partial<Record<string, string>> = {
   visits: "سجّل حجز",
   patients: "أضاف مريض",
   invoices: "أنشأ فاتورة",
   payments: "سجّل دفعة",
   cash_close: "قفل اليوم",
+  prescriptions: "كتب وصفة",
+  prescription_items: "أضاف دواء",
 };
 
 const DELETE_VERBS: Partial<Record<string, string>> = {
@@ -123,6 +129,7 @@ const DELETE_VERBS: Partial<Record<string, string>> = {
   patients: "حذف المريض",
   invoices: "حذف الفاتورة",
   payments: "حذف الدفعة",
+  prescription_items: "شال دواء",
 };
 
 const FALLBACK_UPDATE_VERBS: Partial<Record<string, string>> = {
@@ -131,6 +138,8 @@ const FALLBACK_UPDATE_VERBS: Partial<Record<string, string>> = {
   invoices: "عدّل الفاتورة",
   payments: "عدّل الدفعة",
   cash_close: "عدّل إغلاق اليوم",
+  prescriptions: "عدّل الوصفة",
+  prescription_items: "عدّل دواء",
 };
 
 /**
@@ -179,6 +188,12 @@ export function describeAuditVerb(row: AuditVerbRow): string {
     if (invoiceVerb) {
       return invoiceVerb;
     }
+  }
+
+  // Verb only, as for a note: a prescription's audit line never carries a
+  // drug's name or instructions, or the diagnosis it snapshots.
+  if (row.entity === "prescriptions" && fieldOf(row.before, "printed_at") == null && fieldOf(row.after, "printed_at") != null) {
+    return PRESCRIPTION_PRINT_VERB;
   }
 
   // A visit whose status did not change but whose position did: a queue

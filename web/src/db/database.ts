@@ -18,6 +18,8 @@ import type {
   Payment,
   Practitioner,
   PractitionerLocation,
+  Prescription,
+  PrescriptionItem,
   Schedule,
   ScheduleException,
   Service,
@@ -56,6 +58,8 @@ export class ClintraDatabase extends Dexie {
   visit_form_data!: EntityTable<VisitFormData, "id">;
   care_plans!: EntityTable<CarePlan, "id">;
   care_plan_items!: EntityTable<CarePlanItem, "id">;
+  prescriptions!: EntityTable<Prescription, "id">;
+  prescription_items!: EntityTable<PrescriptionItem, "id">;
   sync_ops!: EntityTable<SyncOp, "op_id">;
   sync_review!: EntityTable<SyncReview, "id">;
   device!: EntityTable<DeviceRegistration, "id">;
@@ -376,6 +380,27 @@ export class ClintraDatabase extends Dexie {
           devices.map((device) => tx.table("device").update(device.id, { series: device.token === null ? 1 : null })),
         );
       });
+
+    // Prescriptions (db/prescriptions.ts; the server's
+    // 2026_09_12_000026_create_prescriptions_tables.php; docs/schema.md's v17
+    // additions). Two new stores, so nothing to backfill:
+    // - prescriptions:
+    //   - &visit_id: at most one prescription per visit, enforced by the
+    //     database itself, and the lookup the writer uses to find a visit's
+    //     prescription before deciding whether to create one.
+    //   - location_id: the number-minting read (the current max number for
+    //     this location, year and series), as invoices' location_id index.
+    //   - patient_id: a patient's prescriptions across visits (the patient
+    //     profile) without a table scan.
+    //   - &[location_id+issued_year+series+number]: the printed number,
+    //     unique within its device series — the same key invoices carry.
+    // - prescription_items:
+    //   - prescription_id: one prescription's items, as invoice_items'
+    //     invoice_id index.
+    this.version(16).stores({
+      prescriptions: "id, &visit_id, location_id, patient_id, &[location_id+issued_year+series+number]",
+      prescription_items: "id, prescription_id",
+    });
   }
 }
 
