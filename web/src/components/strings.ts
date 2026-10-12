@@ -12,6 +12,7 @@ export const sidebarStrings = {
   navAriaLabel: "التنقل الرئيسي",
   navDay: "اليوم",
   navDoctor: "شاشة الطبيب",
+  navVisit: "الزيارة الحالية",
   navAudit: "السجل",
   navSettings: "الإعدادات",
 } as const;
