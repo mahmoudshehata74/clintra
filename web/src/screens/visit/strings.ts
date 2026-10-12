@@ -4,6 +4,8 @@
 // where the visit form has always read them.
 export const visitWorkspaceStrings = {
   loadingLabel: "جارٍ التحميل...",
+  // VisitFormSheet's own title; the patient is named in `.pt-summary`.
+  visitSheetTitle: "ملف الزيارة",
 
   // `.pt-summary`
   ageUnit: "سنة",

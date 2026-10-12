@@ -50,10 +50,10 @@ async function karimInRoom(page: Page, as: { name: string; pin: string } = { nam
   await advanceRowTo(page, PATIENTS.karim, S.statusInRoom);
 }
 
-/** Opens a day-grid row's visit form (the "التسجيل" pill) and waits for its workspace. */
+/** Opens a day-grid row's visit form (the "التسجيل" pill) and waits for its workspace, located by its title. */
 async function openVisitSheet(page: Page, patientName: string): Promise<Locator> {
   await rowFor(page, patientName).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
-  const sheet = page.getByRole("dialog");
+  const sheet = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: VISIT.visitSheetTitle }) });
   await expect(sheet.getByPlaceholder(S.visitFormComplaintPlaceholder)).toBeVisible();
   return sheet;
 }
@@ -147,6 +147,12 @@ async function setDeviceSeries(page: Page, series: number | null): Promise<numbe
 test("adding, editing and removing a drug updates the list and its count", async ({ page }) => {
   await karimInRoom(page);
   const sheet = await openVisitSheet(page, PATIENTS.karim);
+  // Titled by purpose, with the arrival time beside it; the patient is named in `.pt-summary` only.
+  const heading = sheet.getByRole("heading", { level: 3 });
+  await expect(heading).toContainText(VISIT.visitSheetTitle);
+  await expect(heading).toContainText("09:00");
+  await expect(heading).not.toContainText(PATIENTS.karim);
+  await expect(sheet).toContainText(PATIENTS.karim);
   const rx = rxSection(sheet);
   await expect(rx.getByRole("listitem")).toHaveCount(0);
 
