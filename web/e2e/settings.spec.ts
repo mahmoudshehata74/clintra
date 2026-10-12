@@ -281,6 +281,13 @@ test("the staff active switch applies on save, not on tap, and reactivates the s
   const assistantRow = dialog.getByRole("listitem").filter({ hasText: S.roleAssistant });
   const readAssistantActive = async () =>
     (await readStore<{ role: string; is_active: boolean }>(page, "memberships")).find((m) => m.role === "assistant")?.is_active;
+  // The open edit form carries its own "مفعّل" heading beside the switch, so the
+  // row's badge is only a trustworthy signal once the form has closed — and the
+  // form closes only after the save has committed.
+  const expectEditorClosed = async () => {
+    await expect(assistantRow.getByRole("switch")).toHaveCount(0);
+    await expect(assistantRow.getByRole("button", { name: S.settingsSaveAction, exact: true })).toHaveCount(0);
+  };
 
   // Flipping the switch alone changes nothing; Cancel discards it.
   await assistantRow.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
@@ -289,6 +296,7 @@ test("the staff active switch applies on save, not on tap, and reactivates the s
   await expect(assistantSwitch).toHaveAttribute("aria-checked", "false");
   expect(await readAssistantActive()).toBe(true);
   await assistantRow.getByRole("button", { name: S.settingsCancelAction, exact: true }).click();
+  await expectEditorClosed();
   await expect(assistantRow.getByText(S.staffActiveLabel, { exact: true })).toBeVisible();
   expect(await readAssistantActive()).toBe(true);
 
@@ -296,6 +304,7 @@ test("the staff active switch applies on save, not on tap, and reactivates the s
   await assistantRow.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
   await assistantSwitch.click();
   await assistantRow.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expectEditorClosed();
   await expect(assistantRow.getByText(S.staffInactiveBadge, { exact: true })).toBeVisible();
   expect(await readAssistantActive()).toBe(false);
 
@@ -304,6 +313,7 @@ test("the staff active switch applies on save, not on tap, and reactivates the s
   await expect(assistantSwitch).toHaveAttribute("aria-checked", "false");
   await assistantSwitch.click();
   await assistantRow.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expectEditorClosed();
   await expect(assistantRow.getByText(S.staffActiveLabel, { exact: true })).toBeVisible();
   expect(await readAssistantActive()).toBe(true);
 });
