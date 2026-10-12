@@ -179,12 +179,6 @@
   --shadow-m: 0 2px 4px rgba(11, 33, 29, 0.05), 0 12px 28px -18px rgba(11, 33, 29, 0.3);
   --shadow-l: 0 24px 50px -30px rgba(11, 33, 29, 0.55);
 
-  /* Legacy tokens — still used by screens not yet restyled. Each is removed
-     in the commit that migrates its last usage. Do not use in new code. */
-  --color-green-soft: #e8f0ec;
-  --color-line: #e2e3dc;
-  --radius-el: 8px;
-
   /* Brand tokens for logo surfaces only (wordmark/icon). */
   --color-brand-teal: #1a957d;
   --color-brand-ink: #0e1814;
