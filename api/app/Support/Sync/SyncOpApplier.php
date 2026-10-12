@@ -73,6 +73,12 @@ class SyncOpApplier
             return $this->rejected($op, 'series_mismatch');
         }
 
+        $printedLock = $this->applyPrintedLock($op, $table);
+
+        if ($printedLock !== null) {
+            return $printedLock;
+        }
+
         try {
             return match ($op['action']) {
                 'create' => $this->applyCreate($op, $table, $membershipId, $deviceId, $currentOrgId),
@@ -144,15 +150,23 @@ class SyncOpApplier
                 return $this->resolveSlotConflict($op, $table, $attributes);
             }
 
-            // invoices and payments carry a second unique constraint
-            // besides the primary key: their number within a device's
-            // series. series_mismatch above already refused a create
+            // invoices, payments and prescriptions carry a second unique
+            // constraint besides the primary key: their number within a
+            // device's series. series_mismatch above already refused a create
             // outside the pushing device's own series, so a device that
             // mints only in its own series can never hit this — but if one
             // ever does, the row it collided with is a *different* entity,
             // never "this entity_id already exists".
             if ($this->violatesNumberConstraint($e, $table)) {
                 return $this->rejected($op, 'conflict_number_taken');
+            }
+
+            // A one-per-parent rule (a visit's one prescription): the row
+            // it collided with is another entity holding the same parent.
+            $parentReason = $this->parentUniqueReason($e, $table);
+
+            if ($parentReason !== null) {
+                return $this->rejected($op, $parentReason);
             }
 
             // Otherwise the violated constraint is the primary key: the
@@ -271,8 +285,8 @@ class SyncOpApplier
     }
 
     /**
-     * A create on a numbered table (invoices, payments) must be minted in
-     * the pushing device's own series — the guarantee that two devices can
+     * A create on a numbered table (invoices, payments, prescriptions) must
+     * be minted in the pushing device's own series — the guarantee that two devices can
      * never mint the same number (docs/schema.md's v16 additions). The
      * device's series is read through device's own RLS policy (its own org
      * only), so the comparison can never reveal another org's device.
@@ -301,6 +315,140 @@ class SyncOpApplier
         }
 
         return false;
+    }
+
+    /**
+     * The printed lock (docs/schema.md's v17 additions): once a
+     * prescription's printed_at is set, that prescription and its items
+     * never change again.
+     *
+     * - A prescription that is already printed refuses every delete, and
+     *   every update that would change any column it names — including
+     *   clearing or changing printed_at or diagnosis — as
+     *   `prescription_printed`. The push that first sets printed_at finds
+     *   the row unprinted and goes through normally.
+     * - An update to an already-printed prescription that changes nothing
+     *   (a second device re-sending the same print, for instance) is
+     *   `accepted` as a no-op: nothing is written — no rev bump, no ledger
+     *   or audit row — and the result carries the row's current rev. The
+     *   actor column (created_by) is left out of the comparison: the server
+     *   assigns it from the token on every write it does apply, so the
+     *   payload's value never decides anything.
+     * - A prescription_items create, update or delete is refused as
+     *   `prescription_printed` when its parent is printed — the parent the
+     *   payload names and, for an update or delete, the parent the row
+     *   currently has.
+     *
+     * The parent row is read FOR UPDATE, so an item write and a concurrent
+     * first print of the same prescription are serialised: whichever
+     * commits second sees the other's result. Every read goes through the
+     * table's own RLS policy; a row the caller cannot see is simply not
+     * locked here, and the write itself then fails exactly as it would
+     * without this check.
+     *
+     * @return array{op_id: string, status: string, rev?: int, reason?: string}|null null means the op is not affected by the lock.
+     */
+    private function applyPrintedLock(array $op, string $table): ?array
+    {
+        if (in_array($table, SyncableTables::PRINTED_LOCK_TABLES, true) && $op['action'] !== 'create') {
+            $current = DB::table($table)->where('id', $op['entity_id'])->lockForUpdate()->first();
+
+            if ($current === null || $current->printed_at === null) {
+                return null;
+            }
+
+            if ($op['action'] === 'delete' || ! $this->leavesRowUnchanged($op, $table, $current)) {
+                return $this->rejected($op, 'prescription_printed');
+            }
+
+            return ['op_id' => $op['op_id'], 'status' => 'accepted', 'rev' => (int) $current->rev];
+        }
+
+        $child = SyncableTables::PRINTED_LOCK_CHILDREN[$table] ?? null;
+
+        if ($child === null) {
+            return null;
+        }
+
+        [$parentTable, $parentColumn] = $child;
+        $parentIds = [];
+
+        if ($op['action'] !== 'delete' && isset(($op['payload'] ?? [])[$parentColumn])) {
+            $parentIds[] = $op['payload'][$parentColumn];
+        }
+
+        if ($op['action'] !== 'create') {
+            $currentParentId = DB::table($table)->where('id', $op['entity_id'])->value($parentColumn);
+
+            if ($currentParentId !== null) {
+                $parentIds[] = $currentParentId;
+            }
+        }
+
+        foreach (array_unique($parentIds) as $parentId) {
+            $printedAt = DB::table($parentTable)->where('id', $parentId)->lockForUpdate()->value('printed_at');
+
+            if ($printedAt !== null) {
+                return $this->rejected($op, 'prescription_printed');
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * True when every column the update names already holds that value.
+     * Timestamps are compared as instants: a payload's ISO 8601 string and
+     * Postgres' own rendering of the same moment differ as text.
+     */
+    private function leavesRowUnchanged(array $op, string $table, object $current): bool
+    {
+        $actorColumn = SyncableTables::actorColumn($table);
+
+        foreach ($op['payload'] ?? [] as $column => $incoming) {
+            if ($column === 'id' || $column === 'rev' || $column === $actorColumn) {
+                continue;
+            }
+
+            if (! property_exists($current, $column)) {
+                return false;
+            }
+
+            $stored = $current->{$column};
+
+            if ($incoming === null || $stored === null) {
+                if ($incoming !== $stored) {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (is_array($incoming)) {
+                return false;
+            }
+
+            $same = str_ends_with($column, '_at')
+                ? Carbon::parse($incoming)->equalTo(Carbon::parse($stored))
+                : (string) $incoming === (string) $stored;
+
+            if (! $same) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function parentUniqueReason(QueryException $e, string $table): ?string
+    {
+        foreach (SyncableTables::PARENT_UNIQUE_CONSTRAINTS[$table] ?? [] as $constraint => $reason) {
+            if (str_contains($e->getMessage(), "\"{$constraint}\"")) {
+                return $reason;
+            }
+        }
+
+        return null;
     }
 
     private function violatesNumberConstraint(QueryException $e, string $table): bool

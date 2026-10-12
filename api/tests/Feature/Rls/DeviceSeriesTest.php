@@ -458,7 +458,7 @@ test('device keeps ENABLE and FORCE row level security and its one unchanged pol
     ]]);
 });
 
-test('series is NOT NULL with no default on device, invoices and payments, and the number constraints include it', function () {
+test('series is NOT NULL with no default on device, invoices, payments and prescriptions, and the number constraints include it', function () {
     $columns = $this->asOwner()->select(<<<'SQL'
         SELECT table_name, is_nullable, column_default, data_type
         FROM information_schema.columns
@@ -469,6 +469,7 @@ test('series is NOT NULL with no default on device, invoices and payments, and t
         ['table_name' => 'device', 'is_nullable' => 'NO', 'column_default' => null, 'data_type' => 'smallint'],
         ['table_name' => 'invoices', 'is_nullable' => 'NO', 'column_default' => null, 'data_type' => 'smallint'],
         ['table_name' => 'payments', 'is_nullable' => 'NO', 'column_default' => null, 'data_type' => 'smallint'],
+        ['table_name' => 'prescriptions', 'is_nullable' => 'NO', 'column_default' => null, 'data_type' => 'smallint'],
     ]);
 
     $constraints = $this->asOwner()->select(<<<'SQL'

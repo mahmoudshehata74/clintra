@@ -5,13 +5,16 @@
  * server-assigned `rev`, enforced by a shared trigger (enforce_row_rev())
  * rather than column-level grants — see that migration's own doc comment
  * for why a trigger is the only mechanism that actually computes the
- * increment, and why it needs no grant changes at all.
+ * increment, and why it needs no grant changes at all. prescriptions and
+ * prescription_items got the same column and trigger when they were
+ * created (2026_09_12_000026_create_prescriptions_tables.php).
  */
 const SYNCABLE_TABLES = [
     'cash_close', 'day_state', 'invoice_items', 'invoices',
     'membership_locations', 'membership_practitioners', 'memberships',
-    'patients', 'payments', 'schedules', 'service_price_overrides',
-    'services', 'visit_form_data', 'visits',
+    'patients', 'payments', 'prescription_items', 'prescriptions',
+    'schedules', 'service_price_overrides', 'services',
+    'visit_form_data', 'visits',
 ];
 
 test('every syncable table has a rev column and the enforcement trigger attached', function () {

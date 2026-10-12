@@ -20,7 +20,9 @@ use InvalidArgumentException;
  * (SyncWindow::DAYS) directly from the entity tables — day_state and
  * visits, the two tables with a principled date, plus the patients those
  * windowed visits reference (so a name renders, not just a bare
- * patient_id). It is deliberately additive: GET /api/sync/pull's own SQL,
+ * patient_id), and the prescriptions of those visits with their items (a
+ * prescription belongs to exactly one visit, so it is windowed through it).
+ * It is deliberately additive: GET /api/sync/pull's own SQL,
  * cursor format, and monotonic seq guarantee are completely untouched by
  * this class, so a device that has already synced before (pull_cursor is
  * non-null) never calls this endpoint at all and is not affected by its
@@ -41,14 +43,18 @@ class SyncBootstrapPuller
 {
     private const PAGE_SIZE = 200;
 
-    /** Stage order: day_state and visits have a principled date to window by; patients are windowed transitively, via the visits that reference them. */
+    /** Stage order: day_state and visits have a principled date to window by; patients and prescriptions are windowed transitively, via the visits that reference them, and prescription_items via those prescriptions. */
     private const STAGE_DAY_STATE = 0;
 
     private const STAGE_VISITS = 1;
 
     private const STAGE_PATIENTS = 2;
 
-    private const STAGE_DONE = 3;
+    private const STAGE_PRESCRIPTIONS = 3;
+
+    private const STAGE_PRESCRIPTION_ITEMS = 4;
+
+    private const STAGE_DONE = 5;
 
     /**
      * @return array{cursor: string, has_more: bool, rows: list<array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}>}
@@ -113,6 +119,24 @@ class SyncBootstrapPuller
                 ->orderBy('id')
                 ->limit(self::PAGE_SIZE + 1)
                 ->get(),
+            self::STAGE_PRESCRIPTIONS => DB::table('prescriptions')
+                ->whereIn('visit_id', function ($q) use ($from, $to) {
+                    $q->select('id')->from('visits')->whereBetween('visit_date', [$from, $to]);
+                })
+                ->when($afterId !== null, fn ($q) => $q->where('id', '>', $afterId))
+                ->orderBy('id')
+                ->limit(self::PAGE_SIZE + 1)
+                ->get(),
+            self::STAGE_PRESCRIPTION_ITEMS => DB::table('prescription_items')
+                ->whereIn('prescription_id', function ($q) use ($from, $to) {
+                    $q->select('prescriptions.id')->from('prescriptions')
+                        ->join('visits', 'visits.id', '=', 'prescriptions.visit_id')
+                        ->whereBetween('visits.visit_date', [$from, $to]);
+                })
+                ->when($afterId !== null, fn ($q) => $q->where('id', '>', $afterId))
+                ->orderBy('id')
+                ->limit(self::PAGE_SIZE + 1)
+                ->get(),
             default => throw new InvalidArgumentException("unknown bootstrap stage: {$stage}"),
         };
     }
@@ -126,6 +150,8 @@ class SyncBootstrapPuller
             self::STAGE_DAY_STATE => 'day_state',
             self::STAGE_VISITS => 'visits',
             self::STAGE_PATIENTS => 'patients',
+            self::STAGE_PRESCRIPTIONS => 'prescriptions',
+            self::STAGE_PRESCRIPTION_ITEMS => 'prescription_items',
         };
 
         return [
@@ -145,7 +171,7 @@ class SyncBootstrapPuller
             return [self::STAGE_DAY_STATE, null];
         }
 
-        if (! preg_match('/^([0-3]):([0-9a-fA-F-]*)$/', $cursor, $matches)) {
+        if (! preg_match('/^([0-5]):([0-9a-fA-F-]*)$/', $cursor, $matches)) {
             throw new InvalidArgumentException("malformed bootstrap cursor: {$cursor}");
         }
 
