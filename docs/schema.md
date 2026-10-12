@@ -655,7 +655,9 @@ and a printed number never changes.
   `number`, `issued_year` or `receipt_number` (`number_immutable`); a create
   that still collides on the number key is `conflict_number_taken`, never
   `conflict_already_exists`.
-- **Display rule** (`web/src/screens/day/invoiceNumber.ts`). Series 1
+- **Display rule** (`web/src/screens/day/invoiceNumber.ts`; the series
+  letter itself now lives in `web/src/domain/numberSeries.ts`, shared with
+  prescription numbers — see the v17 additions). Series 1
   renders exactly as before ("INV-2026-0043", "RCP-1189"); series n ≥ 2
   adds its letter, bijective base 26 with 1 = A, so 2 → B … 26 → Z,
   27 → AA, 28 → AB … ("INV-2026-B-0043", "RCP-B-1189"). The printed invoice
@@ -663,6 +665,78 @@ and a printed number never changes.
   prefix ("43", "B-43"), as they always showed the bare number. Every place
   that shows or prints an invoice or receipt number goes through these
   formatters.
+
+## v17 additions
+
+### prescriptions, prescription_items
+
+A visit's prescription and its drug lines. Data only so far — no screen
+writes them yet (screens 10 and 16 of the prototype will).
+
+**prescriptions**: id, org_id, location_id, visit_id, patient_id,
+practitioner_id, series, issued_year, number, diagnosis?, printed_at?,
+created_by (membership id), created_at, rev
+
+**prescription_items**: id, prescription_id, name, form?, instructions,
+duration?, note?, position, rev
+
+- `name` is the drug ("Diclofenac 50mg") and `instructions` the Arabic
+  dosage line; both are trimmed and never empty. `form` ("Tablet", "Gel"),
+  `duration` and `note` are optional; blank is stored as null.
+- `position` is 1-based, in append order: a new item takes the highest
+  position so far + 1, and removing an item does not renumber the rest.
+
+Owner decisions:
+
+- **At most one prescription per visit** (`visit_id` unique). It is created
+  together with its first item (`web/src/db/prescriptions.ts`'s
+  `addPrescriptionItem`), only for a visit that is `in_room` or `completed`
+  (any other status refuses, `visit_not_prescribable`). Removing every item
+  leaves the numbered prescription in place, and its number stays used.
+- **Numbered like an invoice** (v16 additions): minted at creation, inside
+  this device's own series, as the max `number` for (`location_id`,
+  `issued_year`, `series`) + 1, read inside the write's own transaction; a
+  device whose series is unknown refuses before anything is written
+  (`device_series_unknown`). Displayed "RX-{year}-{0000}" for series 1 and
+  "RX-{year}-{L}-{0000}" for series n ≥ 2 (`formatPrescriptionNumber`,
+  `web/src/domain/numberSeries.ts`, the same series letter as invoices and
+  receipts). The push endpoint holds it to the same rules as invoices:
+  `series_mismatch`, `number_immutable`, `conflict_number_taken`.
+- **Printed lock.** The first print (`markPrescriptionPrinted`) sets
+  `printed_at` and snapshots the visit's diagnosis, as the general visit
+  form holds it at that moment (`readVisitFormValues`; blank is null), into
+  `prescriptions.diagnosis`. Later prints write nothing. From the first
+  print on, every item write and every change to the prescription itself is
+  refused with `prescription_printed` — on the device, and by the push
+  endpoint (`api/docs/rls.md`'s "Prescriptions"). An empty prescription
+  cannot be printed (`prescription_empty`).
+- **Only the visit's own practitioner writes** a prescription or its items:
+  every web writer refuses unless the acting membership's `practitioner_id`
+  is the visit's (`not_prescriber`). **Known gap:** the server does not
+  enforce who writes. Its RLS policy admits any membership in scope of the
+  visit (the visits policy, verbatim), so a device that bypassed the web
+  writers could write a prescription for a visit it can see. Closing it
+  needs a policy change, out of scope for v1 (`api/docs/rls.md`).
+
+Server (`2026_09_12_000026_create_prescriptions_tables.php`): unique
+indexes `(location_id, issued_year, series, number)` and `(visit_id)`, plain
+indexes on `org_id`, `location_id` and `prescription_items.prescription_id`;
+no foreign key cascades. `rev` with the `enforce_row_rev()` trigger, FORCE
+RLS, both tables in the syncable-table list. A second prescription pushed
+for the same visit is rejected as `conflict_visit_has_prescription`, never
+`conflict_already_exists`. Bootstrap returns the prescriptions of the
+windowed visits and their items.
+
+Local (database version 16), two new stores:
+`prescriptions: "id, &visit_id, location_id, patient_id,
+&[location_id+issued_year+series+number]"` — the visit's one prescription
+(and the lookup that finds it), the number-minting read, a patient's
+prescriptions, and the printed number's uniqueness — and
+`prescription_items: "id, prescription_id"` for one prescription's items.
+Versions 1-15 are unchanged.
+
+The audit log reads "كتب وصفة", "أضاف دواء", "عدّل دواء", "شال دواء" and
+"طبع الوصفة", never a drug's name or instructions, or the diagnosis.
 
 ## Rules
 
@@ -677,6 +751,10 @@ and a printed number never changes.
   reused, never scoped to a year or a single invoice), within the minting
   device's number series (v16 additions).
 - A device's number series is unique per location and never reused.
+- A visit has at most one prescription. A prescription `number` is unique
+  per location per calendar year within the minting device's series, like
+  an invoice's (v17 additions).
+- A printed prescription never changes, and neither do its items.
 - A `cash_close` is unique per location per day.
 - Practitioner availability is computed across all locations: a practitioner
   booked at a time in one location is busy in every other location.
