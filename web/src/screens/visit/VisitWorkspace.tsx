@@ -24,6 +24,8 @@ import {
 } from "../../db/visitForm";
 import { VisitStatus } from "../../domain/visitStatus";
 import { dayScreenStrings } from "../day/strings";
+import PrescriptionPrintSheet from "../prescription/PrescriptionPrintSheet";
+import { computeRxPrintState } from "../prescription/printModel";
 import { visitWorkspaceStrings as T } from "./strings";
 import {
   buildVisitHistory,
@@ -96,7 +98,8 @@ const FIELD_CONFIG: readonly { key: VisitFormFieldKey; label: string; placeholde
  * Reads everything itself via liveQuery; the host only names the visit and
  * how it closes. Complaint and diagnosis autosave per field on blur, as the
  * visit form always has; every prescription write goes through
- * db/prescriptions.ts, whose own rules the controls mirror (computeRxAccess).
+ * db/prescriptions.ts, whose own rules the controls mirror (computeRxAccess,
+ * and computeRxPrintState for the print button).
  */
 export default function VisitWorkspace({ visitId, layout, onClose, completion }: VisitWorkspaceProps) {
   const actingPractitionerId = useGuardedActingMembership()?.practitioner_id ?? null;
@@ -179,6 +182,13 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
   const summary = summarizePatient(data.patient, data.prior, now);
   const history = buildVisitHistory(data.prior, data.formValuesByVisitId, data.drugNamesByVisitId);
   const access = computeRxAccess(actingPractitionerId, visit, data.prescription, data.items.length);
+  const printState = data.prescription
+    ? computeRxPrintState(actingPractitionerId, visit, data.prescription, data.items.length)
+    : null;
+  const print =
+    data.prescription && printState?.isButtonShown
+      ? { prescriptionId: data.prescription.id, label: printState.buttonLabel }
+      : null;
   const minutes = sessionMinutes(visit, now);
 
   async function saveAndClose() {
@@ -280,6 +290,7 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
             items={data.items}
             canEdit={access.canEdit}
             readOnlyLine={access.readOnlyLine}
+            print={print}
           />
         )}
       </div>
@@ -423,6 +434,8 @@ interface RxSectionProps {
   items: PrescriptionItem[];
   canEdit: boolean;
   readOnlyLine: string | null;
+  /** "اطبع الوصفة" / "اطبع تاني" and what it opens; null when there is nothing to print. */
+  print: { prescriptionId: string; label: string } | null;
 }
 
 /** Which inline form is open: one at a time. */
@@ -432,10 +445,13 @@ type RxEditor = { kind: "add" } | { kind: "edit"; itemId: string } | null;
  * `.rx-section`: `.rx-head` with the count, `.rx-list` of `.rx-item`s, and
  * `.rx-add`. Tapping an item opens it for editing in place; "＋ أضف دواء"
  * opens the same form empty. Read-only (no add, edit or remove) whenever
- * computeRxAccess says a write would be refused.
+ * computeRxAccess says a write would be refused. With a drug to print, its
+ * print button opens the printed prescription (screen 16) for anyone who
+ * sees the section; who may issue the first print is that sheet's to say.
  */
-function RxSection({ visitId, items, canEdit, readOnlyLine }: RxSectionProps) {
+function RxSection({ visitId, items, canEdit, readOnlyLine, print }: RxSectionProps) {
   const [editor, setEditor] = useState<RxEditor>(null);
+  const [isPrintOpen, setIsPrintOpen] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const openEditor = canEdit ? editor : null;
 
@@ -509,6 +525,16 @@ function RxSection({ visitId, items, canEdit, readOnlyLine }: RxSectionProps) {
         </p>
       )}
       {readOnlyLine && <p className="mt-2 text-[11.5px] text-muted">{readOnlyLine}</p>}
+      {print && (
+        <div className="mt-2.5 flex justify-end">
+          <Button variant="secondary" size="sm" onClick={() => setIsPrintOpen(true)}>
+            {print.label}
+          </Button>
+        </div>
+      )}
+      {print && isPrintOpen && (
+        <PrescriptionPrintSheet prescriptionId={print.prescriptionId} onDismiss={() => setIsPrintOpen(false)} />
+      )}
     </section>
   );
 }

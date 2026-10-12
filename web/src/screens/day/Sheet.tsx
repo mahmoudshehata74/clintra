@@ -2,6 +2,11 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 
 const DRAG_DISMISS_THRESHOLD_PX = 80;
 
+// Every mounted sheet, in mount order. A sheet can open over another (the
+// printed prescription over the visit sheet); Escape then dismisses only the
+// topmost one, the one the user is looking at.
+const openSheets: object[] = [];
+
 export type SheetSize = "md" | "lg";
 
 // .book's own max-width (520px) for "md"; "lg" is this task's own addition
@@ -21,7 +26,7 @@ interface SheetProps {
 
 /**
  * The bottom-sheet chrome shared by every sheet on the day screen: backdrop
- * tap, drag-down, and Escape all dismiss; background scroll is locked while
+ * tap, drag-down, and Escape (the topmost sheet's only) all dismiss; background scroll is locked while
  * open. The panel itself carries the shared SheetPanel look (.book: token
  * radius on its top corners only, since it's bottom-anchored; bg-card;
  * shadow-l) so every sheet gets the same frame whether or not its content
@@ -54,6 +59,14 @@ export default function Sheet({ onDismiss, size = "md", children }: SheetProps) 
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragStartYRef = useRef<number | null>(null);
+  const [stackToken] = useState(() => ({}));
+
+  useEffect(() => {
+    openSheets.push(stackToken);
+    return () => {
+      openSheets.splice(openSheets.indexOf(stackToken), 1);
+    };
+  }, [stackToken]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -65,13 +78,13 @@ export default function Sheet({ onDismiss, size = "md", children }: SheetProps) 
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && openSheets[openSheets.length - 1] === stackToken) {
         onDismiss();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onDismiss]);
+  }, [onDismiss, stackToken]);
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     setIsDragging(true);
