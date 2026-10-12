@@ -30,6 +30,7 @@ import {
 } from "./support";
 import { registrationStrings } from "../src/auth/registrationStrings";
 import { galleryStrings } from "../src/gallery/strings";
+import { prescriptionPrintStrings as RX } from "../src/screens/prescription/strings";
 
 // Opt-in visual-review capture. Every test here is tagged @screenshot, so the
 // default interaction run (pnpm test:e2e uses --grep-invert @screenshot) and CI
@@ -740,11 +741,14 @@ async function addDrug(
   name: string,
   instructions: string,
   duration: string,
+  optional: { form?: string; note?: string } = {},
 ): Promise<void> {
   await scope.getByRole("button", { name: VISIT.rxAdd, exact: true }).click();
   await scope.getByLabel(VISIT.rxNameLabel, { exact: true }).fill(name);
+  await scope.getByLabel(VISIT.rxFormLabel, { exact: true }).fill(optional.form ?? "");
   await scope.getByLabel(VISIT.rxInstructionsLabel, { exact: true }).fill(instructions);
   await scope.getByLabel(VISIT.rxDurationLabel, { exact: true }).fill(duration);
+  await scope.getByLabel(VISIT.rxNoteLabel, { exact: true }).fill(optional.note ?? "");
   await scope.getByRole("button", { name: VISIT.rxAddConfirm, exact: true }).click();
   await expect(
     scope.getByRole("region", { name: VISIT.rxHeading, exact: true }).getByRole("listitem").filter({ hasText: name }),
@@ -769,4 +773,55 @@ test("@screenshot current-visit", async ({ page }) => {
   const main = page.getByRole("main");
   await fillWorkspace(main);
   await shoot(page, "current-visit", true);
+});
+
+// The printed prescription (screen 16) for كريم's visit above: his
+// diagnosis and three drugs, two with a form and one with a note, as the
+// prototype's own example. window.print is stubbed before the fixture's
+// first navigation, so a print leaves the print target mounted.
+async function karimPrescriptionPreview(page: Page): Promise<ReturnType<Page["getByRole"]>> {
+  await page.addInitScript(() => {
+    window.print = () => {};
+  });
+  await karimWorkspaceWithHistory(page);
+  await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
+  const workspace = page.getByRole("dialog");
+  const diagnosis = workspace.getByPlaceholder(S.visitFormDiagnosisPlaceholder);
+  await diagnosis.fill("التهاب وتر الرضفة");
+  await diagnosis.blur();
+  await expect(workspace.locator("#visit-form-diagnosis-hint")).toHaveText(S.visitFormSavedIndicator);
+  await addDrug(workspace, "Diclofenac 50mg", "قرص مرتين يوميًا بعد الأكل", "7 أيام", {
+    form: "Tablet",
+    note: "يوقف مع أي ألم في المعدة",
+  });
+  await addDrug(workspace, "Paracetamol 500mg", "قرص عند الحاجة، بحد أقصى 4 مرات يوميًا", "", { form: "Tablet" });
+  await addDrug(workspace, "Voltaren Gel 1%", "دهان على مكان الألم 3 مرات يوميًا", "14 يوم");
+
+  await workspace.getByRole("button", { name: RX.printButton, exact: true }).click();
+  const sheet = page
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: RX.sheetTitle, exact: true }) });
+  await expect(sheet.getByText(RX.previewNote, { exact: true })).toBeVisible();
+  await expect(sheet.getByRole("listitem")).toHaveCount(3);
+  await expect(sheet).toContainText(`${KARIM_AGE} ${RX.ageUnit}`);
+  return sheet;
+}
+
+test("@screenshot prescription-preview", async ({ page }) => {
+  const sheet = await karimPrescriptionPreview(page);
+  await sheet.evaluate((element) => element.scrollTo(0, 0));
+  await expect.poll(() => sheet.evaluate((element) => element.scrollTop)).toBe(0);
+  await shoot(page, "prescription-preview", false);
+});
+
+test("@screenshot prescription-print", async ({ page }) => {
+  const sheet = await karimPrescriptionPreview(page);
+  await sheet.getByRole("button", { name: RX.printAction, exact: true }).click();
+  await sheet.getByRole("button", { name: RX.confirmPrint, exact: true }).click();
+  await expect(page.getByText(VISIT.rxPrintedLine, { exact: true })).toBeVisible();
+  await page.emulateMedia({ media: "print" });
+  await expect(page.getByText(RX.previewNote)).toBeHidden();
+  await expect(page.getByText(RX.stamp, { exact: true }).filter({ visible: true })).toHaveCount(1);
+  await shoot(page, "prescription-print", true);
+  await page.emulateMedia({ media: null });
 });

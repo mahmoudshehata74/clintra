@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { cairoInstant, todayInCairo, type ClockTime } from "../src/domain/time";
+import { prescriptionPrintStrings as RX } from "../src/screens/prescription/strings";
 import {
   advanceRowTo,
   ASSISTANT_NAME,
@@ -233,7 +234,9 @@ test("an assistant sees no prescription section without a drug, and the doctor's
   sheet = await openVisitSheet(page, PATIENTS.karim);
   await expect(rxItem(sheet, AMOXICILLIN.name)).toContainText(AMOXICILLIN.instructions);
   await expect(rxSection(sheet).getByText(VISIT.rxCountOne, { exact: true })).toBeVisible();
-  await expect(rxSection(sheet).getByRole("button")).toHaveCount(0);
+  // No add, edit or remove: the print button (screen 16) is its only control.
+  await expect(rxSection(sheet).getByRole("button")).toHaveCount(1);
+  await expect(rxSection(sheet).getByRole("button", { name: RX.printButton, exact: true })).toBeVisible();
   await expect(rxSection(sheet).getByText(VISIT.rxPrintedLine)).toHaveCount(0);
 });
 
@@ -251,7 +254,9 @@ test("once printed, the prescription is read-only and says why", async ({ page }
   sheet = await openVisitSheet(page, PATIENTS.karim);
   await expect(rxItem(sheet, AMOXICILLIN.name)).toBeVisible();
   await expect(rxSection(sheet).getByText(VISIT.rxPrintedLine, { exact: true })).toBeVisible();
-  await expect(rxSection(sheet).getByRole("button")).toHaveCount(0);
+  // No add, edit or remove: the reprint button (screen 16) is its only control.
+  await expect(rxSection(sheet).getByRole("button")).toHaveCount(1);
+  await expect(rxSection(sheet).getByRole("button", { name: RX.reprintButton, exact: true })).toBeVisible();
 });
 
 test("the visit history shows the previous visit's diagnosis and drugs", async ({ page }) => {
