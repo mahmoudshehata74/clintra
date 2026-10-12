@@ -28,6 +28,7 @@ describe("computeExpectedCashTotal", () => {
       org_id: "org-1",
       number: 1,
       issued_year: 2026,
+      series: 1,
       patient_id: "p",
       practitioner_id: "pr",
       visit_id: null,

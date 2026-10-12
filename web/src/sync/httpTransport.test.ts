@@ -195,6 +195,24 @@ describe("HttpTransport.pullBootstrap", () => {
   });
 });
 
+describe("HttpTransport: device_series", () => {
+  it("maps device_series on a pull page and a bootstrap page to deviceSeries", async () => {
+    const fetchImpl = fetchMock();
+    fetchImpl.mockImplementation(async (url) =>
+      jsonResponse(200, {
+        cursor: String(url).includes("bootstrap") ? "3:" : "43",
+        has_more: false,
+        rows: [],
+        device_series: 2,
+      }),
+    );
+    const transport = new HttpTransport({ token: "test-token", fetchImpl });
+
+    expect((await transport.pullSince(null)).deviceSeries).toBe(2);
+    expect((await transport.pullBootstrap(null)).deviceSeries).toBe(2);
+  });
+});
+
 describe("selectSyncTransport", () => {
   it("returns the given fallback (Fake) when no token is available", () => {
     const fallback = { pushOps: vi.fn(), pullSince: vi.fn(), pullBootstrap: vi.fn() };

@@ -49,8 +49,10 @@ class SyncableTables
      * table => one or more alternative column sets backing a slot-style
      * unique constraint — "two different rows compete for the same key"
      * (docs/sync-plan.md's Q4). `visits` has two, mirroring its two real
-     * booking modes (slots vs. queue); everything else here is an edit
-     * conflict, detected by `rev` alone, never a natural-key collision.
+     * booking modes (slots vs. queue). Every other table's edits are
+     * detected by `rev` alone; invoices' and payments' own natural key
+     * (their number within a device's series) is not a slot two devices
+     * compete for — see NUMBER_CONSTRAINTS below.
      *
      * @var array<string, list<list<string>>>
      */
@@ -63,6 +65,37 @@ class SyncableTables
             ['practitioner_id', 'visit_date', 'unique_scheduled_at'],
         ],
     ];
+
+    /**
+     * table => the columns that make up a row's printed number. These are
+     * minted on the device inside its own number series (device.series —
+     * docs/schema.md's v16 additions) and never change once written: an
+     * update touching any of them is rejected as `number_immutable`.
+     *
+     * @var array<string, list<string>>
+     */
+    public const NUMBER_COLUMNS = [
+        'invoices' => ['series', 'number', 'issued_year'],
+        'payments' => ['series', 'receipt_number'],
+    ];
+
+    /**
+     * table => the unique constraint backing that number
+     * (2026_09_12_000024_add_device_number_series.php). A violation of it
+     * is `conflict_number_taken`, never `conflict_already_exists` — the
+     * row it collided with is a different entity.
+     *
+     * @var array<string, string>
+     */
+    public const NUMBER_CONSTRAINTS = [
+        'invoices' => 'invoices_location_id_issued_year_series_number_unique',
+        'payments' => 'payments_location_id_series_receipt_number_unique',
+    ];
+
+    public static function hasNumberSeries(string $table): bool
+    {
+        return array_key_exists($table, self::NUMBER_COLUMNS);
+    }
 
     public static function isSlotTable(string $table): bool
     {

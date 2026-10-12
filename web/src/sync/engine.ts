@@ -238,6 +238,60 @@ async function applyChange(db: ClintraDatabase, change: { entity: string; entity
   }
 }
 
+/** The sync_review reason recordDeviceSeries leaves when the server reports a different series than the one this device already mints in. */
+export const DEVICE_SERIES_CONFLICT_REASON = "device_series_conflict";
+
+/**
+ * Records this device's number series from a pull or bootstrap page
+ * (docs/schema.md's v16 additions). The only expected change is null to a
+ * number: a device registered before series existed learning its own. A
+ * series this device already holds is never overwritten — numbers already
+ * printed in it must keep meaning what they meant — so a different non-null
+ * value from the server is logged and left for a person as one sync_review
+ * row (entity "device", reason device_series_conflict, both values in its
+ * payload; one open row at a time, not one per cycle). That row has no op
+ * behind it and no rev to compare, so the review sheet shows it — with its
+ * reference code — but never offers to resolve it: it needs support, not a
+ * choice between two versions.
+ */
+async function recordDeviceSeries(db: ClintraDatabase, deviceSeries: number | null | undefined): Promise<void> {
+  if (deviceSeries === null || deviceSeries === undefined) {
+    return;
+  }
+
+  const deviceId = getDeviceId();
+  const device = await db.device.get(deviceId);
+  if (!device || device.series === deviceSeries) {
+    return;
+  }
+
+  if (device.series === null || device.series === undefined) {
+    await db.device.update(deviceId, { series: deviceSeries });
+    return;
+  }
+
+  console.error(`sync_engine_device_series_conflict: stored ${device.series}, server reports ${deviceSeries}`);
+  const reviews = await db.sync_review.toArray();
+  const alreadyOpen = reviews.some(
+    (review) => review.needs_review && review.entity === "device" && review.reason === DEVICE_SERIES_CONFLICT_REASON,
+  );
+  if (alreadyOpen) {
+    return;
+  }
+  await db.sync_review.add({
+    id: id(),
+    op_id: id(),
+    entity: "device",
+    entity_id: deviceId,
+    reason: DEVICE_SERIES_CONFLICT_REASON,
+    payload: { stored_series: device.series, server_series: deviceSeries },
+    needs_review: true,
+    created_at: new Date().toISOString(),
+    action: AuditAction.Update,
+    base_rev: null,
+  });
+}
+
 /**
  * Drains GET /api/sync/bootstrap before this device's very first ever
  * pullSince — see SyncTransport.pullBootstrap's own doc comment for the
@@ -274,6 +328,7 @@ async function runBootstrapWindow(db: ClintraDatabase, transport: SyncTransport)
     for (const change of result.changes) {
       await applyChange(db, change);
     }
+    await recordDeviceSeries(db, result.deviceSeries);
 
     cursor = result.cursor;
     hasMore = result.hasMore;
@@ -331,6 +386,7 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
     for (const change of result.changes) {
       await applyChange(db, change);
     }
+    await recordDeviceSeries(db, result.deviceSeries);
 
     cursor = result.cursor;
     hasMore = result.hasMore;

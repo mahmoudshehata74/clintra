@@ -16,6 +16,7 @@ import {
   isAuditRowInScope,
 } from "./auditLogFilters";
 import { computeElapsedLabel } from "./elapsedLabel";
+import { formatBareReceiptNumber } from "./invoiceNumber";
 import Sheet from "./Sheet";
 import SheetCardHead from "./SheetCardHead";
 import { dayScreenStrings } from "./strings";
@@ -160,8 +161,12 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         }
         if (row.entity === "payments") {
           const receiptNumber = payload.receipt_number;
+          // A payment audited before number series existed carries no
+          // series: it was minted as series 1, the value database version 15
+          // gave its row.
+          const series = typeof payload.series === "number" ? payload.series : 1;
           return typeof receiptNumber === "string"
-            ? `${dayScreenStrings.paymentReceiptNumberPrefix} ${receiptNumber}`
+            ? `${dayScreenStrings.paymentReceiptNumberPrefix} ${formatBareReceiptNumber({ receipt_number: receiptNumber, series })}`
             : "";
         }
         if (row.entity === "cash_close") {

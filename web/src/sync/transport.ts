@@ -37,6 +37,14 @@ export interface PullSinceResult {
   hasMore: boolean;
   /** Changes the server has that this device does not, oldest first. */
   changes: PulledChange[];
+  /**
+   * The requesting device's own number series, as the server holds it
+   * (`device_series` on GET /api/sync/pull and /api/sync/bootstrap —
+   * docs/schema.md's v16 additions), so a device registered before series
+   * existed learns its own. Absent or null when the transport has none to
+   * report (FakeTransport, or a request with no device behind it).
+   */
+  deviceSeries?: number | null;
 }
 
 /**

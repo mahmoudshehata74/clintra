@@ -5,6 +5,7 @@ import Button from "../../components/ui/Button";
 import { SheetPanelBody, SheetPanelFoot } from "../../components/ui/SheetPanel";
 import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
+import { isDeviceSeriesUnknown } from "../../db/deviceRegistration";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { type Piastres } from "../../domain/money";
 import { formatMoneyAmount } from "../money";
@@ -94,6 +95,13 @@ export default function PaymentSheet({ invoiceId, onDismiss, onRecorded }: Payme
         paymentAuditLogId: result.paymentAuditLogId,
         invoiceAuditLogId: result.invoiceAuditLogId,
       });
+    } catch (error) {
+      // No receipt number can be minted yet, so nothing was recorded; any
+      // other failure is not this sheet's to explain.
+      if (!isDeviceSeriesUnknown(error)) {
+        throw error;
+      }
+      setAmountError(dayScreenStrings.deviceSeriesUnknownError);
     } finally {
       setIsSubmitting(false);
     }

@@ -278,9 +278,15 @@ trait RlsFixtures
         return $this->track('activation_codes', $id);
     }
 
-    protected function makeDevice(string $orgId, string $locationId, string $membershipId, ?string $id = null): string
+    /**
+     * $series defaults to the next free series at $locationId (max + 1),
+     * the same rule register_device(jsonb) applies
+     * (2026_09_12_000025_assign_device_series_at_registration.php).
+     */
+    protected function makeDevice(string $orgId, string $locationId, string $membershipId, ?string $id = null, ?int $series = null): string
     {
         $id ??= (string) Str::uuid();
+        $series ??= (int) $this->fx()->table('device')->where('location_id', $locationId)->max('series') + 1;
 
         $this->fx()->table('device')->insert($this->normalizeTimestamps([
             'id' => $id,
@@ -288,6 +294,7 @@ trait RlsFixtures
             'location_id' => $locationId,
             'membership_id' => $membershipId,
             'registered_at' => now(),
+            'series' => $series,
         ]));
 
         return $this->track('device', $id);

@@ -81,6 +81,15 @@ test('clintra_register holds no write of any kind outside its allowlist, and no 
 
     expect($grants['device'])->toBe(['INSERT']);
 
+    // register_device reads exactly two device columns, to compute the
+    // next number series at a location
+    // (2026_09_12_000024_add_device_number_series.php) — column-restricted
+    // like the activation_codes UPDATE above, so it surfaces only in
+    // role_column_grants. No other device column is readable, and no
+    // column of device is writable beyond the whole-table INSERT.
+    expect(columnGrants('clintra_register', 'device', 'SELECT'))->toBe(['location_id', 'series']);
+    expect(columnGrants('clintra_register', 'device', 'UPDATE'))->toBe([]);
+
     // audit_log.seq is a Postgres identity column now
     // (2026_09_12_000010_sequence_backed_audit_seq.php) — SELECT MAX(seq)
     // was the only reason this role ever needed SELECT here, and an

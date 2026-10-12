@@ -97,6 +97,11 @@ export async function ensureDeviceRegistration(db: ClintraDatabase): Promise<Dev
     // the seed/demo fallback binding, which has no server-issued identity.
     membership_id: null,
     token: null,
+    // The seed/demo device never talks to a server, so nothing will ever
+    // assign it a number series; it is series 1, which also keeps its
+    // printed numbers exactly as they always were (docs/schema.md's v16
+    // additions).
+    series: 1,
   };
   await db.device.add(registration);
   clearLegacyLocalStorageDeviceId();
@@ -113,4 +118,28 @@ export async function ensureDeviceRegistration(db: ClintraDatabase): Promise<Dev
  */
 export function getDeviceBinding(db: ClintraDatabase): Promise<DeviceRegistration> {
   return ensureDeviceRegistration(db);
+}
+
+/** Thrown by invoice and receipt minting when this device does not know its own number series yet. */
+export const DEVICE_SERIES_UNKNOWN = "device_series_unknown";
+
+/** True for the error getMintingSeries throws — what a screen checks to show its "connect once" message. */
+export function isDeviceSeriesUnknown(error: unknown): boolean {
+  return error instanceof Error && error.message === DEVICE_SERIES_UNKNOWN;
+}
+
+/**
+ * The number series this device mints invoice and receipt numbers in
+ * (DeviceRegistration.series). Throws device_series_unknown while it is
+ * still null — a device registered before series existed, that has not
+ * pulled since — rather than guessing a series another device at the same
+ * location may already hold. Callers read it before their write
+ * transaction starts, so a refusal leaves nothing written.
+ */
+export async function getMintingSeries(db: ClintraDatabase): Promise<number> {
+  const device = await getDeviceBinding(db);
+  if (device.series === null || device.series === undefined) {
+    throw new Error(DEVICE_SERIES_UNKNOWN);
+  }
+  return device.series;
 }

@@ -257,7 +257,8 @@ the `device` row, and returns the full bootstrap payload the web client
 needs to actually render from: the four resolved ids
 (`device_id`/`org_id`/`location_id`/`membership_id` — the client already
 knows `device_id`, it minted it, but not which org/location/membership
-the code just resolved it to), the organization, every location and
+the code just resolved it to), the device's own number `series` (see
+"Per-device number series" below), the organization, every location and
 practitioner in the org, every membership (including `pin_hash`/`pin_salt`
 — see `docs/auth-plan.md`'s registration credential resolution for why
 that crossing the wire once, here, is intentional — and `rev`, so a later
@@ -432,10 +433,12 @@ function's grants.
 |---|---|---|---|
 | `clintra_provision` | `provision_organization` | `clintra_owner` (CLI only) | `INSERT` on `organizations`, `locations`, `practitioners`, `practitioner_locations`, `memberships`, `activation_codes`, `audit_log`; `INSERT`+`SELECT` on `users`; `SELECT` on `specialty_templates` |
 | `clintra_mint` | `mint_activation_code` | `clintra_owner` (CLI only) | `SELECT` on `locations`, `memberships`; `INSERT` on `activation_codes`, `audit_log` |
-| `clintra_register` | `register_device` | `clintra_app` (the unauthenticated HTTP endpoint) | `SELECT` on `organizations`, `locations`, `practitioners`, `memberships`, `users`, `activation_codes`; `UPDATE` on `activation_codes` restricted to exactly two columns (`used_at`, `used_by_device_id`); `INSERT` on `device`, `audit_log` |
+| `clintra_register` | `register_device` | `clintra_app` (the unauthenticated HTTP endpoint) | `SELECT` on `organizations`, `locations`, `practitioners`, `memberships`, `users`, `activation_codes`; `UPDATE` on `activation_codes` restricted to exactly two columns (`used_at`, `used_by_device_id`); `SELECT` on `device` restricted to exactly two columns (`location_id`, `series`); `INSERT` on `device`, `audit_log` |
 
 *(Table above reflects the state after "Sequence-backed audit ordering"
-below — none of the three hold `SELECT` on `audit_log` any more.)*
+below — none of the three hold `SELECT` on `audit_log` any more — and
+after "Per-device number series" below, which added the two-column
+`SELECT` on `device`.)*
 
 `clintra_register` — the one reachable from the internet — is the
 narrowest by construction: read-only everywhere except the two tables
@@ -490,6 +493,49 @@ against any of those three others). All four were dropped. If a later
 change needs the registration response to include specialty/form/location
 data, that's a new migration granting exactly the new column or table
 access it needs — not a standing grant kept around in case.
+
+## Per-device number series
+
+Every device mints `invoices.number` and `payments.receipt_number` inside
+its own number series (`device.series`, `docs/schema.md`'s v16 additions),
+so two devices at one location can never mint the same number. The series
+is assigned by `register_device` itself
+(`2026_09_12_000025_assign_device_series_at_registration.php`): max + 1
+over every device ever registered at the code's location, revoked ones
+included, so a series is never reused. That is a read of other devices'
+rows, which `clintra_register` never needed before, so
+`2026_09_12_000024_add_device_number_series.php` grants it `SELECT` on
+exactly the two columns that read touches — `location_id` and `series` —
+and nothing else on `device`. `clintra_register` is `BYPASSRLS`, so the
+read sees every row despite `device`'s FORCE; no policy was added or
+changed. `ProvisioningRoleGrantsTest.php` pins the grant column-exact.
+
+**Serialised per location with a transaction-scoped advisory lock**
+(`pg_advisory_xact_lock` on a hash of the location id), taken before the
+max is read and held until the registration commits or rolls back, so two
+concurrent registrations at one location can never read the same max.
+Not a row lock: `SELECT ... FOR UPDATE` on the `locations` row would need
+`UPDATE` on `locations`, a privilege this internet-facing role
+deliberately does not hold, while an advisory lock needs no grant at all.
+The unique constraint on `(location_id, series)` is the backstop.
+`DeviceSeriesTest.php` races two registrations at one location from two
+separate OS processes and gets series 1 and 2.
+
+**The one-time backfill turns FORCE off inside its own transaction.**
+Numbering the devices that already exist needs an `UPDATE` across rows no
+membership owns, and `clintra_owner` — the role migrations run as — is
+bound by `device`'s FORCE with no membership, so a plain `UPDATE` would
+number nothing. The migration runs `NO FORCE`, the numbering `UPDATE`,
+`SET NOT NULL`, the unique constraint and `FORCE` again inside the one
+transaction Laravel wraps every pgsql migration in; `ALTER TABLE` holds an
+`ACCESS EXCLUSIVE` lock on `device` until commit, so no other session ever
+sees the table unforced. `DeviceSeriesTest.php` asserts both RLS flags and
+the `device_scope` policy are unchanged afterwards.
+
+The push endpoint reads the pushing device's own series through `device`'s
+ordinary policy (`App\Support\Sync\DeviceSeries`) — no new `SECURITY
+DEFINER` function was needed, since a device row is visible to its own
+org's memberships already.
 
 ## Sequence-backed audit ordering
 
@@ -771,7 +817,15 @@ for the same reason: no single owning org.
   conflict), an insert whose `entity_id` already has a row, a slot
   already occupied (`conflict_slot_taken` — see "Slot conflicts" below),
   or a write against a closed `day_state` row (`conflict_day_closed` —
-  see "Closed days are immutable" below).
+  see "Closed days are immutable" below). For invoices and payments
+  (see "Per-device number series" above): a create in a series other
+  than the pushing device's own (`series_mismatch`), an update that would
+  change a printed number — `series`, `number`, `issued_year`,
+  `receipt_number` (`number_immutable`), or a create whose number is
+  already taken within its series (`conflict_number_taken` — unreachable
+  for a device that mints only in its own series, and never reported as
+  `conflict_already_exists`, since the row it collided with is a
+  different entity).
 - `failed` — anything else: an org mismatch, a future-dated or
   out-of-window `created_at`, or a caught `QueryException` this class
   doesn't otherwise model (a foreign key pointing at nothing, for
@@ -820,7 +874,11 @@ aborted" error before this fix.
 `GET /api/sync/pull` (`App\Http\Controllers\SyncPullController`,
 `App\Support\Sync\SyncPuller`) matches `SyncTransport.pullSince` exactly
 (`web/src/sync/transport.ts`): one opaque cursor in, a batch and a new
-cursor out. Same connection as push — the ordinary, RLS-bound
+cursor out. Every page also carries a top-level `device_series` — the
+requesting device's own number series, read through `device`'s own
+policy — so a device registered before number series existed learns its
+series on its next pull; `GET /api/sync/bootstrap` carries the same
+field. Same connection as push — the ordinary, RLS-bound
 `clintra_app` connection, behind the same `membership` middleware. No web
 changes shipped alongside it; `HttpTransport` implementing the
 `SyncTransport` interface against these two endpoints is a separate step.

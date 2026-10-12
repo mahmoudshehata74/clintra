@@ -7,7 +7,7 @@ import { useActingMembership } from "../../auth/useActingMembership";
 import { Role } from "../../domain/role";
 import { computeExpectedCashTotal } from "../../db/cashClose";
 import { setDayDelay } from "../../db/dayState";
-import { ensureDeviceRegistration } from "../../db/deviceRegistration";
+import { ensureDeviceRegistration, isDeviceSeriesUnknown } from "../../db/deviceRegistration";
 import {
   undoMostRecentDayStateMutation,
   undoMostRecentInvoiceItemMutation,
@@ -470,6 +470,10 @@ export default function DayScreen({
         },
       });
     } catch (error) {
+      if (isDeviceSeriesUnknown(error)) {
+        setToastState({ message: dayScreenStrings.deviceSeriesUnknownError, undo: null });
+        return;
+      }
       console.error(error);
     } finally {
       setAdvanceCooldown((prev) => settleCooldown(prev, visit.id));

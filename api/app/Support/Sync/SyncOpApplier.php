@@ -68,6 +68,11 @@ class SyncOpApplier
             return $this->failed($op, 'org_mismatch');
         }
 
+        if ($op['action'] === 'create' && SyncableTables::hasNumberSeries($table)
+            && ! $this->carriesDeviceSeries($op, $deviceId)) {
+            return $this->rejected($op, 'series_mismatch');
+        }
+
         try {
             return match ($op['action']) {
                 'create' => $this->applyCreate($op, $table, $membershipId, $deviceId, $currentOrgId),
@@ -139,9 +144,20 @@ class SyncOpApplier
                 return $this->resolveSlotConflict($op, $table, $attributes);
             }
 
-            // Not a slot table: the only unique constraint is the primary
-            // key itself — the entity_id this "create" names already has
-            // a row. That is a conflict, not something to overwrite.
+            // invoices and payments carry a second unique constraint
+            // besides the primary key: their number within a device's
+            // series. series_mismatch above already refused a create
+            // outside the pushing device's own series, so a device that
+            // mints only in its own series can never hit this — but if one
+            // ever does, the row it collided with is a *different* entity,
+            // never "this entity_id already exists".
+            if ($this->violatesNumberConstraint($e, $table)) {
+                return $this->rejected($op, 'conflict_number_taken');
+            }
+
+            // Otherwise the violated constraint is the primary key: the
+            // entity_id this "create" names already has a row. That is a
+            // conflict, not something to overwrite.
             return $this->rejected($op, 'conflict_already_exists');
         }
 
@@ -154,6 +170,11 @@ class SyncOpApplier
     private function applyUpdate(array $op, string $table, string $membershipId, string $deviceId, string $orgId): array
     {
         $before = DB::table($table)->where('id', $op['entity_id'])->first();
+
+        if ($before !== null && $this->changesNumber($op, $table, $before)) {
+            return $this->rejected($op, 'number_immutable');
+        }
+
         $attributes = $this->buildAttributes($op, $table, $membershipId);
         unset($attributes['id']);
 
@@ -247,6 +268,46 @@ class SyncOpApplier
         // unique violation — something this method doesn't model. Treat
         // as unexpected rather than guessing.
         return $this->failed($op, 'internal_error');
+    }
+
+    /**
+     * A create on a numbered table (invoices, payments) must be minted in
+     * the pushing device's own series — the guarantee that two devices can
+     * never mint the same number (docs/schema.md's v16 additions). The
+     * device's series is read through device's own RLS policy (its own org
+     * only), so the comparison can never reveal another org's device.
+     */
+    private function carriesDeviceSeries(array $op, string $deviceId): bool
+    {
+        $payloadSeries = ($op['payload'] ?? [])['series'] ?? null;
+
+        return is_int($payloadSeries) && $payloadSeries === DeviceSeries::of($deviceId);
+    }
+
+    /**
+     * A printed number never changes: an update that would alter a
+     * numbered row's series or number columns is refused outright. A
+     * column the payload leaves out is not a change (the update only ever
+     * sets the columns it is given).
+     */
+    private function changesNumber(array $op, string $table, object $before): bool
+    {
+        $payload = $op['payload'] ?? [];
+
+        foreach (SyncableTables::NUMBER_COLUMNS[$table] ?? [] as $column) {
+            if (array_key_exists($column, $payload) && (string) $payload[$column] !== (string) $before->{$column}) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function violatesNumberConstraint(QueryException $e, string $table): bool
+    {
+        $constraint = SyncableTables::NUMBER_CONSTRAINTS[$table] ?? null;
+
+        return $constraint !== null && str_contains($e->getMessage(), "\"{$constraint}\"");
     }
 
     /**

@@ -1,11 +1,14 @@
 import type { SyncReview } from "../db/types";
 
 // Only entities mutate() ever writes today; see fakeTransport.ts's
-// tableForEntity for the matching list.
+// tableForEntity for the matching list. "device" is the one exception: the
+// sync engine's own device_series_conflict row (sync/engine.ts's
+// recordDeviceSeries), never an op.
 const ENTITY_LABELS: Record<string, string> = {
   visits: "زيارة",
   patients: "مريض",
   day_state: "حالة اليوم",
+  device: "الجهاز",
 };
 
 // Every reason api/app/Support/Sync/SyncOpApplier.php's `rejected(...)`

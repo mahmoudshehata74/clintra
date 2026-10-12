@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ClintraDatabase } from "./database";
 import {
+  DEVICE_SERIES_UNKNOWN,
   ensureDeviceRegistration,
   getDeviceBinding,
   getDeviceId,
+  getMintingSeries,
   resetDeviceIdCacheForTests,
 } from "./deviceRegistration";
 import { seedDatabase } from "./seed";
@@ -95,5 +97,22 @@ describe("getDeviceBinding", () => {
     const binding = await getDeviceBinding(db);
     expect(binding.location_id).toBe(location.id);
     expect(binding.org_id).toBe(location.org_id);
+  });
+});
+
+describe("getMintingSeries", () => {
+  it("is 1 for the seed/demo fallback binding, which never talks to a server", async () => {
+    await seedDatabase(db);
+
+    expect(await getMintingSeries(db)).toBe(1);
+    expect((await ensureDeviceRegistration(db)).series).toBe(1);
+  });
+
+  it("throws device_series_unknown while the device's series is still null", async () => {
+    await seedDatabase(db);
+    const device = await ensureDeviceRegistration(db);
+    await db.device.update(device.id, { series: null });
+
+    await expect(getMintingSeries(db)).rejects.toThrow(DEVICE_SERIES_UNKNOWN);
   });
 });
