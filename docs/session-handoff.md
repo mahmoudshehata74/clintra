@@ -25,9 +25,9 @@ screens are built on top of the existing data layer.
   commands, full RLS on every tenant table (see `api/docs/rls.md`).
 
 ## Verify
-Web: `pnpm --dir web test` (vitest, 563 passed) · `pnpm --dir web
+Web: `pnpm --dir web test` (vitest, 959 passed) · `pnpm --dir web
 exec tsc -b --noEmit` · `pnpm --dir web build` · `pnpm --dir web test:e2e`.
-API: `cd api && php artisan test` (Pest, 213 passed).
+API: `cd api && php artisan test` (Pest, 260 passed).
 
 ## Rebuild order (approved)
 1. `docs/design-rule.md` points at the prototype — done (PR #1).
@@ -82,11 +82,33 @@ implements are listed under "Screen 10 (visit workspace)" below.
 (PrescriptionPrintSheet, RxPrintPage, pure helpers in `printModel.ts`), opened
 from the visit workspace's `.rx-section` and reusable by screen 18; the first
 print goes through `markPrescriptionPrinted`. The owner decisions it
-implements are listed under "Screen 16 (printed prescription)" below.
+implements are listed under "Screen 16 (printed prescription)" below. On
+paper it is plain paper (the 12mm margin is `@page prescription`'s), a drug
+never splits across pages and the signature stays with the last drug; the
+audit log lists prescription events under "الزيارات", naming the patient.
+
+Practitioner profile (decision A): done — practitioners sync, and the owner
+edits each practitioner's name, title and syndicate number from the settings
+tab "الأطباء" (`web/src/screens/day/PractitionersPanel.tsx`,
+`web/src/db/practitioners.ts`); the printed prescription shows "رقم النقابة
+{n}" (`docs/schema.md`'s v18 additions; `api/docs/rls.md`'s
+"Practitioners"). Owner decisions it implements:
+1. Name, title and syndicate number are the only editable fields;
+   practitioners are still created only by provisioning, and the server
+   refuses anything else (`practitioner_not_editable`).
+2. The title is stored trimmed with `""` for none (the column stays NOT
+   NULL); the syndicate number is stored trimmed with null for none, at most
+   50 characters. One shared helper decides "empty" for every screen.
+3. Owner only, enforced on the device like every other settings write — the
+   server does not check who edits (a known gap, `api/docs/rls.md`).
+4. Renaming an assistant or other staff member stays in the backlog: a staff
+   name lives on `users`, which is not syncable (no single owning org —
+   `docs/schema.md`'s v12 additions), so it needs its own decision.
 
 ## Data decisions for the rebuild
 - `visits.note text NULL` — the doctor's quick note.
-- `practitioners.syndicate_number varchar(50) NULL` — hidden when empty.
+- `practitioners.syndicate_number varchar(50) NULL` — hidden when empty;
+  done (decision A, above).
 - `prescriptions` numbered `RX-{issued_year}-{sequence}`, sequential per
   location per calendar year, reserved with the same mechanism as invoice
   numbers (`prescriptions.issued_year` is a stored field).
@@ -135,7 +157,7 @@ implements are listed under "Screen 16 (printed prescription)" below.
 - b. One action, "طباعة / حفظ PDF" (the browser's print dialog does both); no PDF button; WhatsApp and SMS wait for screen 19.
 - c. The first print asks "بعد الطباعة الوصفة مش هتتعدّل. نطبع؟" ("اطبع" / "رجوع"), then `markPrescriptionPrinted`, then the dialog; reprints open the dialog with no write; refusals (not the visit's practitioner on a first print, empty, write failure) show an Arabic line and never open the dialog.
 - d. A5 portrait through a named `@page prescription`, applied only to the print target (`.rx-print-target`, rendered in a body-level portal that leaves `#root` off paper); the day sheet, invoice and receipt keep the default page.
-- e. `.rx-doc`: "د. {name}", title (omitted when empty; the syndicate number has one hook, `syndicateNumberPart`, until its column exists), the printClinic lines; `.rx-num` number and "d / m / yyyy" (print date once printed, today in the preview); `.rx-pt` name, age, diagnosis (snapshot once printed); one `.rx-drug` per item numbered 1..n by position; `.rx-sig`; no legal disclaimer (open owner decision); the screen-only `.rx-print-header`.
+- e. `.rx-doc`: "د. {name}", "{title} · رقم النقابة {n}" (either part omitted when empty, the line when both are — decision A), the printClinic lines; `.rx-num` number and "d / m / yyyy" (print date once printed, today in the preview); `.rx-pt` name, age, diagnosis (snapshot once printed); one `.rx-drug` per item numbered 1..n by position; `.rx-sig`; no legal disclaimer (open owner decision); the screen-only `.rx-print-header`.
 - f. After the first print the workspace shows the printed line and read-only list, and the button reads "اطبع تاني".
 
 ## Standing rules for the rebuild

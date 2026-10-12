@@ -939,7 +939,8 @@ middleware.
 **The syncable-table list, and one deliberate exclusion.** The 14
 tables `2026_09_12_000012_add_row_versioning.php` gave a `rev` column, plus
 `prescriptions` and `prescription_items`, which carry `rev` from their own
-creation (see "Prescriptions" above) —
+creation (see "Prescriptions" above), and `practitioners`, which gained it
+with its profile (see "Practitioners" above) —
 derived from what `web/src/db/mutate.ts` callers actually pass as
 `entity:`, not the full v1 table list. `users` stays excluded here too,
 for the same reason: no single owning org.
@@ -1109,8 +1110,10 @@ the two tables with a principled date — directly from those tables,
 filtered to the brief's own 60-day-back/60-day-forward window
 (`App\Support\Sync\SyncWindow::DAYS`, the same constant
 `SyncOpApplier`'s clock-skew check uses), plus the `patients` those
-windowed visits reference, so a name renders instead of a bare id, and the
-`prescriptions` of those visits with their `prescription_items`. It
+windowed visits reference, so a name renders instead of a bare id, the
+`prescriptions` of those visits with their `prescription_items`, and every
+one of the org's `practitioners` (not windowed: a fresh device prints the
+current name, title and syndicate number). It
 never touches `sync_ledger`, never computes or returns a `seq`, and
 never writes `device.pull_cursor` — `GET /api/sync/pull`'s own SQL,
 cursor format, and monotonic-`seq` guarantee are completely untouched by
@@ -1151,9 +1154,10 @@ distinguish "genuinely fresh" from "merely behind."
   ordinary backfill reaches them. Extending coverage to those tables
   would mean more joins and more stages, a larger, separate change from
   this one.
-- Same-shape query complexity trade: five keyset-paginated stages
+- Same-shape query complexity trade: six keyset-paginated stages
   (`day_state`, `visits`, `patients`, `prescriptions`,
-  `prescription_items`) stitched by one small opaque
+  `prescription_items`, `practitioners` — the last appended so an older
+  cursor keeps its meaning) stitched by one small opaque
   cursor (`"{stage}:{last id}"`), rather than pull's single `seq`-ordered
   query — more moving parts, in exchange for windowing by each entity's
   own business date instead of an arrival-time proxy that wouldn't
