@@ -290,6 +290,56 @@ export interface InvoiceItem {
   rev: number;
 }
 
+/**
+ * A visit's prescription — at most one per visit (unique visit_id). Created
+ * together with its first item by db/prescriptions.ts, which mints its
+ * number inside this device's own series exactly like an invoice's
+ * (location_id, issued_year, series, number). Locked once printed_at is set:
+ * neither it nor its items change again, on this device or on the server.
+ * See docs/schema.md's v17 additions.
+ */
+export interface Prescription {
+  id: string;
+  org_id: string;
+  location_id: string;
+  visit_id: string;
+  patient_id: string;
+  practitioner_id: string;
+  /** The number series of the device that minted `number` (DeviceRegistration.series). */
+  series: number;
+  /** The Africa/Cairo calendar year `number` is scoped to (domain/time.ts's cairoYear). */
+  issued_year: number;
+  /** Sequential per location per calendar year within one device's series. */
+  number: number;
+  /** The visit's diagnosis as it stood at the first print; null until then, or when the visit had none. */
+  diagnosis: string | null;
+  /** Set once, by the first print; null while the prescription is still editable. */
+  printed_at: Instant | null;
+  /** Membership id — the practitioner who wrote it. */
+  created_by: string;
+  created_at: Instant;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
+}
+
+/** One drug line on a prescription. */
+export interface PrescriptionItem {
+  id: string;
+  prescription_id: string;
+  /** Trimmed, never empty (e.g. "Diclofenac 50mg"). */
+  name: string;
+  /** e.g. "Tablet", "Gel". */
+  form: string | null;
+  /** The Arabic dosage line; trimmed, never empty. */
+  instructions: string;
+  duration: string | null;
+  note: string | null;
+  /** 1-based, in append order; removing an item does not renumber the rest. */
+  position: number;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
+}
+
 export const PaymentMethod = {
   Cash: "cash",
   Card: "card",

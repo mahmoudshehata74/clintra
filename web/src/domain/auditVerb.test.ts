@@ -225,3 +225,49 @@ describe("describeAuditVerb", () => {
     expect(verb).toBe("حذف الزيارة");
   });
 });
+
+describe("describeAuditVerb: prescriptions", () => {
+  const prescription = (overrides: Record<string, unknown>) => ({
+    id: "rx-1",
+    visit_id: "visit-1",
+    number: 1,
+    diagnosis: null,
+    printed_at: null,
+    ...overrides,
+  });
+  const item = (overrides: Record<string, unknown>) => ({
+    id: "item-1",
+    prescription_id: "rx-1",
+    name: "Diclofenac 50mg",
+    instructions: "قرص مرتين يومياً",
+    position: 1,
+    ...overrides,
+  });
+
+  it.each([
+    ["writing a prescription", { entity: "prescriptions", action: AuditAction.Create, before: null, after: prescription({}) }, "كتب وصفة"],
+    ["adding a drug", { entity: "prescription_items", action: AuditAction.Create, before: null, after: item({}) }, "أضاف دواء"],
+    [
+      "editing a drug",
+      { entity: "prescription_items", action: AuditAction.Update, before: item({}), after: item({ instructions: "قرص عند اللزوم" }) },
+      "عدّل دواء",
+    ],
+    ["removing a drug", { entity: "prescription_items", action: AuditAction.Delete, before: item({}), after: null }, "شال دواء"],
+    [
+      "the first print",
+      {
+        entity: "prescriptions",
+        action: AuditAction.Update,
+        before: prescription({}),
+        after: prescription({ printed_at: "2026-10-12T08:00:00.000Z", diagnosis: "التهاب وتر الرضفة" }),
+      },
+      "طبع الوصفة",
+    ],
+  ])("%s reads as a verb alone, never the drug or the diagnosis", (_label, row, expected) => {
+    const verb = describeAuditVerb(row);
+    expect(verb).toBe(expected);
+    for (const secret of ["Diclofenac", "قرص", "التهاب"]) {
+      expect(verb).not.toContain(secret);
+    }
+  });
+});

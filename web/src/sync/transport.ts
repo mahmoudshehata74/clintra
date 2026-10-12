@@ -21,7 +21,7 @@ export type PushOpResult =
 
 /** One row of server-side history this device does not have applied locally yet. */
 export interface PulledChange {
-  /** Matches db.table(entity) exactly — one of the 14 syncable tables. */
+  /** Matches db.table(entity) exactly — one of the syncable tables (sync/syncableTables.ts). */
   entity: string;
   entity_id: string;
   /** The row's rev as of this change; written to the local row once applied. */

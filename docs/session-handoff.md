@@ -54,6 +54,23 @@ for any membership with a `practitioner_id`; the quick note writes
 `visits.note` through `setVisitNote`. The owner decisions it implements are
 listed under "Screen 9 (doctor day)" below.
 
+`prescriptions` + `prescription_items` (step 6, data only): done — migration,
+RLS, sync (push, pull, bootstrap), per-device RX numbering, printed lock,
+local store (database version 16) and audited writers in
+`web/src/db/prescriptions.ts`; no UI yet (`docs/schema.md`'s v17 additions).
+Owner decisions it implements:
+1. At most one prescription per visit, created with its first item and
+   numbered then in this device's series ("RX-{year}-{0000}", "RX-{year}-{L}-{0000}").
+2. Items are editable only until the first print, which sets `printed_at` and
+   snapshots the visit's diagnosis; after that every write is refused, on the
+   device and by the server.
+3. Item fields: name and instructions required, form, duration and note
+   optional, position 1-based in append order and never renumbered.
+4. Only the visit's own practitioner writes (`not_prescriber`); the server
+   does not enforce who writes in v1 — a known gap (`api/docs/rls.md`).
+5. Removing every item keeps the numbered prescription; an empty one cannot be
+   printed (`prescription_empty`), and the skipped number is acceptable.
+
 ## Data decisions for the rebuild
 - `visits.note text NULL` — the doctor's quick note.
 - `practitioners.syndicate_number varchar(50) NULL` — hidden when empty.

@@ -537,6 +537,91 @@ ordinary policy (`App\Support\Sync\DeviceSeries`) — no new `SECURITY
 DEFINER` function was needed, since a device row is visible to its own
 org's memberships already.
 
+## Prescriptions
+
+`prescriptions` and `prescription_items`
+(`2026_09_12_000026_create_prescriptions_tables.php`, `docs/schema.md`'s
+v17 additions) are new tables, and each one gets every per-table object its
+counterpart already had — nothing about them is new in kind:
+
+| Object | prescriptions | invoices | prescription_items | invoice_items |
+|---|---|---|---|---|
+| RLS | ENABLE + FORCE | ENABLE + FORCE | ENABLE + FORCE | ENABLE + FORCE |
+| Policy | `prescriptions_scope`, USING + WITH CHECK | `invoices_scope` | `prescription_items_scope`, USING + WITH CHECK | `invoice_items_scope` |
+| `clintra_app` grant | SELECT, INSERT, UPDATE, DELETE | same | SELECT, INSERT, UPDATE, DELETE | same |
+| `rev` | integer NOT NULL DEFAULT 1 | same | integer NOT NULL DEFAULT 1 | same |
+| Trigger | `prescriptions_enforce_rev` → `enforce_row_rev()` | `invoices_enforce_rev` | `prescription_items_enforce_rev` | `invoice_items_enforce_rev` |
+| Number key | UNIQUE (location_id, issued_year, series, number) | same | — | — |
+| Other unique | UNIQUE (visit_id) | — | — | — |
+| Plain indexes | org_id, location_id | org_id, location_id, visit_id | prescription_id | invoice_id |
+| Foreign keys | org, location, visit, patient, practitioner, created_by → memberships; all RESTRICT | org, location, visit, patient, practitioner; all RESTRICT | prescription_id → prescriptions, RESTRICT | invoice_id → invoices, service_id → services; RESTRICT |
+| Sync | `SyncableTables::NAMES`, `DIRECT_ORG_ID_TABLES`, `ACTOR_COLUMNS` (created_by), `NUMBER_COLUMNS`/`NUMBER_CONSTRAINTS` | `NAMES`, `DIRECT_ORG_ID_TABLES`, `NUMBER_COLUMNS`/`NUMBER_CONSTRAINTS` | `NAMES` | `NAMES` |
+
+There is no per-table ledger hook: `sync_ledger` is written by
+`SyncOpApplier` for any table in `SyncableTables::NAMES`, and both tables
+are in it. `clintra_fixtures` (test-only) holds the same privileges on both
+as on their counterparts; no provisioning role holds any.
+
+**Policies.** `prescriptions` uses the `visits` policy expression verbatim
+— org + location + practitioner scope — not the `invoices` one:
+
+```sql
+-- visits_scope and prescriptions_scope (USING and WITH CHECK)
+org_id = current_org()
+AND location_id IN (SELECT * FROM allowed_locations())
+AND practitioner_id IN (SELECT * FROM allowed_practitioners())
+
+-- invoices_scope (USING and WITH CHECK), for comparison
+org_id = current_org() AND location_id IN (SELECT * FROM allowed_locations())
+```
+
+The invoices expression leaves the practitioner out so an assistant with
+`self` practitioner scope can still bill every practitioner at their
+location; that reason does not apply to a prescription, which is clinical
+data about one visit. With the visits expression, exactly the memberships
+that can see a visit can see its prescription. `prescription_items` embeds
+the same expression through its parent, as `invoice_items` embeds the
+invoices one and `visit_form_data` the visits one:
+
+```sql
+prescription_id IN (SELECT id FROM prescriptions WHERE org_id = current_org()
+  AND location_id IN (SELECT * FROM allowed_locations())
+  AND practitioner_id IN (SELECT * FROM allowed_practitioners()))
+```
+
+`PrescriptionsTest.php` pins the prescriptions policy to the visits
+policy's deparsed text, both RLS flags, the grant, the unique keys and the
+non-cascading foreign keys, and proves org B can neither read nor write org
+A's rows, through the sync endpoints or directly.
+
+**The printed lock is enforced by the push endpoint** (`SyncOpApplier`'s
+`applyPrintedLock`), not a trigger. Once a prescription's `printed_at` is
+set, a delete of it, or an update that would change any column it names —
+clearing or changing `printed_at` or `diagnosis` included — is rejected as
+`prescription_printed`, and so is a `prescription_items` create, update or
+delete whose parent (the one the payload names, and the one the row
+currently has) is printed. The push that first sets `printed_at` finds the
+row unprinted and is applied normally. An update that changes nothing on an
+already-printed prescription — the same print pushed again from another
+device — is `accepted` as a no-op: nothing is written (no `rev` bump, no
+ledger or audit row) and the result carries the current `rev`. The parent
+is read `FOR UPDATE`, which serialises an item write against a concurrent
+first print of the same prescription. A role that bypasses the endpoint
+(`clintra_owner` in a migration, `clintra_fixtures` in a test) is not held
+to the lock; the API has no other write path to these tables.
+
+**Known gap: who writes is not enforced by the server.** The owner's rule
+is that only the visit's own practitioner writes its prescription. The web
+writers enforce it (`not_prescriber`, `web/src/db/prescriptions.ts`), but
+the policy above admits any membership in scope of the visit — an assistant
+with `all` practitioner scope included — so a client that bypassed the web
+writers could write a prescription for any visit it can see. Closing this
+needs a policy that compares the acting membership's own `practitioner_id`
+with the row's, a change to RLS that v1 deliberately does not make.
+Device tokens are also still bound to the registering membership, not the
+PIN-switched one (`docs/auth-plan.md`), so the server could not yet tell
+which person is writing in any case.
+
 ## Sequence-backed audit ordering
 
 Every provisioning function computed `audit_log.seq` the same way: `SELECT
@@ -802,8 +887,10 @@ every other future entity endpoint will inherit. It matches
 ops in, one result per op out, same order, behind the `membership`
 middleware.
 
-**The syncable-table list, and one deliberate exclusion.** Exactly the 14
-tables `2026_09_12_000012_add_row_versioning.php` gave a `rev` column —
+**The syncable-table list, and one deliberate exclusion.** The 14
+tables `2026_09_12_000012_add_row_versioning.php` gave a `rev` column, plus
+`prescriptions` and `prescription_items`, which carry `rev` from their own
+creation (see "Prescriptions" above) —
 derived from what `web/src/db/mutate.ts` callers actually pass as
 `entity:`, not the full v1 table list. `users` stays excluded here too,
 for the same reason: no single owning org.
@@ -825,7 +912,11 @@ for the same reason: no single owning org.
   already taken within its series (`conflict_number_taken` — unreachable
   for a device that mints only in its own series, and never reported as
   `conflict_already_exists`, since the row it collided with is a
-  different entity).
+  different entity). The same three apply to prescriptions, plus a second
+  prescription for a visit that already has one
+  (`conflict_visit_has_prescription`, again never
+  `conflict_already_exists`) and any write the printed lock refuses
+  (`prescription_printed` — see "Prescriptions" above).
 - `failed` — anything else: an org mismatch, a future-dated or
   out-of-window `created_at`, or a caught `QueryException` this class
   doesn't otherwise model (a foreign key pointing at nothing, for
@@ -835,7 +926,7 @@ for the same reason: no single owning org.
 
 **Trust, per docs/sync-plan.md's Q12/Q13 — applied, not just decided.**
 `actor_membership_id`, and any table's own equivalent (`visits.created_by`,
-`payments.created_by`, `cash_close.closed_by` —
+`payments.created_by`, `prescriptions.created_by`, `cash_close.closed_by` —
 `App\Support\Sync\SyncableTables::ACTOR_COLUMNS`), is always the
 token-resolved membership, overwritten after merging the payload,
 regardless of what the payload itself claims. `org_id` is different:
@@ -884,7 +975,7 @@ changes shipped alongside it; `HttpTransport` implementing the
 `SyncTransport` interface against these two endpoints is a separate step.
 
 **Org isolation is never a hand-written filter.** Every query in
-`SyncPuller` reads either `sync_ledger` or one of the 14 syncable entity
+`SyncPuller` reads either `sync_ledger` or one of the syncable entity
 tables exactly as any other RLS-bound `clintra_app` query would — there is
 no `->where('org_id', ...)` anywhere in the class to forget. `sync_ledger`'s
 own `sync_ledger_select` policy (`org_id = current_org()`) scopes which
@@ -969,7 +1060,8 @@ the two tables with a principled date — directly from those tables,
 filtered to the brief's own 60-day-back/60-day-forward window
 (`App\Support\Sync\SyncWindow::DAYS`, the same constant
 `SyncOpApplier`'s clock-skew check uses), plus the `patients` those
-windowed visits reference, so a name renders instead of a bare id. It
+windowed visits reference, so a name renders instead of a bare id, and the
+`prescriptions` of those visits with their `prescription_items`. It
 never touches `sync_ledger`, never computes or returns a `seq`, and
 never writes `device.pull_cursor` — `GET /api/sync/pull`'s own SQL,
 cursor format, and monotonic-`seq` guarantee are completely untouched by
@@ -1010,8 +1102,9 @@ distinguish "genuinely fresh" from "merely behind."
   ordinary backfill reaches them. Extending coverage to those tables
   would mean more joins and more stages, a larger, separate change from
   this one.
-- Same-shape query complexity trade: three keyset-paginated stages
-  (`day_state`, `visits`, `patients`) stitched by one small opaque
+- Same-shape query complexity trade: five keyset-paginated stages
+  (`day_state`, `visits`, `patients`, `prescriptions`,
+  `prescription_items`) stitched by one small opaque
   cursor (`"{stage}:{last id}"`), rather than pull's single `seq`-ordered
   query — more moving parts, in exchange for windowing by each entity's
   own business date instead of an arrival-time proxy that wouldn't

@@ -1,3 +1,5 @@
+import { seriesPrefix } from "../../domain/numberSeries";
+
 /**
  * Every place that shows or prints an invoice or receipt number goes through
  * the four formatters below — display only: the stored `series`,
@@ -10,30 +12,10 @@
  * always did ("INV-2026-0043", "RCP-1189"), and series n ≥ 2 adds a letter
  * ("INV-2026-B-0043", "RCP-B-1189"). The full forms are the screens' own
  * labels; the bare forms are the printed page's and the audit log's, which
- * have always shown the number without its INV-/RCP- prefix. Both apply the
- * same seriesPrefix(), so they can never disagree about a series.
+ * have always shown the number without its INV-/RCP- prefix. All four apply
+ * the shared seriesPrefix() (domain/numberSeries.ts), so they can never
+ * disagree about a series — with each other or with a prescription's number.
  */
-
-/**
- * The series letter: bijective base 26 with 1 = A, so 2 → B … 26 → Z,
- * 27 → AA, 28 → AB … 52 → AZ, 53 → BA … 702 → ZZ, 703 → AAA. Never "" for a
- * positive series; seriesPrefix() is what omits series 1.
- */
-export function seriesLetter(series: number): string {
-  let letters = "";
-  let remaining = series;
-  while (remaining > 0) {
-    remaining -= 1;
-    letters = String.fromCharCode(65 + (remaining % 26)) + letters;
-    remaining = Math.floor(remaining / 26);
-  }
-  return letters;
-}
-
-/** "" for series 1, otherwise the series letter and a hyphen ("B-", "AA-"). */
-function seriesPrefix(series: number): string {
-  return series === 1 ? "" : `${seriesLetter(series)}-`;
-}
 
 interface InvoiceNumberParts {
   readonly number: number;

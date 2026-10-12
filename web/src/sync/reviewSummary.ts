@@ -1,24 +1,43 @@
 import type { SyncReview } from "../db/types";
 
-// Only entities mutate() ever writes today; see fakeTransport.ts's
-// tableForEntity for the matching list. "device" is the one exception: the
-// sync engine's own device_series_conflict row (sync/engine.ts's
-// recordDeviceSeries), never an op.
+// Every syncable table (sync/syncableTables.ts — reviewSummary.test.ts holds
+// each one to a label here), so no assistant ever reads a raw English table
+// name. "device" is the one non-syncable entry: the sync engine's own
+// device_series_conflict row (sync/engine.ts's recordDeviceSeries), never an
+// op.
 const ENTITY_LABELS: Record<string, string> = {
-  visits: "زيارة",
-  patients: "مريض",
+  cash_close: "إغلاق اليوم",
   day_state: "حالة اليوم",
+  invoice_items: "بند في فاتورة",
+  invoices: "فاتورة",
+  membership_locations: "فرع موظف",
+  membership_practitioners: "دكتور تابع لموظف",
+  memberships: "موظف",
+  patients: "مريض",
+  payments: "دفعة",
+  prescription_items: "دواء في وصفة",
+  prescriptions: "وصفة",
+  schedules: "مواعيد العمل",
+  service_price_overrides: "سعر خاص لخدمة",
+  services: "خدمة",
+  visit_form_data: "نموذج الزيارة",
+  visits: "زيارة",
   device: "الجهاز",
 };
 
 // Every reason api/app/Support/Sync/SyncOpApplier.php's `rejected(...)`
 // can actually produce, plus FakeTransport's own generic one — see
-// api/docs/rls.md's "The sync push endpoint" for the four.
+// api/docs/rls.md's "The sync push endpoint".
 const REASON_LABELS: Record<string, string> = {
   conflict_slot_taken: "الميعاد ده اتحجز من جهاز تاني",
   conflict_already_exists: "السجل ده موجود بالفعل على السيرفر",
   conflict_day_closed: "اليوم ده مقفول، مينفعش يتعدّل",
   conflict_stale_rev: "حد غيّر البيانات دي قبلك",
+  series_mismatch: "الرقم ده مش من سلسلة أرقام الجهاز ده",
+  number_immutable: "الرقم ده اتطبع، مينفعش يتغيّر",
+  conflict_number_taken: "الرقم ده متسجّل قبل كده على السيرفر",
+  conflict_visit_has_prescription: "الزيارة دي ليها وصفة بالفعل من جهاز تاني",
+  prescription_printed: "الوصفة دي اتطبعت، مينفعش تتعدّل",
   conflict: "فيه تعارض في البيانات",
 };
 

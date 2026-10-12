@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  formatBareInvoiceNumber,
-  formatBareReceiptNumber,
-  formatInvoiceNumber,
-  formatReceiptNumber,
-  seriesLetter,
-} from "./invoiceNumber";
+import { seriesLetter } from "../../domain/numberSeries";
+import { formatBareInvoiceNumber, formatBareReceiptNumber, formatInvoiceNumber, formatReceiptNumber } from "./invoiceNumber";
 
 describe("formatInvoiceNumber", () => {
   it("pads the sequence to 4 digits", () => {
