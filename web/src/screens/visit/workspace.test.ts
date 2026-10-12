@@ -19,6 +19,7 @@ import {
   RX_COUNT_FORMS,
   rxDoseLine,
   rxErrorMessage,
+  sessionLengthPhrase,
   sessionMinutes,
   sortRxItems,
   summarizePatient,
@@ -298,5 +299,13 @@ describe("sessionMinutes", () => {
   it("is hidden otherwise", () => {
     expect(sessionMinutes(makeVisit({ status: VisitStatus.Arrived }), nowAt("09:00"))).toBeNull();
     expect(sessionMinutes(makeVisit({ status: VisitStatus.Completed, started_at: null, ended_at: at("10:00") }), nowAt("10:00"))).toBeNull();
+  });
+});
+
+describe("sessionLengthPhrase", () => {
+  it("says less than a minute for zero, then counts minutes", () => {
+    expect(sessionLengthPhrase(0)).toBe("أقل من دقيقة");
+    expect(sessionLengthPhrase(1)).toBe("دقيقة واحدة");
+    expect(sessionLengthPhrase(14)).toBe("14 دقيقة");
   });
 });

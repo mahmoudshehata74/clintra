@@ -59,6 +59,7 @@ export const visitWorkspaceStrings = {
   minuteTwo: "دقيقتين",
   minuteFew: "دقائق",
   minuteMany: "دقيقة",
+  minuteUnderOne: "أقل من دقيقة",
 
   // The "الزيارة الحالية" page.
   currentVisitTitle: "الزيارة الحالية",

@@ -4,7 +4,7 @@ import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Card, { CardHead } from "../../components/ui/Card";
 import { db } from "../../db/database";
-import { getDeviceBinding, isDeviceSeriesUnknown } from "../../db/deviceRegistration";
+import { getDeviceBinding } from "../../db/deviceRegistration";
 import type { Invoice, Patient, Practitioner, Service, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitCompleted, markVisitInRoom } from "../../db/visitAttendance";
@@ -12,18 +12,8 @@ import { findGeneralFormDefinition, readVisitFormValues, type VisitFormFieldValu
 import { ScheduleMode } from "../../domain/scheduleMode";
 import { clockTimeInCairo, weekdayOf, type ClinicDay } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
-import {
-  ADVANCE_COOLDOWN_MS,
-  beginCooldown,
-  elapseCooldown,
-  EMPTY_COOLDOWN_STATE,
-  isCoolingDown,
-  settleCooldown,
-  type CooldownState,
-} from "../day/advanceCooldown";
 import { arabicCount, type ArabicCountForms } from "../../domain/arabicText";
 import { formatElapsedMinutes } from "../day/elapsedLabel";
-import { dayScreenStrings } from "../day/strings";
 import VisitFormSheet from "../day/VisitFormSheet";
 import {
   canCallIn,
@@ -53,6 +43,7 @@ import {
 } from "./doctorDay";
 import QuickNote from "./QuickNote";
 import { doctorDayStrings as T } from "./strings";
+import { useVisitAdvance } from "./useVisitAdvance";
 
 interface DoctorDayScreenProps {
   /** The acting membership's own practitioner (memberships.practitioner_id). */
@@ -92,11 +83,7 @@ interface DoctorDayData {
 export default function DoctorDayScreen({ practitionerId, today, onPractitionerName }: DoctorDayScreenProps) {
   const [locationId, setLocationId] = useState<string | null>(null);
   const [visitFormVisitId, setVisitFormVisitId] = useState<string | null>(null);
-  const [cooldown, setCooldown] = useState<CooldownState>(EMPTY_COOLDOWN_STATE);
-  // The one advance failure this screen explains rather than only logging:
-  // completing cannot mint an invoice number yet (device_series_unknown), so
-  // nothing was written and the patient is still in the room.
-  const [advanceError, setAdvanceError] = useState<string | null>(null);
+  const { advance, isCoolingDown, advanceError } = useVisitAdvance();
   // Waits and "دخل من" are wall-clock-derived; nothing re-renders them on
   // its own, so this ticks once a minute (SlotRow.tsx's own pattern).
   const [, forceMinuteTick] = useState(0);
@@ -188,25 +175,6 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
     }
   }, [practitionerName, onPractitionerName]);
 
-  async function advance(visit: Visit, write: (visitId: string) => Promise<unknown>) {
-    setCooldown((prev) => beginCooldown(prev, visit.id));
-    window.setTimeout(() => {
-      setCooldown((prev) => elapseCooldown(prev, visit.id));
-    }, ADVANCE_COOLDOWN_MS);
-    setAdvanceError(null);
-    try {
-      await write(visit.id);
-    } catch (error) {
-      if (isDeviceSeriesUnknown(error)) {
-        setAdvanceError(dayScreenStrings.deviceSeriesUnknownError);
-        return;
-      }
-      console.error(error);
-    } finally {
-      setCooldown((prev) => settleCooldown(prev, visit.id));
-    }
-  }
-
   if (!data) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-16">
@@ -251,7 +219,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
           variant={variant}
           size={size}
           className={className}
-          disabled={someoneInRoom || isCoolingDown(cooldown, visit.id)}
+          disabled={someoneInRoom || isCoolingDown(visit.id)}
           onClick={() => callIn(visit)}
         >
           {label}
@@ -274,7 +242,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
           now={now}
           priorVisitCount={countPriorCompletedVisits(data.historyVisits, current)}
           lastVisit={summarizeLastVisit(data.historyVisits, current, data.formValuesByVisitId, today)}
-          isCoolingDown={isCoolingDown(cooldown, current.id)}
+          isCoolingDown={isCoolingDown(current.id)}
           onOpenVisitForm={() => setVisitFormVisitId(current.id)}
           onComplete={() => void advance(current, (visitId) => markVisitCompleted(db, visitId))}
         />
@@ -349,7 +317,17 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
         )}
       </Card>
 
-      {visitFormVisitId && <VisitFormSheet visitId={visitFormVisitId} onDismiss={() => setVisitFormVisitId(null)} />}
+      {visitFormVisitId && (
+        <VisitFormSheet
+          visitId={visitFormVisitId}
+          onDismiss={() => setVisitFormVisitId(null)}
+          completion={{
+            onComplete: (visit) => void advance(visit, (visitId) => markVisitCompleted(db, visitId)),
+            isCoolingDown,
+            error: advanceError,
+          }}
+        />
+      )}
     </main>
   );
 }

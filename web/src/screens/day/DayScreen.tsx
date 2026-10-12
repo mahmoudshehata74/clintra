@@ -1110,7 +1110,15 @@ export default function DayScreen({
       )}
 
       {visitFormSheetVisitId && (
-        <VisitFormSheet visitId={visitFormSheetVisitId} onDismiss={() => setVisitFormSheetVisitId(null)} />
+        <VisitFormSheet
+          visitId={visitFormSheetVisitId}
+          onDismiss={() => setVisitFormSheetVisitId(null)}
+          completion={{
+            // The row tap's own completion: same write, toast with undo, and cooldown.
+            onComplete: (visit) => void handleAdvance(visit, VisitStatus.Completed),
+            isCoolingDown: (visitId) => advancingVisitIds.has(visitId),
+          }}
+        />
       )}
 
       {isCashCloseOpen && selectedLocationId && currentPractitioner && (

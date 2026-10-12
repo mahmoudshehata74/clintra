@@ -277,3 +277,8 @@ export function sessionMinutes(visit: Pick<Visit, "status" | "started_at" | "end
   }
   return null;
 }
+
+/** `.runrow .count`'s value: "أقل من دقيقة", "دقيقة واحدة", "دقيقتين", "14 دقيقة". */
+export function sessionLengthPhrase(minutes: number): string {
+  return minutes === 0 ? T.minuteUnderOne : countPhrase(minutes, MINUTE_FORMS);
+}

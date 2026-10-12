@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { db } from "../db/database";
 import { useLiveQuery } from "../db/useLiveQuery";
 import type { Membership, User } from "../db/types";
@@ -36,6 +36,27 @@ export function useActingMembership(): Membership | undefined {
     [membershipId],
   );
   return membershipForSession(row, membershipId);
+}
+
+/**
+ * The membership a screen that stays mounted under the lock overlay acts
+ * for. useActingMembership is undefined while locked (and, right after an
+ * unlock, until its row loads), so the last unlocked membership is
+ * remembered (React's adjust-state-while-rendering pattern) and stands in
+ * while there is no session, or while the session is that same
+ * membership's again and its row is still loading. Once anyone else's
+ * session starts, only their own membership counts — never the previous
+ * member's, not even for one render.
+ */
+export function useGuardedActingMembership(): Membership | undefined {
+  const activeMembershipId = useSyncExternalStore(subscribeSession, getActiveMembershipId);
+  const actingMembership = useActingMembership();
+  const [lastUnlockedMembership, setLastUnlockedMembership] = useState(actingMembership);
+  if (actingMembership && actingMembership !== lastUnlockedMembership) {
+    setLastUnlockedMembership(actingMembership);
+  }
+  const canStandIn = activeMembershipId === null || activeMembershipId === lastUnlockedMembership?.id;
+  return actingMembership ?? (canStandIn ? lastUnlockedMembership : undefined);
 }
 
 /** The same rule for the acting member's user row: only while it is that membership's own user. */
