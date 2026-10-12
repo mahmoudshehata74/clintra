@@ -13,14 +13,16 @@ import { sidebarStrings } from "../src/components/strings";
 // load without a "type: json" attribute. seededVisitsDate() itself is just
 // these two calls (see its own doc comment) — reproduced here against the
 // same pure domain/time.ts helpers rather than against the db module.
-import { addDaysToClinicDay, mostRecentWeekdayOnOrBefore, todayInCairo } from "../src/domain/time";
+import { addDaysToClinicDay, cairoInstant, mostRecentWeekdayOnOrBefore, todayInCairo, type ClockTime } from "../src/domain/time";
 import { dayScreenStrings } from "../src/screens/day/strings";
 import { doctorDayStrings } from "../src/screens/doctor/strings";
+import { prescriptionPrintStrings } from "../src/screens/prescription/strings";
 import { visitWorkspaceStrings } from "../src/screens/visit/strings";
 
 export const S = dayScreenStrings;
 export const DOCTOR = doctorDayStrings;
 export const VISIT = visitWorkspaceStrings;
+export const RX = prescriptionPrintStrings;
 export const AUTH = authStrings;
 export const SIDEBAR = sidebarStrings;
 export { DEV_SEED_PINS };
@@ -246,4 +248,69 @@ export function rowFor(page: Page, patientName: string) {
  */
 export async function labeledRowValue(scope: Locator, label: string): Promise<string> {
   return (await scope.getByText(label, { exact: true }).locator("xpath=following-sibling::*[1]").innerText()).trim();
+}
+
+// The visit workspace's prescription (screens 10 and 16), shared by the
+// prescription print and audit specs.
+
+/** A clock time today, on the real day, as an instant for page.clock. */
+export const todayAt = (time: ClockTime) => new Date(cairoInstant(todayInCairo(), time));
+
+export type Drug = { name: string; form?: string; instructions: string; duration?: string };
+
+/**
+ * كريم booked, arrived at 09:00 and in the room, on the real day, by `as`
+ * (the owner by default). The page clock is pinned to a morning before the
+ * seeded slots schedule opens, so the first open slot is always bookable.
+ */
+export async function karimInRoom(
+  page: Page,
+  as: { name: string; pin: string } = { name: OWNER_NAME, pin: OWNER_PIN },
+): Promise<void> {
+  await page.clock.install({ time: todayAt("08:30") });
+  await gotoRealDay(page, as);
+  await selectPractitioner(page, SLOTS_DR);
+  await bookFirstOpenSlot(page, PATIENTS.karim, "كشف عام");
+  await page.clock.setSystemTime(todayAt("09:00"));
+  await advanceRowTo(page, PATIENTS.karim, S.statusArrived);
+  await advanceRowTo(page, PATIENTS.karim, S.statusInRoom);
+}
+
+export const visitSheet = (page: Page) =>
+  page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: VISIT.visitSheetTitle }) });
+export const printSheet = (page: Page) =>
+  page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: RX.sheetTitle, exact: true }) });
+export const rxSection = (scope: Locator) => scope.getByRole("region", { name: VISIT.rxHeading, exact: true });
+
+/** Opens كريم's visit sheet from his row and waits for the workspace. */
+export async function openVisitSheet(page: Page): Promise<Locator> {
+  await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
+  const sheet = visitSheet(page);
+  await expect(sheet.getByPlaceholder(S.visitFormComplaintPlaceholder)).toBeVisible();
+  return sheet;
+}
+
+export async function closeSheet(sheet: Locator): Promise<void> {
+  await sheet.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
+  await expect(sheet).toBeHidden();
+}
+
+/** Adds one drug through the workspace's inline form, waiting for its row. */
+export async function addDrug(scope: Locator, drug: Drug): Promise<void> {
+  await scope.getByRole("button", { name: VISIT.rxAdd, exact: true }).click();
+  await scope.getByLabel(VISIT.rxNameLabel, { exact: true }).fill(drug.name);
+  await scope.getByLabel(VISIT.rxFormLabel, { exact: true }).fill(drug.form ?? "");
+  await scope.getByLabel(VISIT.rxInstructionsLabel, { exact: true }).fill(drug.instructions);
+  await scope.getByLabel(VISIT.rxDurationLabel, { exact: true }).fill(drug.duration ?? "");
+  await scope.getByRole("button", { name: VISIT.rxAddConfirm, exact: true }).click();
+  await expect(rxSection(scope).getByRole("listitem").filter({ hasText: drug.name })).toBeVisible();
+  await expect(scope.getByRole("button", { name: VISIT.rxAdd, exact: true })).toBeVisible();
+}
+
+/** Opens the print sheet from the workspace's `.rx-section` button (`label`: print or reprint). */
+export async function openPrintSheet(page: Page, workspace: Locator, label: string): Promise<Locator> {
+  await rxSection(workspace).getByRole("button", { name: label, exact: true }).click();
+  const sheet = printSheet(page);
+  await expect(sheet.getByText(RX.previewNote, { exact: true })).toBeVisible();
+  return sheet;
 }

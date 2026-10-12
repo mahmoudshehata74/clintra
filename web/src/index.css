@@ -219,9 +219,12 @@ body {
    invoice, the receipt) keeps the browser's default page size. That target
    renders into its own body-level portal (the workspace may sit inside a
    print-hidden screen); while it is mounted it is the only thing on paper,
-   with the whole app (#root, the visit sheet included) left off. */
+   with the whole app (#root, the visit sheet included) left off. On paper
+   the page's margin is this rule's 12mm, never the preview card's own
+   padding: the print target is plain paper (RxPrintPage). */
 @page prescription {
   size: A5 portrait;
+  margin: 12mm;
 }
 
 @layer utilities {
@@ -231,6 +234,10 @@ body {
 }
 
 @media print {
+  body:has(> .rx-print-target) {
+    background-color: white;
+  }
+
   body:has(> .rx-print-target) > #root {
     display: none;
   }

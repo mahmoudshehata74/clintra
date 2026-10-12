@@ -1,21 +1,26 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { describeAuditVerb } from "../src/domain/auditVerb";
-import { cairoInstant, todayInCairo, type ClockTime } from "../src/domain/time";
-import { prescriptionPrintStrings as RX } from "../src/screens/prescription/strings";
+import { todayInCairo } from "../src/domain/time";
 import {
+  addDrug,
   advanceRowTo,
   ASSISTANT_NAME,
   AUTH,
-  bookFirstOpenSlot,
+  closeSheet,
   DEV_SEED_PINS,
-  gotoRealDay,
+  type Drug,
   gotoSeededDay,
+  karimInRoom,
   lockOverlay,
   login,
+  openAuditLog,
+  openPrintSheet,
+  openVisitSheet,
   OWNER_NAME,
   OWNER_PIN,
   PATIENTS,
   rowFor,
+  RX,
+  rxSection,
   S,
   selectPractitioner,
   SLOTS_DR,
@@ -27,14 +32,12 @@ import {
 // (the existing print specs' stub, counting), so each print request can be
 // asserted to open the dialog exactly once and the print target stays
 // mounted for inspection. The page clock is pinned to a morning before the
-// seeded slots schedule opens, as in visit-workspace.spec.ts.
-const TODAY = todayInCairo();
-const at = (time: ClockTime) => new Date(cairoInstant(TODAY, time));
-const SERVICE = "كشف عام";
-const [YEAR, MONTH, DAY] = TODAY.split("-").map(Number);
+// seeded slots schedule opens (karimInRoom), as in visit-workspace.spec.ts.
+const [YEAR, MONTH, DAY] = todayInCairo().split("-").map(Number);
 const TODAY_ON_PAPER = `${DAY} / ${MONTH} / ${YEAR}`;
+// domain/auditVerb.ts's verb for the first print.
+const PRINT_VERB = "طبع الوصفة";
 
-type Drug = { name: string; form?: string; instructions: string; duration?: string };
 const AMOXICILLIN: Drug = { name: "Amoxicillin 500mg", form: "Capsule", instructions: "كبسولة كل 8 ساعات", duration: "5 أيام" };
 const IBUPROFEN: Drug = { name: "Ibuprofen 400mg", instructions: "قرص بعد الأكل عند الألم" };
 
@@ -50,75 +53,12 @@ test.beforeEach(async ({ page }) => {
 
 const printCalls = (page: Page) => page.evaluate(() => (window as unknown as { printCalls: number }).printCalls);
 
-/** How many audit_log rows read "طبع الوصفة" (domain/auditVerb.ts), straight from the store. */
-async function printAuditCount(page: Page): Promise<number> {
-  const rows = await page.evaluate(async () => {
-    const req = indexedDB.open("clintra");
-    const database: IDBDatabase = await new Promise((resolve, reject) => {
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    try {
-      const store = database.transaction("audit_log", "readonly").objectStore("audit_log");
-      return await new Promise<Record<string, unknown>[]>((resolve, reject) => {
-        const getAll = store.getAll();
-        getAll.onsuccess = () => resolve(getAll.result);
-        getAll.onerror = () => reject(getAll.error);
-      });
-    } finally {
-      database.close();
-    }
-  });
-  return rows.filter(
-    (row) => describeAuditVerb(row as unknown as Parameters<typeof describeAuditVerb>[0]) === "طبع الوصفة",
-  ).length;
-}
-
-/** كريم booked, arrived at 09:00 and in the room, on the real day, by `as` (the owner by default). */
-async function karimInRoom(page: Page, as: { name: string; pin: string } = { name: OWNER_NAME, pin: OWNER_PIN }) {
-  await page.clock.install({ time: at("08:30") });
-  await gotoRealDay(page, as);
-  await selectPractitioner(page, SLOTS_DR);
-  await bookFirstOpenSlot(page, PATIENTS.karim, SERVICE);
-  await page.clock.setSystemTime(at("09:00"));
-  await advanceRowTo(page, PATIENTS.karim, S.statusArrived);
-  await advanceRowTo(page, PATIENTS.karim, S.statusInRoom);
-}
-
-const visitSheet = (page: Page) =>
-  page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: VISIT.visitSheetTitle }) });
-const printSheet = (page: Page) =>
-  page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: RX.sheetTitle, exact: true }) });
-const rxSection = (scope: Locator) => scope.getByRole("region", { name: VISIT.rxHeading, exact: true });
-
-async function openVisitSheet(page: Page): Promise<Locator> {
-  await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
-  const sheet = visitSheet(page);
-  await expect(sheet.getByPlaceholder(S.visitFormComplaintPlaceholder)).toBeVisible();
-  return sheet;
-}
-
-async function closeSheet(sheet: Locator): Promise<void> {
-  await sheet.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
-  await expect(sheet).toBeHidden();
-}
-
-async function addDrug(scope: Locator, drug: Drug): Promise<void> {
-  await scope.getByRole("button", { name: VISIT.rxAdd, exact: true }).click();
-  await scope.getByLabel(VISIT.rxNameLabel, { exact: true }).fill(drug.name);
-  await scope.getByLabel(VISIT.rxFormLabel, { exact: true }).fill(drug.form ?? "");
-  await scope.getByLabel(VISIT.rxInstructionsLabel, { exact: true }).fill(drug.instructions);
-  await scope.getByLabel(VISIT.rxDurationLabel, { exact: true }).fill(drug.duration ?? "");
-  await scope.getByRole("button", { name: VISIT.rxAddConfirm, exact: true }).click();
-  await expect(rxSection(scope).getByRole("listitem").filter({ hasText: drug.name })).toBeVisible();
-  await expect(scope.getByRole("button", { name: VISIT.rxAdd, exact: true })).toBeVisible();
-}
-
-async function openPrintSheet(page: Page, workspace: Locator, label: string): Promise<Locator> {
-  await rxSection(workspace).getByRole("button", { name: label, exact: true }).click();
-  const sheet = printSheet(page);
-  await expect(sheet.getByText(RX.previewNote, { exact: true })).toBeVisible();
-  return sheet;
+/** With every sheet closed: the audit screen lists the first print exactly once. */
+async function expectPrintedOnceInAudit(page: Page): Promise<void> {
+  await openAuditLog(page);
+  const audit = page.getByRole("dialog");
+  await expect(audit.getByText(PRINT_VERB, { exact: true })).toHaveCount(1);
+  await expect(audit.getByRole("listitem").filter({ hasText: PRINT_VERB })).toContainText(PATIENTS.karim);
 }
 
 async function switchUser(page: Page, as: { name: string; pin?: string }): Promise<void> {
@@ -127,13 +67,37 @@ async function switchUser(page: Page, as: { name: string; pin?: string }): Promi
   await login(page, as);
 }
 
-/** The page size a PDF of the current page lays out on, from its first /MediaBox, in points. */
-async function pdfPageSize(page: Page): Promise<{ width: number; height: number }> {
+/** Whether the element is the topmost one at its own centre (what a tap there would hit). */
+const isTopmostAtCentre = (element: Locator) =>
+  element.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === el;
+  });
+
+/** A sheet's drag handle: the element just before its dialog panel (Sheet.tsx). */
+const handleOf = (sheet: Locator) => sheet.locator("xpath=preceding-sibling::div[1]");
+
+/**
+ * A PDF of the current page: the size its first /MediaBox lays out on, in
+ * points, and how many pages it has (its /Type /Page objects). One PDF per
+ * call: making one fires afterprint, which unmounts the print target.
+ */
+async function printedPdf(page: Page): Promise<{ width: number; height: number; pages: number }> {
   const pdf = (await page.pdf({ preferCSSPageSize: true })).toString("latin1");
   const match = /\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/.exec(pdf);
   expect(match).not.toBeNull();
-  return { width: Number(match![1]), height: Number(match![2]) };
+  const pages = pdf.match(/\/Type\s*\/Page(?!s)/g)?.length ?? 0;
+  return { width: Number(match![1]), height: Number(match![2]), pages };
 }
+
+/** The page size a PDF of the current page lays out on, in points. */
+async function pdfPageSize(page: Page): Promise<{ width: number; height: number }> {
+  const { width, height } = await printedPdf(page);
+  return { width, height };
+}
+
+/** The print target's page, as laid out under print media. */
+const paper = (page: Page) => page.locator(".rx-print-target > div");
 
 // A5 portrait is 148 × 210 mm: 419.5 × 595.3 pt.
 function expectA5(size: { width: number; height: number }) {
@@ -176,10 +140,17 @@ test("the preview shows the prescription as screen 16 lays it out", async ({ pag
   await expect(sheet.getByRole("button", { name: RX.printAction, exact: true })).toBeVisible();
   await expect(sheet.getByRole("button", { name: /PDF|واتساب|SMS/ })).toHaveCount(1);
 
-  // Escape dismisses the print sheet only; the visit sheet stays open under it.
+  // Stacked: the visit sheet, its drag handle included, sits under the print
+  // sheet's backdrop; only the print sheet's own handle is on top.
+  await expect.poll(() => isTopmostAtCentre(handleOf(workspace))).toBe(false);
+  await expect.poll(() => isTopmostAtCentre(handleOf(sheet))).toBe(true);
+
+  // Escape dismisses the print sheet only; the visit sheet stays open under it,
+  // and is on top again.
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
   await expect(workspace).toBeVisible();
+  await expect.poll(() => isTopmostAtCentre(handleOf(workspace))).toBe(true);
 });
 
 test("the first print asks; back changes nothing; confirming locks it and prints once; a reprint writes nothing", async ({
@@ -196,7 +167,6 @@ test("the first print asks; back changes nothing; confirming locks it and prints
   await expect(sheet.getByText(RX.confirmQuestion, { exact: true })).toHaveCount(0);
   await expect(sheet.getByRole("button", { name: RX.printAction, exact: true })).toBeVisible();
   expect(await printCalls(page)).toBe(0);
-  expect(await printAuditCount(page)).toBe(0);
 
   // Still editable behind it.
   await closeSheet(sheet);
@@ -208,7 +178,6 @@ test("the first print asks; back changes nothing; confirming locks it and prints
   await sheet.getByRole("button", { name: RX.confirmPrint, exact: true }).click();
   await expect(sheet.getByText(RX.confirmQuestion, { exact: true })).toHaveCount(0);
   await expect.poll(() => printCalls(page)).toBe(1);
-  expect(await printAuditCount(page)).toBe(1);
 
   // The workspace now shows it printed: read-only, with "اطبع تاني".
   await expect(rxSection(workspace).getByText(VISIT.rxPrintedLine, { exact: true })).toBeVisible();
@@ -219,13 +188,16 @@ test("the first print asks; back changes nothing; confirming locks it and prints
   await sheet.getByRole("button", { name: RX.printAction, exact: true }).click();
   await expect.poll(() => printCalls(page)).toBe(2);
   await expect(sheet.getByText(RX.confirmQuestion, { exact: true })).toHaveCount(0);
-  expect(await printAuditCount(page)).toBe(1);
 
   await closeSheet(sheet);
   sheet = await openPrintSheet(page, workspace, RX.reprintButton);
   await sheet.getByRole("button", { name: RX.printAction, exact: true }).click();
   await expect.poll(() => printCalls(page)).toBe(3);
-  expect(await printAuditCount(page)).toBe(1);
+
+  // "Back" wrote nothing and neither did either reprint: one print on record.
+  await closeSheet(sheet);
+  await closeSheet(workspace);
+  await expectPrintedOnceInAudit(page);
 });
 
 test("the assistant cannot issue the first print, and can reprint a printed one", async ({ page }) => {
@@ -241,7 +213,6 @@ test("the assistant cannot issue the first print, and can reprint a printed one"
   await expect(sheet.getByRole("alert")).toHaveText(RX.errorNotPrescriber);
   await expect(sheet.getByText(RX.confirmQuestion, { exact: true })).toHaveCount(0);
   expect(await printCalls(page)).toBe(0);
-  expect(await printAuditCount(page)).toBe(0);
   await closeSheet(sheet);
   await closeSheet(workspace);
 
@@ -260,7 +231,11 @@ test("the assistant cannot issue the first print, and can reprint a printed one"
   await sheet.getByRole("button", { name: RX.printAction, exact: true }).click();
   await expect.poll(() => printCalls(page)).toBe(2);
   await expect(sheet.getByRole("alert")).toHaveCount(0);
-  expect(await printAuditCount(page)).toBe(1);
+
+  // The refusal wrote nothing and the reprint neither: one print on record.
+  await closeSheet(sheet);
+  await closeSheet(workspace);
+  await expectPrintedOnceInAudit(page);
 });
 
 test("an empty prescription shows no print button", async ({ page }) => {
@@ -294,9 +269,68 @@ test("the printed prescription alone is on paper, on an A5 page", async ({ page 
   await expect(page.getByRole("button", { name: RX.printAction, exact: true })).toBeHidden();
   await expect(page.getByPlaceholder(S.visitFormComplaintPlaceholder)).toBeHidden();
   await expect(page.getByRole("button", { name: AUTH.lockButtonLabel, exact: true })).toBeHidden();
+  // Plain paper: none of the preview card's frame; the margin is @page's.
+  const look = await paper(page).evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      border: style.borderTopWidth,
+      radius: style.borderTopLeftRadius,
+      shadow: style.boxShadow,
+      padding: style.paddingTop,
+      maxWidth: style.maxWidth,
+      width: element.getBoundingClientRect().width,
+      bodyWidth: document.body.getBoundingClientRect().width,
+    };
+  });
+  expect(look).toEqual({
+    border: "0px",
+    radius: "0px",
+    shadow: "none",
+    padding: "0px",
+    maxWidth: "none",
+    width: look.bodyWidth,
+    bodyWidth: look.bodyWidth,
+  });
   await page.emulateMedia({ media: null });
 
-  expectA5(await pdfPageSize(page));
+  const pdf = await printedPdf(page);
+  expectA5(pdf);
+  expect(pdf.pages).toBe(1);
+});
+
+test("a long prescription goes on to a second A5 page, a drug never split", async ({ page }) => {
+  await karimInRoom(page);
+  const workspace = await openVisitSheet(page);
+  for (let n = 1; n <= 12; n += 1) {
+    await addDrug(workspace, { name: `Drug ${n} 100mg`, form: "Tablet", instructions: "قرص مرتين يوميًا بعد الأكل", duration: "7 أيام" });
+  }
+  const sheet = await openPrintSheet(page, workspace, RX.printButton);
+  await expect(sheet.getByRole("listitem")).toHaveCount(12);
+  await sheet.getByRole("button", { name: RX.printAction, exact: true }).click();
+  await sheet.getByRole("button", { name: RX.confirmPrint, exact: true }).click();
+  await expect.poll(() => printCalls(page)).toBe(1);
+
+  await page.emulateMedia({ media: "print" });
+  // Every drug is unbreakable, and the last one shares an unbreakable block with the signature.
+  const drugs = paper(page).getByRole("listitem");
+  await expect(drugs).toHaveCount(12);
+  const breaks = await drugs.evaluateAll((items) => items.map((item) => getComputedStyle(item).breakInside));
+  expect(breaks).toEqual(Array(12).fill("avoid"));
+  const lastDrugWithSignature = await paper(page).evaluate((root, stamp) => {
+    const items = root.querySelectorAll("li");
+    const signature = [...root.querySelectorAll("p")].find((p) => p.textContent === stamp);
+    let block = items[items.length - 1]?.parentElement ?? null;
+    while (block && signature && !block.contains(signature)) {
+      block = block.parentElement;
+    }
+    return block && block !== root ? getComputedStyle(block).breakInside : null;
+  }, RX.stamp);
+  expect(lastDrugWithSignature).toBe("avoid");
+  await page.emulateMedia({ media: null });
+
+  const pdf = await printedPdf(page);
+  expectA5(pdf);
+  expect(pdf.pages).toBe(2);
 });
 
 test.describe("the existing printed pages keep their page size", () => {

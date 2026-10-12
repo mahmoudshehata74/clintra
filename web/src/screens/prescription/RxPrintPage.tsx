@@ -1,6 +1,7 @@
+import type { ReactNode } from "react";
 import Ltr from "../../components/Ltr";
 import { PrintPage } from "../day/PrintPage";
-import type { RxPrintModel } from "./printModel";
+import type { RxPrintDrug, RxPrintModel } from "./printModel";
 import { prescriptionPrintStrings as T } from "./strings";
 
 /**
@@ -12,14 +13,19 @@ import { prescriptionPrintStrings as T } from "./strings";
  * once as the on-screen preview, with `.rx-print-header`, and once as the
  * flat print target, without it.
  *
- * `.rx-print-page` is `.print-page` (same white page, padding, border,
- * shadow and width), so it is the shared PrintPage. Colours on paper are the
- * plain black/white/grey keywords design-rule.md's print exception allows;
- * the screen-only `.rx-print-header` uses the warning tokens.
+ * On screen, `.rx-print-page` is `.print-page` (same white page, padding,
+ * border, shadow and width), so the preview is the shared PrintPage. On
+ * paper it is plain paper: no border, radius, shadow, card background,
+ * width cap or padding — the margin is `@page prescription`'s (index.css).
+ * A drug never splits across two pages, and `.rx-sig` stays on the page of
+ * the last drug: the two share one unbreakable block. Colours on paper are
+ * the plain black/white/grey keywords design-rule.md's print exception
+ * allows; the screen-only `.rx-print-header` uses the warning tokens.
  */
 export default function RxPrintPage({ model, preview }: { model: RxPrintModel; preview: boolean }) {
+  const lastDrug = model.drugs.at(-1);
   return (
-    <PrintPage>
+    <RxPaper preview={preview}>
       {preview && (
         <p className="mb-5 rounded-control border-[1.5px] border-dashed border-warning bg-warning-wash px-3.5 py-3 text-center text-xs font-semibold text-warning">
           {T.previewNote}
@@ -66,34 +72,56 @@ export default function RxPrintPage({ model, preview }: { model: RxPrintModel; p
         <span aria-hidden="true" className="flex-1 border-b-[1.5px] border-black" />
       </div>
 
-      <ol>
-        {model.drugs.map((drug) => (
-          <li
-            key={drug.number}
-            className="flex items-start gap-3.5 border-b border-dashed border-black/20 py-3 last:border-b-0"
-          >
-            <span className="flex h-7 w-7 flex-none items-center justify-center rounded-chip bg-black text-[13px] font-bold text-white">
-              <Ltr>{drug.number}</Ltr>
-            </span>
-            <div>
-              <p className="text-[14.5px] font-bold tracking-[-0.005em] text-black">
-                <Ltr>{drug.name}</Ltr>
-              </p>
-              <p className="mt-[3px] text-xs text-black/80 tabular-nums">{drug.dose}</p>
-              {drug.note && <p className="mt-0.5 text-[11.5px] text-black/60 italic">{drug.note}</p>}
-            </div>
-          </li>
-        ))}
-      </ol>
+      {model.drugs.length > 1 && (
+        <ol>
+          {model.drugs.slice(0, -1).map((drug) => (
+            <RxDrug key={drug.number} drug={drug} isLast={false} />
+          ))}
+        </ol>
+      )}
 
-      {/* `.rx-sig` */}
-      <div className="mt-[22px] flex justify-between border-t border-dashed border-black/20 pt-3.5 text-[11px] text-black/60">
-        <p>
-          <span className="font-bold text-black">{T.signature}</span> · {model.doctorName}
-        </p>
-        <p>{T.stamp}</p>
+      {/* The last `.rx-drug` and `.rx-sig`, kept together on one page. */}
+      <div className="break-inside-avoid">
+        {lastDrug && (
+          <ol start={lastDrug.number}>
+            <RxDrug drug={lastDrug} isLast />
+          </ol>
+        )}
+
+        {/* `.rx-sig` */}
+        <div className="mt-[22px] flex justify-between border-t border-dashed border-black/20 pt-3.5 text-[11px] text-black/60">
+          <p>
+            <span className="font-bold text-black">{T.signature}</span> · {model.doctorName}
+          </p>
+          <p>{T.stamp}</p>
+        </div>
       </div>
-    </PrintPage>
+    </RxPaper>
+  );
+}
+
+/** The preview's `.print-page` card on screen; plain paper in the print target. */
+function RxPaper({ preview, children }: { preview: boolean; children: ReactNode }) {
+  return preview ? <PrintPage>{children}</PrintPage> : <div className="bg-white text-black">{children}</div>;
+}
+
+/** `.rx-drug`: never split across two pages; the last one has no rule under it. */
+function RxDrug({ drug, isLast }: { drug: RxPrintDrug; isLast: boolean }) {
+  return (
+    <li
+      className={`flex break-inside-avoid items-start gap-3.5 py-3 ${isLast ? "" : "border-b border-dashed border-black/20"}`}
+    >
+      <span className="flex h-7 w-7 flex-none items-center justify-center rounded-chip bg-black text-[13px] font-bold text-white">
+        <Ltr>{drug.number}</Ltr>
+      </span>
+      <div>
+        <p className="text-[14.5px] font-bold tracking-[-0.005em] text-black">
+          <Ltr>{drug.name}</Ltr>
+        </p>
+        <p className="mt-[3px] text-xs text-black/80 tabular-nums">{drug.dose}</p>
+        {drug.note && <p className="mt-0.5 text-[11.5px] text-black/60 italic">{drug.note}</p>}
+      </div>
+    </li>
   );
 }
 

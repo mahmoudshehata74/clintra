@@ -777,9 +777,10 @@ test("@screenshot current-visit", async ({ page }) => {
 
 // The printed prescription (screen 16) for كريم's visit above: his
 // diagnosis and three drugs, two with a form and one with a note, as the
-// prototype's own example. window.print is stubbed before the fixture's
-// first navigation, so a print leaves the print target mounted.
-async function karimPrescriptionPreview(page: Page): Promise<ReturnType<Page["getByRole"]>> {
+// prototype's own example, then `extraDrugs` more. window.print is stubbed
+// before the fixture's first navigation, so a print leaves the print target
+// mounted.
+async function karimPrescriptionPreview(page: Page, extraDrugs = 0): Promise<ReturnType<Page["getByRole"]>> {
   await page.addInitScript(() => {
     window.print = () => {};
   });
@@ -796,13 +797,16 @@ async function karimPrescriptionPreview(page: Page): Promise<ReturnType<Page["ge
   });
   await addDrug(workspace, "Paracetamol 500mg", "قرص عند الحاجة، بحد أقصى 4 مرات يوميًا", "", { form: "Tablet" });
   await addDrug(workspace, "Voltaren Gel 1%", "دهان على مكان الألم 3 مرات يوميًا", "14 يوم");
+  for (const [index, name] of EXTRA_DRUGS.slice(0, extraDrugs).entries()) {
+    await addDrug(workspace, name, "قرص مرة يوميًا بعد الفطار", "30 يوم", index % 3 === 0 ? { form: "Tablet" } : {});
+  }
 
   await workspace.getByRole("button", { name: RX.printButton, exact: true }).click();
   const sheet = page
     .getByRole("dialog")
     .filter({ has: page.getByRole("heading", { name: RX.sheetTitle, exact: true }) });
   await expect(sheet.getByText(RX.previewNote, { exact: true })).toBeVisible();
-  await expect(sheet.getByRole("listitem")).toHaveCount(3);
+  await expect(sheet.getByRole("listitem")).toHaveCount(3 + extraDrugs);
   await expect(sheet).toContainText(`${KARIM_AGE} ${RX.ageUnit}`);
   return sheet;
 }
@@ -814,14 +818,41 @@ test("@screenshot prescription-preview", async ({ page }) => {
   await shoot(page, "prescription-preview", false);
 });
 
-test("@screenshot prescription-print", async ({ page }) => {
-  const sheet = await karimPrescriptionPreview(page);
+const EXTRA_DRUGS = [
+  "Omeprazole 20mg",
+  "Vitamin D3 50000 IU",
+  "Calcium 600mg",
+  "Esomeprazole 40mg",
+  "Cetirizine 10mg",
+  "Metformin 500mg",
+  "Atorvastatin 20mg",
+  "Folic Acid 5mg",
+  "Magnesium 250mg",
+];
+
+/**
+ * The print target under print media, at A5's size in CSS pixels (148 ×
+ * 210 mm = 559 × 794) — what goes on paper, as plain paper. A screenshot
+ * does not paginate: a prescription longer than one page is captured as one
+ * tall image (fullPage), and its page break shows only on paper (the
+ * printed page count is asserted in prescription-print.spec.ts).
+ */
+async function shootA5Print(page: Page, sheet: ReturnType<Page["getByRole"]>, surface: string): Promise<void> {
   await sheet.getByRole("button", { name: RX.printAction, exact: true }).click();
   await sheet.getByRole("button", { name: RX.confirmPrint, exact: true }).click();
   await expect(page.getByText(VISIT.rxPrintedLine, { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 559, height: 794 });
   await page.emulateMedia({ media: "print" });
   await expect(page.getByText(RX.previewNote)).toBeHidden();
   await expect(page.getByText(RX.stamp, { exact: true }).filter({ visible: true })).toHaveCount(1);
-  await shoot(page, "prescription-print", true);
+  await shoot(page, surface, true);
   await page.emulateMedia({ media: null });
+}
+
+test("@screenshot prescription-print-a5-3-drugs", async ({ page }) => {
+  await shootA5Print(page, await karimPrescriptionPreview(page), "prescription-print-a5-3-drugs");
+});
+
+test("@screenshot prescription-print-a5-12-drugs", async ({ page }) => {
+  await shootA5Print(page, await karimPrescriptionPreview(page, 9), "prescription-print-a5-12-drugs");
 });

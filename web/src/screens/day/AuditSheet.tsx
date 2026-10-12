@@ -3,7 +3,7 @@ import Ltr from "../../components/Ltr";
 import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
-import type { AuditLog, ClinicDay, Membership, Patient, User, Visit } from "../../db/types";
+import type { AuditLog, ClinicDay, Membership, Patient, Prescription, User, Visit } from "../../db/types";
 import { AuditAction } from "../../db/types";
 import { describeAuditVerb, describeVisitFormChange } from "../../domain/auditVerb";
 import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo } from "../../domain/time";
@@ -53,7 +53,16 @@ const ACTION_FILTER_OPTIONS: readonly { value: AuditActionFilter; label: string 
   { value: AuditAction.Delete, label: dayScreenStrings.auditFilterActionDelete },
 ];
 
-const AUDITED_ENTITIES = new Set(["visits", "patients", "invoices", "payments", "cash_close", "visit_form_data"]);
+const AUDITED_ENTITIES = new Set([
+  "visits",
+  "patients",
+  "invoices",
+  "payments",
+  "cash_close",
+  "visit_form_data",
+  "prescriptions",
+  "prescription_items",
+]);
 
 function payloadOf(row: Pick<AuditLog, "before" | "after">): Record<string, unknown> | null {
   return (row.after ?? row.before) as Record<string, unknown> | null;
@@ -109,11 +118,39 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         formDataVisits.filter((v): v is Visit => v != null).map((v) => [v.id, v]),
       );
 
+      // prescription_items is the same case one level down: its payload
+      // carries only prescription_id, so each row is scoped (and named) by
+      // its prescription, which carries the visit's location, practitioner
+      // and patient.
+      const itemPrescriptionIds = [
+        ...new Set(
+          candidateRows
+            .filter((row) => row.entity === "prescription_items")
+            .map((row) => payloadOf(row)?.prescription_id)
+            .filter((prescriptionId): prescriptionId is string => typeof prescriptionId === "string"),
+        ),
+      ];
+      const itemPrescriptions = await db.prescriptions.bulkGet(itemPrescriptionIds);
+      const itemPrescriptionsById = new Map(
+        itemPrescriptions.filter((p): p is Prescription => p != null).map((p) => [p.id, p]),
+      );
+
+      function itemPrescriptionOf(row: AuditLog): Prescription | undefined {
+        const prescriptionId = payloadOf(row)?.prescription_id;
+        return typeof prescriptionId === "string" ? itemPrescriptionsById.get(prescriptionId) : undefined;
+      }
+
       function isInScope(row: AuditLog): boolean {
         if (row.entity === "visit_form_data") {
           const visitId = payloadOf(row)?.visit_id;
           const visit = typeof visitId === "string" ? formDataVisitsById.get(visitId) : undefined;
           return visit ? visit.location_id === locationId && visit.practitioner_id === practitionerId : false;
+        }
+        if (row.entity === "prescription_items") {
+          const prescription = itemPrescriptionOf(row);
+          return prescription
+            ? prescription.location_id === locationId && prescription.practitioner_id === practitionerId
+            : false;
         }
         return isAuditRowInScope(row, practitionerId, locationId);
       }
@@ -129,13 +166,23 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
       const users = await db.users.bulkGet(userIds);
       const usersById = new Map(users.filter((u): u is User => u != null).map((u) => [u.id, u]));
 
+      // The patient a row is about, for the entities whose line names one.
+      function patientIdOf(row: AuditLog): string | undefined {
+        if (row.entity === "prescription_items") {
+          return itemPrescriptionOf(row)?.patient_id;
+        }
+        if (row.entity === "visits" || row.entity === "invoices" || row.entity === "prescriptions") {
+          const patientId = payloadOf(row)?.patient_id;
+          return typeof patientId === "string" ? patientId : undefined;
+        }
+        return undefined;
+      }
+
       const patientIds = new Set<string>();
       for (const row of scoped) {
-        if (row.entity === "visits" || row.entity === "invoices") {
-          const patientId = payloadOf(row)?.patient_id;
-          if (typeof patientId === "string") {
-            patientIds.add(patientId);
-          }
+        const patientId = patientIdOf(row);
+        if (patientId !== undefined) {
+          patientIds.add(patientId);
         }
       }
       const patients = await db.patients.bulkGet([...patientIds]);
@@ -152,9 +199,16 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         if (!payload) {
           return "";
         }
-        if (row.entity === "visits" || row.entity === "invoices") {
-          const patientId = payload.patient_id;
-          return typeof patientId === "string" ? (patientsById.get(patientId)?.full_name ?? "") : "";
+        // A prescription's line names its patient, never a drug, its
+        // instructions or the diagnosis (as its verb, domain/auditVerb.ts).
+        if (
+          row.entity === "visits" ||
+          row.entity === "invoices" ||
+          row.entity === "prescriptions" ||
+          row.entity === "prescription_items"
+        ) {
+          const patientId = patientIdOf(row);
+          return patientId !== undefined ? (patientsById.get(patientId)?.full_name ?? "") : "";
         }
         if (row.entity === "patients") {
           return typeof payload.full_name === "string" ? payload.full_name : "";

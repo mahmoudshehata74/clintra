@@ -1,11 +1,47 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 
 const DRAG_DISMISS_THRESHOLD_PX = 80;
 
 // Every mounted sheet, in mount order. A sheet can open over another (the
 // printed prescription over the visit sheet); Escape then dismisses only the
-// topmost one, the one the user is looking at.
-const openSheets: object[] = [];
+// topmost one, the one the user is looking at, and every sheet under it sits
+// under the topmost one's backdrop (see the layers below). Replaced, never
+// mutated, so a subscribed sheet re-renders when the stack changes.
+let openSheets: readonly object[] = [];
+const stackListeners = new Set<() => void>();
+
+function setOpenSheets(next: readonly object[]) {
+  openSheets = next;
+  stackListeners.forEach((listener) => listener());
+}
+
+function subscribeToStack(listener: () => void) {
+  stackListeners.add(listener);
+  return () => {
+    stackListeners.delete(listener);
+  };
+}
+
+function readStack() {
+  return openSheets;
+}
+
+// Stacked layers, by a sheet's depth in the stack (0 = the first one open):
+// its backdrop, and its handle+panel while another sheet covers it. Each
+// covered panel sits above its own backdrop and below the next sheet's, so
+// only the topmost sheet's handle and panel are undimmed; all of them stay
+// below the app bar and rail (z-40), as the first backdrop always did. The
+// topmost panel is z-45 at any depth. Deeper stacks than this share the last
+// pair.
+const BACKDROP_LAYER = ["z-30", "z-32", "z-34", "z-36"] as const;
+const COVERED_PANEL_LAYER = ["z-31", "z-33", "z-35", "z-37"] as const;
 
 export type SheetSize = "md" | "lg";
 
@@ -54,17 +90,24 @@ interface SheetProps {
  * internally (overflow-y-auto on the dialog element) while a restyled
  * sheet's SheetPanelHead/Foot stay pinned via their own sticky positioning.
  * UndoToast stays at its own z-10, i.e. below a sheet, as before.
+ * A sheet opened over another one stacks above it: the lower sheet, its
+ * drag handle included, drops under the upper sheet's backdrop (see
+ * BACKDROP_LAYER and COVERED_PANEL_LAYER above).
  */
 export default function Sheet({ onDismiss, size = "md", children }: SheetProps) {
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragStartYRef = useRef<number | null>(null);
   const [stackToken] = useState(() => ({}));
+  const stack = useSyncExternalStore(subscribeToStack, readStack);
+  const depth = stack.indexOf(stackToken);
+  const layer = Math.min(Math.max(depth, 0), BACKDROP_LAYER.length - 1);
+  const isCovered = depth !== -1 && depth < stack.length - 1;
 
   useEffect(() => {
-    openSheets.push(stackToken);
+    setOpenSheets([...openSheets, stackToken]);
     return () => {
-      openSheets.splice(openSheets.indexOf(stackToken), 1);
+      setOpenSheets(openSheets.filter((token) => token !== stackToken));
     };
   }, [stackToken]);
 
@@ -126,7 +169,7 @@ export default function Sheet({ onDismiss, size = "md", children }: SheetProps) 
 
   return (
     <>
-      <div className="fixed inset-0 z-30 bg-ink/40" onClick={onDismiss} aria-hidden="true" />
+      <div className={`fixed inset-0 ${BACKDROP_LAYER[layer]} bg-ink/40`} onClick={onDismiss} aria-hidden="true" />
       {/* pointer-events-none: this box spans the viewport from the top gap
           (top-6 — see this component's doc comment) down to the bottom,
           mobile bottom-bar height excluded, so the dialog panel inside it
@@ -137,7 +180,9 @@ export default function Sheet({ onDismiss, size = "md", children }: SheetProps) 
           below sm keeps the panel off AppShell's mobile bottom nav bar, so
           that bar stays visible and clickable; at sm: and above the rail is
           a side column instead, so this reclaims the full height. */}
-      <div className="pointer-events-none fixed inset-x-0 top-6 bottom-16 z-45 flex flex-col items-center justify-end sm:bottom-0">
+      <div
+        className={`pointer-events-none fixed inset-x-0 top-6 bottom-16 ${isCovered ? COVERED_PANEL_LAYER[layer] : "z-45"} flex flex-col items-center justify-end sm:bottom-0`}
+      >
         {/* Drag-to-dismiss handle: sits in the dimmed gap above the card
             itself rather than inside it, since the card's own top is now
             either the dark SheetPanelHead or (for a not-yet-restyled sheet)
