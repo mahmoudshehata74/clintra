@@ -22,8 +22,10 @@ import {
   rowFor,
   S,
   selectPractitioner,
+  SIDEBAR,
   SLOTS_DR,
   QUEUE_DR,
+  VISIT,
 } from "./support";
 import { registrationStrings } from "../src/auth/registrationStrings";
 import { galleryStrings } from "../src/gallery/strings";
@@ -589,3 +591,94 @@ async function fillVisitForm(page: Page, patientName: string, complaint: string,
   await form.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
   await expect(form).toBeHidden();
 }
+
+// The visit workspace (screen 10) for كريم, in the room on the real day
+// since 09:00, with a two-visit history. On the seeded Monday first: his
+// seeded queue visit (completed with سلمى) gets a diagnosis, and his seeded
+// arrived slots visit is seen, closed, diagnosed and given two drugs. Every
+// service and patient is picked by name and the clock is pinned, so desktop
+// and mobile render the same data.
+async function karimWorkspaceWithHistory(page: Page): Promise<void> {
+  const day = todayInCairo();
+  const at = (time: ClockTime) => new Date(cairoInstant(day, time));
+  await page.clock.install({ time: at("08:30") });
+
+  await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, QUEUE_DR);
+  await fillVisitForm(page, PATIENTS.karim, "ألم في الركبة بعد الجري", "إجهاد عضلي");
+  await selectPractitioner(page, SLOTS_DR);
+  await advanceRowTo(page, PATIENTS.karim, S.statusInRoom);
+  await advanceRowTo(page, PATIENTS.karim, S.statusCompleted);
+  await fillVisitForm(page, PATIENTS.karim, "ألم في الركبة اليمنى", "التهاب أوتار");
+  await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
+  const earlier = page.getByRole("dialog");
+  await addDrug(earlier, "Diclofenac 50mg", "قرص مرتين يوميًا بعد الأكل", "5 أيام");
+  await addDrug(earlier, "Voltaren Gel", "دهان موضعي على الركبة", "");
+  await earlier.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
+  await expect(earlier).toBeHidden();
+
+  await gotoRealDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
+  await bookFirstOpenSlot(page, PATIENTS.karim, "كشف عام");
+  await page.clock.setSystemTime(at("09:00"));
+  await advanceRowTo(page, PATIENTS.karim, S.statusArrived);
+  await advanceRowTo(page, PATIENTS.karim, S.statusInRoom);
+  // Half a minute past, so the seconds the taps above took never round the
+  // session length down to 13 on a slower run.
+  await page.clock.setSystemTime(new Date(at("09:14").getTime() + 30_000));
+}
+
+/** Fills the workspace's two fields and three drugs, waiting for each save. */
+async function fillWorkspace(scope: ReturnType<Page["getByRole"]>): Promise<void> {
+  for (const [key, placeholder, value] of [
+    ["complaint", S.visitFormComplaintPlaceholder, "ألم مستمر في الركبة اليمنى من 5 أيام، يزيد مع الحركة"],
+    ["diagnosis", S.visitFormDiagnosisPlaceholder, "التهاب وتر الرضفة، حاد"],
+  ] as const) {
+    const field = scope.getByPlaceholder(placeholder);
+    await field.fill(value);
+    await field.blur();
+    // Each field's own "اتحفظ" hint (Field's `${id}-hint`).
+    await expect(scope.locator(`#visit-form-${key}-hint`)).toHaveText(S.visitFormSavedIndicator);
+  }
+  await addDrug(scope, "Diclofenac 50mg", "قرص مرتين يوميًا بعد الأكل", "7 أيام");
+  await addDrug(scope, "Paracetamol 500mg", "قرص عند الألم، بحد أقصى 4 مرات يوميًا", "");
+  await addDrug(scope, "Voltaren Gel", "دهان موضعي 3 مرات يوميًا على الركبة", "أسبوعين");
+  await expect(scope.getByRole("region", { name: VISIT.historyTwo, exact: true })).toBeVisible();
+  await expect(scope.getByText(S.visitFormSavedIndicator)).toHaveCount(0);
+}
+
+async function addDrug(
+  scope: ReturnType<Page["getByRole"]>,
+  name: string,
+  instructions: string,
+  duration: string,
+): Promise<void> {
+  await scope.getByRole("button", { name: VISIT.rxAdd, exact: true }).click();
+  await scope.getByLabel(VISIT.rxNameLabel, { exact: true }).fill(name);
+  await scope.getByLabel(VISIT.rxInstructionsLabel, { exact: true }).fill(instructions);
+  await scope.getByLabel(VISIT.rxDurationLabel, { exact: true }).fill(duration);
+  await scope.getByRole("button", { name: VISIT.rxAddConfirm, exact: true }).click();
+  await expect(
+    scope.getByRole("region", { name: VISIT.rxHeading, exact: true }).getByRole("listitem").filter({ hasText: name }),
+  ).toBeVisible();
+  await expect(scope.getByRole("button", { name: VISIT.rxAdd, exact: true })).toBeVisible();
+}
+
+test("@screenshot visit-workspace-sheet", async ({ page }) => {
+  await karimWorkspaceWithHistory(page);
+  await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  await fillWorkspace(sheet);
+  // The sheet scrolls inside its own dialog element; capture it from the top.
+  await sheet.evaluate((element) => element.scrollTo(0, 0));
+  await expect.poll(() => sheet.evaluate((element) => element.scrollTop)).toBe(0);
+  await shoot(page, "visit-workspace-sheet", false);
+});
+
+test("@screenshot current-visit", async ({ page }) => {
+  await karimWorkspaceWithHistory(page);
+  await page.getByRole("navigation", { name: SIDEBAR.navAriaLabel }).getByRole("button", { name: SIDEBAR.navVisit, exact: true }).click();
+  const main = page.getByRole("main");
+  await fillWorkspace(main);
+  await shoot(page, "current-visit", true);
+});
