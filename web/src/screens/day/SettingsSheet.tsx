@@ -2,6 +2,7 @@ import { useState } from "react";
 import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
+import PractitionersPanel from "./PractitionersPanel";
 import ServicesPanel from "./ServicesPanel";
 import Sheet from "./Sheet";
 import SheetCardHead from "./SheetCardHead";
@@ -9,7 +10,7 @@ import StaffPanel from "./StaffPanel";
 import { dayScreenStrings } from "./strings";
 import WorkingHoursPanel from "./WorkingHoursPanel";
 
-type Panel = "hours" | "services" | "staff";
+type Panel = "hours" | "services" | "staff" | "practitioners";
 
 interface SettingsSheetProps {
   practitionerId: string;
@@ -22,12 +23,14 @@ const TAB_OPTIONS: readonly { value: Panel; label: string }[] = [
   { value: "hours", label: dayScreenStrings.settingsHoursTab },
   { value: "services", label: dayScreenStrings.settingsServicesTab },
   { value: "staff", label: dayScreenStrings.settingsStaffTab },
+  { value: "practitioners", label: dayScreenStrings.settingsPractitionersTab },
 ];
 
 /**
  * The owner-only settings sheet, prototype #s12–14: a `.c-head` (badge
  * "الإعدادات", then what the open tab is about), the `.set-tabs` bar
- * switching between the three panels, and the panel itself, which owns its
+ * switching between the panels — the prototype's three, then the
+ * practitioners tab it does not show — and the panel itself, which owns its
  * own `.set-body` and `.runrow`. Only ever rendered when the acting
  * membership is an owner (see DayScreen) — there is no route to it
  * otherwise.
@@ -51,7 +54,9 @@ export default function SettingsSheet({ practitionerId, locationId, orgId, onDis
         }
       : panel === "services"
         ? { title: dayScreenStrings.settingsServicesHeadTitle, subtitle: undefined }
-        : { title: dayScreenStrings.settingsStaffTab, subtitle: undefined };
+        : panel === "staff"
+          ? { title: dayScreenStrings.settingsStaffTab, subtitle: undefined }
+          : { title: dayScreenStrings.settingsPractitionersTab, subtitle: undefined };
 
   return (
     <Sheet onDismiss={onDismiss} size="lg">
@@ -72,6 +77,7 @@ export default function SettingsSheet({ practitionerId, locationId, orgId, onDis
       {panel === "hours" && <WorkingHoursPanel practitionerId={practitionerId} locationId={locationId} />}
       {panel === "services" && <ServicesPanel orgId={orgId} />}
       {panel === "staff" && <StaffPanel orgId={orgId} />}
+      {panel === "practitioners" && <PractitionersPanel orgId={orgId} />}
     </Sheet>
   );
 }

@@ -36,7 +36,7 @@ export default function RxPrintPage({ model, preview }: { model: RxPrintModel; p
       <div className="mb-4 flex items-start justify-between gap-4 border-b-2 border-black pb-3.5">
         <div>
           <p className="text-[17px] font-bold tracking-[-0.01em] text-black">{model.doctorName}</p>
-          {model.doctorSpec && <p className="mt-0.5 text-[11.5px] text-black/65">{model.doctorSpec}</p>}
+          {model.doctorSpec && <DoctorSpec spec={model.doctorSpec} />}
           <ClinicSpec clinic={model.clinic} />
         </div>
         <div className="flex-none text-end font-mono text-xs text-black/60 tabular-nums">
@@ -122,6 +122,25 @@ function RxDrug({ drug, isLast }: { drug: RxPrintDrug; isLast: boolean }) {
         {drug.note && <p className="mt-0.5 text-[11.5px] text-black/60 italic">{drug.note}</p>}
       </div>
     </li>
+  );
+}
+
+/**
+ * The first `.doc-spec` line: "{title} · رقم النقابة {n}", either part left
+ * out when the practitioner has none (printModel.ts); the number is its own
+ * left-to-right run.
+ */
+function DoctorSpec({ spec }: { spec: NonNullable<RxPrintModel["doctorSpec"]> }) {
+  return (
+    <p className="mt-0.5 text-[11.5px] text-black/65">
+      {spec.title}
+      {spec.title !== null && spec.syndicateNumber !== null && " · "}
+      {spec.syndicateNumber !== null && (
+        <>
+          {T.syndicatePrefix} <Ltr>{spec.syndicateNumber}</Ltr>
+        </>
+      )}
+    </p>
   );
 }
 

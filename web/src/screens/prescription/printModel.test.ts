@@ -59,7 +59,7 @@ function input(overrides: Partial<RxPrintInput> = {}): RxPrintInput {
     items: [makeItem(1)],
     visitForm: { complaint: "ألم في الركبة", diagnosis: "التهاب وتر الرضفة" },
     patient: { full_name: "كريم فتحي", birth_year: 1992 },
-    practitioner: { full_name: "أحمد المصري", title: "استشاري العلاج الطبيعي" },
+    practitioner: { full_name: "أحمد المصري", title: "استشاري العلاج الطبيعي", syndicate_number: null },
     clinic: CLINIC,
     now: new Date(cairoInstant("2026-09-30", "11:00")),
     ...overrides,
@@ -77,12 +77,30 @@ describe("buildRxPrintModel", () => {
   it("names the doctor, their title and the clinic lines in `.rx-doc`", () => {
     const model = buildRxPrintModel(input());
     expect(model.doctorName).toBe("د. أحمد المصري");
-    expect(model.doctorSpec).toBe("استشاري العلاج الطبيعي");
+    expect(model.doctorSpec).toEqual({ title: "استشاري العلاج الطبيعي", syndicateNumber: null });
     expect(model.clinic).toBe(CLINIC);
   });
 
-  it("omits the title line when the title is empty", () => {
-    expect(buildRxPrintModel(input({ practitioner: { full_name: "أحمد المصري", title: "  " } })).doctorSpec).toBeNull();
+  it("carries the syndicate number after the title, trimmed", () => {
+    const practitioner = { full_name: "أحمد المصري", title: "استشاري العلاج الطبيعي", syndicate_number: " 12345 " };
+    expect(buildRxPrintModel(input({ practitioner })).doctorSpec).toEqual({
+      title: "استشاري العلاج الطبيعي",
+      syndicateNumber: "12345",
+    });
+  });
+
+  it("leaves out the title when there is none, keeping the syndicate number", () => {
+    const practitioner = { full_name: "أحمد المصري", title: "", syndicate_number: "12345" };
+    expect(buildRxPrintModel(input({ practitioner })).doctorSpec).toEqual({ title: null, syndicateNumber: "12345" });
+  });
+
+  it("omits the whole line when there is neither a title nor a syndicate number", () => {
+    expect(
+      buildRxPrintModel(input({ practitioner: { full_name: "أحمد المصري", title: "  ", syndicate_number: null } })).doctorSpec,
+    ).toBeNull();
+    expect(
+      buildRxPrintModel(input({ practitioner: { full_name: "أحمد المصري", title: "", syndicate_number: " " } })).doctorSpec,
+    ).toBeNull();
   });
 
   it("formats the number in its series", () => {

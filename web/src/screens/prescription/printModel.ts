@@ -2,6 +2,7 @@ import { PrescriptionError } from "../../db/prescriptions";
 import type { Patient, Practitioner, Prescription, PrescriptionItem, Visit } from "../../db/types";
 import type { VisitFormFieldValues } from "../../db/visitForm";
 import { formatPrescriptionNumber } from "../../domain/numberSeries";
+import { practitionerTitleOf, syndicateNumberOf } from "../../domain/practitionerProfile";
 import { todayInCairo } from "../../domain/time";
 import type { PrintClinicLines } from "../day/printClinic";
 import { computeAge } from "../doctor/doctorDay";
@@ -15,15 +16,6 @@ import { prescriptionPrintStrings as T } from "./strings";
 export function formatRxDate(day: string): string {
   const [year, month, date] = day.split("-").map(Number);
   return `${date} / ${month} / ${year}`;
-}
-
-/**
- * Where `practitioners.syndicate_number` ("نقابة الأطباء {n}") goes on the
- * first `.doc-spec` line, after the title. The column does not exist yet, so
- * there is nothing to show; once it does, this returns it (null when empty).
- */
-function syndicateNumberPart(): string | null {
-  return null;
 }
 
 function nonEmpty(value: string | null | undefined): string | null {
@@ -42,11 +34,18 @@ export interface RxPrintDrug {
   note: string | null;
 }
 
+/** The first `.doc-spec` line: "{title} · رقم النقابة {n}", either part left out when the practitioner has none. */
+export interface RxDoctorSpec {
+  title: string | null;
+  /** The number alone; the line renders it after "رقم النقابة", as its own left-to-right run. */
+  syndicateNumber: string | null;
+}
+
 export interface RxPrintModel {
   /** `.doc-name`: "د. {full_name}". */
   doctorName: string;
-  /** The first `.doc-spec` line (title, then the syndicate number); null when there is nothing to show. */
-  doctorSpec: string | null;
+  /** The first `.doc-spec` line; null when the practitioner has neither a title nor a syndicate number. */
+  doctorSpec: RxDoctorSpec | null;
   /** The second `.doc-spec` line: the same clinic lines as every other printed page. */
   clinic: PrintClinicLines;
   /** `.rx-num`: "RX-2026-0287". */
@@ -67,7 +66,7 @@ export interface RxPrintInput {
   /** The visit's general form as it stands now (only read before the first print). */
   visitForm: VisitFormFieldValues;
   patient: Pick<Patient, "full_name" | "birth_year"> | undefined;
-  practitioner: Pick<Practitioner, "full_name" | "title"> | undefined;
+  practitioner: Pick<Practitioner, "full_name" | "title" | "syndicate_number"> | undefined;
   clinic: PrintClinicLines;
   now: Date;
 }
@@ -81,10 +80,13 @@ export interface RxPrintInput {
 export function buildRxPrintModel(input: RxPrintInput): RxPrintModel {
   const { prescription, practitioner, patient } = input;
   const issuedAt = prescription.printed_at !== null ? new Date(prescription.printed_at) : input.now;
-  const doctorSpec = [nonEmpty(practitioner?.title), syndicateNumberPart()].filter(Boolean).join(" · ");
+  const doctorSpec: RxDoctorSpec = {
+    title: practitionerTitleOf(practitioner?.title),
+    syndicateNumber: syndicateNumberOf(practitioner?.syndicate_number),
+  };
   return {
     doctorName: `${T.doctorPrefix} ${practitioner?.full_name ?? ""}`,
-    doctorSpec: doctorSpec === "" ? null : doctorSpec,
+    doctorSpec: doctorSpec.title === null && doctorSpec.syndicateNumber === null ? null : doctorSpec,
     clinic: input.clinic,
     number: formatPrescriptionNumber(prescription),
     date: formatRxDate(todayInCairo(issuedAt)),
