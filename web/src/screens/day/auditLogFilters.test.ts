@@ -40,6 +40,22 @@ describe("filterAuditRows", () => {
   it("returns an empty list when no row matches both filters", () => {
     expect(filterAuditRows(rows, "patients", AuditAction.Delete)).toHaveLength(0);
   });
+
+  it("lists prescription and prescription_items rows under the visits filter", () => {
+    const withRx = [
+      ...rows,
+      row({ entity: "prescriptions", action: AuditAction.Create }),
+      row({ entity: "prescription_items", action: AuditAction.Delete }),
+    ];
+    expect(filterAuditRows(withRx, "visits", "all").map((r) => r.entity)).toEqual([
+      "visits",
+      "visits",
+      "prescriptions",
+      "prescription_items",
+    ]);
+    expect(filterAuditRows(withRx, "visits", AuditAction.Delete).map((r) => r.entity)).toEqual(["prescription_items"]);
+    expect(filterAuditRows(withRx, "invoices", "all").map((r) => r.entity)).toEqual(["invoices"]);
+  });
 });
 
 describe("isAuditRowInScope", () => {

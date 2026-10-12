@@ -3,6 +3,18 @@ import { AuditAction, type AuditLog } from "../../db/types";
 export type AuditEntityFilter = "all" | "visits" | "patients" | "invoices" | "payments" | "cash_close" | "visit_form_data";
 export type AuditActionFilter = "all" | AuditAction;
 
+// Entities listed under another entity's filter rather than one of their
+// own: a visit's prescription and its drugs are part of the visit.
+const ENTITY_FILTER_GROUP: Partial<Record<string, AuditEntityFilter>> = {
+  prescriptions: "visits",
+  prescription_items: "visits",
+};
+
+/** The entity filter a row is listed under: its own entity's, unless ENTITY_FILTER_GROUP files it under another. */
+export function auditEntityFilterOf(entity: string): string {
+  return ENTITY_FILTER_GROUP[entity] ?? entity;
+}
+
 /** Applies the audit sheet's two independent filters: entity type and action. Either left at "all" matches every row. */
 export function filterAuditRows<T extends Pick<AuditLog, "entity" | "action">>(
   rows: readonly T[],
@@ -10,7 +22,7 @@ export function filterAuditRows<T extends Pick<AuditLog, "entity" | "action">>(
   actionFilter: AuditActionFilter,
 ): T[] {
   return rows.filter((row) => {
-    if (entityFilter !== "all" && row.entity !== entityFilter) {
+    if (entityFilter !== "all" && auditEntityFilterOf(row.entity) !== entityFilter) {
       return false;
     }
     if (actionFilter !== "all" && row.action !== actionFilter) {

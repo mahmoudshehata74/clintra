@@ -1,7 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
+  addDrug,
+  closeSheet,
+  type Drug,
   gotoRealDay,
+  karimInRoom,
   openAuditLog,
+  openPrintSheet,
+  openVisitSheet,
+  RX,
+  rxSection,
+  VISIT,
   openBookingSheet,
   PATIENTS,
   pickSearchResult,
@@ -133,4 +142,53 @@ test("the head counts the events listed, and the filter groups are labelled", as
   await dialog.getByRole("button", { name: S.auditFilterEntityPayments, exact: true }).click();
   await expect(dialog.getByText(`0 ${S.auditEventCountUnit}`, { exact: true })).toBeVisible();
   await expect(dialog.getByText(S.auditSheetEmpty, { exact: true })).toBeVisible();
+});
+
+test("a prescription's events are listed under the visits filter, naming the patient and never a drug", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.print = () => {};
+  });
+  const amoxicillin: Drug = { name: "Amoxicillin 500mg", instructions: "كبسولة كل 8 ساعات", duration: "5 أيام" };
+  const ibuprofen: Drug = { name: "Ibuprofen 400mg", instructions: "قرص بعد الأكل عند الألم" };
+  await karimInRoom(page);
+  const workspace = await openVisitSheet(page);
+  const rx = rxSection(workspace);
+  await addDrug(workspace, amoxicillin); // كتب وصفة + أضاف دواء
+  await addDrug(workspace, ibuprofen); // أضاف دواء
+  await rx.getByRole("listitem").filter({ hasText: amoxicillin.name }).getByRole("button", { name: new RegExp(amoxicillin.name) }).click();
+  await workspace.getByLabel(VISIT.rxDurationLabel, { exact: true }).fill("7 أيام");
+  await workspace.getByRole("button", { name: VISIT.rxEditConfirm, exact: true }).click(); // عدّل دواء
+  await expect(rx.getByRole("listitem").filter({ hasText: amoxicillin.name })).toContainText("7 أيام");
+  await rx.getByRole("listitem").filter({ hasText: ibuprofen.name }).getByRole("button", { name: VISIT.rxRemove, exact: true }).click(); // شال دواء
+  await expect(rx.getByRole("listitem")).toHaveCount(1);
+  const sheet = await openPrintSheet(page, workspace, RX.printButton);
+  await sheet.getByRole("button", { name: RX.printAction, exact: true }).click();
+  await sheet.getByRole("button", { name: RX.confirmPrint, exact: true }).click(); // طبع الوصفة
+  await expect(rx.getByText(VISIT.rxPrintedLine, { exact: true })).toBeVisible();
+  await closeSheet(sheet);
+  await closeSheet(workspace);
+
+  await openAudit(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.auditFilterEntityVisits, exact: true }).click();
+  for (const [verb, count] of [
+    ["كتب وصفة", 1],
+    ["أضاف دواء", 2],
+    ["عدّل دواء", 1],
+    ["شال دواء", 1],
+    ["طبع الوصفة", 1],
+  ] as const) {
+    const rows = dialog.getByRole("listitem").filter({ has: page.getByText(verb, { exact: true }) });
+    await expect(rows).toHaveCount(count);
+    for (const row of await rows.all()) {
+      await expect(row).toContainText(PATIENTS.karim);
+    }
+  }
+  await expect(dialog).not.toContainText(amoxicillin.name);
+  await expect(dialog).not.toContainText(ibuprofen.name);
+  await expect(dialog).not.toContainText(amoxicillin.instructions);
+
+  // Not under another entity's filter.
+  await dialog.getByRole("button", { name: S.auditFilterEntityInvoices, exact: true }).click();
+  await expect(dialog.getByText("كتب وصفة", { exact: true })).toHaveCount(0);
 });

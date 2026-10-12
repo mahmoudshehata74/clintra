@@ -78,6 +78,12 @@ and by the rail page "الزيارة الحالية"; prescription editing goes 
 `--radius-el`) had no use left and are retired. The owner decisions it
 implements are listed under "Screen 10 (visit workspace)" below.
 
+16 prescription print (step 6): done — `web/src/screens/prescription/`
+(PrescriptionPrintSheet, RxPrintPage, pure helpers in `printModel.ts`), opened
+from the visit workspace's `.rx-section` and reusable by screen 18; the first
+print goes through `markPrescriptionPrinted`. The owner decisions it
+implements are listed under "Screen 16 (printed prescription)" below.
+
 ## Data decisions for the rebuild
 - `visits.note text NULL` — the doctor's quick note.
 - `practitioners.syndicate_number varchar(50) NULL` — hidden when empty.
@@ -119,10 +125,18 @@ implements are listed under "Screen 10 (visit workspace)" below.
 - b. `.pt-summary`: avatar initial, name · age (omitted without birth_year), local mono LTR phone when present, "N زيارات · آخر زيارة قبل …" omitting empty parts; no `.quick` buttons until screen 18, no `.plan-badge` until screen 17.
 - c. `.visit-history`: the last three completed visits before this one, any practitioner on the device, newest first — d/m, diagnosis (else complaint, else "من غير تشخيص"), " — " first two drug names then "+N"; heading by real count; hidden without a prior visit.
 - d. Complaint and diagnosis are the shared Field + TextArea, saved as before.
-- e. `.rx-section` with arabicCount ("دواء واحد"/"دوائين"/"3 أدوية"/"11 دواء"); item = LTR name + "instructions · duration" (note muted), tap to edit in place, "حذف", "＋ أضف دواء" inline form; writer errors mapped to Arabic; read-only when not the visit's practitioner, not prescribable, or printed ("الوصفة اتطبعت ومش ممكن تتعدّل"); hidden for a non-prescriber with no drug; no print button.
+- e. `.rx-section` with arabicCount ("دواء واحد"/"دوائين"/"3 أدوية"/"11 دواء"); item = LTR name + "instructions · duration" (note muted), tap to edit in place, "حذف", "＋ أضف دواء" inline form; writer errors mapped to Arabic; read-only when not the visit's practitioner, not prescribable, or printed ("الوصفة اتطبعت ومش ممكن تتعدّل"); hidden for a non-prescriber with no drug; the print button arrived with screen 16.
 - f. `.runrow`: "قفل الزيارة" only while in_room through the caller's own completion path and cooldown; "حفظ ومتابعة لاحقًا" waits for the field save and closes; `.count` live while in_room, final once completed, "أقل من دقيقة" under one minute.
 - g. One VisitWorkspace for VisitFormSheet and the "الزيارة الحالية" rail page (nav key `visit`, practitioner memberships only, after "شاشة الطبيب"): the practitioner's in_room visit today or "مفيش زيارة مفتوحة دلوقتي" with "افتح شاشة الطبيب"; stays mounted under the idle lock on the guarded acting membership.
 - h. The legacy tokens are retired from `@theme` and `docs/design-tokens.md` (zero uses in web/src); dark mode stays off.
+
+### Screen 16 (printed prescription) — owner decisions over the prototype
+- a. Entry: "اطبع الوصفة" (printed: "اطبع تاني") in `.rx-section` whenever the prescription has a drug, for anyone who sees the section; it opens PrescriptionPrintSheet (Sheet, size lg) with the `.rx-print-page` preview.
+- b. One action, "طباعة / حفظ PDF" (the browser's print dialog does both); no PDF button; WhatsApp and SMS wait for screen 19.
+- c. The first print asks "بعد الطباعة الوصفة مش هتتعدّل. نطبع؟" ("اطبع" / "رجوع"), then `markPrescriptionPrinted`, then the dialog; reprints open the dialog with no write; refusals (not the visit's practitioner on a first print, empty, write failure) show an Arabic line and never open the dialog.
+- d. A5 portrait through a named `@page prescription`, applied only to the print target (`.rx-print-target`, rendered in a body-level portal that leaves `#root` off paper); the day sheet, invoice and receipt keep the default page.
+- e. `.rx-doc`: "د. {name}", title (omitted when empty; the syndicate number has one hook, `syndicateNumberPart`, until its column exists), the printClinic lines; `.rx-num` number and "d / m / yyyy" (print date once printed, today in the preview); `.rx-pt` name, age, diagnosis (snapshot once printed); one `.rx-drug` per item numbered 1..n by position; `.rx-sig`; no legal disclaimer (open owner decision); the screen-only `.rx-print-header`.
+- f. After the first print the workspace shows the printed line and read-only list, and the button reads "اطبع تاني".
 
 ## Standing rules for the rebuild
 - Existing logic and behaviour do not change; vitest and e2e stay green at
