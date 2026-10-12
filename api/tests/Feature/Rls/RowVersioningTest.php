@@ -7,13 +7,14 @@
  * for why a trigger is the only mechanism that actually computes the
  * increment, and why it needs no grant changes at all. prescriptions and
  * prescription_items got the same column and trigger when they were
- * created (2026_09_12_000026_create_prescriptions_tables.php).
+ * created (2026_09_12_000026_create_prescriptions_tables.php), and
+ * practitioners from 2026_09_12_000027_add_profile_and_rev_to_practitioners.php.
  */
 const SYNCABLE_TABLES = [
     'cash_close', 'day_state', 'invoice_items', 'invoices',
     'membership_locations', 'membership_practitioners', 'memberships',
-    'patients', 'payments', 'prescription_items', 'prescriptions',
-    'schedules', 'service_price_overrides', 'services',
+    'patients', 'payments', 'practitioners', 'prescription_items',
+    'prescriptions', 'schedules', 'service_price_overrides', 'services',
     'visit_form_data', 'visits',
 ];
 

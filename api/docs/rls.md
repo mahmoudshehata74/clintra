@@ -622,6 +622,55 @@ Device tokens are also still bound to the registering membership, not the
 PIN-switched one (`docs/auth-plan.md`), so the server could not yet tell
 which person is writing in any case.
 
+## Practitioners
+
+`practitioners` became a syncable table
+(`2026_09_12_000027_add_profile_and_rev_to_practitioners.php`,
+`docs/schema.md`'s v18 additions) so the owner can edit each
+practitioner's name, title and syndicate number from settings. It gained
+`syndicate_number varchar(50) NULL` and the same `rev` column and
+`practitioners_enforce_rev` trigger (`enforce_row_rev()`) every other
+syncable table carries. **Nothing about access changed:** its policy is
+still `practitioners_scope`, `org_id = current_org()` for `USING` and
+`WITH CHECK`, and `clintra_app` still holds the table-level `SELECT,
+INSERT, UPDATE, DELETE` it always had — a table-level grant already covers
+a new column, and the policy filters rows, not columns.
+`PractitionerProfileSyncTest.php` pins the policy text, both RLS flags and
+the grant, and proves org B can neither read nor update org A's rows,
+through the sync endpoints or directly.
+
+**The push endpoint allows a profile edit and nothing else**
+(`SyncOpApplier`'s profile rule, `SyncableTables::PROFILE_ONLY_COLUMNS`).
+Practitioners are created only by provisioning, so a pushed `create` or
+`delete` is rejected as `practitioner_not_editable`; an `update` may change
+only `full_name`, `title` and `syndicate_number`, and any other column its
+payload names with a value different from the stored one is rejected the
+same way. The profile is validated as the device validates it — a name
+that is empty once trimmed, a title that is not a string, or a syndicate
+number over 50 characters is `practitioner_profile_invalid`. `title` is
+`NOT NULL` and `""` means "no title"; since Laravel's global
+`ConvertEmptyStringsToNull` middleware delivers a pushed `""` as `null`,
+the applier stores a `null` title as `""` (practitioners only).
+
+`register_device` returns each practitioner's `syndicate_number` and `rev`
+(`2026_09_12_000028_add_practitioner_profile_to_register_device.php`, the
+000025 body otherwise byte-for-byte; `clintra_register`'s `SELECT` on
+`practitioners` is table-level, so no grant changed), and bootstrap returns
+every practitioner of the org in a sixth stage, appended after
+`prescription_items` so an older cursor keeps its meaning.
+
+**Known gap: who edits is not enforced by the server.** Only the owner
+edits a practitioner's profile; the web writer enforces it
+(`not_owner`, `web/src/db/practitioners.ts`), but the policy admits any
+membership of the org, so a client that bypassed the web writer could
+change any practitioner's name, title or syndicate number in its own org.
+This is the same gap as every other settings write (working hours,
+services, staff): the server does not know roles per write in v1, and
+device tokens are bound to the registering membership, not the PIN-switched
+one (`docs/auth-plan.md`), so it could not yet tell which person is
+writing in any case. Closing it needs a role check in the policy or the
+endpoint, a change v1 deliberately does not make.
+
 ## Sequence-backed audit ordering
 
 Every provisioning function computed `audit_log.seq` the same way: `SELECT
