@@ -20,8 +20,9 @@ use InvalidArgumentException;
  * (SyncWindow::DAYS) directly from the entity tables — day_state and
  * visits, the two tables with a principled date, plus the patients those
  * windowed visits reference (so a name renders, not just a bare
- * patient_id), and the prescriptions of those visits with their items (a
- * prescription belongs to exactly one visit, so it is windowed through it).
+ * patient_id), the prescriptions of those visits with their items (a
+ * prescription belongs to exactly one visit, so it is windowed through it),
+ * and every one of the org's practitioners.
  * It is deliberately additive: GET /api/sync/pull's own SQL,
  * cursor format, and monotonic seq guarantee are completely untouched by
  * this class, so a device that has already synced before (pull_cursor is
@@ -43,7 +44,15 @@ class SyncBootstrapPuller
 {
     private const PAGE_SIZE = 200;
 
-    /** Stage order: day_state and visits have a principled date to window by; patients and prescriptions are windowed transitively, via the visits that reference them, and prescription_items via those prescriptions. */
+    /**
+     * Stage order: day_state and visits have a principled date to window by;
+     * patients and prescriptions are windowed transitively, via the visits
+     * that reference them, and prescription_items via those prescriptions.
+     * practitioners are the org's few prescribers, not windowed at all:
+     * every one, so a fresh device prints the current name, title and
+     * syndicate number. Appended last, so a cursor minted before it existed
+     * keeps its meaning.
+     */
     private const STAGE_DAY_STATE = 0;
 
     private const STAGE_VISITS = 1;
@@ -54,7 +63,9 @@ class SyncBootstrapPuller
 
     private const STAGE_PRESCRIPTION_ITEMS = 4;
 
-    private const STAGE_DONE = 5;
+    private const STAGE_PRACTITIONERS = 5;
+
+    private const STAGE_DONE = 6;
 
     /**
      * @return array{cursor: string, has_more: bool, rows: list<array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}>}
@@ -137,6 +148,11 @@ class SyncBootstrapPuller
                 ->orderBy('id')
                 ->limit(self::PAGE_SIZE + 1)
                 ->get(),
+            self::STAGE_PRACTITIONERS => DB::table('practitioners')
+                ->when($afterId !== null, fn ($q) => $q->where('id', '>', $afterId))
+                ->orderBy('id')
+                ->limit(self::PAGE_SIZE + 1)
+                ->get(),
             default => throw new InvalidArgumentException("unknown bootstrap stage: {$stage}"),
         };
     }
@@ -152,6 +168,7 @@ class SyncBootstrapPuller
             self::STAGE_PATIENTS => 'patients',
             self::STAGE_PRESCRIPTIONS => 'prescriptions',
             self::STAGE_PRESCRIPTION_ITEMS => 'prescription_items',
+            self::STAGE_PRACTITIONERS => 'practitioners',
         };
 
         return [
@@ -171,7 +188,7 @@ class SyncBootstrapPuller
             return [self::STAGE_DAY_STATE, null];
         }
 
-        if (! preg_match('/^([0-5]):([0-9a-fA-F-]*)$/', $cursor, $matches)) {
+        if (! preg_match('/^([0-6]):([0-9a-fA-F-]*)$/', $cursor, $matches)) {
             throw new InvalidArgumentException("malformed bootstrap cursor: {$cursor}");
         }
 

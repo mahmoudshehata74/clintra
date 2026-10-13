@@ -10,15 +10,16 @@ namespace App\Support\Sync;
  * derived and why `users` is deliberately excluded). Every table here
  * carries a server-assigned `rev` column — from that migration, or, for
  * prescriptions and prescription_items, from the migration that created
- * them (2026_09_12_000026_create_prescriptions_tables.php).
+ * them (2026_09_12_000026_create_prescriptions_tables.php), and, for
+ * practitioners, from 2026_09_12_000027_add_profile_and_rev_to_practitioners.php.
  */
 class SyncableTables
 {
     public const NAMES = [
         'cash_close', 'day_state', 'invoice_items', 'invoices',
         'membership_locations', 'membership_practitioners', 'memberships',
-        'patients', 'payments', 'prescription_items', 'prescriptions',
-        'schedules', 'service_price_overrides', 'services',
+        'patients', 'payments', 'practitioners', 'prescription_items',
+        'prescriptions', 'schedules', 'service_price_overrides', 'services',
         'visit_form_data', 'visits',
     ];
 
@@ -33,7 +34,7 @@ class SyncableTables
      * etc.) and surfaces as a generic `failed` — see
      * SyncPushController::isRlsRefusal().
      */
-    public const DIRECT_ORG_ID_TABLES = ['invoices', 'memberships', 'patients', 'prescriptions', 'services', 'visits'];
+    public const DIRECT_ORG_ID_TABLES = ['invoices', 'memberships', 'patients', 'practitioners', 'prescriptions', 'services', 'visits'];
 
     /**
      * table => the payload column naming the acting membership. Always
@@ -126,6 +127,20 @@ class SyncableTables
 
     /** Tables whose rows are locked once their own printed_at is set. */
     public const PRINTED_LOCK_TABLES = ['prescriptions'];
+
+    /**
+     * table => the only columns a pushed update may change. Rows of these
+     * tables are created only by provisioning, never pushed: a create or a
+     * delete is refused, and so is an update whose payload names any other
+     * column with a value different from the stored one
+     * (`practitioner_not_editable` — SyncOpApplier's profile rule,
+     * docs/schema.md's v18 additions).
+     *
+     * @var array<string, list<string>>
+     */
+    public const PROFILE_ONLY_COLUMNS = [
+        'practitioners' => ['full_name', 'title', 'syndicate_number'],
+    ];
 
     public static function hasNumberSeries(string $table): bool
     {

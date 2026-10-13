@@ -73,6 +73,13 @@ class SyncOpApplier
             return $this->rejected($op, 'series_mismatch');
         }
 
+        $op = $this->withStoredEmptyTitle($op, $table);
+        $profileRule = $this->applyProfileRule($op, $table);
+
+        if ($profileRule !== null) {
+            return $profileRule;
+        }
+
         $printedLock = $this->applyPrintedLock($op, $table);
 
         if ($printedLock !== null) {
@@ -394,6 +401,95 @@ class SyncOpApplier
         }
 
         return null;
+    }
+
+    /**
+     * The practitioner profile rule (docs/schema.md's v18 additions):
+     * practitioners are created only by provisioning, so a pushed create or
+     * delete is refused as `practitioner_not_editable`, and an update may
+     * change only full_name, title and syndicate_number — any other column
+     * the payload names with a value different from the stored one is
+     * refused the same way (a column carried unchanged, as a device's whole
+     * row is, is fine). The profile itself is validated as the device
+     * validates it: full_name is not empty once trimmed, title is a string
+     * ("" is no title; the column is NOT NULL — see withStoredEmptyTitle),
+     * and syndicate_number is null or at most 50 characters
+     * (`practitioner_profile_invalid`).
+     *
+     * Who may edit — the owner — is enforced on the device only, like every
+     * other settings write (api/docs/rls.md's "Practitioners"). The row is
+     * read through practitioners' own policy; one the caller cannot see is
+     * left to the update itself, which then matches nothing
+     * (`conflict_stale_rev`).
+     *
+     * @return array{op_id: string, status: string, reason: string}|null null means the op is not affected by the rule.
+     */
+    private function applyProfileRule(array $op, string $table): ?array
+    {
+        $editable = SyncableTables::PROFILE_ONLY_COLUMNS[$table] ?? null;
+
+        if ($editable === null) {
+            return null;
+        }
+
+        if ($op['action'] !== 'update') {
+            return $this->rejected($op, 'practitioner_not_editable');
+        }
+
+        $payload = $op['payload'] ?? [];
+        $current = DB::table($table)->where('id', $op['entity_id'])->first();
+
+        if ($current !== null) {
+            foreach ($payload as $column => $incoming) {
+                if ($column === 'id' || $column === 'rev' || in_array($column, $editable, true)) {
+                    continue;
+                }
+
+                if (! property_exists($current, $column) || ! $this->sameValue($incoming, $current->{$column})) {
+                    return $this->rejected($op, 'practitioner_not_editable');
+                }
+            }
+        }
+
+        $isValid = (! array_key_exists('full_name', $payload)
+                || (is_string($payload['full_name']) && trim($payload['full_name']) !== ''))
+            && (! array_key_exists('title', $payload) || is_string($payload['title']))
+            && (($payload['syndicate_number'] ?? null) === null
+                || (is_string($payload['syndicate_number']) && mb_strlen($payload['syndicate_number']) <= 50));
+
+        return $isValid ? null : $this->rejected($op, 'practitioner_profile_invalid');
+    }
+
+    /**
+     * A practitioner's title is NOT NULL, and "" means "no title"
+     * (docs/schema.md's v18 additions). The request pipeline turns every
+     * empty string in a pushed payload into null (Laravel's global
+     * ConvertEmptyStringsToNull middleware), so the "" a device sends for no
+     * title arrives as null; it is stored as "" again. Every other table's
+     * payload is left as it arrives.
+     */
+    private function withStoredEmptyTitle(array $op, string $table): array
+    {
+        if ($table === 'practitioners' && is_array($op['payload'] ?? null)
+            && array_key_exists('title', $op['payload']) && $op['payload']['title'] === null) {
+            $op['payload']['title'] = '';
+        }
+
+        return $op;
+    }
+
+    /** A payload value against a stored one: null only equals null; booleans and numbers compare as Postgres returns them. */
+    private function sameValue(mixed $incoming, mixed $stored): bool
+    {
+        if ($incoming === null || $stored === null) {
+            return $incoming === $stored;
+        }
+
+        if (is_array($incoming)) {
+            return false;
+        }
+
+        return (string) $incoming === (string) $stored;
     }
 
     /**

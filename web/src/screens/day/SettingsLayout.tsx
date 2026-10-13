@@ -17,16 +17,18 @@ export function SetList({ children }: { children: ReactNode }) {
   return <ul className="flex flex-col gap-2">{children}</ul>;
 }
 
-export type SetRowLayout = "hours" | "service" | "staff";
+export type SetRowLayout = "hours" | "service" | "staff" | "practitioner";
 
 // `.set-row` (110px 1fr auto), `.set-row.svc` (1fr auto auto auto auto),
-// `.set-row.staff` (1fr auto auto auto). Below 600px (the prototype's own
+// `.set-row.staff` (1fr auto auto auto); the practitioners tab, which the
+// prototype does not show, is a name block and its edit action (1fr auto). Below 600px (the prototype's own
 // narrow breakpoint) the hours row's fixed 110px day column gives way to
 // auto, so the three parts still fit one line on a phone.
 const ROW_COLUMNS: Record<SetRowLayout, string> = {
   hours: "grid-cols-[110px_1fr_auto] max-[600px]:grid-cols-[auto_1fr_auto]",
   service: "grid-cols-[1fr_auto_auto_auto_auto]",
   staff: "grid-cols-[1fr_auto_auto_auto]",
+  practitioner: "grid-cols-[1fr_auto]",
 };
 
 interface SetRowProps {

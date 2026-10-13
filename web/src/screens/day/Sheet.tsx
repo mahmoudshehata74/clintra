@@ -33,6 +33,13 @@ function readStack() {
   return openSheets;
 }
 
+// Escape presses a sheet has already dismissed for. Every open sheet listens
+// for Escape, in whatever order their listeners happen to be registered; once
+// the topmost one dismisses, React may unmount it before the next listener
+// runs, and the sheet under it would then find itself topmost and dismiss on
+// the same press. One press dismisses one sheet.
+const handledEscapes = new WeakSet<KeyboardEvent>();
+
 // Stacked layers, by a sheet's depth in the stack (0 = the first one open):
 // its backdrop, and its handle+panel while another sheet covers it. Each
 // covered panel sits above its own backdrop and below the next sheet's, so
@@ -121,7 +128,8 @@ export default function Sheet({ onDismiss, size = "md", children }: SheetProps) 
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && openSheets[openSheets.length - 1] === stackToken) {
+      if (event.key === "Escape" && !handledEscapes.has(event) && openSheets[openSheets.length - 1] === stackToken) {
+        handledEscapes.add(event);
         onDismiss();
       }
     }

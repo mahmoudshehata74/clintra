@@ -13,6 +13,8 @@ export const prescriptionPrintStrings = {
 
   // `.rx-doc`
   doctorPrefix: "د.",
+  // `.doc-spec`'s first line: "{title} · رقم النقابة {n}".
+  syndicatePrefix: "رقم النقابة",
 
   // `.rx-pt`
   patientLabel: "المريض:",

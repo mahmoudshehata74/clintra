@@ -140,6 +140,9 @@ const FALLBACK_UPDATE_VERBS: Partial<Record<string, string>> = {
   cash_close: "عدّل إغلاق اليوم",
   prescriptions: "عدّل الوصفة",
   prescription_items: "عدّل دواء",
+  // Verb only: a practitioner's name, title or syndicate number never
+  // appears in the audit line (db/practitioners.ts).
+  practitioners: "عدّل بيانات الطبيب",
 };
 
 /**

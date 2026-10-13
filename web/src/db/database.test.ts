@@ -296,7 +296,7 @@ describe("version 14: visits.note backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const visits = await upgraded.visits.toArray();
 
-    expect(upgraded.verno).toBe(16);
+    expect(upgraded.verno).toBe(17);
     expect(visits.find((visit) => visit.id === withoutNote.id)).toHaveProperty("note", null);
     expect(visits.find((visit) => visit.id === pulledWithNote.id)?.note).toBe("حساسية بنسلين");
     upgraded.close();
@@ -380,7 +380,7 @@ describe("version 15: number series backfill", () => {
 
     const upgraded = new ClintraDatabase(name);
 
-    expect(upgraded.verno).toBe(16);
+    expect(upgraded.verno).toBe(17);
     expect((await upgraded.invoices.toArray()).map((invoice) => invoice.series)).toEqual([1, 1]);
     expect((await upgraded.payments.toArray()).map((payment) => payment.series)).toEqual([1, 1]);
     expect((await upgraded.device.get("seed-device"))?.series).toBe(1);
@@ -399,6 +399,40 @@ describe("version 15: number series backfill", () => {
     const freshPayment = { ...paymentBase, amount: 100 as Piastres, method: "cash" as const, receipt_number: "1" };
     await expect(upgraded.payments.add({ ...freshPayment, id: "payment-3", series: 2 })).resolves.toBe("payment-3");
     await expect(upgraded.payments.add({ ...freshPayment, id: "payment-4", series: 1 })).rejects.toThrow();
+    upgraded.close();
+  });
+});
+
+describe("version 17: practitioners' syndicate_number and rev backfill", () => {
+  it("backfills syndicate_number null and rev 1 on practitioners written before it, and keeps values a row already carries", async () => {
+    const name = `clintra-db-upgrade-test-${crypto.randomUUID()}`;
+    const stores = Object.fromEntries(
+      new ClintraDatabase(name).tables.map((table) => [
+        table.name,
+        [table.schema.primKey.src, ...table.schema.indexes.map((index) => index.src)].join(", "),
+      ]),
+    );
+    const legacy = new Dexie(name);
+    legacy.version(16).stores(stores);
+    const base = { org_id: ORG_ID, user_id: null, specialty_id: "spec-1", is_active: true };
+    const local = { ...base, id: "practitioner-local", full_name: "أحمد المصري", title: "طبيب عام" };
+    const pulled = {
+      ...base,
+      id: "practitioner-pulled",
+      full_name: "سلمى إبراهيم",
+      title: "",
+      syndicate_number: "12345",
+      rev: 4,
+    };
+    await legacy.table("practitioners").bulkAdd([local, pulled]);
+    legacy.close();
+
+    const upgraded = new ClintraDatabase(name);
+    const practitioners = await upgraded.practitioners.toArray();
+
+    expect(upgraded.verno).toBe(17);
+    expect(practitioners.find((p) => p.id === local.id)).toEqual({ ...local, syndicate_number: null, rev: 1 });
+    expect(practitioners.find((p) => p.id === pulled.id)).toEqual(pulled);
     upgraded.close();
   });
 });

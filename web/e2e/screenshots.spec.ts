@@ -136,6 +136,31 @@ test("@screenshot settings-staff", async ({ page }) => {
   await shoot(page, "settings-staff", false);
 });
 
+// The "الأطباء" tab with one row in edit mode: سلمى إبراهيم given a
+// syndicate number first, so both row states show; then أحمد المصري's
+// editor open with a new title and number typed in, not yet saved.
+test("@screenshot settings-practitioners", async ({ page }) => {
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsPractitionersTab, exact: true }).click();
+
+  const salma = dialog.getByRole("listitem").filter({ hasText: QUEUE_DR });
+  await salma.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  await salma.getByLabel(S.practitionerSyndicateLabel, { exact: true }).fill("45871");
+  await salma.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(salma).toContainText(`${S.practitionerSyndicatePrefix} 45871`);
+
+  const ahmed = dialog.getByRole("listitem").filter({ hasText: SLOTS_DR });
+  await ahmed.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  await ahmed.getByLabel(S.practitionerTitleLabel, { exact: true }).fill("استشاري العلاج الطبيعي");
+  await ahmed.getByLabel(S.practitionerSyndicateLabel, { exact: true }).fill("12345");
+  await expect(ahmed.getByRole("button", { name: S.settingsSaveAction, exact: true })).toBeVisible();
+  await shoot(page, "settings-practitioners", false);
+});
+
 test("@screenshot day-slots-with-in-room", async ({ page }) => {
   await selectPractitioner(page, SLOTS_DR);
   // Advance the arrived visit so a row wears the loud green in_room fill.

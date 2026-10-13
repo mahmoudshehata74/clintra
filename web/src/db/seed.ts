@@ -233,6 +233,8 @@ async function writeSeedData(
     specialty_id: specialtyTemplate.id,
     title: "طبيب عام",
     is_active: true,
+    syndicate_number: null,
+    rev: 1,
   };
 
   const practitionerLocation: PractitionerLocation = {
@@ -250,6 +252,8 @@ async function writeSeedData(
     specialty_id: specialtyTemplate.id,
     title: "طبيبة عامة",
     is_active: true,
+    syndicate_number: null,
+    rev: 1,
   };
 
   const queuePractitionerLocation: PractitionerLocation = {

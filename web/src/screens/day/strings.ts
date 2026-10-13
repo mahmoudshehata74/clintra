@@ -443,6 +443,7 @@ export const dayScreenStrings = {
   auditFilterEntityPayments: "الدفعات",
   auditFilterEntityCashClose: "إغلاق الصندوق",
   auditFilterEntityVisitFormData: "الزيارة (النموذج)",
+  auditFilterEntitySettings: "الإعدادات",
   auditFilterActionCreate: "إنشاء",
   auditFilterActionUpdate: "تعديل",
   auditFilterActionDelete: "حذف",
@@ -464,6 +465,7 @@ export const dayScreenStrings = {
   settingsHoursTab: "مواعيد العمل",
   settingsServicesTab: "الخدمات",
   settingsStaffTab: "الموظفون",
+  settingsPractitionersTab: "الأطباء",
   // Indexed by weekdayOf() (0 = Sunday .. 6 = Saturday).
   weekdayNames: ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"],
 
@@ -539,6 +541,17 @@ export const dayScreenStrings = {
   // Confirmation after a PIN change: prefix + name + suffix.
   staffPinChangedPrefix: "اتغيّر الرقم السري لـ",
   staffPinChangedSuffix: "— لازم تدخل بيه المرة الجاية",
+
+  // Panel D — practitioners (name, title, syndicate number).
+  practitionerSyndicatePrefix: "رقم النقابة",
+  practitionerNoSyndicate: "من غير رقم نقابة",
+  practitionerNameLabel: "الاسم",
+  practitionerTitleLabel: "اللقب أو التخصص",
+  practitionerTitlePlaceholder: "مثلاً: استشاري العلاج الطبيعي",
+  practitionerSyndicateLabel: "رقم النقابة",
+  practitionerNameRequiredError: "لازم تكتب اسم الطبيب",
+  practitionerSyndicateTooLongError: "رقم النقابة 50 حرف بالكتير",
+  practitionerSaveFailedError: "ما اتحفظش، جرّب تاني",
 
   // Shared settings actions.
   settingsSaveAction: "حفظ",

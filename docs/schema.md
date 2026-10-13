@@ -47,7 +47,8 @@ membership_id, practitioner_id
 *`id` added: the natural key is the composite `membership_id + practitioner_id`.*
 
 ### practitioners
-id, org_id, user_id?, full_name, specialty_id, title, is_active
+id, org_id, user_id?, full_name, specialty_id, title, is_active,
+syndicate_number? (see v18 additions)
 
 ### practitioner_locations
 practitioner_id, location_id, is_active
@@ -737,6 +738,58 @@ Versions 1-15 are unchanged.
 
 The audit log reads "كتب وصفة", "أضاف دواء", "عدّل دواء", "شال دواء" and
 "طبع الوصفة", never a drug's name or instructions, or the diagnosis.
+
+## v18 additions
+
+### practitioners.syndicate_number, practitioners.rev; practitioners sync
+
+Owner decision: the owner edits each practitioner's name, title and
+syndicate number from settings (the "الأطباء" tab), and the printed
+prescription shows the syndicate number.
+
+- `syndicate_number` (varchar(50), nullable): the practitioner's medical
+  syndicate registration number, stored trimmed; null means none is on
+  record, and an empty entry is stored as null.
+- `title` is unchanged and stays NOT NULL: it is stored trimmed, and `""`
+  means "no title". One rule everywhere — the settings row, its edit form and
+  the printed prescription all read both fields through
+  `web/src/domain/practitionerProfile.ts`, so no screen decides "empty"
+  differently. (The server receives a pushed `""` as null, through Laravel's
+  global ConvertEmptyStringsToNull middleware, and stores it as `""` again:
+  `api/docs/rls.md`'s "Practitioners".)
+- `rev`, with the shared `enforce_row_rev()` trigger, as every other
+  syncable table (v12 additions): `practitioners` joins the syncable-table
+  list, in `SyncableTables::NAMES` and `DIRECT_ORG_ID_TABLES` on the server
+  and `web/src/sync/syncableTables.ts` on the device.
+- **Writes.** `web/src/db/practitioners.ts`'s `updatePractitionerProfile`,
+  through `mutate()`: the owner only (`not_owner`); the name is required
+  once trimmed; the syndicate number is at most 50 characters; writing the
+  values already stored is a no-op (no audit row, no sync op). The audit log
+  reads "عدّل بيانات الطبيب" under the "الإعدادات" filter, scoped to that
+  practitioner's own log, and never shows a field's value.
+- **Server.** Practitioners are created only by provisioning: the push
+  endpoint refuses a create or a delete, and an update that changes any
+  column other than `full_name`, `title` and `syndicate_number`
+  (`practitioner_not_editable`); it validates the profile as the device does
+  (`practitioner_profile_invalid`). Owner-only editing is enforced on the
+  device only — the same known gap as every other settings write
+  (`api/docs/rls.md`'s "Practitioners"). Pull returns practitioner rows;
+  bootstrap returns every practitioner of the org in a sixth stage;
+  `register_device` returns each practitioner's `syndicate_number` and
+  `rev`. The policy (`org_id = current_org()`) and `clintra_app`'s grants
+  did not change.
+- **Printed prescription.** The first `.doc-spec` line reads "{title} · رقم
+  النقابة {n}", either part left out when empty and the whole line left out
+  when both are.
+
+Server: `2026_09_12_000027_add_profile_and_rev_to_practitioners.php` (the
+column, `rev` and the trigger),
+`2026_09_12_000028_add_practitioner_profile_to_register_device.php` (the
+registration payload). Local: database version 17 backfills
+`syndicate_number: null` and `rev: 1` (version 12's convention — 1 is what
+the server gave every existing row) onto every practitioner without them,
+leaving a pulled row's own values alone; no index changes. Versions 1-16
+are unchanged.
 
 ## Rules
 
