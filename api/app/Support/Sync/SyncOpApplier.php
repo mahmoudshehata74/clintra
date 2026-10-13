@@ -80,6 +80,19 @@ class SyncOpApplier
             return $profileRule;
         }
 
+        $messageRule = $this->applyMessageRule($op, $table);
+
+        if (isset($messageRule['status'])) {
+            return $messageRule;
+        }
+
+        $op = $messageRule ?? $op;
+        $templateRule = $this->applyTemplateRule($op, $table);
+
+        if ($templateRule !== null) {
+            return $templateRule;
+        }
+
         $printedLock = $this->applyPrintedLock($op, $table);
 
         if ($printedLock !== null) {
@@ -461,6 +474,152 @@ class SyncOpApplier
     }
 
     /**
+     * The message rule (docs/schema.md's v19 additions): a message is written
+     * once, when the device opens WhatsApp or SMS for it, and only
+     * `marked_sent_at` may change afterwards (SyncableTables::APPEND_ONLY_COLUMNS).
+     *
+     * - A delete is refused as `message_immutable`: messages are never deleted.
+     * - An update whose payload names any other column with a value different
+     *   from the stored one is refused as `message_immutable` (a column
+     *   carried unchanged, as a device's whole row is, is fine; timestamps
+     *   compare as instants; the actor column is left out of the comparison,
+     *   as in leavesRowUnchanged, since the payload's value never decides
+     *   anything). An accepted update is narrowed to the allowed
+     *   columns, so it writes `marked_sent_at` and nothing else — not even the
+     *   actor column, which stays the creator's (buildAttributes).
+     *   `marked_sent_at` must be null or a timestamp (`message_invalid`).
+     * - A create is validated as the device validates it (`message_invalid`):
+     *   a known template key, a channel of whatsapp or sms, an E.164 phone, a
+     *   timestamp attempted_at, and a body that is a string not empty once
+     *   trimmed. The request pipeline delivers a pushed "" as null (Laravel's
+     *   global ConvertEmptyStringsToNull middleware), so an empty body arrives
+     *   as null and is refused here — never stored, and never left to the NOT
+     *   NULL column to surface as an internal_error.
+     *
+     * The row is read through messages' own policy; one the caller cannot see
+     * is left to the update itself, which then matches nothing
+     * (`conflict_stale_rev`).
+     *
+     * @return array<string, mixed>|null null when the op is not a message op;
+     *                                   a result (it carries `status`) when it is refused;
+     *                                   otherwise the op to apply, narrowed for an update.
+     */
+    private function applyMessageRule(array $op, string $table): ?array
+    {
+        $editable = SyncableTables::APPEND_ONLY_COLUMNS[$table] ?? null;
+
+        if ($editable === null) {
+            return null;
+        }
+
+        if ($op['action'] === 'delete') {
+            return $this->rejected($op, 'message_immutable');
+        }
+
+        $payload = $op['payload'] ?? [];
+
+        if ($op['action'] === 'create') {
+            return $this->isValidMessage($payload) ? $op : $this->rejected($op, 'message_invalid');
+        }
+
+        $current = DB::table($table)->where('id', $op['entity_id'])->first();
+        $actorColumn = SyncableTables::actorColumn($table);
+
+        if ($current !== null) {
+            foreach ($payload as $column => $incoming) {
+                if ($column === 'id' || $column === 'rev' || $column === $actorColumn || in_array($column, $editable, true)) {
+                    continue;
+                }
+
+                if (! property_exists($current, $column) || ! $this->sameColumnValue($column, $incoming, $current->{$column})) {
+                    return $this->rejected($op, 'message_immutable');
+                }
+            }
+        }
+
+        $markedSentAt = $payload['marked_sent_at'] ?? null;
+
+        if ($markedSentAt !== null && ! $this->isTimestamp($markedSentAt)) {
+            return $this->rejected($op, 'message_invalid');
+        }
+
+        $op['payload'] = array_intersect_key($payload, array_flip($editable));
+
+        return $op;
+    }
+
+    /** @param  array<string, mixed>  $payload */
+    private function isValidMessage(array $payload): bool
+    {
+        $body = $payload['body'] ?? null;
+        $phone = $payload['phone'] ?? null;
+        $markedSentAt = $payload['marked_sent_at'] ?? null;
+
+        return in_array($payload['template_key'] ?? null, SyncableTables::MESSAGE_TEMPLATE_KEYS, true)
+            && in_array($payload['channel'] ?? null, ['whatsapp', 'sms'], true)
+            && is_string($phone) && preg_match('/^\+[1-9]\d{7,14}$/', $phone) === 1
+            && is_string($body) && trim($body) !== ''
+            && $this->isTimestamp($payload['attempted_at'] ?? null)
+            && ($markedSentAt === null || $this->isTimestamp($markedSentAt));
+    }
+
+    /**
+     * The template override rule (docs/schema.md's v19 additions): an
+     * organization's edited body for one of the five editable keys may be
+     * created, updated and deleted ("reset to default" deletes it). A create
+     * or update is refused as `template_invalid` unless its key is one of
+     * SyncableTables::EDITABLE_TEMPLATE_KEYS ("custom" has no override) and
+     * its body is a string, not empty once trimmed and at most 4000
+     * characters. An empty body arrives as null (ConvertEmptyStringsToNull,
+     * as for messages) and is refused, never stored.
+     *
+     * Who may edit — the owner — is enforced on the device only, like every
+     * other settings write (api/docs/rls.md's "Messages and message templates").
+     *
+     * @return array{op_id: string, status: string, reason: string}|null null means the op is not affected by the rule.
+     */
+    private function applyTemplateRule(array $op, string $table): ?array
+    {
+        if ($table !== 'message_templates' || $op['action'] === 'delete') {
+            return null;
+        }
+
+        $payload = $op['payload'] ?? [];
+        $body = $payload['body'] ?? null;
+
+        $isValid = in_array($payload['key'] ?? null, SyncableTables::EDITABLE_TEMPLATE_KEYS, true)
+            && is_string($body) && trim($body) !== ''
+            && mb_strlen($body) <= SyncableTables::TEMPLATE_BODY_MAX_LENGTH;
+
+        return $isValid ? null : $this->rejected($op, 'template_invalid');
+    }
+
+    private function isTimestamp(mixed $value): bool
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return false;
+        }
+
+        try {
+            Carbon::parse($value);
+        } catch (Throwable) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /** A payload value against a stored one, comparing timestamp columns as instants (as leavesRowUnchanged does). */
+    private function sameColumnValue(string $column, mixed $incoming, mixed $stored): bool
+    {
+        if ($incoming !== null && $stored !== null && str_ends_with($column, '_at') && $this->isTimestamp($incoming)) {
+            return Carbon::parse($incoming)->equalTo(Carbon::parse($stored));
+        }
+
+        return $this->sameValue($incoming, $stored);
+    }
+
+    /**
      * A practitioner's title is NOT NULL, and "" means "no title"
      * (docs/schema.md's v18 additions). The request pipeline turns every
      * empty string in a pushed payload into null (Laravel's global
@@ -565,9 +724,12 @@ class SyncOpApplier
         // payload's — docs/sync-plan.md's Q12, extended from
         // audit_log.actor_membership_id to every table with an equivalent
         // column.
+        // An append-only row's actor column is its creator's: an update
+        // there (a message marked sent) leaves it alone.
         $actorColumn = SyncableTables::actorColumn($table);
+        $keepsCreator = $op['action'] === 'update' && array_key_exists($table, SyncableTables::APPEND_ONLY_COLUMNS);
 
-        if ($actorColumn !== null) {
+        if ($actorColumn !== null && ! $keepsCreator) {
             $attributes[$actorColumn] = $membershipId;
         }
 

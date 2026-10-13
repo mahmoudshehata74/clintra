@@ -296,7 +296,7 @@ describe("version 14: visits.note backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const visits = await upgraded.visits.toArray();
 
-    expect(upgraded.verno).toBe(17);
+    expect(upgraded.verno).toBe(18);
     expect(visits.find((visit) => visit.id === withoutNote.id)).toHaveProperty("note", null);
     expect(visits.find((visit) => visit.id === pulledWithNote.id)?.note).toBe("حساسية بنسلين");
     upgraded.close();
@@ -380,7 +380,7 @@ describe("version 15: number series backfill", () => {
 
     const upgraded = new ClintraDatabase(name);
 
-    expect(upgraded.verno).toBe(17);
+    expect(upgraded.verno).toBe(18);
     expect((await upgraded.invoices.toArray()).map((invoice) => invoice.series)).toEqual([1, 1]);
     expect((await upgraded.payments.toArray()).map((payment) => payment.series)).toEqual([1, 1]);
     expect((await upgraded.device.get("seed-device"))?.series).toBe(1);
@@ -430,10 +430,36 @@ describe("version 17: practitioners' syndicate_number and rev backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const practitioners = await upgraded.practitioners.toArray();
 
-    expect(upgraded.verno).toBe(17);
+    expect(upgraded.verno).toBe(18);
     expect(practitioners.find((p) => p.id === local.id)).toEqual({ ...local, syndicate_number: null, rev: 1 });
     expect(practitioners.find((p) => p.id === pulled.id)).toEqual(pulled);
     upgraded.close();
+  });
+});
+
+describe("version 18: messages and message_templates", () => {
+  it("adds both stores with their indexes, one template override per key", async () => {
+    const local = new ClintraDatabase(`clintra-db-messages-test-${crypto.randomUUID()}`);
+    expect(local.verno).toBe(18);
+    expect(local.messages.schema.indexes.map((index) => index.src).sort()).toEqual([
+      "attempted_at",
+      "location_id",
+      "patient_id",
+    ]);
+    const keyIndex = local.message_templates.schema.indexes.map((index) => [index.src, index.unique]);
+    expect(keyIndex).toEqual([["&key", true]]);
+
+    const override = {
+      org_id: ORG_ID,
+      key: "booking_confirmation",
+      body: "نص",
+      updated_by: "membership-1",
+      updated_at: "2026-10-13T08:00:00.000Z",
+      rev: 1,
+    };
+    await local.message_templates.add({ ...override, id: "template-1" });
+    await expect(local.message_templates.add({ ...override, id: "template-2" })).rejects.toThrow();
+    local.close();
   });
 });
 

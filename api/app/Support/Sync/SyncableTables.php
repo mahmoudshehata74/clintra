@@ -11,16 +11,18 @@ namespace App\Support\Sync;
  * carries a server-assigned `rev` column — from that migration, or, for
  * prescriptions and prescription_items, from the migration that created
  * them (2026_09_12_000026_create_prescriptions_tables.php), and, for
- * practitioners, from 2026_09_12_000027_add_profile_and_rev_to_practitioners.php.
+ * practitioners, from 2026_09_12_000027_add_profile_and_rev_to_practitioners.php,
+ * and, for messages and message_templates, from
+ * 2026_09_12_000029_create_messages_tables.php.
  */
 class SyncableTables
 {
     public const NAMES = [
         'cash_close', 'day_state', 'invoice_items', 'invoices',
         'membership_locations', 'membership_practitioners', 'memberships',
-        'patients', 'payments', 'practitioners', 'prescription_items',
-        'prescriptions', 'schedules', 'service_price_overrides', 'services',
-        'visit_form_data', 'visits',
+        'message_templates', 'messages', 'patients', 'payments',
+        'practitioners', 'prescription_items', 'prescriptions', 'schedules',
+        'service_price_overrides', 'services', 'visit_form_data', 'visits',
     ];
 
     /**
@@ -34,7 +36,7 @@ class SyncableTables
      * etc.) and surfaces as a generic `failed` — see
      * SyncPushController::isRlsRefusal().
      */
-    public const DIRECT_ORG_ID_TABLES = ['invoices', 'memberships', 'patients', 'practitioners', 'prescriptions', 'services', 'visits'];
+    public const DIRECT_ORG_ID_TABLES = ['invoices', 'memberships', 'message_templates', 'messages', 'patients', 'practitioners', 'prescriptions', 'services', 'visits'];
 
     /**
      * table => the payload column naming the acting membership. Always
@@ -45,6 +47,8 @@ class SyncableTables
      */
     public const ACTOR_COLUMNS = [
         'cash_close' => 'closed_by',
+        'message_templates' => 'updated_by',
+        'messages' => 'created_by',
         'payments' => 'created_by',
         'prescriptions' => 'created_by',
         'visits' => 'created_by',
@@ -141,6 +145,35 @@ class SyncableTables
     public const PROFILE_ONLY_COLUMNS = [
         'practitioners' => ['full_name', 'title', 'syndicate_number'],
     ];
+
+    /**
+     * table => the only columns a pushed update may change, for tables whose
+     * rows are otherwise written once and never deleted: an update naming
+     * any other column with a value different from the stored one, and
+     * every delete, is refused (`message_immutable` — SyncOpApplier's
+     * message rule, docs/schema.md's v19 additions). The actor column is
+     * the creator's and is not overwritten by a later update.
+     *
+     * @var array<string, list<string>>
+     */
+    public const APPEND_ONLY_COLUMNS = [
+        'messages' => ['marked_sent_at'],
+    ];
+
+    /** Every template key a message may be written from (web/src/domain/messageTemplates.ts). */
+    public const MESSAGE_TEMPLATE_KEYS = [
+        'booking_confirmation', 'appointment_reminder', 'post_visit_followup',
+        'care_plan_session_reminder', 'balance_reminder', 'custom',
+    ];
+
+    /** The template keys an organization may override (message_templates.key): every key but "custom". */
+    public const EDITABLE_TEMPLATE_KEYS = [
+        'booking_confirmation', 'appointment_reminder', 'post_visit_followup',
+        'care_plan_session_reminder', 'balance_reminder',
+    ];
+
+    /** The longest template body the push endpoint accepts, in characters. */
+    public const TEMPLATE_BODY_MAX_LENGTH = 4000;
 
     public static function hasNumberSeries(string $table): bool
     {

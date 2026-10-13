@@ -1,4 +1,5 @@
-import { AuditAction, InvoiceStatus, type AuditLog } from "../db/types";
+import { AuditAction, InvoiceStatus, MessageChannel, type AuditLog } from "../db/types";
+import { findMessageTemplate } from "./messageTemplates";
 import { VisitStatus } from "./visitStatus";
 
 export type AuditVerbRow = Pick<AuditLog, "entity" | "action" | "before" | "after">;
@@ -114,6 +115,44 @@ const VISIT_NOTE_VERB = "عدّل ملاحظة الزيارة";
 // markPrescriptionPrinted): the one update that sets printed_at.
 const PRESCRIPTION_PRINT_VERB = "طبع الوصفة";
 
+// Messages and template overrides (db/messages.ts). Verb only: a message's
+// body and phone, and a template's body, never appear in the audit line.
+const MESSAGE_OPENED_VERBS: Record<MessageChannel, string> = {
+  [MessageChannel.WhatsApp]: "فتح رسالة واتساب",
+  [MessageChannel.Sms]: "فتح رسالة SMS",
+};
+const MESSAGE_MARKED_SENT_VERB = "علّم الرسالة إنها اتبعتت";
+const MESSAGE_UNMARKED_SENT_VERB = "شال علامة الإرسال";
+const MESSAGE_FALLBACK_VERB = "عدّل الرسالة";
+
+function templateNameOf(row: AuditVerbRow): string {
+  const key = fieldOf(row.after ?? row.before, "key");
+  const name = typeof key === "string" ? findMessageTemplate(key)?.name : undefined;
+  return name ?? "رسالة";
+}
+
+function describeMessageVerb(row: AuditVerbRow): string {
+  if (row.action === AuditAction.Create) {
+    const channel = fieldOf(row.after, "channel");
+    return MESSAGE_OPENED_VERBS[channel as MessageChannel] ?? MESSAGE_OPENED_VERBS[MessageChannel.WhatsApp];
+  }
+  const before = fieldOf(row.before, "marked_sent_at") ?? null;
+  const after = fieldOf(row.after, "marked_sent_at") ?? null;
+  if (before === null && after !== null) {
+    return MESSAGE_MARKED_SENT_VERB;
+  }
+  if (before !== null && after === null) {
+    return MESSAGE_UNMARKED_SENT_VERB;
+  }
+  return MESSAGE_FALLBACK_VERB;
+}
+
+/** An override's create or update reads as an edit of that template; its delete as a reset to the default. */
+function describeTemplateVerb(row: AuditVerbRow): string {
+  const name = templateNameOf(row);
+  return row.action === AuditAction.Delete ? `رجّع قالب «${name}» للأصل` : `عدّل قالب «${name}»`;
+}
+
 const CREATE_VERBS: Partial<Record<string, string>> = {
   visits: "سجّل حجز",
   patients: "أضاف مريض",
@@ -161,6 +200,15 @@ export function describeAuditVerb(row: AuditVerbRow): string {
   // the row itself was created or updated (see describeVisitFormChange).
   if (row.entity === "visit_form_data") {
     return describeVisitFormChange(row)?.verb ?? VISIT_FORM_FALLBACK_VERB;
+  }
+
+  // A message's verb depends on its channel or on its sent mark, a
+  // template's on which template it is — not on the action alone.
+  if (row.entity === "messages") {
+    return describeMessageVerb(row);
+  }
+  if (row.entity === "message_templates") {
+    return describeTemplateVerb(row);
   }
 
   if (row.action === AuditAction.Delete) {

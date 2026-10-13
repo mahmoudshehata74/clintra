@@ -14,6 +14,8 @@ export const SYNCABLE_TABLES = [
   "membership_locations",
   "membership_practitioners",
   "memberships",
+  "message_templates",
+  "messages",
   "patients",
   "payments",
   "practitioners",

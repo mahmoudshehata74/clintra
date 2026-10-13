@@ -791,6 +791,103 @@ the server gave every existing row) onto every practitioner without them,
 leaving a pulled row's own values alone; no index changes. Versions 1-16
 are unchanged.
 
+## v19 additions
+
+### messages, message_templates
+
+The messages a clinic sends its patients over WhatsApp or SMS, and the
+organization's edited template bodies. Data only so far — no screen writes
+them yet (screen 19 of the prototype will).
+
+**messages**: id, org_id, location_id, patient_id, visit_id?, template_key,
+channel, phone, body, attempted_at, marked_sent_at?, created_by (membership
+id), created_at, rev
+
+**message_templates**: id, org_id, key, body, updated_by (membership id),
+updated_at, rev
+
+Owner decisions:
+
+- **Templates: defaults ship with the app, overrides live in the database.**
+  The six keys, their names, descriptions, kinds and default bodies are
+  defined in `web/src/domain/messageTemplates.ts`, in display order:
+  `booking_confirmation` (تأكيد الحجز), `appointment_reminder` (تذكير
+  بالموعد), `post_visit_followup` (متابعة بعد الزيارة),
+  `care_plan_session_reminder` (تذكير جلسة خطة), `balance_reminder` (تذكير
+  برصيد متبقي) and `custom` (رسالة مخصصة, written per message, default
+  body `""`). `message_templates` holds only an organization's edited body
+  for one of the five editable keys; `custom` has no override. "Reset to
+  default" deletes the override, and `effectiveBody(key, override)` falls
+  back to the default. (This replaces the earlier plan of seeding templates
+  by migration: a seed would only reach the organizations that exist when
+  the migration runs.) Placeholders: `patient_name`, `clinic_name`,
+  `clinic_phone`, `date`, `time`, `doctor_name`, `session_label`,
+  `balance`. `renderTemplate(body, values)` fills the known ones through the
+  existing domain formatters (the clinic-day date with Latin digits,
+  "HH:MM", money, the local phone display), leaves an unknown `{{token}}`
+  untouched, and reports every known placeholder that had no value so a
+  screen can warn before sending.
+- **A message is written the moment the app opens WhatsApp or SMS for it**
+  (`attempted_at`). Its body, phone, channel, template key, patient and
+  `attempted_at` never change afterwards; only `marked_sent_at` may be set or
+  cleared — "اتبعتت" is marked by hand. Messages are never deleted.
+- **No provider, so no delivery status.** The app opens
+  `https://wa.me/<E.164 digits without +>?text=<encoded body>` or
+  `sms:<E.164>?body=<encoded body>` (`buildMessageLink`,
+  `web/src/domain/messageLink.ts`, percent-encoding the whole body).
+- **Scope.** `messages` is isolated like `invoices` — org + allowed locations,
+  not practitioner, since assistants send most messages — and
+  `message_templates` like `practitioners`, org only. Template editing is
+  owner only, enforced on the device; the server does not check who edits,
+  the same known gap as every other settings write (`api/docs/rls.md`'s
+  "Messages and message templates").
+
+- `template_key` is one of the six keys and `channel` is `whatsapp` or
+  `sms` (both CHECK constraints); `message_templates.key` is one of the five
+  editable keys (CHECK), unique per organization.
+- `phone` is the patient's number in E.164, as it was when the message was
+  opened; `body` is the rendered text, trimmed, exactly as it was handed to
+  WhatsApp or SMS. `phone` has no format CHECK — no existing phone column has
+  one — and the push endpoint validates its shape instead.
+- **Writes** (`web/src/db/messages.ts`, through `mutate()`):
+  `recordMessageAttempt` (refuses `patient_has_no_phone`, an empty body and
+  an unknown key; the location is the visit's when one is given, otherwise
+  this device's; returns the row and its link), `markMessageSent` /
+  `unmarkMessageSent` (no-op when unchanged), `saveTemplateBody` (owner only,
+  `not_owner`; trimmed; empty refused; at most 4000 characters; equal to the
+  default deletes the override instead) and `resetTemplate`. The audit log
+  reads "فتح رسالة واتساب" / "فتح رسالة SMS" (naming the patient), "علّم
+  الرسالة إنها اتبعتت", "شال علامة الإرسال", "عدّل قالب «{name}»" and "رجّع
+  قالب «{name}» للأصل" — never a body or a phone. Messages are listed under
+  the "patients" filter, template edits under "settings".
+- **Server.** The push endpoint accepts a message create, and an update that
+  changes `marked_sent_at` only; any other changed column, and every delete,
+  is `message_immutable`; a create without a known key, a valid channel, an
+  E.164 phone or a non-empty body is `message_invalid`. A template override
+  may be created, updated and deleted; a key outside the five, or a body that
+  is empty or over 4000 characters, is `template_invalid`. An empty body is
+  refused, never stored: Laravel's ConvertEmptyStringsToNull middleware
+  delivers a pushed `""` as null, which both rules refuse explicitly. Pull
+  returns both tables; bootstrap returns the messages attempted inside the
+  60-day window and every template override, in two stages appended after
+  `practitioners`.
+
+Server (`2026_09_12_000029_create_messages_tables.php`): plain indexes on
+`messages.org_id`, `location_id`, `patient_id` and `attempted_at`, unique
+`(org_id, key)` on `message_templates`; no foreign key cascades. `rev` with
+the `enforce_row_rev()` trigger, FORCE RLS, both tables in the
+syncable-table list (`SyncableTables::NAMES` and `DIRECT_ORG_ID_TABLES`;
+`ACTOR_COLUMNS` `messages` → `created_by`, `message_templates` →
+`updated_by`; a mark leaves `created_by` as the creator's).
+
+Local (database version 18), two new stores:
+`messages: "id, patient_id, location_id, attempted_at"` — a patient's
+messages, a location's, and the newest first — and
+`message_templates: "id, &key"`, at most one override per key and the
+lookup `effectiveBody` needs. The key alone is unique locally, not
+`[org_id+key]`, because a device serves exactly one organization. Versions
+1-17 are unchanged.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.
@@ -808,6 +905,9 @@ are unchanged.
   per location per calendar year within the minting device's series, like
   an invoice's (v17 additions).
 - A printed prescription never changes, and neither do its items.
+- A message never changes after it is written except for its sent mark, and
+  is never deleted. An organization has at most one template override per
+  key, and none for `custom`.
 - A `cash_close` is unique per location per day.
 - Practitioner availability is computed across all locations: a practitioner
   booked at a time in one location is busy in every other location.

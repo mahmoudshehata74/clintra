@@ -12,6 +12,8 @@ import type {
   Location,
   Membership,
   MembershipLocation,
+  Message,
+  MessageTemplate,
   MembershipPractitioner,
   Organization,
   Patient,
@@ -60,6 +62,8 @@ export class ClintraDatabase extends Dexie {
   care_plan_items!: EntityTable<CarePlanItem, "id">;
   prescriptions!: EntityTable<Prescription, "id">;
   prescription_items!: EntityTable<PrescriptionItem, "id">;
+  messages!: EntityTable<Message, "id">;
+  message_templates!: EntityTable<MessageTemplate, "id">;
   sync_ops!: EntityTable<SyncOp, "op_id">;
   sync_review!: EntityTable<SyncReview, "id">;
   device!: EntityTable<DeviceRegistration, "id">;
@@ -429,6 +433,26 @@ export class ClintraDatabase extends Dexie {
           ),
         );
       });
+
+    // Messages and template overrides (db/messages.ts; the server's
+    // 2026_09_12_000029_create_messages_tables.php; docs/schema.md's v19
+    // additions). Two new stores, so nothing to backfill:
+    // - messages:
+    //   - patient_id: one patient's messages (the patient profile, and the
+    //     messages screen's per-patient history) without a table scan.
+    //   - location_id: the messages sent from this location, as invoices'
+    //     location_id index.
+    //   - attempted_at: the newest messages first ("آخر الرسائل المرسلة").
+    // - message_templates:
+    //   - &key: at most one override per template key, enforced by the
+    //     database itself, and the lookup effectiveBody needs. Unique on the
+    //     key alone, not [org_id+key] as on the server, because a device
+    //     serves exactly one organization (DeviceRegistration.org_id), so
+    //     within one local database the key already identifies the row.
+    this.version(18).stores({
+      messages: "id, patient_id, location_id, attempted_at",
+      message_templates: "id, &key",
+    });
   }
 }
 

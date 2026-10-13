@@ -624,3 +624,57 @@ export interface CarePlanItem {
   price: Piastres;
   status: string;
 }
+
+/** How a message was handed to the patient: the app opens WhatsApp or the SMS app; nothing is sent by a provider. */
+export const MessageChannel = {
+  WhatsApp: "whatsapp",
+  Sms: "sms",
+} as const;
+
+export type MessageChannel = (typeof MessageChannel)[keyof typeof MessageChannel];
+
+/**
+ * One message the app opened WhatsApp or SMS for (docs/schema.md's v19
+ * additions). Written at that moment; only marked_sent_at ever changes
+ * afterwards, and a message is never deleted (db/messages.ts).
+ */
+export interface Message {
+  id: string;
+  org_id: string;
+  location_id: string;
+  patient_id: string;
+  visit_id: string | null;
+  /** One of domain/messageTemplates.ts's six keys. */
+  template_key: string;
+  channel: MessageChannel;
+  /** The patient's E.164 number, as it was when the message was opened. */
+  phone: string;
+  /** The rendered text handed to WhatsApp or SMS. */
+  body: string;
+  attempted_at: Instant;
+  /** Set by hand ("اتبعتت"); null when not marked. */
+  marked_sent_at: Instant | null;
+  /** Membership id — whoever opened the message. */
+  created_by: string;
+  created_at: Instant;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
+}
+
+/**
+ * An organization's edited body for one editable template key — an
+ * override of the default that ships with the app
+ * (domain/messageTemplates.ts). No row means the default applies.
+ */
+export interface MessageTemplate {
+  id: string;
+  org_id: string;
+  /** One of the five editable keys; "custom" has no override. */
+  key: string;
+  body: string;
+  /** Membership id — whoever last edited it. */
+  updated_by: string;
+  updated_at: Instant;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
+}

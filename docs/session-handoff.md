@@ -25,9 +25,9 @@ screens are built on top of the existing data layer.
   commands, full RLS on every tenant table (see `api/docs/rls.md`).
 
 ## Verify
-Web: `pnpm --dir web test` (vitest, 959 passed) · `pnpm --dir web
+Web: `pnpm --dir web test` (vitest, 1040 passed) · `pnpm --dir web
 exec tsc -b --noEmit` · `pnpm --dir web build` · `pnpm --dir web test:e2e`.
-API: `cd api && php artisan test` (Pest, 260 passed).
+API: `cd api && php artisan test` (Pest, 299 passed).
 
 ## Rebuild order (approved)
 1. `docs/design-rule.md` points at the prototype — done (PR #1).
@@ -105,6 +105,23 @@ tab "الأطباء" (`web/src/screens/day/PractitionersPanel.tsx`,
    name lives on `users`, which is not syncable (no single owning org —
    `docs/schema.md`'s v12 additions), so it needs its own decision.
 
+`messages` + `message_templates` (step 6, data only): done — migration, RLS,
+sync (push, pull, bootstrap), local store (database version 18), audited
+writers in `web/src/db/messages.ts`, template definitions and
+`renderTemplate` in `web/src/domain/messageTemplates.ts`, wa.me/sms links in
+`web/src/domain/messageLink.ts`; no UI yet (`docs/schema.md`'s v19
+additions; `api/docs/rls.md`'s "Messages and message templates"). Owner
+decisions it implements:
+1. Six fixed template keys whose names, descriptions, kinds and default bodies ship in web code; `message_templates` stores only an organization's edited body for one of the five editable keys, and "reset to default" deletes it.
+2. A message row is written when the app opens WhatsApp or SMS for it (`attempted_at`); only `marked_sent_at` ("اتبعتت", by hand) ever changes, and messages are never deleted (`message_immutable`).
+3. No provider and no delivery status: `https://wa.me/<digits>?text=` and `sms:<E.164>?body=`, built by the pure `buildMessageLink`.
+4. Messages are scoped like invoices (org + locations), templates like practitioners (org); owner-only template editing is enforced on the device only — the same known server gap as other settings writes.
+
+This changes the earlier plan below ("templates seeded by migration"):
+defaults now ship with the app and only overrides live in the database,
+because a seed would only reach the organizations that exist when the
+migration runs — every organization provisioned later would have none.
+
 ## Data decisions for the rebuild
 - `visits.note text NULL` — the doctor's quick note.
 - `practitioners.syndicate_number varchar(50) NULL` — hidden when empty;
@@ -116,9 +133,11 @@ tab "الأطباء" (`web/src/screens/day/PractitionersPanel.tsx`,
   gets its own series at registration and mints invoice and receipt numbers
   only inside it, so two devices never collide (`docs/schema.md`'s v16
   additions); prescriptions (RX) will reuse the same series rule.
-- `messages` + `message_templates`; templates seeded by migration. A message
-  row records `attempted_at`; "sent" is marked manually. WhatsApp opens
-  `wa.me`, SMS opens `sms:`. No messaging provider in v1.
+- `messages` + `message_templates`; template defaults ship with the app and
+  `message_templates` holds only an organization's overrides (originally
+  "seeded by migration" — changed, see above). A message row records
+  `attempted_at`; "sent" is marked manually. WhatsApp opens `wa.me`, SMS
+  opens `sms:`. No messaging provider in v1. Done (data only).
 - Care plans use the existing `care_plans` and `care_plan_items`; there is
   no `care_plan_sessions` table. A session's label comes from its service
   name, its date from its linked visit or from the previous session plus
