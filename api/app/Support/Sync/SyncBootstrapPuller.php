@@ -22,7 +22,8 @@ use InvalidArgumentException;
  * windowed visits reference (so a name renders, not just a bare
  * patient_id), the prescriptions of those visits with their items (a
  * prescription belongs to exactly one visit, so it is windowed through it),
- * and every one of the org's practitioners.
+ * every one of the org's practitioners, the messages attempted inside the
+ * window, and every one of the org's message template overrides.
  * It is deliberately additive: GET /api/sync/pull's own SQL,
  * cursor format, and monotonic seq guarantee are completely untouched by
  * this class, so a device that has already synced before (pull_cursor is
@@ -50,8 +51,10 @@ class SyncBootstrapPuller
      * that reference them, and prescription_items via those prescriptions.
      * practitioners are the org's few prescribers, not windowed at all:
      * every one, so a fresh device prints the current name, title and
-     * syndicate number. Appended last, so a cursor minted before it existed
-     * keeps its meaning.
+     * syndicate number. messages are windowed by their own attempted_at, and
+     * message_templates are the org's few overrides, not windowed. Each
+     * stage was appended after the existing ones, so a cursor minted before
+     * it existed keeps its meaning.
      */
     private const STAGE_DAY_STATE = 0;
 
@@ -65,7 +68,11 @@ class SyncBootstrapPuller
 
     private const STAGE_PRACTITIONERS = 5;
 
-    private const STAGE_DONE = 6;
+    private const STAGE_MESSAGES = 6;
+
+    private const STAGE_MESSAGE_TEMPLATES = 7;
+
+    private const STAGE_DONE = 8;
 
     /**
      * @return array{cursor: string, has_more: bool, rows: list<array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}>}
@@ -153,6 +160,20 @@ class SyncBootstrapPuller
                 ->orderBy('id')
                 ->limit(self::PAGE_SIZE + 1)
                 ->get(),
+            // attempted_at is an instant: the window is the same calendar
+            // days, from the start of $from to the end of $to.
+            self::STAGE_MESSAGES => DB::table('messages')
+                ->where('attempted_at', '>=', now()->subDays(SyncWindow::DAYS)->startOfDay()->toIso8601String())
+                ->where('attempted_at', '<', now()->addDays(SyncWindow::DAYS + 1)->startOfDay()->toIso8601String())
+                ->when($afterId !== null, fn ($q) => $q->where('id', '>', $afterId))
+                ->orderBy('id')
+                ->limit(self::PAGE_SIZE + 1)
+                ->get(),
+            self::STAGE_MESSAGE_TEMPLATES => DB::table('message_templates')
+                ->when($afterId !== null, fn ($q) => $q->where('id', '>', $afterId))
+                ->orderBy('id')
+                ->limit(self::PAGE_SIZE + 1)
+                ->get(),
             default => throw new InvalidArgumentException("unknown bootstrap stage: {$stage}"),
         };
     }
@@ -169,6 +190,8 @@ class SyncBootstrapPuller
             self::STAGE_PRESCRIPTIONS => 'prescriptions',
             self::STAGE_PRESCRIPTION_ITEMS => 'prescription_items',
             self::STAGE_PRACTITIONERS => 'practitioners',
+            self::STAGE_MESSAGES => 'messages',
+            self::STAGE_MESSAGE_TEMPLATES => 'message_templates',
         };
 
         return [
@@ -188,7 +211,7 @@ class SyncBootstrapPuller
             return [self::STAGE_DAY_STATE, null];
         }
 
-        if (! preg_match('/^([0-6]):([0-9a-fA-F-]*)$/', $cursor, $matches)) {
+        if (! preg_match('/^([0-8]):([0-9a-fA-F-]*)$/', $cursor, $matches)) {
             throw new InvalidArgumentException("malformed bootstrap cursor: {$cursor}");
         }
 
