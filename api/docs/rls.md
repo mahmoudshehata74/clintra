@@ -1092,6 +1092,81 @@ guessed at** — both spelled out in `docs/sync-plan.md`'s Q9:
   every row it's entitled to see through RLS is included regardless of
   which device wrote it.
 
+## Messages and message templates
+
+`messages` and `message_templates`
+(`2026_09_12_000029_create_messages_tables.php`, `docs/schema.md`'s v19
+additions) are new tables, and each one gets every per-table object the
+prescriptions migration gave its tables:
+
+| Object | messages | message_templates | prescriptions (for comparison) |
+|---|---|---|---|
+| RLS | ENABLE + FORCE | ENABLE + FORCE | ENABLE + FORCE |
+| Policy | `messages_scope`, USING + WITH CHECK | `message_templates_scope`, USING + WITH CHECK | `prescriptions_scope`, USING + WITH CHECK |
+| `clintra_app` grant | SELECT, INSERT, UPDATE, DELETE | same | same |
+| `rev` | integer NOT NULL DEFAULT 1 | same | same |
+| Trigger | `messages_enforce_rev` → `enforce_row_rev()` | `message_templates_enforce_rev` | `prescriptions_enforce_rev` |
+| Checks | `messages_template_key_check` (six keys), `messages_channel_check` (whatsapp, sms) | `message_templates_key_check` (five editable keys) | — |
+| Unique | — | (org_id, key) | (location_id, issued_year, series, number), (visit_id) |
+| Plain indexes | org_id, location_id, patient_id, attempted_at | — (the unique key leads with org_id) | org_id, location_id |
+| Foreign keys | org, location, patient, visit (nullable), created_by → memberships; all RESTRICT | org, updated_by → memberships; RESTRICT | org, location, visit, patient, practitioner, created_by; RESTRICT |
+| Sync | `NAMES`, `DIRECT_ORG_ID_TABLES`, `ACTOR_COLUMNS` (created_by), `APPEND_ONLY_COLUMNS` | `NAMES`, `DIRECT_ORG_ID_TABLES`, `ACTOR_COLUMNS` (updated_by) | `NAMES`, `DIRECT_ORG_ID_TABLES`, `ACTOR_COLUMNS`, number columns |
+
+`clintra_fixtures` (test-only) holds the same privileges on both as on every
+other table; no provisioning role holds any.
+
+**Policies.** `messages` uses the `invoices` expression verbatim and
+`message_templates` the `practitioners` one:
+
+```sql
+-- invoices_scope and messages_scope (USING and WITH CHECK)
+org_id = current_org() AND location_id IN (SELECT * FROM allowed_locations())
+
+-- practitioners_scope and message_templates_scope (USING and WITH CHECK)
+org_id = current_org()
+```
+
+A message carries no practitioner, and assistants send most of them for
+every practitioner at their location, so it is scoped like an invoice: a
+membership limited to listed locations sees only those locations'
+messages. Template overrides are organization settings, scoped like
+practitioners. `MessagesTest.php` pins both policies to their counterparts'
+deparsed text, both RLS flags, the grants, the checks, the indexes and the
+non-cascading foreign keys, and proves that org B can neither read nor
+write org A's rows — through the sync endpoints or directly — and that a
+location outside a membership's list hides its messages.
+
+**The push endpoint keeps a message as it was written** (`SyncOpApplier`'s
+message rule, `SyncableTables::APPEND_ONLY_COLUMNS`). A delete is
+`message_immutable`; so is an update whose payload names any column other
+than `marked_sent_at` with a value different from the stored one
+(timestamps compare as instants; the actor column is left out, as for the
+printed lock). An accepted update writes `marked_sent_at` only and leaves
+`created_by` as the creator's. A create must carry a known template key, a
+whatsapp or sms channel, an E.164 phone, a timestamp `attempted_at` and a
+body not empty once trimmed (`message_invalid`). Template overrides may be
+created, updated and deleted; a key outside the five editable ones or a
+body that is empty or over 4000 characters is `template_invalid`. Laravel's
+global `ConvertEmptyStringsToNull` middleware delivers a pushed `""` as
+`null`, so an empty body arrives as `null`: both rules refuse it with their
+own reason before the write, so it is neither stored nor left to the NOT
+NULL column to surface as an `internal_error`.
+
+Bootstrap returns the messages attempted inside the 60-day window (by
+`attempted_at`, Cairo calendar days) and every template override of the
+org, in stages 6 and 7, appended after `practitioners` so an older cursor
+keeps its meaning.
+
+**Known gap: who edits a template is not enforced by the server.** Only the
+owner edits template overrides; the web writers enforce it (`not_owner`,
+`web/src/db/messages.ts`), but the policy admits any membership of the org.
+This is the same gap as every other settings write (working hours,
+services, staff, practitioners' profiles): the server does not know roles
+per write in v1, and device tokens are bound to the registering membership,
+not the PIN-switched one (`docs/auth-plan.md`). Closing it needs a role
+check in the policy or the endpoint, a change v1 deliberately does not
+make.
+
 ## The sync bootstrap endpoint
 
 `GET /api/sync/bootstrap` (`App\Http\Controllers\SyncBootstrapController`,
@@ -1111,9 +1186,10 @@ filtered to the brief's own 60-day-back/60-day-forward window
 (`App\Support\Sync\SyncWindow::DAYS`, the same constant
 `SyncOpApplier`'s clock-skew check uses), plus the `patients` those
 windowed visits reference, so a name renders instead of a bare id, the
-`prescriptions` of those visits with their `prescription_items`, and every
+`prescriptions` of those visits with their `prescription_items`, every
 one of the org's `practitioners` (not windowed: a fresh device prints the
-current name, title and syndicate number). It
+current name, title and syndicate number), the `messages` attempted inside
+the window and every one of the org's `message_templates`. It
 never touches `sync_ledger`, never computes or returns a `seq`, and
 never writes `device.pull_cursor` — `GET /api/sync/pull`'s own SQL,
 cursor format, and monotonic-`seq` guarantee are completely untouched by
@@ -1154,10 +1230,11 @@ distinguish "genuinely fresh" from "merely behind."
   ordinary backfill reaches them. Extending coverage to those tables
   would mean more joins and more stages, a larger, separate change from
   this one.
-- Same-shape query complexity trade: six keyset-paginated stages
+- Same-shape query complexity trade: eight keyset-paginated stages
   (`day_state`, `visits`, `patients`, `prescriptions`,
-  `prescription_items`, `practitioners` — the last appended so an older
-  cursor keeps its meaning) stitched by one small opaque
+  `prescription_items`, `practitioners`, `messages`, `message_templates` —
+  the last three each appended so an older cursor keeps its meaning)
+  stitched by one small opaque
   cursor (`"{stage}:{last id}"`), rather than pull's single `seq`-ordered
   query — more moving parts, in exchange for windowing by each entity's
   own business date instead of an arrival-time proxy that wouldn't
