@@ -94,6 +94,15 @@ async function closeReviewAndDropEntityHistory(db: ClintraDatabase, review: Sync
 }
 
 /**
+ * "تمام" on a displaced_by_server row (sync/pullCollisions.ts): the server's
+ * version has already replaced the local one, and the displaced row's queued
+ * ops are already gone, so the only thing left is to close the row.
+ */
+export async function acknowledgeReview(db: ClintraDatabase, reviewId: string): Promise<void> {
+  await db.sync_review.update(reviewId, { needs_review: false });
+}
+
+/**
  * "خليها كده" (keep mine) — docs/sync-plan.md's Q6/Q7. What this means
  * depends entirely on why the op was rejected:
  *

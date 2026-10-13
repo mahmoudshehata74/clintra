@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AuditAction, type SyncReview } from "../db/types";
-import { describeReviewFieldDiffs, describeSyncReview } from "./reviewSummary";
+import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type DisplacedPayload } from "./pullCollisions";
+import { describeDisplacedContent, describeReviewFieldDiffs, describeSyncReview } from "./reviewSummary";
 import { SYNCABLE_TABLES } from "./syncableTables";
 
 function makeReview(overrides: Partial<SyncReview> = {}): SyncReview {
@@ -69,5 +70,52 @@ describe("describeReviewFieldDiffs", () => {
   it("shows a field present on only one side against an em dash, not hidden", () => {
     const diffs = describeReviewFieldDiffs({ a: 1 }, { a: 1, b: 2 });
     expect(diffs).toEqual([{ field: "b", mine: "—", server: "2" }]);
+  });
+});
+
+describe("the pull side's two review reasons (sync/pullCollisions.ts)", () => {
+  function displaced(entity: string, row: Record<string, unknown>, children: DisplacedPayload["children"] = []): SyncReview {
+    return makeReview({ entity, reason: DISPLACED_BY_SERVER_REASON, payload: { row, children } satisfies DisplacedPayload });
+  }
+
+  it("labels displaced_by_server in Arabic", () => {
+    expect(describeSyncReview(displaced("prescriptions", {}))).toBe("وصفة — النسخة دي اتشالت لأن جهاز تاني سبقها على السيرفر");
+  });
+
+  it("labels server_unique_conflict for support, with its reference code", () => {
+    expect(describeSyncReview(makeReview({ entity: "message_templates", reason: SERVER_UNIQUE_CONFLICT_REASON }))).toBe(
+      "قالب رسالة — تعارض محتاج مراجعة من الدعم — كود المرجع: REVIEW-1",
+    );
+  });
+
+  it("summarises a displaced prescription by its drug names, in item order", () => {
+    const review = displaced("prescriptions", { id: "rx-1" }, [
+      { entity: "prescription_items", row: { name: "Voltaren Gel", position: 2 } },
+      { entity: "prescription_items", row: { name: "Brufen 400mg", position: 1 } },
+    ]);
+    expect(describeDisplacedContent(review, new Map())).toBe("الأدوية: Brufen 400mg، Voltaren Gel");
+    expect(describeDisplacedContent(displaced("prescriptions", { id: "rx-2" }), new Map())).toBe("وصفة من غير أدوية");
+  });
+
+  it("summarises a displaced template by its name", () => {
+    expect(describeDisplacedContent(displaced("message_templates", { key: "booking_confirmation" }), new Map())).toBe("القالب: تأكيد الحجز");
+  });
+
+  it("summarises a displaced visit by its patient and its time, or its place in the queue", () => {
+    const names = new Map([["patient-1", "هدى سمير"]]);
+    expect(describeDisplacedContent(displaced("visits", { patient_id: "patient-1", scheduled_at: "2026-09-07T07:00:00.000Z", position: 1 }), names)).toBe(
+      "هدى سمير — الساعة 10:00",
+    );
+    expect(describeDisplacedContent(displaced("visits", { patient_id: "patient-2", scheduled_at: null, position: 4 }), names)).toBe("مريض — دور 4");
+  });
+
+  it("summarises a displaced day's delay and a displaced cash close's total", () => {
+    expect(describeDisplacedContent(displaced("day_state", { delay_minutes: 30 }), new Map())).toBe("تأخير 30 دقيقة");
+    expect(describeDisplacedContent(displaced("cash_close", { total_collected: 45000 }), new Map())).toBe("المحصّل 450.00 ج.م");
+  });
+
+  it("has nothing to add for any other review", () => {
+    expect(describeDisplacedContent(makeReview(), new Map())).toBeNull();
+    expect(describeDisplacedContent(displaced("visit_form_data", { visit_id: "visit-1" }), new Map())).toBeNull();
   });
 });

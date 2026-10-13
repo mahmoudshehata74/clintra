@@ -1,4 +1,8 @@
 import type { SyncReview } from "../db/types";
+import { findMessageTemplate } from "../domain/messageTemplates";
+import { formatPiastresForDisplay, type Piastres } from "../domain/money";
+import { clockTimeInCairo } from "../domain/time";
+import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type DisplacedPayload } from "./pullCollisions";
 
 // Every syncable table (sync/syncableTables.ts — reviewSummary.test.ts holds
 // each one to a label here), so no assistant ever reads a raw English table
@@ -30,8 +34,11 @@ const ENTITY_LABELS: Record<string, string> = {
 
 // Every reason api/app/Support/Sync/SyncOpApplier.php's `rejected(...)`
 // can actually produce, plus FakeTransport's own generic one — see
-// api/docs/rls.md's "The sync push endpoint".
+// api/docs/rls.md's "The sync push endpoint" — and the pull side's own
+// displaced_by_server (sync/pullCollisions.ts). server_unique_conflict is
+// labelled in describeSyncReview, since its label carries the reference code.
 const REASON_LABELS: Record<string, string> = {
+  [DISPLACED_BY_SERVER_REASON]: "النسخة دي اتشالت لأن جهاز تاني سبقها على السيرفر",
   conflict_slot_taken: "الميعاد ده اتحجز من جهاز تاني",
   conflict_already_exists: "السجل ده موجود بالفعل على السيرفر",
   conflict_day_closed: "اليوم ده مقفول، مينفعش يتعدّل",
@@ -67,8 +74,52 @@ function referenceCodeFor(review: SyncReview): string {
 /** A short human-readable summary of one sync_review row, for the needs-review list. */
 export function describeSyncReview(review: SyncReview): string {
   const entityLabel = ENTITY_LABELS[review.entity] ?? review.entity;
-  const reasonLabel = REASON_LABELS[review.reason] ?? `فيه مشكلة تقنية — كود المرجع: ${referenceCodeFor(review)}`;
+  const reasonLabel =
+    review.reason === SERVER_UNIQUE_CONFLICT_REASON
+      ? `تعارض محتاج مراجعة من الدعم — كود المرجع: ${referenceCodeFor(review)}`
+      : (REASON_LABELS[review.reason] ?? `فيه مشكلة تقنية — كود المرجع: ${referenceCodeFor(review)}`);
   return `${entityLabel} — ${reasonLabel}`;
+}
+
+/**
+ * What a displaced_by_server row held, in a line the assistant can act on
+ * (re-enter it, or tell the patient): a prescription's drug names, a
+ * template's name, a visit's patient and time, a day's delay or a cash
+ * close's total. Null for any other review, and for an entity with nothing
+ * more to say than its label (a visit's form). `patientNames` maps patient
+ * id to name, for a displaced visit.
+ */
+export function describeDisplacedContent(review: SyncReview, patientNames: ReadonlyMap<string, string>): string | null {
+  if (review.reason !== DISPLACED_BY_SERVER_REASON) {
+    return null;
+  }
+  const { row, children } = review.payload as DisplacedPayload;
+
+  switch (review.entity) {
+    case "prescriptions": {
+      const drugs = children
+        .filter((child) => child.entity === "prescription_items")
+        .map((child) => child.row as { name: string; position: number })
+        .sort((a, b) => a.position - b.position)
+        .map((item) => item.name);
+      return drugs.length > 0 ? `الأدوية: ${drugs.join("، ")}` : "وصفة من غير أدوية";
+    }
+    case "message_templates": {
+      const key = row.key as string;
+      return `القالب: ${findMessageTemplate(key)?.name ?? key}`;
+    }
+    case "visits": {
+      const patient = patientNames.get(row.patient_id as string) ?? "مريض";
+      const scheduledAt = row.scheduled_at as string | null;
+      return scheduledAt ? `${patient} — الساعة ${clockTimeInCairo(scheduledAt)}` : `${patient} — دور ${row.position as number}`;
+    }
+    case "day_state":
+      return `تأخير ${row.delay_minutes as number} دقيقة`;
+    case "cash_close":
+      return `المحصّل ${formatPiastresForDisplay(row.total_collected as Piastres)}`;
+    default:
+      return null;
+  }
 }
 
 function stringifyFieldValue(value: unknown): string {
