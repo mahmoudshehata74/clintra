@@ -24,7 +24,11 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
+  // The one CI retry stays for diagnosis (the second attempt's trace shows
+  // whether a failure reproduces), but a test that fails and then passes is
+  // still a failure: failOnFlakyTests turns a flaky result into a red run.
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: !!process.env.CI,
   // A few flows (the overbook path fills the whole day booking-by-booking) are
   // deliberately heavy; capping workers keeps many parallel Chromium instances
   // from starving each other's CPU and turning that work into spurious

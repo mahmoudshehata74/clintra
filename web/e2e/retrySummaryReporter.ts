@@ -2,11 +2,10 @@ import type { Reporter, TestCase, TestResult } from "@playwright/test/reporter";
 import { appendFileSync } from "node:fs";
 
 /**
- * CI runs with retries: 1 (playwright.config.ts) — a real regression that
- * only fails once still exits the job green on the second attempt. That
- * silently defeats the whole point of watching CI's colour, so this adds
- * exactly one visible marker when it happens: nothing at all on an
- * ordinary all-first-try-green run (the common case, left untouched), a
+ * CI runs with retries: 1 and failOnFlakyTests (playwright.config.ts), so a
+ * test that only passes on its second attempt already fails the run. This
+ * reporter names those tests where they are easy to find: nothing at all on
+ * an ordinary all-first-try-green run (the common case, left untouched), a
  * GitHub Actions warning annotation plus a job-summary line when a test
  * needed a retry to pass.
  */
@@ -33,7 +32,7 @@ export default class RetrySummaryReporter implements Reporter {
     if (summaryPath) {
       const body = [
         "## ⚠️ Tests passed only after a retry",
-        "A green run below still needed a second attempt — treat this as a flake report, not a clean pass.",
+        "These tests failed once and passed on the retry — the run is failed as flaky.",
         "",
         ...this.retried.map((title) => `- ${title}`),
         "",
