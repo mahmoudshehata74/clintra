@@ -745,6 +745,121 @@ them as one rule would be wrong:
 
 ---
 
+## Local unique collisions on pull
+
+Two devices that are both offline can each create a row that shares a
+unique key: a prescription for the same visit, a first override of the
+same message template, the same cash-close day, the same slot. The server
+accepts whichever create arrives first and rejects the other, as Q4/Q7
+describe. The loser then pulls the winner's row, and its own row (a
+different id, the same key) is still in the local store. A plain
+`table.put(payload)` of the pulled row threw a `ConstraintError`. The pull
+cycle failed before its cursor moved, then failed the same way on every
+retry, so the device quietly stopped receiving server changes.
+
+`web/src/sync/pullCollisions.ts`'s `applyPulledRow` now writes every pulled
+and bootstrapped row (`engine.ts`'s `applyChange`). Before the write it
+looks up each of the table's unique indexes for a local row with a
+different id that already holds the pulled row's key. Everything below
+happens in one Dexie transaction per pulled row.
+
+**a. The local row was never accepted: it is displaced.** "Never accepted"
+means its create op is still queued, or a review row records that create
+as rejected. The local row is removed from its store, along with its
+descendants: the rows that point at it through a foreign key the server
+enforces and never cascades (`CHILD_LINKS`):
+
+- `visits` ← `prescriptions`, `visit_form_data`, `invoices` and `messages`
+  (by `visit_id`)
+- `prescriptions` ← `prescription_items`
+- `invoices` ← `invoice_items` and `payments`
+
+No descendant of a never-accepted row can exist on the server, because its
+foreign key would refuse it. Every queued op for the row and its
+descendants leaves the queue. Any review still open for one of them is
+closed, because it is superseded. One `sync_review` row records what was
+removed:
+
+- reason `displaced_by_server`
+- entity: the table
+- `payload = { row, children: [{ entity, row }] }`
+
+Then the pulled row is written. The review sheet shows "النسخة دي اتشالت
+لأن جهاز تاني سبقها على السيرفر" with the displaced content summarised by
+entity (a prescription's drug names, a template's name, a visit's patient
+and time, a day's delay, a cash close's total). It offers only "تمام",
+which closes the row (`reviewActions.ts`'s `acknowledgeReview`).
+
+**b. The local row was accepted: nothing is touched.** The server enforces
+the same keys, so two rows it accepted should never share one. If they
+do, both rows stay as they are. One `server_unique_conflict` review row
+is left, at most one open per pulled entity_id, with payload
+`{ pulled, local }`. The conflict is logged (`console.error`) and the
+pulled row is skipped. The rest of the page still applies and the cursor
+still advances. The sheet shows "تعارض محتاج مراجعة من الدعم" with the
+row's reference code and no actions.
+
+Rows can reach this case without a server bug. A pulled payload is the
+entity's *current* state (`SyncPuller::currentPayload`), not its state as
+of that ledger entry. So when accepted rows trade keys on the server (a
+swap of two queue positions, done through a third value), an earlier
+entry in a page can carry a key that a local row still holds until a
+later entry in the same page moves it. No accepted write does that today:
+a queue reorder's first op collides on the server itself and comes back
+`failed`. If one ever does, applying the page in key-safe order is the
+fix. Recording a review is not.
+
+**c. Children of a rejected create.** On the server, a child create whose
+parent does not exist fails on its foreign key (or on the child table's
+RLS check). `SyncOpApplier` turns any `QueryException` it does not
+recognise into `failed` / `internal_error`. A `failed` op is retried with
+backoff indefinitely: the backoff is capped at five minutes, and
+`describeFailedOpEscalation` only provides a reference code after five
+failures. It never stops the retries. That policy is unchanged. Instead,
+when `runSyncCycle` records a rejected create, its descendants' queued ops
+(found the same way as in (a), including ops for a child whose row was
+already removed) leave the queue in the same transaction. They are
+folded into that review row's payload as `{ row, child_ops }`. A rejected
+create with no queued child ops keeps the plain row as its payload, as
+before. The child rows themselves stay until the parent's review is
+settled or a pull displaces the parent.
+
+**Every local unique index, and whether a pulled row can collide with it:**
+
+| Store | Unique key path | Can collide? | Scenario |
+| --- | --- | --- | --- |
+| `visits` | `[practitioner_id+visit_date+position]` | yes | two devices offline each book the next queue position for one doctor's day; the second create is `conflict_slot_taken` |
+| `visits` | `[practitioner_id+visit_date+unique_scheduled_at]` | yes | two devices offline each book the same slot |
+| `day_state` | `[practitioner_id+location_id+date]` | yes | two devices offline each create the day's row (setting a delay) |
+| `cash_close` | `[location_id+date]` | yes | two devices offline each close the same day (`conflict_already_exists`) |
+| `visit_form_data` | `[visit_id+form_definition_id]` | yes | two devices offline each start the visit's form (`conflict_already_exists`) |
+| `prescriptions` | `visit_id` | yes | two devices offline each write the visit's prescription (`conflict_visit_has_prescription`) |
+| `message_templates` | `key` | yes | two devices offline each save the first override of one template (`conflict_already_exists` on the server's `[org_id+key]`) |
+| `prescriptions` | `[location_id+issued_year+series+number]` | no | numbers are minted only inside the minting device's own series, and the server refuses any other series (`series_mismatch`) |
+| `invoices` | `[location_id+issued_year+series+number]` | no | as prescriptions' number |
+| `payments` | `[location_id+series+receipt_number]` | no | as prescriptions' number |
+| `users` | `phone` | no | `users` is not a syncable table; never pulled |
+| `audit_log` | `seq` | no | not syncable; never pulled |
+
+The primary key (`id`) of every store is not a collision: a pulled row
+with a local row's id *is* that row, and the upsert overwrites it.
+`sync_ops`, `sync_review` and `device` are never pulled. The three
+number-series indexes cannot collide in normal operation. If one ever
+did, `applyPulledRow` handles it generically, as (a) or (b).
+`web/src/sync/pullCollisions.test.ts` covers each "yes" row, both after
+the server's rejection and with the create still queued.
+
+**Why the server's version wins.** The server already decided. It holds
+the same unique constraint and accepted the other row, so the local row
+can never be accepted under that key. Keeping it would mean either never
+applying the pulled row (and diverging from the server forever) or
+holding the pull up until a person resolves it, which is the wedge this
+replaces. The brief's "never lose data" is kept by the review row: the
+displaced row and its children are preserved in full in its payload, and
+the sheet tells the assistant what to re-enter.
+
+---
+
 ## Sources
 
 - `docs/reference/clintra-cli-brief.md` — the CLI working brief itself,
