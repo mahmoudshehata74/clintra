@@ -64,6 +64,8 @@ const AUDITED_ENTITIES = new Set([
   "prescriptions",
   "prescription_items",
   "practitioners",
+  "messages",
+  "message_templates",
 ]);
 
 function payloadOf(row: Pick<AuditLog, "before" | "after">): Record<string, unknown> | null {
@@ -178,7 +180,12 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         if (row.entity === "prescription_items") {
           return itemPrescriptionOf(row)?.patient_id;
         }
-        if (row.entity === "visits" || row.entity === "invoices" || row.entity === "prescriptions") {
+        if (
+          row.entity === "visits" ||
+          row.entity === "invoices" ||
+          row.entity === "prescriptions" ||
+          row.entity === "messages"
+        ) {
           const patientId = payloadOf(row)?.patient_id;
           return typeof patientId === "string" ? patientId : undefined;
         }
@@ -207,12 +214,14 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
           return "";
         }
         // A prescription's line names its patient, never a drug, its
-        // instructions or the diagnosis (as its verb, domain/auditVerb.ts).
+        // instructions or the diagnosis, and a message's never its body or
+        // phone (as their verbs, domain/auditVerb.ts).
         if (
           row.entity === "visits" ||
           row.entity === "invoices" ||
           row.entity === "prescriptions" ||
-          row.entity === "prescription_items"
+          row.entity === "prescription_items" ||
+          row.entity === "messages"
         ) {
           const patientId = patientIdOf(row);
           return patientId !== undefined ? (patientsById.get(patientId)?.full_name ?? "") : "";

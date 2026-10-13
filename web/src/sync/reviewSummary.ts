@@ -13,6 +13,8 @@ const ENTITY_LABELS: Record<string, string> = {
   membership_locations: "فرع موظف",
   membership_practitioners: "دكتور تابع لموظف",
   memberships: "موظف",
+  message_templates: "قالب رسالة",
+  messages: "رسالة",
   patients: "مريض",
   payments: "دفعة",
   practitioners: "بيانات طبيب",
@@ -41,6 +43,9 @@ const REASON_LABELS: Record<string, string> = {
   prescription_printed: "الوصفة دي اتطبعت، مينفعش تتعدّل",
   practitioner_not_editable: "بيانات الطبيب دي مينفعش تتغيّر من الجهاز، غير الاسم واللقب ورقم النقابة",
   practitioner_profile_invalid: "بيانات الطبيب دي ناقصة أو غلط: الاسم مطلوب ورقم النقابة 50 حرف بالكتير",
+  message_immutable: "الرسالة دي اتسجّلت ومينفعش تتغيّر أو تتمسح، غير علامة الإرسال",
+  message_invalid: "الرسالة دي ناقصة أو غلط: لازم يكون ليها نص ورقم موبايل صحيح",
+  template_invalid: "القالب ده مش صالح: لازم يكون ليه نص، 4000 حرف بالكتير",
   conflict: "فيه تعارض في البيانات",
 };
 
