@@ -1,5 +1,19 @@
 import { expect, test, type Page } from "@playwright/test";
-import { AUTH, gotoSeededDay, labeledRowValue, PATIENTS, rowFor, S, selectPractitioner, SIDEBAR, SLOTS_DR } from "./support";
+import {
+  ASSISTANT_NAME,
+  AUTH,
+  gotoSeededDay,
+  invoiceHead,
+  invoicePayments,
+  invoiceTotals,
+  labeledRowValue,
+  PATIENTS,
+  rowFor,
+  S,
+  selectPractitioner,
+  SIDEBAR,
+  SLOTS_DR,
+} from "./support";
 
 // Neutralise window.print so clicking a print action leaves the print view
 // mounted (printTarget stays set) for assertions, instead of the afterprint
@@ -48,18 +62,26 @@ test("completing a visit produces an invoice with number, status, items and tota
   await expect(dialog.locator("bdi.ltr-run").first()).toContainText(/\d/);
   // Status pill — a brand-new invoice is unpaid.
   await expect(dialog.getByText(S.invoiceStatusUnpaid)).toBeVisible();
-  // Items table: leading header and the completed visit's service line.
-  await expect(dialog.getByText(S.invoiceItemLabel)).toBeVisible();
+  // Items table: the `.tab` headers and the completed visit's service line.
+  await expect(dialog.getByRole("columnheader")).toHaveText([
+    S.invoiceItemLabel,
+    S.invoiceItemQtyLabel,
+    S.invoiceItemUnitPriceLabel,
+    S.invoiceItemTotalLabel,
+  ]);
   await expect(dialog.getByText("استشارة متابعة")).toBeVisible();
   // Totals block.
-  await expect(dialog.getByText(S.invoiceTotalLabel)).toBeVisible();
-  await expect(dialog.getByText(S.invoicePaidLabel)).toBeVisible();
-  await expect(dialog.getByText(S.invoiceRemainingLabel)).toBeVisible();
+  const totals = invoiceTotals(dialog);
+  await expect(totals.getByText(S.invoiceTotalLabel, { exact: true })).toBeVisible();
+  await expect(totals.getByText(S.invoicePaidLabel, { exact: true })).toBeVisible();
+  await expect(totals.getByText(S.invoiceRemainingLabel, { exact: true })).toBeVisible();
+  // `.runrow .count`: when it was created, and by whom (the assistant completed the visit).
+  await expect(dialog.getByText(new RegExp(`^${S.invoiceCreatedPrefix} \\d{2}:\\d{2} · ${ASSISTANT_NAME}$`))).toBeVisible();
 });
 
 test("a partial payment flips status to partial and turns the remaining row amber", async ({ page }) => {
   const dialog = await completeAndOpenInvoice(page);
-  const total = parsePounds(await labeledRowValue(dialog, S.invoiceTotalLabel));
+  const total = parsePounds(await labeledRowValue(invoiceTotals(dialog), S.invoiceTotalLabel));
 
   // Not exact: the button's own accessible name now also carries the amount due.
   await dialog.getByRole("button", { name: S.recordPaymentAction }).click();
@@ -81,7 +103,7 @@ test("a partial payment flips status to partial and turns the remaining row ambe
 
 test("paying the remainder flips status to paid and drops the amber remaining emphasis", async ({ page }) => {
   const dialog = await completeAndOpenInvoice(page);
-  const total = parsePounds(await labeledRowValue(dialog, S.invoiceTotalLabel));
+  const total = parsePounds(await labeledRowValue(invoiceTotals(dialog), S.invoiceTotalLabel));
 
   // First half.
   await dialog.getByRole("button", { name: S.recordPaymentAction }).click();
@@ -108,7 +130,7 @@ test("paying the remainder flips status to paid and drops the amber remaining em
 
 test("voiding is disabled once a payment exists, with the reason shown", async ({ page }) => {
   const dialog = await completeAndOpenInvoice(page);
-  const total = parsePounds(await labeledRowValue(dialog, S.invoiceTotalLabel));
+  const total = parsePounds(await labeledRowValue(invoiceTotals(dialog), S.invoiceTotalLabel));
 
   await dialog.getByRole("button", { name: S.recordPaymentAction }).click();
   const payment = page.getByRole("dialog");
@@ -122,7 +144,7 @@ test("voiding is disabled once a payment exists, with the reason shown", async (
 
 test("the receipt print view shows the print-header note", async ({ page }) => {
   const dialog = await completeAndOpenInvoice(page);
-  const total = parsePounds(await labeledRowValue(dialog, S.invoiceTotalLabel));
+  const total = parsePounds(await labeledRowValue(invoiceTotals(dialog), S.invoiceTotalLabel));
 
   await dialog.getByRole("button", { name: S.recordPaymentAction }).click();
   const payment = page.getByRole("dialog");
@@ -130,7 +152,7 @@ test("the receipt print view shows the print-header note", async ({ page }) => {
   await payment.getByRole("button", { name: S.paymentConfirmButton, exact: true }).click();
 
   // Open the receipt print view for the recorded payment.
-  await page.getByRole("dialog").getByRole("button", { name: S.printReceiptAction, exact: true }).click();
+  await invoicePayments(page.getByRole("dialog")).getByRole("button", { name: S.printReceiptAction, exact: true }).click();
   await page.emulateMedia({ media: "print" });
   await expect(page.getByText(S.printHeaderWarning)).toBeVisible();
   await page.emulateMedia({ media: null });
@@ -138,12 +160,47 @@ test("the receipt print view shows the print-header note", async ({ page }) => {
 
 test("printing an invoice shows only the printed page — no app bar, rail or backdrop", async ({ page }) => {
   const dialog = await completeAndOpenInvoice(page);
-  await dialog.getByRole("button", { name: S.printInvoiceAction, exact: true }).click();
+  await invoiceHead(dialog).getByRole("button", { name: S.printInvoiceAction, exact: true }).click();
 
   await page.emulateMedia({ media: "print" });
   await expect(page.getByText(S.printHeaderWarning)).toBeVisible();
   await expect(page.getByRole("button", { name: AUTH.lockButtonLabel, exact: true })).toBeHidden();
   await expect(page.getByRole("button", { name: SIDEBAR.navDay, exact: true })).toBeHidden();
   await expect(page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true })).toBeHidden();
+  await page.emulateMedia({ media: null });
+});
+
+test("confirming a payment prints its receipt in the same tap, through the reprint's own page", async ({ page }) => {
+  const dialog = await completeAndOpenInvoice(page);
+  const total = parsePounds(await labeledRowValue(invoiceTotals(dialog), S.invoiceTotalLabel));
+
+  await dialog.getByRole("button", { name: S.recordPaymentAction }).click();
+  const payment = page.getByRole("dialog");
+  await expect(payment.getByRole("heading", { name: new RegExp(`^${S.paymentSheetTitle} · ${S.paymentSheetInvoiceConnector} INV-`) })).toBeVisible();
+  await expect(payment.getByLabel(S.paymentAmountPlaceholder, { exact: true })).toBeVisible();
+  await payment.getByRole("textbox").first().fill((total / 2).toFixed(2));
+  await payment.getByRole("button", { name: S.paymentConfirmButton, exact: true }).click();
+  await expect(page.getByText(S.invoiceStatusPartial)).toBeVisible();
+
+  // No reprint tapped: the receipt is already the printed page.
+  const receiptNumber = (await invoicePayments(page.getByRole("dialog")).getByText(/^RCP-\d+$/).innerText()).replace("RCP-", "");
+  await page.emulateMedia({ media: "print" });
+  await expect(page.getByText(S.paymentReceiptNumberPrefix, { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: receiptNumber, exact: true })).toBeVisible();
+  await page.emulateMedia({ media: null });
+});
+
+test("a refused payment prints nothing", async ({ page }) => {
+  const dialog = await completeAndOpenInvoice(page);
+  const total = parsePounds(await labeledRowValue(invoiceTotals(dialog), S.invoiceTotalLabel));
+
+  await dialog.getByRole("button", { name: S.recordPaymentAction }).click();
+  const payment = page.getByRole("dialog");
+  await payment.getByRole("textbox").first().fill((total + 1).toFixed(2));
+  await payment.getByRole("button", { name: S.paymentConfirmButton, exact: true }).click();
+  await expect(payment.getByText(S.paymentAmountExceedsRemainingError, { exact: true })).toBeVisible();
+
+  await page.emulateMedia({ media: "print" });
+  await expect(page.getByText(S.paymentReceiptNumberPrefix, { exact: true })).toHaveCount(0);
   await page.emulateMedia({ media: null });
 });

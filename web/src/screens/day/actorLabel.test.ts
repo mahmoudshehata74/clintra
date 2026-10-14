@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatActorLabel } from "./actorLabel";
+import { formatActorLabel, formatActorName } from "./actorLabel";
 import { Role } from "../../domain/role";
 import type { Membership, User } from "../../db/types";
 import { dayScreenStrings } from "./strings";
@@ -54,5 +54,17 @@ describe("formatActorLabel", () => {
 
   it("falls back to the unknown-actor string when the user is missing", () => {
     expect(formatActorLabel(membership({}), undefined)).toBe(dayScreenStrings.auditUnknownActor);
+  });
+});
+
+describe("formatActorName", () => {
+  it("reads the bare name, as the day rows and the audit log show it", () => {
+    expect(formatActorName(membership({}), user({}))).toBe("سارة حسن");
+    expect(formatActorName(membership({ role: Role.Owner }), user({ full_name: "أحمد المصري" }))).toBe("أحمد المصري");
+  });
+
+  it("reads an unknown actor when the membership or user is missing", () => {
+    expect(formatActorName(undefined, user({}))).toBe(dayScreenStrings.auditUnknownActor);
+    expect(formatActorName(membership({}), undefined)).toBe(dayScreenStrings.auditUnknownActor);
   });
 });

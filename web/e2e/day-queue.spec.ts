@@ -60,6 +60,7 @@ test("average consult minutes render in Western digits, and the expected-wait li
   // the pre-threshold "لسه بدري نحسب المتوقع" line. (That pre-threshold branch
   // needs a <2-completion fixture, which the demo seed never produces; it is
   // covered by the queueSummary unit tests.)
-  await expect(page.getByText(S.queueExpectedWaitPrefix, { exact: false }).first()).toBeVisible();
+  // `.qwait`: "متوقع" over the expected call time, a 24-hour clock time.
+  await expect(page.getByText(new RegExp(`^${S.queueExpectedCallPrefix}\\d{2}:\\d{2}$`)).first()).toBeVisible();
   await expect(page.getByText(S.queueExpectedWaitUnknown)).toHaveCount(0);
 });

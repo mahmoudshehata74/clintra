@@ -151,7 +151,7 @@ export function sidebar(page: Page): Locator {
 /** Open the audit log from the rail's "السجل" item and wait for its sheet. */
 export async function openAuditLog(page: Page): Promise<void> {
   await sidebar(page).getByRole("button", { name: SIDEBAR.navAudit, exact: true }).click();
-  await expect(page.getByRole("dialog").getByText(S.auditSheetTitle, { exact: false }).first()).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(S.auditSheetTitle, { exact: true })).toBeVisible();
 }
 
 /** Open the doctor's day from the rail's "شاشة الطبيب" item and wait for its day list. */
@@ -170,8 +170,8 @@ export async function selectPractitioner(page: Page, name: string): Promise<void
   await page.getByRole("button", { name, exact: true }).click();
 }
 
-/** Open the booking sheet from the floating action (slots mode: "حجز"). */
-export async function openBookingSheet(page: Page, label: string = S.bookingButtonLabel): Promise<void> {
+/** Open the booking sheet from the card's `.run` (slots mode: "احجز مريض جديد"). */
+export async function openBookingSheet(page: Page, label: string = S.bookingRunButtonLabel): Promise<void> {
   await page.getByRole("button", { name: label, exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
 }
@@ -240,6 +240,15 @@ export async function readClockTime(text: string | null): Promise<string> {
   }
   return match[0];
 }
+
+/**
+ * The invoice sheet's parts (InvoiceSheet.tsx's data-invoice-* hooks): its
+ * head (with "طباعة"), its totals (with "الإجمالي") and its payments (each
+ * with its own "طباعة") — the items table and the head share those words.
+ */
+export const invoiceHead = (scope: Locator) => scope.locator("[data-invoice-head]");
+export const invoiceTotals = (scope: Locator) => scope.locator("[data-invoice-totals]");
+export const invoicePayments = (scope: Locator) => scope.locator("[data-invoice-payments]");
 
 /** A day-grid row (SlotRow <li> / QueueRow <li>) that contains the given patient name. */
 export function rowFor(page: Page, patientName: string) {
@@ -747,7 +756,7 @@ export function parsePounds(text: string): number {
 }
 
 export async function recordHalfPayment(page: Page, dialog: ReturnType<Page["getByRole"]>) {
-  const total = parsePounds(await labeledRowValue(dialog, S.invoiceTotalLabel));
+  const total = parsePounds(await labeledRowValue(invoiceTotals(dialog), S.invoiceTotalLabel));
   // Not exact: the button's own accessible name now also carries the amount due.
   await dialog.getByRole("button", { name: S.recordPaymentAction }).click();
   const payment = page.getByRole("dialog");

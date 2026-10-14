@@ -145,11 +145,26 @@ describe("buildRxPrintModel", () => {
       {
         number: 1,
         name: "Diclofenac 50mg — Tablet",
-        dose: "قرص مرتين يوميًا · 7 أيام",
+        dose: {
+          instructions: "قرص مرتين يوميًا",
+          duration: "7 أيام",
+          dose: "قرص مرتين يوميًا · لمدة 7 أيام",
+          note: "يوقف مع أي ألم في المعدة",
+        },
         note: "يوقف مع أي ألم في المعدة",
       },
-      { number: 2, name: "Paracetamol 500mg", dose: "قرص عند الحاجة", note: null },
-      { number: 3, name: "Voltaren Gel 1% — Topical", dose: "دهان 3 مرات يوميًا · 14 يوم", note: null },
+      {
+        number: 2,
+        name: "Paracetamol 500mg",
+        dose: { instructions: "قرص عند الحاجة", duration: null, dose: "قرص عند الحاجة", note: null },
+        note: null,
+      },
+      {
+        number: 3,
+        name: "Voltaren Gel 1% — Topical",
+        dose: { instructions: "دهان 3 مرات يوميًا", duration: "14 يوم", dose: "دهان 3 مرات يوميًا · لمدة 14 يوم", note: null },
+        note: null,
+      },
     ]);
   });
 });

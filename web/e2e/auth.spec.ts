@@ -204,7 +204,7 @@ test("a half-open booking sheet is preserved under the lock and restored on unlo
   await gotoSeededDay(page);
   await selectPractitioner(page, SLOTS_DR);
 
-  await page.getByRole("button", { name: S.bookingButtonLabel, exact: true }).click();
+  await page.getByRole("button", { name: S.bookingRunButtonLabel, exact: true }).click();
   const sheet = page.getByRole("dialog");
   const search = sheet.getByPlaceholder(S.bookingSearchPlaceholder);
   await search.fill(PATIENTS.mona);

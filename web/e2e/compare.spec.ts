@@ -18,6 +18,7 @@ import {
   karimPrescriptionPreview,
   karimProfileFixture,
   karimWorkspaceWithHistory,
+  invoiceTotals,
   labeledRowValue,
   lockOverlay,
   login,
@@ -161,7 +162,7 @@ const SCREENS: readonly Screen[] = [
       await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
       await page.getByRole("menuitem", { name: S.invoiceMenuLabel, exact: true }).click();
       const invoice = page.getByRole("dialog");
-      const total = parsePounds(await labeledRowValue(invoice, S.invoiceTotalLabel));
+      const total = parsePounds(await labeledRowValue(invoiceTotals(invoice), S.invoiceTotalLabel));
       await invoice.getByRole("button", { name: S.recordPaymentAction }).click();
       const payment = page.getByRole("dialog").filter({ hasText: S.paymentMethodLabel });
       await payment.getByRole("textbox").first().fill(total.toFixed(2));

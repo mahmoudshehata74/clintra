@@ -1,5 +1,12 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
-import { AUTH, gotoSeededDay, PATIENTS, S, selectPractitioner, SIDEBAR, SLOTS_DR } from "./support";
+import { formatWeekdayFullDate } from "../src/domain/displayDate";
+import { addDaysToClinicDay } from "../src/domain/time";
+import { AUTH, gotoSeededDay, PATIENTS, S, SEEDED_DAY, selectPractitioner, SIDEBAR, SLOTS_DR } from "./support";
+
+// Not imported: the Playwright loader cannot import JSON without an import
+// attribute (see support.ts) — the printed footer's version, read the same way.
+const APP_VERSION = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as { version: string }).version;
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -65,4 +72,17 @@ test("the preview page is as wide as the prototype's print page allows, and carr
     return { page: pageEl.getBoundingClientRect().width, available };
   });
   expect(Math.abs(widths.page - Math.min(600, widths.available))).toBeLessThanOrEqual(1);
+});
+
+test("the page reads tomorrow without a comma, and its footer the print time and Clintra's version", async ({ page }) => {
+  await page.getByRole("button", { name: S.daySheetButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  const tomorrow = addDaysToClinicDay(SEEDED_DAY, 1);
+  await expect(dialog.getByText(`${formatWeekdayFullDate(tomorrow)} — 0 ${S.daySheetPatientCountUnit}`, { exact: true })).toBeVisible();
+  await expect(dialog.getByText(new RegExp(`^${S.printedAtPrefix} \\d{1,2} \\S+ \\d{2}:\\d{2}$`))).toBeVisible();
+  await expect(dialog.getByText(`Clintra v${APP_VERSION}`, { exact: true })).toBeVisible();
+  // `.print-header`: the ✎ before the note, on the prototype's yellow.
+  const note = dialog.getByText(`✎ ${S.printHeaderPlaceholder}`, { exact: true });
+  await expect(note).toHaveCSS("background-color", "rgb(255, 248, 225)");
+  await expect(note).toHaveCSS("color", "rgb(133, 109, 0)");
 });

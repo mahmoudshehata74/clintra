@@ -54,10 +54,10 @@ describe("describeAuditVerb", () => {
   });
 
   it.each([
-    [VisitStatus.Booked, VisitStatus.Cancelled, "ألغى الزيارة"],
-    [VisitStatus.Arrived, VisitStatus.Cancelled, "ألغى الزيارة"],
-    [VisitStatus.Booked, VisitStatus.NoShow, "سجّل غياب"],
-    [VisitStatus.InRoom, VisitStatus.NoShow, "سجّل غياب"],
+    [VisitStatus.Booked, VisitStatus.Cancelled, "ألغى الحجز"],
+    [VisitStatus.Arrived, VisitStatus.Cancelled, "ألغى الحجز"],
+    [VisitStatus.Booked, VisitStatus.NoShow, "علّم لم يحضر"],
+    [VisitStatus.InRoom, VisitStatus.NoShow, "علّم لم يحضر"],
     [VisitStatus.Confirmed, VisitStatus.Rescheduled, "نقل الميعاد"],
   ])("the same terminal verb applies regardless of the starting status: %s -> %s", (from, to, expected) => {
     const verb = describeAuditVerb({
@@ -146,7 +146,7 @@ describe("describeAuditVerb", () => {
   });
 
   it.each([
-    ["visits", "سجّل حجز"],
+    ["visits", "أنشأ حجز"],
     ["patients", "أضاف مريض"],
     ["invoices", "أنشأ فاتورة"],
     ["payments", "سجّل دفعة"],
@@ -166,7 +166,7 @@ describe("describeAuditVerb", () => {
       ["a session added", "care_plan_items", AuditAction.Create, null, { status: "planned", visit_id: null }, "أضاف جلسات للخطة"],
       ["a session skipped", "care_plan_items", AuditAction.Update, { status: "planned", visit_id: null }, { status: "skipped", visit_id: null }, "أجّل جلسة"],
       ["a session brought back", "care_plan_items", AuditAction.Update, { status: "skipped", visit_id: null }, { status: "planned", visit_id: null }, "رجّع جلسة"],
-      ["a session booked", "care_plan_items", AuditAction.Update, { status: "planned", visit_id: null }, { status: "planned", visit_id: "v1" }, "سجّل حجز"],
+      ["a session booked", "care_plan_items", AuditAction.Update, { status: "planned", visit_id: null }, { status: "planned", visit_id: "v1" }, "أنشأ حجز"],
       ["a booked session moved", "care_plan_items", AuditAction.Update, { status: "planned", visit_id: "v1" }, { status: "planned", visit_id: "v2" }, "نقل الميعاد"],
       ["a session freed by a cancel", "care_plan_items", AuditAction.Update, { status: "planned", visit_id: "v1" }, { status: "planned", visit_id: null }, "عدّل خطة رعاية"],
     ])("reads %s", (_label, entity, action, before, after, expected) => {
@@ -175,8 +175,8 @@ describe("describeAuditVerb", () => {
   });
 
   it("falls back to a generic create verb for an entity with no specific one", () => {
-    const verb = describeAuditVerb({ entity: "schedules", action: AuditAction.Create, before: null, after: { id: "x" } });
-    expect(verb).toBe("أنشأ (schedules)");
+    const verb = describeAuditVerb({ entity: "day_state", action: AuditAction.Create, before: null, after: { id: "x" } });
+    expect(verb).toBe("أنشأ (day_state)");
   });
 
   describe("visit_form_data", () => {
@@ -240,7 +240,7 @@ describe("describeAuditVerb", () => {
       before: visit({ status: VisitStatus.Booked }),
       after: null,
     });
-    expect(verb).toBe("حذف الزيارة");
+    expect(verb).toBe("حذف الحجز");
   });
 });
 
@@ -287,5 +287,39 @@ describe("describeAuditVerb: prescriptions", () => {
     for (const secret of ["Diclofenac", "قرص", "التهاب"]) {
       expect(verb).not.toContain(secret);
     }
+  });
+});
+
+describe("describeAuditVerb: settings", () => {
+  it.each<[string, AuditAction, Record<string, unknown> | null, Record<string, unknown> | null, string]>([
+    ["services", AuditAction.Create, null, { id: "s", name: "كشف", is_active: true }, "أضاف خدمة"],
+    ["services", AuditAction.Update, { is_active: true }, { is_active: false }, "وقّف خدمة"],
+    ["services", AuditAction.Update, { is_active: false }, { is_active: true }, "شغّل خدمة"],
+    ["services", AuditAction.Update, { is_active: true, name: "كشف" }, { is_active: true, name: "كشف عام" }, "عدّل خدمة"],
+    ["service_price_overrides", AuditAction.Create, null, { id: "o" }, "أضاف سعر خاص"],
+    ["service_price_overrides", AuditAction.Update, { price: 1 }, { price: 2 }, "عدّل سعر خاص"],
+    ["service_price_overrides", AuditAction.Delete, { id: "o" }, null, "شال سعر خاص"],
+    ["schedules", AuditAction.Update, { start_time: "09:00" }, { start_time: "10:00" }, "عدّل مواعيد العمل"],
+    ["users", AuditAction.Create, null, { id: "u", full_name: "منى" }, "أضاف موظف"],
+    ["memberships", AuditAction.Create, null, { id: "m" }, "حدّد صلاحية موظف"],
+    ["memberships", AuditAction.Update, { is_active: true, pin_hash: "a" }, { is_active: false, pin_hash: "a" }, "وقّف موظف"],
+    ["memberships", AuditAction.Update, { is_active: false, pin_hash: "a" }, { is_active: true, pin_hash: "a" }, "شغّل موظف"],
+    ["memberships", AuditAction.Update, { is_active: true, pin_hash: "a" }, { is_active: true, pin_hash: "b" }, "غيّر الرقم السري"],
+    ["memberships", AuditAction.Update, { is_active: true, pin_hash: "a", role: "assistant" }, { is_active: true, pin_hash: "a", role: "manager" }, "عدّل صلاحية موظف"],
+    ["membership_locations", AuditAction.Create, null, { id: "l" }, "حدّد فروع الموظف"],
+    ["membership_practitioners", AuditAction.Delete, { id: "p" }, null, "شال طبيب من نطاق الموظف"],
+  ])("reads a %s %s", (entity, action, before, after, expected) => {
+    expect(describeAuditVerb({ entity, action, before, after })).toBe(expected);
+  });
+
+  it("never names a PIN", () => {
+    const verb = describeAuditVerb({
+      entity: "memberships",
+      action: AuditAction.Update,
+      before: { is_active: true, pin_hash: "1234" },
+      after: { is_active: true, pin_hash: "5678" },
+    });
+    expect(verb).not.toContain("1234");
+    expect(verb).not.toContain("5678");
   });
 });

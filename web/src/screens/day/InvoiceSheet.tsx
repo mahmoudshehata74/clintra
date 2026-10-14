@@ -170,8 +170,11 @@ export default function InvoiceSheet({
     <>
       <div className="print:hidden">
         <Sheet onDismiss={onDismiss} size="lg">
-          {/* `.inv-head` */}
-          <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-[18px] py-[14px] text-on-dark">
+          {/* `.inv-head`. The data-invoice-* attributes are plain, non-visual
+              hooks (as SlotRow's data-slot-time): the head's "طباعة" and a
+              payment's "طباعة" share their wording, as do the items' and the
+              totals' "الإجمالي". */}
+          <div data-invoice-head className="sticky top-0 z-10 flex flex-wrap items-center gap-3 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-[18px] py-[14px] text-on-dark">
             <span className="font-mono text-sm font-bold tracking-[0.02em] text-on-dark tabular-nums">
               <Ltr>{formatInvoiceNumber(invoice)}</Ltr>
             </span>
@@ -235,7 +238,7 @@ export default function InvoiceSheet({
             </table>
 
             {/* `.totals` */}
-            <div className="flex flex-col gap-2 rounded-card border border-rule bg-field px-4 py-[14px]">
+            <div data-invoice-totals className="flex flex-col gap-2 rounded-card border border-rule bg-field px-4 py-[14px]">
               <div className="flex items-center justify-between text-[13.5px]">
                 <span className="font-semibold text-muted">{dayScreenStrings.invoiceTotalLabel}</span>
                 <span className="font-bold tabular-nums tracking-[-0.01em] text-text">
@@ -271,7 +274,7 @@ export default function InvoiceSheet({
             </div>
 
             {hasPayments && (
-              <div>
+              <div data-invoice-payments>
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.05em] text-muted">{dayScreenStrings.paymentsListHeading}</p>
                 <div className="flex flex-col gap-[6px]">
                   {payments.map((payment) => (

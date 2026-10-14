@@ -3,6 +3,7 @@ import type { Visit } from "../../db/types";
 import { VisitSource } from "../../domain/visitSource";
 import { VisitStatus } from "../../domain/visitStatus";
 import {
+  computeExpectedCallTime,
   computeExpectedWaitMinutes,
   computeQueueCellCounts,
   computeQueueExpectedFinishTime,
@@ -146,5 +147,20 @@ describe("computeQueueExpectedFinishTime", () => {
 
   it("is null when nobody is left to see", () => {
     expect(computeQueueExpectedFinishTime(0, 0, 11, NOW)).toBeNull();
+  });
+});
+
+describe("computeExpectedCallTime", () => {
+  const NOW = "2026-09-07T10:00:00.000Z"; // 13:00 Cairo (UTC+3 in September)
+
+  it("reads the expected wait as a 24-hour Cairo clock time (`.qwait` \"متوقع 13:22\")", () => {
+    // Two turns away at 11 minutes each.
+    expect(computeExpectedCallTime(5, 3, 11, NOW)).toBe("13:22");
+    expect(computeExpectedCallTime(9, 3, 11, NOW)).toBe("14:06");
+  });
+
+  it("reads now for a visit at or before the current turn", () => {
+    expect(computeExpectedCallTime(3, 3, 11, NOW)).toBe("13:00");
+    expect(computeExpectedCallTime(1, 3, 11, NOW)).toBe("13:00");
   });
 });

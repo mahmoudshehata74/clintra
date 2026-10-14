@@ -4,7 +4,7 @@ import { describeAuditVerb } from "../domain/auditVerb";
 import { id } from "../domain/id";
 import { effectiveBody, MESSAGE_TEMPLATES } from "../domain/messageTemplates";
 import { Role } from "../domain/role";
-import { auditEntityFilterOf } from "../screens/day/auditLogFilters";
+import { auditGroupOf } from "../screens/day/auditLogFilters";
 import { describeSyncReview } from "../sync/reviewSummary";
 import { ClintraDatabase } from "./database";
 import { getDeviceBinding } from "./deviceRegistration";
@@ -210,7 +210,7 @@ describe("markMessageSent / unmarkMessageSent", () => {
     await expect(unmarkMessageSent(db, id())).rejects.toThrow(MessageError.MessageNotFound);
   });
 
-  it("read in the audit log by channel and mark, under the patients filter, never with the body or phone", async () => {
+  it("read in the audit log by channel and mark, under the visits filter, never with the body or phone", async () => {
     const message = await recorded();
     await markMessageSent(db, message.id);
     await unmarkMessageSent(db, message.id);
@@ -225,7 +225,7 @@ describe("markMessageSent / unmarkMessageSent", () => {
       expect(verb).not.toContain("كريم");
       expect(verb).not.toContain("1234567");
     }
-    expect(auditEntityFilterOf("messages")).toBe("patients");
+    expect(auditGroupOf("messages")).toBe("visits");
   });
 });
 
@@ -328,7 +328,7 @@ describe("saveTemplateBody / resetTemplate", () => {
       "رجّع قالب «تذكير جلسة خطة» للأصل",
     ]);
     expect(verbs.join()).not.toContain("سري");
-    expect(auditEntityFilterOf("message_templates")).toBe("settings");
+    expect(auditGroupOf("message_templates")).toBe("settings");
   });
 });
 

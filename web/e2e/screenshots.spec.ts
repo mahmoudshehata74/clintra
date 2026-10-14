@@ -5,6 +5,7 @@ import {
   emptySlotTiles,
   gotoRealDay,
   gotoSeededDay,
+  invoicePayments,
   labeledRowValue,
   lockOverlay,
   login,
@@ -333,7 +334,7 @@ test("@screenshot receipt-print", async ({ page }) => {
   await login(page);
   const dialog = await openFreshInvoice(page);
   await recordHalfPayment(page, dialog);
-  await page.getByRole("dialog").getByRole("button", { name: S.printReceiptAction, exact: true }).click();
+  await invoicePayments(page.getByRole("dialog")).getByRole("button", { name: S.printReceiptAction, exact: true }).click();
   await page.emulateMedia({ media: "print" });
   await expect(page.getByText(S.printHeaderWarning)).toBeVisible();
   await shoot(page, "receipt-print", true);

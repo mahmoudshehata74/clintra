@@ -389,12 +389,22 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
                 <span className={`h-[9px] w-[9px] rounded-full ${DOT_LOOK[tone]}`} aria-hidden="true" />
                 <div className="min-w-0">
                   <p className="text-[13.5px] font-semibold text-text">
-                    {verb}
-                    {subject && <> · {subject}</>}
+                    <span>{verb}</span>
+                    {subject && (
+                      <>
+                        {" · "}
+                        <span>{subject}</span>
+                      </>
+                    )}
                   </p>
                   <p className="mt-px text-[11.5px] text-muted">
                     <b className="font-semibold text-text">{actorName}</b>
-                    {context && <> · {context}</>}
+                    {context && (
+                      <>
+                        {" · "}
+                        <span>{context}</span>
+                      </>
+                    )}
                   </p>
                 </div>
                 <span className="whitespace-nowrap text-end text-[11px] text-faint tabular-nums">

@@ -132,11 +132,11 @@ test("the owner edits name, title and syndicate number; it persists, prints, and
   // Two edits on record, under the settings filter, and no field value in either line.
   await openAuditLog(page);
   const audit = page.getByRole("dialog");
-  await audit.getByRole("button", { name: S.auditFilterEntitySettings, exact: true }).click();
+  await audit.getByRole("button", { name: S.auditFilterSettings, exact: true }).click();
   await expect(audit.getByText(PROFILE_VERB, { exact: true })).toHaveCount(2);
   await expect(audit).not.toContainText(SYNDICATE);
   await expect(audit).not.toContainText(NEW_TITLE);
-  await audit.getByRole("button", { name: S.auditFilterEntityVisits, exact: true }).click();
+  await audit.getByRole("button", { name: S.auditFilterVisits, exact: true }).click();
   await expect(audit.getByText(PROFILE_VERB, { exact: true })).toHaveCount(0);
 });
 

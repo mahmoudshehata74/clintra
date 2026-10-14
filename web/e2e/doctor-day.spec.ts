@@ -14,6 +14,9 @@ import {
   OWNER_NAME,
   OWNER_PIN,
   PATIENTS,
+  PRACTITIONER_NAME,
+  PROFILE,
+  profileSheet,
   rowFor,
   S,
   SIDEBAR,
@@ -304,4 +307,17 @@ test("a failed note save says so, keeps the draft, and clears once a later save 
   await expect(hero(page).getByText(DOCTOR.quickNoteSaved, { exact: true })).toBeVisible();
   await expect(hero(page).getByRole("alert")).toHaveCount(0);
   await expect(note).toHaveValue("ضغط عالي جدًا");
+});
+
+test("the app bar names the doctor, and a booked row not yet arrived opens the patient's profile", async ({ page }) => {
+  await startAsOwner(page);
+  await bookFirstOpenSlot(page, PATIENTS.mona);
+  await openDoctorDay(page);
+  // `.appbar .who`: "د. أحمد المصري".
+  await expect(page.getByRole("banner").getByText(`${S.doctorPrefix} ${PRACTITIONER_NAME}`, { exact: true })).toBeVisible();
+
+  const mona = dayList(page).getByRole("listitem").filter({ hasText: PATIENTS.mona });
+  await expect(mona).toContainText(DOCTOR.briefTagNotArrived);
+  await mona.getByRole("button", { name: PROFILE.openProfile, exact: true }).click();
+  await expect(profileSheet(page).getByText(PATIENTS.mona, { exact: true }).first()).toBeVisible();
 });

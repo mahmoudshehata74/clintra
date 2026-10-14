@@ -252,7 +252,9 @@ describe("canCallIn / dayListAction", () => {
     expect(dayListAction(makeVisit({ status: VisitStatus.Completed }))).toBe("review");
     expect(dayListAction(makeVisit({ status: VisitStatus.InRoom }))).toBe("open");
     expect(dayListAction(makeVisit({ status: VisitStatus.Arrived }))).toBe("call");
-    expect(dayListAction(makeVisit({ status: VisitStatus.Booked }))).toBeNull();
+    expect(dayListAction(makeVisit({ status: VisitStatus.Booked }))).toBe("profile");
+    expect(dayListAction(makeVisit({ status: VisitStatus.Confirmed }))).toBe("profile");
+    expect(dayListAction(makeVisit({ status: VisitStatus.Cancelled }))).toBeNull();
   });
 });
 

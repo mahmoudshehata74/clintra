@@ -19,7 +19,7 @@ describe("printClinicLines", () => {
       phone: null,
     });
     expect(printClinicLines({ name: "عيادة النور" }, { name: "", address: "", phone: "+201001234567" }).details).toEqual([
-      "010 0123 4567",
+      "0100 123 4567",
     ]);
   });
 

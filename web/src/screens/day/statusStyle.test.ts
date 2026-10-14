@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { statusVisual } from "./statusStyle";
+import { arrivedWord, statusVisual, visitStatusLabel } from "./statusStyle";
 import { VisitStatus } from "../../domain/visitStatus";
 
 // Rewritten for the prototype's `.slot` row design (a left-edge accent
@@ -63,5 +63,36 @@ describe("statusVisual", () => {
 
   it("rescheduled has no treatment — the caller renders that slot as empty instead", () => {
     expect(statusVisual(VisitStatus.Rescheduled)).toBeNull();
+  });
+});
+
+describe("visitStatusLabel", () => {
+  it.each([
+    [VisitStatus.Booked, "محجوز"],
+    [VisitStatus.Confirmed, "اتأكد"],
+    [VisitStatus.Arrived, "وصل"],
+    [VisitStatus.InRoom, "في الكشف"],
+    [VisitStatus.Completed, "اكتمل"],
+    [VisitStatus.NoShow, "لم يحضر"],
+    [VisitStatus.Cancelled, "ملغي"],
+  ])("reads %s as the prototype's word %s", (status, word) => {
+    expect(visitStatusLabel(status)).toBe(word);
+  });
+
+  it("reads arrived as وصلت for a patient recorded as female, وصل otherwise", () => {
+    expect(visitStatusLabel(VisitStatus.Arrived, "female")).toBe("وصلت");
+    expect(visitStatusLabel(VisitStatus.Arrived, "male")).toBe("وصل");
+    expect(visitStatusLabel(VisitStatus.Arrived, null)).toBe("وصل");
+    expect(arrivedWord("female")).toBe("وصلت");
+    expect(arrivedWord(undefined)).toBe("وصل");
+  });
+
+  it("never genders any other status", () => {
+    expect(visitStatusLabel(VisitStatus.InRoom, "female")).toBe("في الكشف");
+    expect(visitStatusLabel(VisitStatus.Completed, "female")).toBe("اكتمل");
+  });
+
+  it("reads a status with no word of its own as its raw value", () => {
+    expect(visitStatusLabel(VisitStatus.Rescheduled)).toBe("rescheduled");
   });
 });
