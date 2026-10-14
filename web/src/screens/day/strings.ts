@@ -20,14 +20,17 @@ export const dayScreenStrings = {
   scheduleNotConfiguredHint: "تتسجل من الإعدادات",
   emptySlot: "الموعد فاضي",
   // Short status words shown on every booked row, so status is never
-  // communicated by colour alone.
+  // communicated by colour alone — the prototype's own words (`.slot .state`),
+  // read through statusStyle.ts's visitStatusLabel. Arrived follows the
+  // patient's recorded gender ("وصلت" for female, "وصل" otherwise).
   statusBooked: "محجوز",
   statusConfirmed: "اتأكد",
   statusArrived: "وصل",
-  statusInRoom: "جوه",
-  statusCompleted: "خلص",
-  statusCancelled: "اتلغى",
-  statusNoShow: "غاب",
+  statusArrivedFemale: "وصلت",
+  statusInRoom: "في الكشف",
+  statusCompleted: "اكتمل",
+  statusCancelled: "ملغي",
+  statusNoShow: "لم يحضر",
   // Shown under the patient name on a cancelled or no_show row: the slot is
   // free again, but the screen stays read-only so this is text only.
   slotAvailableAgain: "الميعاد ده فاضي تاني",
@@ -86,14 +89,22 @@ export const dayScreenStrings = {
   // `.qwho .meta`'s in_room phrase ("دخل من 7د") — gender-neutral, unlike
   // the prototype's own per-row sample text.
   queueInRoomMetaPrefix: "دخل من",
+  // `.qwho .meta`'s completed phrase ("خلصت 12:04"), following the patient's gender.
+  queueFinishedMeta: "خلص",
+  queueFinishedMetaFemale: "خلصت",
   // Marks the single waiting row that is next in line. The redesigned row
   // (QueueRow.tsx) carries this as visually-hidden text for assistive
   // technology, not a visible badge — the prototype's own `.qrow.next`
   // only recolours the qnum.
   queueNextBadge: "التالي",
   queueNextActionNumberPrefix: "نمرة",
-  // The floating action that opens the booking sheet.
+  // Before a practitioner's name wherever the prototype names the doctor
+  // ("د. أحمد المصري") — see doctorName.ts.
+  doctorPrefix: "د.",
+  // The booking sheet's title prefix ("حجز · 11:30 · د. أحمد المصري").
   bookingButtonLabel: "حجز",
+  // The slots card's `.run` that opens the booking sheet.
+  bookingRunButtonLabel: "احجز مريض جديد",
   // `.field label` above the search box — distinct from the placeholder
   // below, which stays its own (shorter) wording.
   bookingSearchLabel: "ابحث بالاسم أو التليفون",
@@ -106,8 +117,9 @@ export const dayScreenStrings = {
   // Shown only once the search query is non-empty and matches nothing. An
   // empty query renders no results and no message at all.
   bookingNoResults: "مفيش نتائج",
-  // Shown on a result row in place of a last-visit date, for a patient with
-  // no completed visit on record.
+  // `.rr .m`: "آخر زيارة {relative}" (the doctor's day's relative helper),
+  // or bookingFirstVisit for a patient with no completed visit on record.
+  bookingLastVisitPrefix: "آخر زيارة",
   bookingFirstVisit: "أول زيارة",
   bookingBackAction: "رجوع",
   // Shown on the slots step when the practitioner's schedule has no empty
@@ -133,9 +145,9 @@ export const dayScreenStrings = {
   // getMintingSeries); nothing is written.
   deviceSeriesUnknownError: "الجهاز ده محتاج يتصل بالإنترنت مرة واحدة قبل ما يطلّع فواتير أو إيصالات",
   // Prefixes the typed search text on the always-present "create new
-  // patient" row, e.g. "+ مريض جديد باسم «أحم»" — shown as the list's last
-  // row whether or not any real match was found, not only on zero results.
-  newPatientButtonPrefix: "+ مريض جديد باسم",
+  // patient" row (`.rr.new`), e.g. "＋ إضافة مريض جديد باسم «أحم»" — shown as
+  // the list's last row whether or not any real match was found.
+  newPatientButtonPrefix: "＋ إضافة مريض جديد باسم",
   newPatientNamePlaceholder: "اسم المريض",
   newPatientPhonePlaceholder: "رقم التليفون (اختياري)",
   // Toggle that disables and clears the phone field.
@@ -202,7 +214,6 @@ export const dayScreenStrings = {
   slotsCardSubtitleBookedSuffix: "حجوزات",
   slotsCardSubtitleFreeSuffix: "فاضية",
   // `.slot .time .until` — shown under the time, state-dependent.
-  untilArrivedPrefix: "وصل",
   untilSincePrefix: "من",
   // The empty slot's own free-text line and its dashed quick-book button —
   // distinct from emptySlot above, which stays the button's accessible name.
@@ -256,9 +267,9 @@ export const dayScreenStrings = {
   // The items table's leading column header.
   invoiceItemLabel: "البند",
   invoiceItemQtyLabel: "الكمية",
-  invoiceItemUnitPriceLabel: "سعر الوحدة",
+  invoiceItemUnitPriceLabel: "السعر",
   invoiceItemTotalLabel: "الإجمالي",
-  invoiceTotalLabel: "إجمالي الفاتورة",
+  invoiceTotalLabel: "الإجمالي",
   invoicePaidLabel: "المدفوع",
   invoiceRemainingLabel: "المتبقي",
   invoiceStatusUnpaid: "غير مدفوعة",
@@ -266,7 +277,9 @@ export const dayScreenStrings = {
   invoiceStatusPaid: "مدفوعة بالكامل",
   invoiceStatusVoid: "ملغاة",
   recordPaymentAction: "تسجيل دفعة",
-  printInvoiceAction: "إيصال الفاتورة",
+  printInvoiceAction: "طباعة",
+  // `.runrow .count`: "إنشاء 10:00 · سارة حسن".
+  invoiceCreatedPrefix: "إنشاء",
   voidInvoiceAction: "إلغاء الفاتورة",
   // Shown instead of an enabled voidInvoiceAction once any payment exists.
   voidInvoiceDisabledReason: "مفيش إلغاء بعد تسجيل دفعة",
@@ -276,11 +289,11 @@ export const dayScreenStrings = {
   paymentReceiptNumberPrefix: "إيصال رقم",
   printReceiptAction: "طباعة",
 
-  // The "تسجيل دفعة" prompt.
-  paymentSheetTitle: "تسجيل دفعة",
+  // The payment sheet (`.book-head h3`: "دفعة · فاتورة INV-2026-0142").
+  paymentSheetTitle: "دفعة",
   // `.book-head h3`'s own connector word, e.g. "دفعة · فاتورة INV-2026-0142".
   paymentSheetInvoiceConnector: "فاتورة",
-  paymentAmountPlaceholder: "المبلغ (جنيه)",
+  paymentAmountPlaceholder: "المبلغ",
   // `.field .hint` under the amount field.
   paymentAmountHint: "اكتب رقم أقل عشان دفعة جزئية تانية",
   paymentAmountInvalidError: "المبلغ ده مش صحيح",
@@ -297,7 +310,8 @@ export const dayScreenStrings = {
   // The note field's own example placeholder text (`.field .in` placeholder),
   // distinct from paymentNotePlaceholder above, which is the field's label.
   paymentNoteExamplePlaceholder: "مثلًا: باقي المبلغ الأسبوع الجاي",
-  paymentConfirmButton: "تسجيل",
+  // Records the payment, then prints its receipt (the reprint's own path).
+  paymentConfirmButton: "أكّد الدفعة واطبع إيصال",
   paymentToastMessage: "اتسجلت الدفعة",
   // Shown when undoing a payment reverses the invoice's paid/status but then
   // deleting the payment row itself fails — the assistant must know the
@@ -315,9 +329,12 @@ export const dayScreenStrings = {
   // `.close-summary`, `.close-grid`, `.close-cell`, `.match`, `.diff`, `.field`,
   // `.runrow`).
   cashCloseButtonLabel: "إغلاق الصندوق",
+  // `.c-head .badge` and `.sub` ("6:12 م · قبل ما تسيبي الاستقبال").
+  cashCloseHeadBadge: "آخر اليوم",
+  cashCloseHeadSubtitleSuffix: "قبل ما تسيبي الاستقبال",
   cashCloseSheetTitle: "إغلاق الصندوق",
-  // `.c-head h3`'s own prefix, combined with formatCairoDisplayDate(date) —
-  // e.g. "إقفال يوم الاثنين 7 سبتمبر".
+  // `.c-head h3`'s own prefix, combined with displayDate.ts's
+  // formatWeekdayDayMonth(date) — e.g. "إقفال يوم الاثنين 7 سبتمبر".
   cashCloseHeadTitlePrefix: "إقفال يوم",
   cashCloseSummaryHeading: "ملخّص اليوم",
   // `.close-grid`'s four cells.
@@ -335,9 +352,10 @@ export const dayScreenStrings = {
   // The eligible/warning result banner once an amount has been typed.
   cashCloseMatchedTitle: "مطابق تمامًا",
   cashCloseMatchedSubtitle: "مفيش فرق بين المتوقع والمحصّل",
-  // Existing label kept as-is per the task's own instruction (no printing
-  // added here, unlike the prototype's own ".run" button text).
-  cashCloseConfirmButton: "إغلاق",
+  // `.runrow .run`: closes the day, then prints its summary (DayCloseSummaryPrint.tsx).
+  cashCloseConfirmButton: "اقفل اليوم واطبع الملخص",
+  // The closed state's reprint of that summary.
+  cashClosePrintSummaryAction: "اطبع الملخص",
   cashCloseExportCsvAction: "تصدير CSV",
   // `.runrow .count`'s own prefix, e.g. "هيقفله سارة حسن".
   cashCloseClosesCountPrefix: "هيقفله",
@@ -349,6 +367,15 @@ export const dayScreenStrings = {
   cashCloseClosedAtLabel: "اتقفل الساعة",
   cashCloseClosedByLabel: "بواسطة",
   cashCloseNoDifferenceNoteLabel: "مفيش ملاحظة",
+
+  // The printed day summary (DayCloseSummaryPrint.tsx); its other lines
+  // reuse the cash close's own labels.
+  daySummarySeenLabel: "مرضى اتكشفوا",
+  daySummaryCancelledLabel: "ملغي",
+  daySummaryCollectedByPrefix: "المحصّل",
+  daySummaryTotalCollectedLabel: "إجمالي المحصّل",
+  daySummaryExpectedCashLabel: "الكاش المتوقع",
+  daySummaryClosedByLabel: "قفله",
 
   // The past-due gate (screen 7): visits still booked/confirmed whose time
   // has already passed — see pastDueVisits.ts. Shown as its own list above
@@ -389,8 +416,8 @@ export const dayScreenStrings = {
   queueSummaryCurrentTurnLabel: "الدور دلوقتي",
   queueSummaryWaitingLabel: "مستنيين",
   queueSummaryAverageLabel: "متوسط الكشف",
-  // Prefixes the expected-wait minutes on a waiting row, e.g. "متوقع دورك بعد ~٢٢ دقيقة".
-  queueExpectedWaitPrefix: "متوقع دورك بعد ~",
+  // `.qwait` on a waiting row: "متوقع" over the expected call time ("13:15").
+  queueExpectedCallPrefix: "متوقع",
   // Shown instead, on every waiting row, until at least two visits have
   // completed today — never extrapolated from a single data point.
   queueExpectedWaitUnknown: "لسه بدري نحسب المتوقع",
@@ -407,10 +434,9 @@ export const dayScreenStrings = {
   queueCardBadge: "الطابور",
   queueCardTitle: "الدور",
   queueCardSubtitle: "النمرة تلقائية للأقدم انتظار",
-  queueCallNextActionLabel: "استدعاء التالي",
   // `.qwait` — completed shows a duration, in_room a plain dash (the
   // prototype's own rendering: no elapsed time there), waiting reuses
-  // queueExpectedWaitPrefix/queueExpectedWaitUnknown above unchanged.
+  // queueExpectedCallPrefix/queueExpectedWaitUnknown above.
   queueWaitCompletedPrefix: "استغرق",
   queueWaitInRoomDash: "—",
   // `.runrow .count` on the queue card's footer.
@@ -440,26 +466,26 @@ export const dayScreenStrings = {
   // as a timeline of what happened rather than staff surveillance — see
   // domain/auditVerb.ts for how a row's verb is built from its before/after
   // diff, not just its entity name.
-  auditSheetTitle: "السجل",
+  auditSheetTitle: "سجل اليوم",
   // `.c-head .sub` — "{n} حدث", the count of events the list is showing.
   auditEventCountUnit: "حدث",
-  // The two filter groups' accessible names (role="group" has none of its own).
-  auditFilterEntityGroupLabel: "تصفية حسب النوع",
-  auditFilterActionGroupLabel: "تصفية حسب الإجراء",
+  // The filter group's accessible name (role="group" has none of its own).
+  auditFilterGroupLabel: "تصفية السجل",
   // `.aud-time`'s elapsed part, today only: "12:18 · من 3د".
   auditElapsedPrefix: "من",
   auditSheetEmpty: "مفيش حركة النهاردة",
+  // `.filts`: the prototype's four (auditLogFilters.ts's groups).
   auditFilterAll: "الكل",
-  auditFilterEntityVisits: "الزيارات",
-  auditFilterEntityPatients: "المرضى",
-  auditFilterEntityInvoices: "الفواتير",
-  auditFilterEntityPayments: "الدفعات",
-  auditFilterEntityCashClose: "إغلاق الصندوق",
-  auditFilterEntityVisitFormData: "الزيارة (النموذج)",
-  auditFilterEntitySettings: "الإعدادات",
-  auditFilterActionCreate: "إنشاء",
-  auditFilterActionUpdate: "تعديل",
-  auditFilterActionDelete: "حذف",
+  auditFilterVisits: "زيارات",
+  auditFilterInvoices: "فواتير",
+  auditFilterSettings: "إعدادات",
+  // `.c-head`: "اليوم" badge and "سجل اليوم" title.
+  auditSheetBadge: "اليوم",
+  // `.aud-txt .who`'s context after the actor: a slot visit's time, a
+  // queue visit's number, an invoice's number.
+  auditContextSlotPrefix: "موعد",
+  auditContextQueuePrefix: "نمرة",
+  auditContextInvoicePrefix: "فاتورة",
   // The actor label's role suffix, e.g. "سارة حسن (المساعد)" — see domain/role.ts's Role enum.
   roleOwner: "المالك",
   rolePractitioner: "الطبيب",
@@ -475,6 +501,9 @@ export const dayScreenStrings = {
   settingsTabsGroupLabel: "أقسام الإعدادات",
   settingsHoursHeadSubtitle: "مواعيد العمل الأسبوعية",
   settingsServicesHeadTitle: "خدمات العيادة",
+  // `.c-head .sub` on the services and staff tabs.
+  settingsServicesHeadActiveUnit: "خدمات نشطة",
+  settingsStaffHeadActiveUnit: "موظفين نشطين",
   settingsHoursTab: "مواعيد العمل",
   settingsServicesTab: "الخدمات",
   settingsStaffTab: "الموظفون",
@@ -539,7 +568,9 @@ export const dayScreenStrings = {
   staffLastOwnerError: "لازم يفضل مالك واحد نشط على الأقل",
   // The note box under the staff list when the last active owner's switch is locked.
   staffNoteLabel: "ملاحظة:",
-  staffLastOwnerNote: "العيادة لازم يكون ليها مالك واحد شغّال على الأقل",
+  staffLastOwnerNote: "مش قادر تخفّي المالك — العيادة لازم عندها مالك واحد شغّال على الأقل.",
+  // `.staff-name .role` after a membership tied to a practitioner ("المالك · طبيب").
+  staffPractitionerRoleSuffix: "طبيب",
   // `.runrow .count`: "حد أدنى: 1 مالك".
   staffMinimumPrefix: "حد أدنى:",
   staffMinimumOwner: "1 مالك",

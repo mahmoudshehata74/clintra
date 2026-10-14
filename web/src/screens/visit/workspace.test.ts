@@ -135,7 +135,7 @@ describe("summarizePatient", () => {
       initial: "ك",
       name: "كريم فتحي",
       age: 34,
-      phone: "011 1234 5678",
+      phone: "0111 234 5678",
       visitCount: "زيارتين",
       lastVisitRelative: "قبل 3 أسابيع",
     });
@@ -209,12 +209,27 @@ describe("prescription items", () => {
   });
 
   it("builds the dose line from instructions and duration, with the note apart", () => {
-    expect(rxDoseLine(item(1))).toEqual({ dose: "قرص مرتين يوميًا", note: null });
+    expect(rxDoseLine(item(1))).toEqual({ instructions: "قرص مرتين يوميًا", duration: null, dose: "قرص مرتين يوميًا", note: null });
     expect(rxDoseLine(item(1, { duration: "7 أيام", note: "بعد الأكل" }))).toEqual({
-      dose: "قرص مرتين يوميًا · 7 أيام",
+      instructions: "قرص مرتين يوميًا",
+      duration: "7 أيام",
+      dose: "قرص مرتين يوميًا · لمدة 7 أيام",
       note: "بعد الأكل",
     });
-    expect(rxDoseLine(item(1, { duration: " ", note: "" }))).toEqual({ dose: "قرص مرتين يوميًا", note: null });
+    expect(rxDoseLine(item(1, { duration: " ", note: "" }))).toEqual({
+      instructions: "قرص مرتين يوميًا",
+      duration: null,
+      dose: "قرص مرتين يوميًا",
+      note: null,
+    });
+  });
+
+  it("prefixes the duration with لمدة once, even when it was typed with one", () => {
+    expect(rxDoseLine(item(1, { duration: "لمدة 7 أيام" }))).toMatchObject({
+      duration: "7 أيام",
+      dose: "قرص مرتين يوميًا · لمدة 7 أيام",
+    });
+    expect(rxDoseLine(item(1, { duration: "لمدة" }))).toMatchObject({ duration: null, dose: "قرص مرتين يوميًا" });
   });
 });
 

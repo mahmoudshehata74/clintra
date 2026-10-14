@@ -15,7 +15,7 @@ import { resolveServicePrice } from "../../domain/pricing";
 import { generateTimeChoices } from "../../domain/schedule";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import type { ClinicDay, ClockTime } from "../../domain/time";
-import { addDaysToClinicDay, clockTimeInCairo, formatCairoDisplayDate, formatCairoDisplayDateParts } from "../../domain/time";
+import { addDaysToClinicDay, clockTimeInCairo, formatCairoDisplayDateParts, todayInCairo } from "../../domain/time";
 import { VisitSource } from "../../domain/visitSource";
 import { VisitStatus } from "../../domain/visitStatus";
 import {
@@ -32,6 +32,8 @@ import {
 } from "./newPatientForm";
 import { submitNewPatientForm } from "./newPatientSubmission";
 import { carePlanErrorMessage } from "../carePlan/carePlanModel";
+import { formatRelativeVisitTime } from "../doctor/doctorDay";
+import { withDoctorPrefix } from "./doctorName";
 import type { DayScheduleState } from "./scheduleState";
 import Sheet from "./Sheet";
 import SheetHeader from "./SheetHeader";
@@ -47,9 +49,10 @@ const OVERBOOK_STEP_MINUTES = 15;
 // last row.
 const RESULT_ROW_CLASS =
   "flex w-full flex-col px-[13px] py-[10px] text-start transition-colors duration-150 hover:bg-green-wash";
+// `.rr.new`: tinted green-wash at rest, the full wash on hover like `.rr`.
 const NEW_PATIENT_ROW_CLASS =
-  "flex w-full items-center px-[13px] py-[10px] text-start text-green transition-colors duration-150 " +
-  "hover:bg-[color-mix(in_srgb,var(--color-green-wash)_60%,transparent)]";
+  "flex w-full items-center px-[13px] py-[10px] text-start text-[13.5px] font-semibold text-green transition-colors duration-150 " +
+  "bg-[color-mix(in_srgb,var(--color-green-wash)_60%,transparent)] hover:bg-green-wash";
 
 // This task's own chip for a pickable time (slots, overbook): there is no
 // dedicated reference class for it (screen 4's only mockup shows the search
@@ -198,13 +201,20 @@ export default function BookingSheet({
     return resolveServicePrice(candidate, overrides, { practitionerId: practitioner.id, locationId });
   }
 
-  const chosenTime = step.kind === "confirm" ? step.time : null;
+  // The slot the sheet was opened from names the time until a patient is
+  // picked; after that, the confirm step's own time does.
+  const chosenTime =
+    step.kind === "confirm"
+      ? step.time
+      : (step.kind === "search" || step.kind === "new_patient") && presetTime
+        ? presetTime
+        : null;
   const sheetTitle =
     mode === "walk_in"
       ? dayScreenStrings.walkInButtonLabel
       : isQueueMode
         ? dayScreenStrings.addToQueueButtonLabel
-        : buildBookingSheetTitle(chosenTime, showPractitionerName ? practitioner.full_name : null);
+        : buildBookingSheetTitle(chosenTime, showPractitionerName ? withDoctorPrefix(practitioner.full_name) : null);
 
   const results = useLiveQuery(() => searchPatients(db, debouncedQuery), [debouncedQuery]) ?? [];
   const emptySlots = useMemo(
@@ -414,7 +424,9 @@ export default function BookingSheet({
                   <button key={patient.id} type="button" onClick={() => goToSlotsOrAutoConfirm(patient)} className={RESULT_ROW_CLASS}>
                     <span className="text-[13.5px] font-semibold text-text">{patient.full_name}</span>
                     <span className="mt-px text-[11px] text-muted">
-                      {lastVisitDate ? <Ltr>{formatCairoDisplayDate(lastVisitDate)}</Ltr> : dayScreenStrings.bookingFirstVisit}
+                      {lastVisitDate
+                        ? `${dayScreenStrings.bookingLastVisitPrefix} ${formatRelativeVisitTime(lastVisitDate, todayInCairo())}`
+                        : dayScreenStrings.bookingFirstVisit}
                       {patient.phone && (
                         <>
                           {" · "}

@@ -3,20 +3,15 @@ import type { Patient, Practitioner, Prescription, PrescriptionItem, Visit } fro
 import type { VisitFormFieldValues } from "../../db/visitForm";
 import { formatPrescriptionNumber } from "../../domain/numberSeries";
 import { practitionerTitleOf, syndicateNumberOf } from "../../domain/practitionerProfile";
+import { formatSlashDate } from "../../domain/slashDate";
 import { todayInCairo } from "../../domain/time";
 import type { PrintClinicLines } from "../day/printClinic";
 import { computeAge } from "../doctor/doctorDay";
-import { rxDoseLine, sortRxItems } from "../visit/workspace";
+import { rxDoseLine, sortRxItems, type RxDoseLine } from "../visit/workspace";
 import { prescriptionPrintStrings as T } from "./strings";
 
 // Pure derivations behind the printed prescription (reference screen 16).
 // None reads the database or the clock on its own.
-
-/** "2026-09-30" → "30 / 9 / 2026", `.rx-num`'s date. */
-export function formatRxDate(day: string): string {
-  const [year, month, date] = day.split("-").map(Number);
-  return `${date} / ${month} / ${year}`;
-}
 
 function nonEmpty(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? "";
@@ -28,8 +23,8 @@ export interface RxPrintDrug {
   number: number;
   /** `.n`: "name — form", or the name alone without a form. Rendered left to right. */
   name: string;
-  /** `.dose`: "instructions · duration". */
-  dose: string;
+  /** `.dose`: the instructions and the duration ("· لمدة {duration}", the duration in bold). */
+  dose: RxDoseLine;
   /** `.note`; null when empty. */
   note: string | null;
 }
@@ -89,15 +84,15 @@ export function buildRxPrintModel(input: RxPrintInput): RxPrintModel {
     doctorSpec: doctorSpec.title === null && doctorSpec.syndicateNumber === null ? null : doctorSpec,
     clinic: input.clinic,
     number: formatPrescriptionNumber(prescription),
-    date: formatRxDate(todayInCairo(issuedAt)),
+    date: formatSlashDate(todayInCairo(issuedAt)),
     patientName: patient?.full_name ?? "",
     age: computeAge(patient?.birth_year ?? null, issuedAt),
     diagnosis:
       prescription.printed_at !== null ? nonEmpty(prescription.diagnosis) : nonEmpty(input.visitForm.diagnosis),
     drugs: sortRxItems(input.items).map((item, index) => {
-      const { dose, note } = rxDoseLine(item);
+      const dose = rxDoseLine(item);
       const form = nonEmpty(item.form);
-      return { number: index + 1, name: form ? `${item.name} — ${form}` : item.name, dose, note };
+      return { number: index + 1, name: form ? `${item.name} — ${form}` : item.name, dose, note: dose.note };
     }),
   };
 }

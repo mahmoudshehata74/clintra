@@ -10,7 +10,7 @@ export const registrationStrings = {
   codePlaceholder: "CLT-XXXX-XXXX-XXXX-XXXX",
   // `.field .hint` under the code.
   codeHint: "من رسالة التفعيل اللي وصلتك",
-  submitLabel: "تفعيل الجهاز",
+  submitLabel: "فعّل الجهاز",
   submittingLabel: "جاري التفعيل…",
   // The same text db/registration.ts's local phone check returns; see activationForm.ts.
   invalidPhone: "رقم الموبايل غير صالح",

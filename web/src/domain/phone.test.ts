@@ -16,8 +16,25 @@ describe("normalizeEgyptianPhone", () => {
 });
 
 describe("formatEgyptianPhoneForDisplay", () => {
-  it("formats a mobile E.164 number into locally grouped digits", () => {
-    expect(formatEgyptianPhoneForDisplay("+201001234567")).toBe("010 0123 4567");
+  // Mobile numbers read 4-3-4, as the prototype writes them; landlines keep
+  // their area code apart from the subscriber number.
+  it.each([
+    ["+201001234567", "0100 123 4567"],
+    ["+201112345678", "0111 234 5678"],
+    ["+201223456789", "0122 345 6789"],
+    ["+201551234567", "0155 123 4567"],
+  ])("formats the mobile %s as %s", (e164, expected) => {
+    expect(formatEgyptianPhoneForDisplay(e164)).toBe(expected);
+  });
+
+  it.each([
+    ["+20225551234", "02 2555 1234"],
+    ["+20221234567", "02 2123 4567"],
+    ["+2031234567", "03 123 4567"],
+    ["+20501234567", "050 123 4567"],
+    ["+20882345678", "088 234 5678"],
+  ])("formats the landline %s as %s", (e164, expected) => {
+    expect(formatEgyptianPhoneForDisplay(e164)).toBe(expected);
   });
 
   it("formats a Cairo landline E.164 number with its area code separated", () => {

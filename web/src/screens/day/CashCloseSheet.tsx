@@ -11,14 +11,15 @@ import { InvoiceStatus, type CashClose, type InvoiceItem, type Patient, type Sch
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitNoShow } from "../../db/visitCancel";
 import { parsePoundsToPiastres, type Piastres } from "../../domain/money";
-import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo, type ClinicDay } from "../../domain/time";
+import { formatWeekdayDayMonth } from "../../domain/displayDate";
+import { clockTimeInCairo, todayInCairo, type ClinicDay } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import { formatMoneyAmount } from "../money";
 import { buildDayInvoicesCsv, csvFileNameForDay, type CsvInvoiceRow } from "./cashCloseCsv";
 import { validateCashCloseForm } from "./cashCloseForm";
 import { computePastDueVisits, pastDueVisitWhenLabel } from "./pastDueVisits";
 import Sheet from "./Sheet";
-import SheetHeader from "./SheetHeader";
+import SheetCardHead from "./SheetCardHead";
 import { dayScreenStrings } from "./strings";
 import type { UndoAction } from "./undoAction";
 
@@ -27,7 +28,10 @@ interface CashCloseSheetProps {
   orgId: string;
   date: ClinicDay;
   onDismiss: () => void;
+  /** After a successful close only: the caller prints the day's summary (DayCloseSummaryPrint.tsx). */
   onClosed: () => void;
+  /** The closed state's reprint of that summary. */
+  onPrintSummary: () => void;
   /** Reported up so DayScreen can show the same toast+undo every other no-show mark uses. */
   onNoShowMarked: (undo: UndoAction) => void;
   /** Closes this sheet and opens the move sheet for the given visit — the same replace-one-sheet-with-another pattern the invoice sheet's "record payment" uses. */
@@ -55,7 +59,7 @@ const EMPTY_SHEET_DATA: SheetData = {
 
 const CURRENCY_UNIT = dayScreenStrings.tileCurrencyUnit;
 
-/** `.close-cell` — one tile of the summary grid, its value tinted eligible/warning or left neutral. */
+/** `.close-cell` — one tile of the summary grid, label and value inline as the prototype renders its two spans, the value tinted eligible/warning or left neutral. */
 function CloseCell({
   label,
   value,
@@ -70,8 +74,8 @@ function CloseCell({
   const valueToneClass = tone === "match" ? "text-eligible" : tone === "diff" ? "text-warning" : "text-text";
   return (
     <div className="rounded-control border border-rule bg-card px-3.5 py-3">
-      <span className="block text-[11px] font-semibold text-muted">{label}</span>
-      <span className={`mt-0.5 block text-[19px] font-bold tabular-nums tracking-[-0.01em] ${valueToneClass}`}>
+      <span className="text-[11px] font-semibold text-muted">{label}</span>{" "}
+      <span className={`text-[19px] font-bold tabular-nums tracking-[-0.01em] ${valueToneClass}`}>
         <Ltr>{value}</Ltr>
         {unit && <i className="ms-1 text-[11px] font-semibold not-italic text-faint">{unit}</i>}
       </span>
@@ -91,6 +95,7 @@ export default function CashCloseSheet({
   date,
   onDismiss,
   onClosed,
+  onPrintSummary,
   onNoShowMarked,
   onRequestMove,
 }: CashCloseSheetProps) {
@@ -248,179 +253,198 @@ export default function CashCloseSheet({
     }
   }
 
-  const headTitle = `${dayScreenStrings.cashCloseHeadTitlePrefix} ${formatCairoDisplayDate(date)}`;
+  // `.c-head`: "آخر اليوم", "إقفال يوم الاثنين 7 سبتمبر", "{time} · قبل ما تسيبي الاستقبال".
+  const head = (
+    <SheetCardHead
+      badge={dayScreenStrings.cashCloseHeadBadge}
+      title={`${dayScreenStrings.cashCloseHeadTitlePrefix} ${formatWeekdayDayMonth(date)}`}
+      subtitle={
+        <>
+          <Ltr>{clockTimeInCairo(new Date().toISOString())}</Ltr> · {dayScreenStrings.cashCloseHeadSubtitleSuffix}
+        </>
+      }
+      onDismiss={onDismiss}
+    />
+  );
 
   if (data.existingClose) {
     const closedClose = data.existingClose;
     return (
+      <div className="print:hidden">
+        <Sheet onDismiss={onDismiss}>
+          {head}
+          <SheetPanelBody>
+            <div className="rounded-card bg-field p-5">
+              <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
+                {dayScreenStrings.cashCloseSummaryHeading}
+              </p>
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
+                <CloseCell label={dayScreenStrings.cashCloseExpectedLabel} value={formatMoneyAmount(closedClose.total_expected)} unit={CURRENCY_UNIT} />
+                <CloseCell
+                  label={dayScreenStrings.cashCloseGridCollectedLabel}
+                  value={formatMoneyAmount(closedClose.total_collected)}
+                  unit={CURRENCY_UNIT}
+                  tone={closedClose.difference === 0 ? "match" : "diff"}
+                />
+                <CloseCell
+                  label={dayScreenStrings.cashCloseDifferenceLabel}
+                  value={formatMoneyAmount(closedClose.difference)}
+                  unit={CURRENCY_UNIT}
+                  tone={closedClose.difference === 0 ? "match" : "diff"}
+                />
+                <CloseCell label={dayScreenStrings.cashCloseClosedAtLabel} value={clockTimeInCairo(closedClose.closed_at)} />
+              </div>
+            </div>
+            <p className="text-sm text-muted">
+              {dayScreenStrings.cashCloseClosedByLabel} <span className="font-semibold text-text">{data.closedByName ?? ""}</span>
+            </p>
+            <p className="text-sm text-muted">{closedClose.difference_note ?? dayScreenStrings.cashCloseNoDifferenceNoteLabel}</p>
+          </SheetPanelBody>
+          <SheetPanelFoot>
+            {/* Keyed in both branches: the open form renders first, before
+                this location/day's cash_close row has loaded, so without keys
+                React would reuse the open form's primary confirm button as
+                this one and its colours would visibly transition from the
+                primary look to the secondary one (a faded "ghost" button). */}
+            <Button key="print-summary" variant="primary" onClick={onPrintSummary}>
+              {dayScreenStrings.cashClosePrintSummaryAction}
+            </Button>
+            <Button key="export-csv" variant="secondary" onClick={handleExportCsv}>
+              {dayScreenStrings.cashCloseExportCsvAction}
+            </Button>
+          </SheetPanelFoot>
+        </Sheet>
+      </div>
+    );
+  }
+
+  return (
+    <div className="print:hidden">
       <Sheet onDismiss={onDismiss}>
-        <SheetHeader title={headTitle} onDismiss={onDismiss} />
+        {head}
         <SheetPanelBody>
+          {pastDueVisits.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-card border border-warning/40 bg-warning-wash p-3">
+              <p className="text-[13px] font-bold text-warning">{dayScreenStrings.cashClosePastDueSectionTitle}</p>
+              <ul className="flex flex-col gap-2">
+                {pastDueVisits.map((visit) => {
+                  const patient = data.patientsById.get(visit.patient_id);
+                  const service = visit.service_id ? data.servicesById.get(visit.service_id) : undefined;
+                  return (
+                    <li key={visit.id} className="flex items-center justify-between gap-2 rounded-control border border-rule bg-card px-3 py-2 text-[13px]">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-text">
+                          <Ltr>{pastDueVisitWhenLabel(visit, dayScreenStrings.cashClosePastDueQueueNumberPrefix)}</Ltr> — {patient?.full_name ?? ""}
+                        </p>
+                        {service && <p className="truncate text-[11.5px] text-muted">{service.name}</p>}
+                      </div>
+                      <div className="flex shrink-0 gap-1.5">
+                        <Button variant="danger" size="sm" onClick={() => handleMarkNoShow(visit)}>
+                          {dayScreenStrings.cashClosePastDueNoShowAction}
+                        </Button>
+                        <Button variant="secondary" size="sm" onClick={() => onRequestMove(visit)}>
+                          {dayScreenStrings.cashClosePastDueMoveAction}
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              <Button variant="outline" disabled={isMarkingAll} onClick={handleMarkAllNoShow}>
+                {dayScreenStrings.cashClosePastDueBulkAction}
+              </Button>
+              <label className="flex items-center gap-2 text-[12.5px] text-muted">
+                <input
+                  type="checkbox"
+                  checked={acknowledgedPastDue}
+                  onChange={(event) => {
+                    setAcknowledgedPastDue(event.target.checked);
+                    setPastDueError(null);
+                  }}
+                />
+                {dayScreenStrings.cashClosePastDueAcknowledgeLabel}
+              </label>
+              {pastDueError && <p className="text-[12.5px] text-danger">{pastDueError}</p>}
+            </div>
+          )}
+
+          {/* `.close-summary` */}
           <div className="rounded-card bg-field p-5">
             <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
               {dayScreenStrings.cashCloseSummaryHeading}
             </p>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
-              <CloseCell label={dayScreenStrings.cashCloseExpectedLabel} value={formatMoneyAmount(closedClose.total_expected)} unit={CURRENCY_UNIT} />
+              <CloseCell label={dayScreenStrings.cashCloseExpectedLabel} value={formatMoneyAmount(expected)} unit={CURRENCY_UNIT} />
               <CloseCell
                 label={dayScreenStrings.cashCloseGridCollectedLabel}
-                value={formatMoneyAmount(closedClose.total_collected)}
-                unit={CURRENCY_UNIT}
-                tone={closedClose.difference === 0 ? "match" : "diff"}
+                value={parsedCollected.ok ? formatMoneyAmount(parsedCollected.value) : "—"}
+                unit={parsedCollected.ok ? CURRENCY_UNIT : undefined}
+                tone={difference === null ? undefined : difference === 0 ? "match" : "diff"}
               />
-              <CloseCell
-                label={dayScreenStrings.cashCloseDifferenceLabel}
-                value={formatMoneyAmount(closedClose.difference)}
-                unit={CURRENCY_UNIT}
-                tone={closedClose.difference === 0 ? "match" : "diff"}
-              />
-              <CloseCell label={dayScreenStrings.cashCloseClosedAtLabel} value={clockTimeInCairo(closedClose.closed_at)} />
+              <CloseCell label={dayScreenStrings.cashCloseGridInvoicesLabel} value={paidInvoiceCount} unit={dayScreenStrings.cashCloseGridInvoicesUnit} />
+              <CloseCell label={dayScreenStrings.slabNoShowCellLabel} value={noShowCountToday} />
             </div>
           </div>
-          <p className="text-sm text-muted">
-            {dayScreenStrings.cashCloseClosedByLabel} <span className="font-semibold text-text">{data.closedByName ?? ""}</span>
-          </p>
-          <p className="text-sm text-muted">{closedClose.difference_note ?? dayScreenStrings.cashCloseNoDifferenceNoteLabel}</p>
+
+          <Field label={dayScreenStrings.cashCloseActualCashFieldLabel} id="cash-close-collected" error={collectedError ?? undefined}>
+            <TextInput
+              variant="amount"
+              inputMode="decimal"
+              value={totalCollectedInput}
+              onChange={(event) => {
+                setTotalCollectedInput(event.target.value);
+                setCollectedError(null);
+              }}
+              placeholder={dayScreenStrings.cashCloseCollectedPlaceholder}
+            />
+          </Field>
+
+          {difference !== null &&
+            (difference === 0 ? (
+              <div className="flex items-center gap-2.5 rounded-control border border-green-line bg-[color-mix(in_srgb,var(--color-eligible)_8%,transparent)] px-3.5 py-3">
+                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-eligible text-sm font-bold text-white">✓</span>
+                <div>
+                  <p className="text-[13.5px] font-bold text-eligible">{dayScreenStrings.cashCloseMatchedTitle}</p>
+                  <p className="text-[11.5px] text-muted">{dayScreenStrings.cashCloseMatchedSubtitle}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2.5 rounded-control border border-[color-mix(in_srgb,var(--color-warning)_40%,transparent)] bg-warning-wash px-3.5 py-3">
+                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-warning text-sm font-bold text-white">!</span>
+                <p className="text-[13.5px] font-bold text-warning">
+                  {dayScreenStrings.cashCloseDifferenceLabel} <Ltr>{formatMoneyAmount(difference)}</Ltr> {CURRENCY_UNIT}
+                </p>
+              </div>
+            ))}
+
+          {difference !== null && difference !== 0 && (
+            <Field label={dayScreenStrings.cashCloseNotePlaceholder} id="cash-close-note" error={noteError ?? undefined}>
+              <TextInput
+                type="text"
+                value={note}
+                onChange={(event) => {
+                  setNote(event.target.value);
+                  setNoteError(null);
+                }}
+              />
+            </Field>
+          )}
         </SheetPanelBody>
+
         <SheetPanelFoot>
-          {/* Keyed in both branches: the open form renders first, before
-              this location/day's cash_close row has loaded, so without keys
-              React would reuse the open form's primary confirm button as
-              this one and its colours would visibly transition from the
-              primary look to the secondary one (a faded "ghost" button). */}
+          <Button key="confirm" variant="primary" className="flex-1" disabled={isSubmitting} onClick={handleConfirm}>
+            {dayScreenStrings.cashCloseConfirmButton}
+          </Button>
           <Button key="export-csv" variant="secondary" onClick={handleExportCsv}>
             {dayScreenStrings.cashCloseExportCsvAction}
           </Button>
+          {actingUser && (
+            <span className="ms-auto self-center text-[11.5px] text-muted">
+              {dayScreenStrings.cashCloseClosesCountPrefix} <b className="font-bold text-text">{actingUser.full_name}</b>
+            </span>
+          )}
         </SheetPanelFoot>
       </Sheet>
-    );
-  }
-
-  return (
-    <Sheet onDismiss={onDismiss}>
-      <SheetHeader title={headTitle} onDismiss={onDismiss} />
-      <SheetPanelBody>
-        {pastDueVisits.length > 0 && (
-          <div className="flex flex-col gap-2 rounded-card border border-warning/40 bg-warning-wash p-3">
-            <p className="text-[13px] font-bold text-warning">{dayScreenStrings.cashClosePastDueSectionTitle}</p>
-            <ul className="flex flex-col gap-2">
-              {pastDueVisits.map((visit) => {
-                const patient = data.patientsById.get(visit.patient_id);
-                const service = visit.service_id ? data.servicesById.get(visit.service_id) : undefined;
-                return (
-                  <li key={visit.id} className="flex items-center justify-between gap-2 rounded-control border border-rule bg-card px-3 py-2 text-[13px]">
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-text">
-                        <Ltr>{pastDueVisitWhenLabel(visit, dayScreenStrings.cashClosePastDueQueueNumberPrefix)}</Ltr> — {patient?.full_name ?? ""}
-                      </p>
-                      {service && <p className="truncate text-[11.5px] text-muted">{service.name}</p>}
-                    </div>
-                    <div className="flex shrink-0 gap-1.5">
-                      <Button variant="danger" size="sm" onClick={() => handleMarkNoShow(visit)}>
-                        {dayScreenStrings.cashClosePastDueNoShowAction}
-                      </Button>
-                      <Button variant="secondary" size="sm" onClick={() => onRequestMove(visit)}>
-                        {dayScreenStrings.cashClosePastDueMoveAction}
-                      </Button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-            <Button variant="outline" disabled={isMarkingAll} onClick={handleMarkAllNoShow}>
-              {dayScreenStrings.cashClosePastDueBulkAction}
-            </Button>
-            <label className="flex items-center gap-2 text-[12.5px] text-muted">
-              <input
-                type="checkbox"
-                checked={acknowledgedPastDue}
-                onChange={(event) => {
-                  setAcknowledgedPastDue(event.target.checked);
-                  setPastDueError(null);
-                }}
-              />
-              {dayScreenStrings.cashClosePastDueAcknowledgeLabel}
-            </label>
-            {pastDueError && <p className="text-[12.5px] text-danger">{pastDueError}</p>}
-          </div>
-        )}
-
-        {/* `.close-summary` */}
-        <div className="rounded-card bg-field p-5">
-          <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
-            {dayScreenStrings.cashCloseSummaryHeading}
-          </p>
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
-            <CloseCell label={dayScreenStrings.cashCloseExpectedLabel} value={formatMoneyAmount(expected)} unit={CURRENCY_UNIT} />
-            <CloseCell
-              label={dayScreenStrings.cashCloseGridCollectedLabel}
-              value={parsedCollected.ok ? formatMoneyAmount(parsedCollected.value) : "—"}
-              unit={parsedCollected.ok ? CURRENCY_UNIT : undefined}
-              tone={difference === null ? undefined : difference === 0 ? "match" : "diff"}
-            />
-            <CloseCell label={dayScreenStrings.cashCloseGridInvoicesLabel} value={paidInvoiceCount} unit={dayScreenStrings.cashCloseGridInvoicesUnit} />
-            <CloseCell label={dayScreenStrings.slabNoShowCellLabel} value={noShowCountToday} />
-          </div>
-        </div>
-
-        <Field label={dayScreenStrings.cashCloseActualCashFieldLabel} id="cash-close-collected" error={collectedError ?? undefined}>
-          <TextInput
-            variant="amount"
-            inputMode="decimal"
-            value={totalCollectedInput}
-            onChange={(event) => {
-              setTotalCollectedInput(event.target.value);
-              setCollectedError(null);
-            }}
-            placeholder={dayScreenStrings.cashCloseCollectedPlaceholder}
-          />
-        </Field>
-
-        {difference !== null &&
-          (difference === 0 ? (
-            <div className="flex items-center gap-2.5 rounded-control border border-green-line bg-[color-mix(in_srgb,var(--color-eligible)_8%,transparent)] px-3.5 py-3">
-              <span className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-eligible text-sm font-bold text-white">✓</span>
-              <div>
-                <p className="text-[13.5px] font-bold text-eligible">{dayScreenStrings.cashCloseMatchedTitle}</p>
-                <p className="text-[11.5px] text-muted">{dayScreenStrings.cashCloseMatchedSubtitle}</p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2.5 rounded-control border border-[color-mix(in_srgb,var(--color-warning)_40%,transparent)] bg-warning-wash px-3.5 py-3">
-              <span className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-warning text-sm font-bold text-white">!</span>
-              <p className="text-[13.5px] font-bold text-warning">
-                {dayScreenStrings.cashCloseDifferenceLabel} <Ltr>{formatMoneyAmount(difference)}</Ltr> {CURRENCY_UNIT}
-              </p>
-            </div>
-          ))}
-
-        {difference !== null && difference !== 0 && (
-          <Field label={dayScreenStrings.cashCloseNotePlaceholder} id="cash-close-note" error={noteError ?? undefined}>
-            <TextInput
-              type="text"
-              value={note}
-              onChange={(event) => {
-                setNote(event.target.value);
-                setNoteError(null);
-              }}
-            />
-          </Field>
-        )}
-      </SheetPanelBody>
-
-      <SheetPanelFoot>
-        <Button key="confirm" variant="primary" className="flex-1" disabled={isSubmitting} onClick={handleConfirm}>
-          {dayScreenStrings.cashCloseConfirmButton}
-        </Button>
-        <Button key="export-csv" variant="secondary" onClick={handleExportCsv}>
-          {dayScreenStrings.cashCloseExportCsvAction}
-        </Button>
-        {actingUser && (
-          <span className="ms-auto self-center text-[11.5px] text-muted">
-            {dayScreenStrings.cashCloseClosesCountPrefix} <b className="font-bold text-text">{actingUser.full_name}</b>
-          </span>
-        )}
-      </SheetPanelFoot>
-    </Sheet>
+    </div>
   );
 }

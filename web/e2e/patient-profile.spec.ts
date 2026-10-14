@@ -4,6 +4,8 @@ import {
   ASSISTANT_NAME,
   closeSheet,
   DEV_SEED_PINS,
+  DOCTOR,
+  doctorSection,
   gotoSeededDay,
   karimProfileFixture,
   openDoctorDay,
@@ -58,7 +60,7 @@ test("the profile's hero, tabs and timeline match the patient's history", async 
 
   const hero = page.getByRole("region", { name: PATIENTS.karim, exact: true });
   await expect(hero.getByRole("heading", { name: `${PATIENTS.karim}34 سنة · ذكر` })).toBeVisible();
-  await expect(hero).toContainText("011 1234 5678");
+  await expect(hero).toContainText("0111 234 5678");
   await expect(hero).toContainText(`${PROFILE.firstVisitLabel} 9 / 9 / 2026`);
   await expect(hero).toContainText(`${PROFILE.statVisits}3`);
   await expect(planStat(hero)).toBeVisible();
@@ -97,7 +99,7 @@ test("the profile's hero, tabs and timeline match the patient's history", async 
   await expect(eventRow(page, "دفعة · 100 ج.م فيزا")).toContainText("فاتورة INV-2026-0002 · سارة حسن");
 
   // A cancelled visit reads muted: the field surface instead of the card.
-  const cancelled = eventRow(page, PROFILE.visitCancelled).getByRole("button");
+  const cancelled = eventRow(page, `${PROFILE.visitTitle} — ${S.statusCancelled}`).getByRole("button");
   const completed = eventRow(page, "زيارة — خشونة بسيطة").getByRole("button");
   await expect(cancelled).toHaveCSS("background-color", "rgb(246, 249, 247)");
   await expect(completed).toHaveCSS("background-color", "rgb(255, 255, 255)");
@@ -165,7 +167,7 @@ test("the workspace's quick buttons, the day's menu and the doctor's day open th
 
   // The doctor's day: the next patient's "افتح الملف".
   await page.clock.setSystemTime(new Date(profileAt(PROFILE_DAY, "09:10")));
-  await page.getByRole("button", { name: S.bookingButtonLabel, exact: true }).click();
+  await page.getByRole("button", { name: S.bookingRunButtonLabel, exact: true }).click();
   const booking = page.getByRole("dialog");
   await booking.getByPlaceholder(S.bookingSearchPlaceholder).fill(PATIENTS.mona);
   await booking.getByRole("button").filter({ hasText: PATIENTS.mona }).filter({ hasNotText: S.newPatientButtonPrefix }).first().click();
@@ -173,7 +175,8 @@ test("the workspace's quick buttons, the day's menu and the doctor's day open th
   await booking.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
   await expect(booking).toBeHidden();
   await openDoctorDay(page);
-  await page.getByRole("button", { name: PROFILE.openProfile, exact: true }).click();
+  // The next patient's brief (a booked row in "كل اليوم" has its own "افتح الملف").
+  await doctorSection(page, DOCTOR.briefNextHeading).getByRole("button", { name: PROFILE.openProfile, exact: true }).click();
   sheet = profileSheet(page);
   await expect(sheet.getByRole("heading", { name: new RegExp(`^${PATIENTS.mona}`) })).toBeVisible();
   await closeSheet(sheet);
@@ -227,7 +230,7 @@ test("the assistant finds a patient by name and by phone, and pages through a lo
   results = await searchPatientsPage(page, "0100 123 4567");
   await expect(results.getByRole("button")).toHaveCount(1);
   await expect(results.getByRole("button")).toContainText(PATIENTS.mona);
-  await expect(results.getByRole("button")).toContainText("010 0123 4567");
+  await expect(results.getByRole("button")).toContainText("0100 123 4567");
 
   // By name, then open it.
   await openProfileFromSearch(page, "منى", PATIENTS.mona);

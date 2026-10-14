@@ -16,7 +16,7 @@ import {
 import type { Location, Practitioner, Service, ServicePriceOverride } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { formatMoneyAmount } from "../money";
-import { countServicesByState } from "./serviceCounts";
+import { countServicesByState, sortServicesByName } from "./serviceCounts";
 import { SetBody, SetList, SetRow, SettingsFooter } from "./SettingsLayout";
 import { dayScreenStrings } from "./strings";
 
@@ -67,7 +67,7 @@ export default function ServicesPanel({ orgId }: { orgId: string }) {
         db.locations.toArray(),
       ]);
       return {
-        services: services.sort((a, b) => a.name.localeCompare(b.name, "ar")),
+        services: sortServicesByName(services),
         overrides,
         practitioners: practitioners.filter((p) => p.is_active),
         locations: locations.filter((l) => l.is_active),

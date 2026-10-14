@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import PageMain from "../../components/PageMain";
 import Ltr from "../../components/Ltr";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
@@ -180,9 +181,9 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
 
   if (!data) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
+      <PageMain className="py-16">
         <p className="text-muted">{T.loadingLabel}</p>
-      </main>
+      </PageMain>
     );
   }
 
@@ -233,7 +234,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
   }
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-3.5 px-6 pt-6 pb-16 print:hidden">
+    <PageMain className="flex flex-col gap-3.5 pt-6 pb-16 print:hidden">
       {momentum && <MomentumBar momentum={momentum} isQueueMode={isQueueMode} />}
 
       {current ? (
@@ -314,6 +315,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
                     : undefined
                 }
                 onOpenVisitForm={() => setVisitFormVisitId(visit.id)}
+                onOpenProfile={() => setProfilePatientId(visit.patient_id)}
                 callButton={callButton(visit, T.callInShort, "secondary", "sm")}
               />
             ))}
@@ -334,7 +336,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
           }}
         />
       )}
-    </main>
+    </PageMain>
   );
 }
 
@@ -893,6 +895,8 @@ interface DayListRowProps {
   missingDiagnosis: boolean;
   previousVisitLabel: string | undefined;
   onOpenVisitForm: () => void;
+  /** A booked row's "افتح الملف": the patient profile sheet. */
+  onOpenProfile: () => void;
   callButton: ReactNode;
 }
 
@@ -907,6 +911,7 @@ function DayListRow({
   missingDiagnosis,
   previousVisitLabel,
   onOpenVisitForm,
+  onOpenProfile,
   callButton,
 }: DayListRowProps) {
   const action = dayListAction(visit);
@@ -1008,6 +1013,11 @@ function DayListRow({
           </Button>
         )}
         {action === "call" && callButton}
+        {action === "profile" && patient && (
+          <Button variant="secondary" size="sm" onClick={onOpenProfile}>
+            {patientProfileStrings.openProfile}
+          </Button>
+        )}
       </div>
     </li>
   );

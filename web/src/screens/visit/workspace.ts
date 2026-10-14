@@ -167,17 +167,25 @@ export function sortRxItems(items: readonly PrescriptionItem[]): PrescriptionIte
 }
 
 export interface RxDoseLine {
-  /** "instructions · duration" — the duration part omitted when empty. */
+  instructions: string;
+  /** The duration alone ("7 أيام"), without a typed leading "لمدة"; null when empty. */
+  duration: string | null;
+  /** The whole line as plain text: "instructions · لمدة duration" — the duration part omitted when empty. */
   dose: string;
   /** Rendered muted after the dose; null when empty. */
   note: string | null;
 }
 
+const DURATION_PREFIX = new RegExp(`^${T.rxDurationPrefix}\\s*`);
+
 /** `.rx-item .dose`. */
 export function rxDoseLine(item: Pick<PrescriptionItem, "instructions" | "duration" | "note">): RxDoseLine {
-  const duration = nonEmpty(item.duration ?? undefined);
+  const typed = nonEmpty(item.duration ?? undefined);
+  const duration = typed ? nonEmpty(typed.replace(DURATION_PREFIX, "")) : null;
   return {
-    dose: duration ? `${item.instructions} · ${duration}` : item.instructions,
+    instructions: item.instructions,
+    duration,
+    dose: duration ? `${item.instructions} · ${T.rxDurationPrefix} ${duration}` : item.instructions,
     note: nonEmpty(item.note ?? undefined),
   };
 }

@@ -24,6 +24,7 @@ import MessagesScreen from "./screens/messages/MessagesScreen";
 import { messagesStrings } from "./screens/messages/strings";
 import PatientsScreen from "./screens/patient/PatientsScreen";
 import { patientProfileStrings } from "./screens/patient/strings";
+import { withDoctorPrefix } from "./screens/day/doctorName";
 import CurrentVisitScreen from "./screens/visit/CurrentVisitScreen";
 import { visitWorkspaceStrings } from "./screens/visit/strings";
 import { SYNC_AUTH_ERROR_EVENT_NAME, startSyncEngine, type SyncEngineHandle } from "./sync/engine";
@@ -233,7 +234,7 @@ export default function App() {
                   : dayScreenTitle
         }
         today={dayScreenToday}
-        whoName={isDoctorViewShown ? doctorPractitionerName : undefined}
+        whoName={isDoctorViewShown && doctorPractitionerName ? withDoctorPrefix(doctorPractitionerName) : undefined}
       >
         {/* The day screen stays mounted (hidden) under the doctor's day and
             the current visit: it owns the seed/boot load, the day actually

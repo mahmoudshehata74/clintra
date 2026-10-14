@@ -265,7 +265,7 @@ test("sessions are skipped and brought back, the plan edited, stopped and resume
 
   await openAuditLog(page);
   const audit = page.getByRole("dialog");
-  await audit.getByRole("button", { name: S.auditFilterEntityVisits, exact: true }).click();
+  await audit.getByRole("button", { name: S.auditFilterVisits, exact: true }).click();
   for (const [verb, count] of [
     ["بدأ خطة رعاية", 1],
     ["أضاف جلسات للخطة", 6],

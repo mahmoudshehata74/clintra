@@ -23,7 +23,7 @@ interface StaffOption {
 }
 
 /**
- * The full-viewport lock overlay (reference screen 2). One screen, two states:
+ * The full-viewport lock overlay holding the `.pin-scr` card (reference screen 1). One screen, two states:
  * a membership picker when nobody is chosen yet ("دخول العيادة"), then the PIN
  * pad for the chosen person ("دخول <name>"). Opaque by design — per
  * docs/auth-plan.md the underlying UI (including any open sheet) stays mounted
@@ -145,127 +145,132 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
       ? authStrings.lockWrongPin
       : null;
 
+  // `.pad button`: 14px of padding around 20px text — 60px tall.
   const padKeyClassName =
-    "flex min-h-12 items-center justify-center rounded-card border border-white/[0.13] bg-white/[0.06] font-semibold text-on-dark " +
+    "flex min-h-[60px] items-center justify-center rounded-card border border-white/[0.13] bg-white/[0.06] font-semibold text-on-dark " +
     "transition-colors duration-150 hover:bg-white/[0.14] " +
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink " +
     "disabled:cursor-not-allowed disabled:opacity-40";
 
   return (
+    // The overlay stays full-screen and opaque (the page's own paper behind
+    // it); the lock itself is the prototype's `.pin-scr` card on it.
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-6 text-center"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-y-auto bg-[linear-gradient(180deg,var(--color-paper-2)_0%,var(--color-paper)_340px)] px-5 max-[600px]:px-3"
       role="dialog"
       aria-modal="true"
       aria-label={authStrings.lockOverlayAria}
     >
-      <p className="text-[22px] font-bold tracking-[-0.02em] text-white">
-        Clin<span className="text-copper-2">tra</span>
-      </p>
+      <div className="flex w-full max-w-page flex-col items-center rounded-panel bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-6 py-11 text-center text-on-dark">
+        <p className="text-[22px] font-bold tracking-[-0.02em] text-white">
+          Clin<span className="text-copper-2">tra</span>
+        </p>
 
-      {!picked ? (
-        // Not drawn by the prototype (#s1 shows only the PIN state): same
-        // ink surface and brand, each membership as a full-width on-dark
-        // row rather than Button's onDark variant, which has no form sized
-        // for a 48px-tall, full-width list item.
-        <div className="mt-8 flex w-full max-w-xs flex-col gap-2">
-          <p className="mb-2 text-sm font-semibold tracking-[0.02em] text-on-dark">{authStrings.lockClinicPrompt}</p>
-          {staff.map(({ membership, user }) => (
-            <button
-              key={membership.id}
-              type="button"
-              onClick={() => choose(membership.id)}
-              className="min-h-12 w-full rounded-card border border-white/[0.16] bg-white/[0.09] px-4 py-3 text-start text-sm font-semibold text-on-dark transition-colors duration-150 hover:bg-white/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
-            >
-              {formatActorLabel(membership, user)}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-8 flex w-full max-w-[300px] flex-col items-center">
-          <p className="mt-[6px] text-xs tracking-[0.02em] text-on-dark-dim">
-            {authStrings.lockEnterPrefix} {formatActorLabel(picked.membership, picked.user)}
-          </p>
-          <p className="mt-[22px] text-sm font-semibold tracking-[0.02em] text-on-dark">{authStrings.lockPinTitle}</p>
-
-          <div className="mt-[14px] flex justify-center gap-[10px]">
-            {Array.from({ length: PIN_LENGTH }).map((_, index) => {
-              const filled = index < entered.length;
-              return (
-                <span
-                  key={index}
-                  aria-hidden="true"
-                  data-filled={filled}
-                  className={
-                    filled
-                      ? "h-3 w-3 rounded-full bg-copper shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-copper)_25%,transparent)]"
-                      : "h-3 w-3 rounded-full bg-white/[0.15]"
-                  }
-                />
-              );
-            })}
-          </div>
-          {/* Screen-reader progress, per docs/auth-plan.md Layer 2 Q5 ("2 of 4
-              entered"); the data-filled attributes above let a test assert
-              the same progress without relying on dot colour. */}
-          <span className="sr-only" role="status" aria-live="polite">
-            {entered.length} {authStrings.lockDigitsProgressOf} {PIN_LENGTH} {authStrings.lockDigitsProgressSuffix}
-          </span>
-
-          <div className="mt-3 flex min-h-[26px] items-center justify-center">
-            {alertMessage ? (
-              <Badge appearance="solid" tone="danger" shape="pill">
-                {alertMessage}
-              </Badge>
-            ) : null}
-          </div>
-
-          {/* dir="ltr" scoped to the grid only: the pad reads left-to-right
-              like every phone keypad (1 2 3 / 4 5 6 / 7 8 9 / [blank] 0
-              [مسح]) regardless of the page's own RTL direction, which would
-              otherwise auto-place grid items right-to-left and mirror it —
-              see docs/design-rule.md's "Settled deviations". */}
-          <div dir="ltr" className="mt-[22px] grid w-full max-w-[240px] grid-cols-3 gap-2">
-            {PAD_DIGITS.map((digit) => (
+        {!picked ? (
+          // Not drawn by the prototype (#s1 shows only the PIN state): same
+          // ink surface and brand, each membership as a full-width on-dark
+          // row rather than Button's onDark variant, which has no form sized
+          // for a 48px-tall, full-width list item.
+          <div className="mt-8 flex w-full max-w-xs flex-col gap-2">
+            <p className="mb-2 text-sm font-semibold tracking-[0.02em] text-on-dark">{authStrings.lockClinicPrompt}</p>
+            {staff.map(({ membership, user }) => (
               <button
-                key={digit}
+                key={membership.id}
                 type="button"
-                disabled={isLockedOut}
-                onClick={() => pressDigit(digit)}
-                className={`${padKeyClassName} text-xl tabular-nums tracking-[-0.02em]`}
+                onClick={() => choose(membership.id)}
+                className="min-h-12 w-full rounded-card border border-white/[0.16] bg-white/[0.09] px-4 py-3 text-start text-sm font-semibold text-on-dark transition-colors duration-150 hover:bg-white/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
               >
-                {digit}
+                {formatActorLabel(membership, user)}
               </button>
             ))}
-            <span aria-hidden="true" />
-            <button
-              type="button"
-              disabled={isLockedOut}
-              onClick={() => pressDigit("0")}
-              className={`${padKeyClassName} text-xl tabular-nums tracking-[-0.02em]`}
-            >
-              0
-            </button>
-            <button
-              type="button"
-              onClick={pressDelete}
-              aria-label={authStrings.lockDeleteAria}
-              className={`${padKeyClassName} text-sm`}
-            >
-              {authStrings.lockDeleteLabel}
-            </button>
           </div>
+        ) : (
+          <div className="flex w-full max-w-[300px] flex-col items-center">
+            <p className="mt-[6px] text-xs tracking-[0.02em] text-on-dark-dim">
+              {authStrings.lockEnterPrefix} {formatActorLabel(picked.membership, picked.user)}
+            </p>
+            <p className="mt-[22px] text-sm font-semibold tracking-[0.02em] text-on-dark">{authStrings.lockPinTitle}</p>
 
-          {staff.length > 1 && (
-            <button
-              type="button"
-              onClick={() => choose(undefined)}
-              className="mt-6 text-xs font-semibold text-on-dark-dim transition-colors duration-150 hover:text-on-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
-            >
-              {authStrings.lockSwitchUser}
-            </button>
-          )}
-        </div>
-      )}
+            <div className="mt-[14px] flex justify-center gap-[10px]">
+              {Array.from({ length: PIN_LENGTH }).map((_, index) => {
+                const filled = index < entered.length;
+                return (
+                  <span
+                    key={index}
+                    aria-hidden="true"
+                    data-filled={filled}
+                    className={
+                      filled
+                        ? "h-3 w-3 rounded-full bg-copper shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-copper)_25%,transparent)]"
+                        : "h-3 w-3 rounded-full bg-white/[0.15]"
+                    }
+                  />
+                );
+              })}
+            </div>
+            {/* Screen-reader progress, per docs/auth-plan.md Layer 2 Q5 ("2 of 4
+                entered"); the data-filled attributes above let a test assert
+                the same progress without relying on dot colour. */}
+            <span className="sr-only" role="status" aria-live="polite">
+              {entered.length} {authStrings.lockDigitsProgressOf} {PIN_LENGTH} {authStrings.lockDigitsProgressSuffix}
+            </span>
+
+            <div className="mt-3 flex min-h-[26px] items-center justify-center">
+              {alertMessage ? (
+                <Badge appearance="solid" tone="danger" shape="pill">
+                  {alertMessage}
+                </Badge>
+              ) : null}
+            </div>
+
+            {/* dir="ltr" scoped to the grid only: the pad reads left-to-right
+                like every phone keypad (1 2 3 / 4 5 6 / 7 8 9 / [blank] 0
+                [مسح]) regardless of the page's own RTL direction, which would
+                otherwise auto-place grid items right-to-left and mirror it —
+                see docs/design-rule.md's "Settled deviations". */}
+            <div dir="ltr" className="mt-[22px] grid w-full max-w-[240px] grid-cols-3 gap-2">
+              {PAD_DIGITS.map((digit) => (
+                <button
+                  key={digit}
+                  type="button"
+                  disabled={isLockedOut}
+                  onClick={() => pressDigit(digit)}
+                  className={`${padKeyClassName} text-xl tabular-nums tracking-[-0.02em]`}
+                >
+                  {digit}
+                </button>
+              ))}
+              <span aria-hidden="true" />
+              <button
+                type="button"
+                disabled={isLockedOut}
+                onClick={() => pressDigit("0")}
+                className={`${padKeyClassName} text-xl tabular-nums tracking-[-0.02em]`}
+              >
+                0
+              </button>
+              <button
+                type="button"
+                onClick={pressDelete}
+                aria-label={authStrings.lockDeleteAria}
+                className={`${padKeyClassName} text-sm`}
+              >
+                {authStrings.lockDeleteLabel}
+              </button>
+            </div>
+
+            {staff.length > 1 && (
+              <button
+                type="button"
+                onClick={() => choose(undefined)}
+                className="mt-6 text-xs font-semibold text-on-dark-dim transition-colors duration-150 hover:text-on-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
+              >
+                {authStrings.lockSwitchUser}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

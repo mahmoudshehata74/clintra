@@ -11,11 +11,11 @@ import type { Patient, Schedule, Service, Visit } from "../../db/types";
 import { computeGridRows } from "./dayGrid";
 import { computeElapsedLabel } from "./elapsedLabel";
 import { computeEmptySlots } from "./emptySlots";
-import { computeExpectedWaitMinutes, computeQueueSummary } from "./queueSummary";
+import { computeExpectedCallTime, computeQueueSummary } from "./queueSummary";
 import QueueRow, { type QueueRowKind } from "./QueueRow";
 import { resolveDayScheduleState } from "./scheduleState";
 import SlotRow from "./SlotRow";
-import { STATUS_LABEL, statusVisual } from "./statusStyle";
+import { arrivedWord, statusVisual, visitStatusLabel } from "./statusStyle";
 import { dayScreenStrings } from "./strings";
 import { isMenuEligible, isQueueWaiting, primaryAdvanceTarget } from "./visitActions";
 
@@ -62,8 +62,6 @@ interface PractitionerColumnProps {
   onOpenVisitForm: (visit: Visit) => void;
   /** The slots card's trailing action ("ورقة الغد") — slots mode only. The audit log ("السجل") moved to AppShell's rail. */
   onOpenDaySheet?: () => void;
-  /** The queue card's "استدعاء التالي" trailing action — advances the next waiting visit. */
-  onCallNextInQueue?: () => void;
 }
 
 export default function PractitionerColumn({
@@ -96,7 +94,6 @@ export default function PractitionerColumn({
   onSendToEnd,
   onOpenVisitForm,
   onOpenDaySheet,
-  onCallNextInQueue,
 }: PractitionerColumnProps) {
   const scheduleState = resolveDayScheduleState(todaysSchedule, hasAnySchedule);
 
@@ -141,7 +138,6 @@ export default function PractitionerColumn({
         onOpenProfile={onOpenProfile}
         onSendToEnd={onSendToEnd}
         onOpenVisitForm={onOpenVisitForm}
-        onCallNext={onCallNextInQueue}
         onOpenBooking={onOpenBooking}
         onWalkIn={onWalkIn}
         today={today}
@@ -256,7 +252,7 @@ export default function PractitionerColumn({
       >
         {onOpenBooking && (
           <Button variant="primary" size="sm" onClick={onOpenBooking}>
-            {dayScreenStrings.bookingButtonLabel}
+            {dayScreenStrings.bookingRunButtonLabel}
           </Button>
         )}
         {onWalkIn && (
@@ -301,7 +297,6 @@ interface QueueColumnProps {
   onOpenProfile: (visit: Visit) => void;
   onSendToEnd: (visit: Visit) => void;
   onOpenVisitForm: (visit: Visit) => void;
-  onCallNext?: () => void;
   onOpenBooking?: () => void;
   onWalkIn?: () => void;
   /** Today, for the elapsed in_room meta phrase's real-day gating — see elapsedLabel.ts. */
@@ -333,7 +328,6 @@ function QueueColumn({
   onOpenProfile,
   onSendToEnd,
   onOpenVisitForm,
-  onCallNext,
   onOpenBooking,
   onWalkIn,
   today,
@@ -343,8 +337,6 @@ function QueueColumn({
   const summary = computeQueueSummary(sortedVisits);
   const hasEnoughDataForEstimate = countCompletedConsultations(sortedVisits) >= MINIMUM_COMPLETED_FOR_ESTIMATE;
   const completedCount = sortedVisits.filter((visit) => visit.status === VisitStatus.Completed).length;
-  const someoneInRoom = sortedVisits.some((visit) => visit.status === VisitStatus.InRoom);
-  const canCallNext = Boolean(onCallNext && !someoneInRoom && summary.nextVisitId);
 
   return (
     <Card>
@@ -352,13 +344,6 @@ function QueueColumn({
         badge={dayScreenStrings.queueCardBadge}
         title={showLabel ? practitionerName : dayScreenStrings.queueCardTitle}
         subtitle={dayScreenStrings.queueCardSubtitle}
-        action={
-          canCallNext && (
-            <Button variant="onDark" size="sm" onClick={onCallNext}>
-              {dayScreenStrings.queueCallNextActionLabel}
-            </Button>
-          )
-        }
       />
       <ul>
         {sortedVisits.map((visit) => {
@@ -389,19 +374,21 @@ function QueueColumn({
                   ? "next"
                   : "waiting";
 
-          // `.qwho .meta`'s state phrase, gender-neutral per the task's own
-          // wording — "{service} · {phrase}" is QueueRow.tsx's own concern,
-          // this only ever builds the phrase half.
+          // `.qwho .meta`'s state phrase ("خلصت 12:04", "وصل 12:28"), its verb
+          // following the patient's gender — "{service} · {phrase}" is
+          // QueueRow.tsx's own concern, this only ever builds the phrase half.
           let metaPhrase: ReactNode = null;
           if (visit.status === VisitStatus.Completed && visit.ended_at) {
-            metaPhrase = `${dayScreenStrings.statusCompleted} ${clockTimeInCairo(visit.ended_at)}`;
+            const finished =
+              patient?.gender === "female" ? dayScreenStrings.queueFinishedMetaFemale : dayScreenStrings.queueFinishedMeta;
+            metaPhrase = `${finished} ${clockTimeInCairo(visit.ended_at)}`;
           } else if (visit.status === VisitStatus.InRoom && visit.started_at) {
             const elapsed = computeElapsedLabel(visit.started_at, now.toISOString(), today, now);
             metaPhrase = elapsed ? `${dayScreenStrings.queueInRoomMetaPrefix} ${elapsed}` : dayScreenStrings.statusInRoom;
           } else if (visit.status === VisitStatus.Arrived && visit.arrived_at) {
-            metaPhrase = `${dayScreenStrings.statusArrived} ${clockTimeInCairo(visit.arrived_at)}`;
+            metaPhrase = `${arrivedWord(patient?.gender)} ${clockTimeInCairo(visit.arrived_at)}`;
           } else if (visit.status === VisitStatus.Booked || visit.status === VisitStatus.Confirmed) {
-            metaPhrase = STATUS_LABEL[visit.status];
+            metaPhrase = visitStatusLabel(visit.status);
           }
 
           let waitNode: ReactNode = null;
@@ -411,10 +398,10 @@ function QueueColumn({
             const visual = statusVisual(visit.status);
             waitNode = visual ? (
               <Badge {...visual.badge} shape="pill">
-                {STATUS_LABEL[visit.status]}
+                {visitStatusLabel(visit.status)}
               </Badge>
             ) : (
-              <b>{STATUS_LABEL[visit.status]}</b>
+              <b>{visitStatusLabel(visit.status)}</b>
             );
           } else if (isCompleted && visit.started_at && visit.ended_at) {
             const minutes = Math.round(
@@ -440,12 +427,18 @@ function QueueColumn({
             if (!hasEnoughDataForEstimate || avgConsultMinutes === null || summary.currentTurnPosition === null) {
               waitNode = dayScreenStrings.queueExpectedWaitUnknown;
             } else {
-              const minutes = computeExpectedWaitMinutes(visit.position, summary.currentTurnPosition, avgConsultMinutes);
+              // `.qwait`: "متوقع" over the expected call time, a clock time.
+              const callTime = computeExpectedCallTime(
+                visit.position,
+                summary.currentTurnPosition,
+                avgConsultMinutes,
+                now.toISOString(),
+              );
               waitNode = (
                 <>
-                  {dayScreenStrings.queueExpectedWaitPrefix}
+                  {dayScreenStrings.queueExpectedCallPrefix}
                   <b>
-                    <Ltr>{minutes}</Ltr> {dayScreenStrings.delayMinutesSuffix}
+                    <Ltr>{callTime}</Ltr>
                   </b>
                 </>
               );

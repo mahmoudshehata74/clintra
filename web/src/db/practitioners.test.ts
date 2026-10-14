@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { setActiveMembershipId } from "../auth/session";
 import { describeAuditVerb } from "../domain/auditVerb";
 import { Role } from "../domain/role";
-import { auditEntityFilterOf } from "../screens/day/auditLogFilters";
+import { auditGroupOf } from "../screens/day/auditLogFilters";
 import { describeSyncReview } from "../sync/reviewSummary";
 import { ClintraDatabase } from "./database";
 import { PractitionerProfileError, updatePractitionerProfile } from "./practitioners";
@@ -163,7 +163,7 @@ describe("updatePractitionerProfile", () => {
     const [row] = (await writesFor(practitioner.id)).auditRows;
     expect(describeAuditVerb(row)).toBe("عدّل بيانات الطبيب");
     expect(describeAuditVerb(row)).not.toContain("98765");
-    expect(auditEntityFilterOf(row.entity)).toBe("settings");
+    expect(auditGroupOf(row.entity)).toBe("settings");
   });
 });
 

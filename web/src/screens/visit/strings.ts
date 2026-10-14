@@ -25,6 +25,8 @@ export const visitWorkspaceStrings = {
 
   // `.rx-section`
   rxHeading: "الوصفة الطبية",
+  // `.rx-item .dose`: "· لمدة" before the (bold) duration.
+  rxDurationPrefix: "لمدة",
   rxCountOne: "دواء واحد",
   rxCountTwo: "دوائين",
   rxCountFew: "أدوية",

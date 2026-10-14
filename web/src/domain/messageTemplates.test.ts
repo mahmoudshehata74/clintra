@@ -97,7 +97,7 @@ describe("renderTemplate", () => {
     ["money through the money formatter", "{{balance}}", ALL_VALUES, "250.50 ج.م", []],
     ["a zero balance, which is a value", "{{balance}}", { balance: 0 as Piastres }, "0.00 ج.م", []],
     ["a landline in the local display format", "{{clinic_phone}}", ALL_VALUES, "02 2123 4567", []],
-    ["a mobile in the local display format", "{{clinic_phone}}", { clinic_phone: "+201001234567" }, "010 0123 4567", []],
+    ["a mobile in the local display format", "{{clinic_phone}}", { clinic_phone: "+201001234567" }, "0100 123 4567", []],
     ["every use of a placeholder", "{{patient_name}} / {{patient_name}}", ALL_VALUES, "كريم فتحي / كريم فتحي", []],
     ["a value trimmed", "[{{doctor_name}}]", { doctor_name: "  د. سلمى  " }, "[د. سلمى]", []],
     ["an unknown token untouched and unreported", "{{nickname}} {{patient_name}}", ALL_VALUES, "{{nickname}} كريم فتحي", []],

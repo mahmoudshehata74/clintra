@@ -175,7 +175,7 @@ describe("prescriptionMessageText", () => {
       [
         "الوصفة RX-2026-B-0012",
         "المريض: كريم فتحي",
-        "1. Augmentin 1g — Tablet: قرص كل 12 ساعة · 7 أيام",
+        "1. Augmentin 1g — Tablet: قرص كل 12 ساعة · لمدة 7 أيام",
         "2. Panadol 500mg: قرص عند الحاجة",
         "   مش أكتر من 4 في اليوم",
         "د. أحمد المصري",
@@ -213,8 +213,8 @@ describe("the recent messages list", () => {
   });
 
   it("names the recipient with the number in its local display form", () => {
-    expect(messageRecipientLine("كريم فتحي", "+201001234567")).toBe("كريم فتحي · 010 0123 4567");
-    expect(messageRecipientLine(undefined, "+201001234567")).toBe("010 0123 4567");
+    expect(messageRecipientLine("كريم فتحي", "+201001234567")).toBe("كريم فتحي · 0100 123 4567");
+    expect(messageRecipientLine(undefined, "+201001234567")).toBe("0100 123 4567");
   });
 
   it("shows the membership's organization and locations only, newest first, at most 20", () => {

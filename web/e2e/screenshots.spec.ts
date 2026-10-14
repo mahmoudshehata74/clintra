@@ -5,6 +5,7 @@ import {
   emptySlotTiles,
   gotoRealDay,
   gotoSeededDay,
+  invoicePayments,
   labeledRowValue,
   lockOverlay,
   login,
@@ -333,7 +334,7 @@ test("@screenshot receipt-print", async ({ page }) => {
   await login(page);
   const dialog = await openFreshInvoice(page);
   await recordHalfPayment(page, dialog);
-  await page.getByRole("dialog").getByRole("button", { name: S.printReceiptAction, exact: true }).click();
+  await invoicePayments(page.getByRole("dialog")).getByRole("button", { name: S.printReceiptAction, exact: true }).click();
   await page.emulateMedia({ media: "print" });
   await expect(page.getByText(S.printHeaderWarning)).toBeVisible();
   await shoot(page, "receipt-print", true);
@@ -383,6 +384,30 @@ test("@screenshot cash-close-closed", async ({ page }) => {
   await page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true }).click();
   await expect(page.getByRole("dialog").getByText(S.cashCloseClosedAtLabel)).toBeVisible();
   await shoot(page, "cash-close-closed", false);
+});
+
+/**
+ * The day summary printed on close, under print media at A4's size in CSS
+ * pixels (210 × 297 mm = 794 × 1123). The page is the same for both
+ * projects, so one project writes it, under a name without the project.
+ */
+test("@screenshot cash-close-summary-print", async ({ page }) => {
+  test.skip(test.info().project.name !== "desktop", "one A4 page, written once, by the desktop project");
+  await page.addInitScript(() => {
+    window.print = () => {};
+  });
+  await gotoRealDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder(S.cashCloseCollectedPlaceholder).fill("0");
+  await dialog.getByRole("button", { name: S.cashCloseConfirmButton, exact: true }).last().click();
+  await expect(page.getByText(S.cashCloseToastMessage)).toBeVisible();
+  await page.setViewportSize({ width: 794, height: 1123 });
+  await page.emulateMedia({ media: "print" });
+  await expect(page.getByText("Clintra v1.0.0", { exact: true })).toBeVisible();
+  await page.screenshot({ path: `${OUT_DIR}/cash-close-summary-print.png`, fullPage: true, animations: "disabled" });
+  await page.emulateMedia({ media: null });
 });
 
 test("@screenshot gallery-buttons", async ({ page }) => {

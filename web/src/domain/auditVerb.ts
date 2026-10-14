@@ -84,8 +84,8 @@ const VISIT_FORM_FALLBACK_VERB = "عدّل النموذج";
 // visit was: an assistant can cancel, mark no-show, or move a visit from
 // booked, confirmed, arrived or in_room alike.
 const VISIT_TERMINAL_VERBS: Partial<Record<VisitStatus, string>> = {
-  [VisitStatus.Cancelled]: "ألغى الزيارة",
-  [VisitStatus.NoShow]: "سجّل غياب",
+  [VisitStatus.Cancelled]: "ألغى الحجز",
+  [VisitStatus.NoShow]: "علّم لم يحضر",
   [VisitStatus.Rescheduled]: "نقل الميعاد",
 };
 
@@ -170,7 +170,7 @@ const CARE_PLAN_ITEM_STATUS_VERBS: Partial<Record<string, string>> = {
 // visit's own write. Booked and moved read as the visit's own verbs; a link
 // cleared by a cancel or a no-show (the session row alone cannot tell
 // which) reads as the plan's plain edit, beside the visit's own line.
-const CARE_PLAN_SESSION_BOOKED_VERB = "سجّل حجز";
+const CARE_PLAN_SESSION_BOOKED_VERB = "أنشأ حجز";
 const CARE_PLAN_SESSION_MOVED_VERB = "نقل الميعاد";
 const CARE_PLAN_EDIT_VERB = "عدّل خطة رعاية";
 
@@ -190,8 +190,29 @@ function describeCarePlanItemUpdate(row: AuditVerbRow): string | undefined {
   return after === null ? CARE_PLAN_EDIT_VERB : CARE_PLAN_SESSION_MOVED_VERB;
 }
 
+// Settings (the audit sheet's "إعدادات"): verb only — a service's price, a
+// staff member's PIN or scopes never appear in the audit line. A service or
+// a staff membership switched off or on reads as that, not as an edit.
+function describeSettingsUpdate(row: AuditVerbRow): string | undefined {
+  const wasActive = fieldOf(row.before, "is_active");
+  const isActive = fieldOf(row.after, "is_active");
+  const toggled = typeof wasActive === "boolean" && typeof isActive === "boolean" && wasActive !== isActive;
+  if (row.entity === "services" && toggled) {
+    return isActive ? "شغّل خدمة" : "وقّف خدمة";
+  }
+  if (row.entity === "memberships") {
+    if (toggled) {
+      return isActive ? "شغّل موظف" : "وقّف موظف";
+    }
+    if (fieldOf(row.before, "pin_hash") !== fieldOf(row.after, "pin_hash")) {
+      return "غيّر الرقم السري";
+    }
+  }
+  return undefined;
+}
+
 const CREATE_VERBS: Partial<Record<string, string>> = {
-  visits: "سجّل حجز",
+  visits: "أنشأ حجز",
   patients: "أضاف مريض",
   invoices: "أنشأ فاتورة",
   payments: "سجّل دفعة",
@@ -200,14 +221,26 @@ const CREATE_VERBS: Partial<Record<string, string>> = {
   prescription_items: "أضاف دواء",
   care_plans: "بدأ خطة رعاية",
   care_plan_items: "أضاف جلسات للخطة",
+  services: "أضاف خدمة",
+  service_price_overrides: "أضاف سعر خاص",
+  schedules: "أضاف مواعيد العمل",
+  users: "أضاف موظف",
+  memberships: "حدّد صلاحية موظف",
+  membership_locations: "حدّد فروع الموظف",
+  membership_practitioners: "حدّد أطباء الموظف",
 };
 
 const DELETE_VERBS: Partial<Record<string, string>> = {
-  visits: "حذف الزيارة",
+  visits: "حذف الحجز",
   patients: "حذف المريض",
   invoices: "حذف الفاتورة",
   payments: "حذف الدفعة",
   prescription_items: "شال دواء",
+  services: "حذف خدمة",
+  service_price_overrides: "شال سعر خاص",
+  schedules: "شال مواعيد العمل",
+  membership_locations: "شال فرع من نطاق الموظف",
+  membership_practitioners: "شال طبيب من نطاق الموظف",
 };
 
 const FALLBACK_UPDATE_VERBS: Partial<Record<string, string>> = {
@@ -223,6 +256,11 @@ const FALLBACK_UPDATE_VERBS: Partial<Record<string, string>> = {
   practitioners: "عدّل بيانات الطبيب",
   care_plans: CARE_PLAN_EDIT_VERB,
   care_plan_items: CARE_PLAN_EDIT_VERB,
+  services: "عدّل خدمة",
+  service_price_overrides: "عدّل سعر خاص",
+  schedules: "عدّل مواعيد العمل",
+  users: "عدّل بيانات موظف",
+  memberships: "عدّل صلاحية موظف",
 };
 
 /**
@@ -287,6 +325,11 @@ export function describeAuditVerb(row: AuditVerbRow): string {
     if (planVerb) {
       return planVerb;
     }
+  }
+
+  const settingsVerb = describeSettingsUpdate(row);
+  if (settingsVerb) {
+    return settingsVerb;
   }
 
   if (row.entity === "care_plan_items") {

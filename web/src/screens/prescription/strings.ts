@@ -13,6 +13,8 @@ export const prescriptionPrintStrings = {
 
   // `.rx-doc`
   doctorPrefix: "د.",
+  // `.doc-spec`: before the clinic's phone ("هاتف: 0100 000 0000").
+  clinicPhonePrefix: "هاتف:",
   // `.doc-spec`'s first line: "{title} · رقم النقابة {n}".
   syndicatePrefix: "رقم النقابة",
 

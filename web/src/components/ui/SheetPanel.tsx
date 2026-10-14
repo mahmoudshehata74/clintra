@@ -71,8 +71,10 @@ export interface SheetPanelHeadProps {
  */
 export function SheetPanelHead({ title, onClose, closeLabel }: SheetPanelHeadProps) {
   return (
-    <div className="sticky top-0 z-10 flex items-center bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[14px] text-on-dark">
-      <h3 className="m-0 flex-1 text-[15px] font-semibold tracking-[-0.005em]">{title}</h3>
+    // gap-3: whatever the title row carries at its end (the visit sheet's
+    // arrival time) keeps clear of the close button.
+    <div className="sticky top-0 z-10 flex items-center gap-3 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[14px] text-on-dark">
+      <h3 className="m-0 min-w-0 flex-1 text-[15px] font-semibold tracking-[-0.005em]">{title}</h3>
       <SheetPanelCloseButton onClose={onClose} closeLabel={closeLabel} />
     </div>
   );

@@ -264,7 +264,7 @@ describe("buildProfileHero", () => {
       initial: "ك",
       name: "كريم فتحي",
       ageLine: "34 سنة · ذكر",
-      phone: "011 1234 5678",
+      phone: "0111 234 5678",
       firstVisit: "9 / 9 / 2026",
     });
   });
@@ -363,8 +363,8 @@ describe("buildProfileEvents", () => {
   });
 
   it("shows a cancelled visit and a no-show muted, at their booked time", () => {
-    expect(byKey(events, "visit:v-cancelled")).toMatchObject({ title: "زيارة اتلغت", muted: true, time: "10:00" });
-    expect(byKey(events, "visit:v-noshow")).toMatchObject({ title: "ما حضرش", muted: true, time: "11:00" });
+    expect(byKey(events, "visit:v-cancelled")).toMatchObject({ title: "زيارة — ملغي", muted: true, time: "10:00" });
+    expect(byKey(events, "visit:v-noshow")).toMatchObject({ title: "زيارة — لم يحضر", muted: true, time: "11:00" });
   });
 
   it("names a prescription's drugs in order and whether it was printed", () => {

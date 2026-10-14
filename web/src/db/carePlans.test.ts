@@ -368,8 +368,8 @@ describe("links kept by the visit writers", () => {
     const after = await writeCounts();
     expect(after.auditRows - before.auditRows).toBe(3);
     expect((await db.care_plans.get(plan.id))?.expected_end).toBe(cairoInstant("2026-11-10", "00:00"));
-    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "سجّل حجز"]);
-    expect(await verbsFor("visits", booked.id)).toEqual(["سجّل حجز"]);
+    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "أنشأ حجز"]);
+    expect(await verbsFor("visits", booked.id)).toEqual(["أنشأ حجز"]);
   });
 
   it.each<[string, (context: { plan: CarePlan; items: CarePlanItem[] }) => Promise<Partial<Parameters<typeof bookExistingPatientVisit>[1]>>, string]>([
@@ -439,7 +439,7 @@ describe("links kept by the visit writers", () => {
     expect((await db.care_plan_items.get(items[0].id))?.visit_id).toBe(queued);
     expect((await db.care_plans.get(plan.id))?.expected_end).toBe(cairoInstant("2026-11-10", "00:00"));
     expect((await writeCounts()).auditRows - before.auditRows).toBe(3);
-    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "سجّل حجز"]);
+    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "أنشأ حجز"]);
   });
 
   it("refuses a queue visit for a session that is not bookable, and writes nothing", async () => {
@@ -490,7 +490,7 @@ describe("links kept by the visit writers", () => {
     expect(moved).not.toBe(booked.id);
     expect((await db.visits.get(moved))?.rescheduled_from).toBe(booked.id);
     expect((await db.care_plans.get(plan.id))?.expected_end).toBe(cairoInstant("2026-11-17", "00:00"));
-    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "سجّل حجز", "نقل الميعاد"]);
+    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "أنشأ حجز", "نقل الميعاد"]);
   });
 
   it.each<[string, (visitId: string) => Promise<string>]>([
@@ -560,7 +560,7 @@ describe("undoing a visit write restores the session link with it", () => {
     expect((await db.visits.get(booked.id))?.status).toBe(VisitStatus.Booked);
     expect((await db.care_plan_items.get(items[0].id))?.visit_id).toBe(booked.id);
     expect((await db.care_plans.get(plan.id))?.expected_end).toBe(bookedEnd);
-    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "سجّل حجز", "نقل الميعاد", "نقل الميعاد"]);
+    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "أنشأ حجز", "نقل الميعاد", "نقل الميعاد"]);
   });
 
   it("queues the session's restored link before the moved visit's delete, so the server never refuses that delete", async () => {
@@ -601,7 +601,7 @@ describe("undoing a visit write restores the session link with it", () => {
     expect((await db.care_plans.get(plan.id))?.expected_end).toBe(bookedEnd);
     // The session, the visit and the plan's end: three writes, together.
     expect((await writeCounts()).auditRows - before.auditRows).toBe(3);
-    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "سجّل حجز", "عدّل خطة رعاية", "سجّل حجز"]);
+    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "أنشأ حجز", "عدّل خطة رعاية", "أنشأ حجز"]);
   });
 
   it("undoing a session's booking unlinks the session before the visit is deleted", async () => {

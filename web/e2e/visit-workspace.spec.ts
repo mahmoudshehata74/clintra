@@ -159,7 +159,7 @@ test("adding, editing and removing a drug updates the list and its count", async
 
   await addDrug(sheet, AMOXICILLIN);
   await expect(rx.getByText(VISIT.rxCountOne, { exact: true })).toBeVisible();
-  await expect(rxItem(sheet, AMOXICILLIN.name)).toContainText(`${AMOXICILLIN.instructions} · ${AMOXICILLIN.duration}`);
+  await expect(rxItem(sheet, AMOXICILLIN.name)).toContainText(`${AMOXICILLIN.instructions} · ${VISIT.rxDurationPrefix} ${AMOXICILLIN.duration}`);
 
   await addDrug(sheet, IBUPROFEN);
   await expect(rx.getByText(VISIT.rxCountTwo, { exact: true })).toBeVisible();
@@ -172,7 +172,7 @@ test("adding, editing and removing a drug updates the list and its count", async
   await duration.fill("7 أيام");
   await sheet.getByRole("button", { name: VISIT.rxEditConfirm, exact: true }).click();
   await expect(duration).toHaveCount(0);
-  await expect(rxItem(sheet, AMOXICILLIN.name)).toContainText(`${AMOXICILLIN.instructions} · 7 أيام`);
+  await expect(rxItem(sheet, AMOXICILLIN.name)).toContainText(`${AMOXICILLIN.instructions} · ${VISIT.rxDurationPrefix} 7 أيام`);
 
   await rxItem(sheet, IBUPROFEN.name).getByRole("button", { name: VISIT.rxRemove, exact: true }).click();
   await expect(rxItem(sheet, IBUPROFEN.name)).toHaveCount(0);

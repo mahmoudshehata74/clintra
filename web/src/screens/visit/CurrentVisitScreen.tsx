@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import PageMain from "../../components/PageMain";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import { db } from "../../db/database";
@@ -53,7 +54,7 @@ export default function CurrentVisitScreen({ practitionerId, today, onOpenDoctor
   }, [locationId, practitionerId, today]);
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-3.5 px-6 pt-6 pb-16 print:hidden">
+    <PageMain className="flex flex-col gap-3.5 pt-6 pb-16 print:hidden">
       {current === undefined ? (
         <p className="text-muted">{T.loadingLabel}</p>
       ) : current === null ? (
@@ -78,6 +79,6 @@ export default function CurrentVisitScreen({ practitionerId, today, onOpenDoctor
           />
         </Card>
       )}
-    </main>
+    </PageMain>
   );
 }

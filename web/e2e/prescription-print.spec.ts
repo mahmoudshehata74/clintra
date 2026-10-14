@@ -9,6 +9,8 @@ import {
   DEV_SEED_PINS,
   type Drug,
   gotoSeededDay,
+  invoiceHead,
+  invoiceTotals,
   karimInRoom,
   lockOverlay,
   login,
@@ -120,7 +122,7 @@ test("the preview shows the prescription as screen 16 lays it out", async ({ pag
   await expect(sheet.getByText(`${RX.doctorPrefix} ${SLOTS_DR}`, { exact: true })).toBeVisible();
   await expect(sheet.getByText("طبيب عام", { exact: true })).toBeVisible();
   await expect(
-    sheet.getByText("عيادة النور · الفرع الرئيسي · شارع الجمهورية، القاهرة · 02 2123 4567", { exact: true }),
+    sheet.getByText(`عيادة النور · الفرع الرئيسي · شارع الجمهورية، القاهرة · ${RX.clinicPhonePrefix} 02 2123 4567`, { exact: true }),
   ).toBeVisible();
   await expect(sheet.getByText(/^RX-\d{4}-\d{4}$/)).toBeVisible();
   await expect(sheet.getByText(TODAY_ON_PAPER, { exact: true })).toBeVisible();
@@ -131,7 +133,7 @@ test("the preview shows the prescription as screen 16 lays it out", async ({ pag
   const drugs = sheet.getByRole("listitem");
   await expect(drugs).toHaveCount(2);
   await expect(drugs.nth(0)).toContainText(`1${AMOXICILLIN.name} — ${AMOXICILLIN.form}`);
-  await expect(drugs.nth(0)).toContainText(`${AMOXICILLIN.instructions} · ${AMOXICILLIN.duration}`);
+  await expect(drugs.nth(0)).toContainText(`${AMOXICILLIN.instructions} · ${VISIT.rxDurationPrefix} ${AMOXICILLIN.duration}`);
   await expect(drugs.nth(1)).toContainText(`2${IBUPROFEN.name}`);
   await expect(drugs.nth(1)).not.toContainText("—");
   await expect(sheet).toContainText(`${RX.signature} · ${RX.doctorPrefix} ${SLOTS_DR}`);
@@ -355,8 +357,8 @@ test.describe("the existing printed pages keep their page size", () => {
     await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
     await page.getByRole("menuitem", { name: S.invoiceMenuLabel, exact: true }).click();
     const invoice = page.getByRole("dialog");
-    await expect(invoice.getByText(S.invoiceTotalLabel, { exact: true })).toBeVisible();
-    await invoice.getByRole("button", { name: S.printInvoiceAction, exact: true }).click();
+    await expect(invoiceTotals(invoice).getByText(S.invoiceTotalLabel, { exact: true })).toBeVisible();
+    await invoiceHead(invoice).getByRole("button", { name: S.printInvoiceAction, exact: true }).click();
     await expect.poll(() => printCalls(page)).toBe(1);
     expect(await pdfPageSize(page)).toEqual(LETTER);
   });

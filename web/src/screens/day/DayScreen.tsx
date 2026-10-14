@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import PageMain from "../../components/PageMain";
 import Ltr from "../../components/Ltr";
 import Button from "../../components/ui/Button";
 import ToggleGroup from "../../components/ui/ToggleGroup";
@@ -23,6 +24,7 @@ import type {
   Location,
   Membership,
   Patient,
+  Payment,
   Practitioner,
   Schedule,
   Service,
@@ -38,7 +40,7 @@ import type { Piastres } from "../../domain/money";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import { addDaysToClinicDay, clockTimeInCairo, todayInCairo, weekdayOf, type ClockTime } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
-import { formatActorLabel } from "./actorLabel";
+import { formatActorName } from "./actorLabel";
 import {
   ADVANCE_COOLDOWN_MS,
   beginCooldown,
@@ -51,6 +53,7 @@ import AuditSheet from "./AuditSheet";
 import BookingSheet, { type BookingSheetMode } from "./BookingSheet";
 import CancelVisitSheet from "./CancelVisitSheet";
 import CashCloseSheet from "./CashCloseSheet";
+import DayCloseSummaryPrint from "./DayCloseSummaryPrint";
 import { computeDayCounters } from "./dayCounters";
 import { computeDaySlotsSlab } from "./daySlotsSlab";
 import DaySlab from "./DaySlab";
@@ -182,6 +185,9 @@ export default function DayScreen({
   const [openMenuVisitId, setOpenMenuVisitId] = useState<string | null>(null);
   const [rowActionSheet, setRowActionSheet] = useState<RowActionSheetState>(null);
   const [invoiceSheetInvoiceId, setInvoiceSheetInvoiceId] = useState<string | null>(null);
+  // The payment just recorded from the payment sheet: the invoice sheet it
+  // returns to prints that payment's receipt once.
+  const [receiptToPrintPaymentId, setReceiptToPrintPaymentId] = useState<string | null>(null);
   // The visit whose patient the send sheet is open for (VisitMenu's "ابعت رسالة").
   const [sendMessageVisitId, setSendMessageVisitId] = useState<string | null>(null);
   // The patient whose profile is open (VisitMenu's "ملف المريض").
@@ -189,6 +195,9 @@ export default function DayScreen({
   const [paymentSheetInvoiceId, setPaymentSheetInvoiceId] = useState<string | null>(null);
   const [visitFormSheetVisitId, setVisitFormSheetVisitId] = useState<string | null>(null);
   const [isCashCloseOpen, setIsCashCloseOpen] = useState(false);
+  // A print of the closed day's summary, after closing or from the closed
+  // state's reprint; the nonce remounts it for each request.
+  const [daySummaryPrintNonce, setDaySummaryPrintNonce] = useState<number | null>(null);
   const [isDaySheetOpen, setIsDaySheetOpen] = useState(false);
   // Per visit id: blocks a row's primary button for ADVANCE_COOLDOWN_MS after
   // a status-advancing tap, so an accidental double-tap can't skip a status
@@ -402,7 +411,7 @@ export default function DayScreen({
       for (const visit of visits) {
         const membership = membershipsById.get(visit.created_by);
         const user = membership ? usersById.get(membership.user_id) : undefined;
-        actorLabelByVisitId.set(visit.id, formatActorLabel(membership, user));
+        actorLabelByVisitId.set(visit.id, formatActorName(membership, user));
       }
 
       return {
@@ -483,15 +492,6 @@ export default function DayScreen({
       console.error(error);
     } finally {
       setAdvanceCooldown((prev) => settleCooldown(prev, visit.id));
-    }
-  }
-
-  async function handleCallNextInQueue() {
-    const sorted = [...currentPractitionerVisits].sort((a, b) => a.position - b.position);
-    const nextVisitId = computeQueueSummary(sorted).nextVisitId;
-    const nextVisit = sorted.find((visit) => visit.id === nextVisitId);
-    if (nextVisit) {
-      await handleAdvance(nextVisit, VisitStatus.InRoom);
     }
   }
 
@@ -725,11 +725,12 @@ export default function DayScreen({
     setPaymentSheetInvoiceId(invoiceId);
   }
 
-  function handlePaymentRecorded(undo: UndoAction) {
+  function handlePaymentRecorded(undo: UndoAction, payment: Payment) {
     const invoiceId = paymentSheetInvoiceId;
     setPaymentSheetInvoiceId(null);
     // Back to the invoice sheet so the assistant sees the updated totals,
-    // not just a toast claiming something changed.
+    // not just a toast claiming something changed, and its receipt prints.
+    setReceiptToPrintPaymentId(payment.id);
     setInvoiceSheetInvoiceId(invoiceId);
     setToastState({ message: dayScreenStrings.paymentToastMessage, undo });
   }
@@ -742,6 +743,7 @@ export default function DayScreen({
   function handleCashClosed() {
     setIsCashCloseOpen(false);
     setToastState({ message: dayScreenStrings.cashCloseToastMessage, undo: null });
+    setDaySummaryPrintNonce(Date.now());
   }
 
   function handleCashClosePastDueMarked(undo: UndoAction) {
@@ -781,9 +783,9 @@ export default function DayScreen({
 
   if (!staticData) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
+      <PageMain className="py-16">
         <p className="text-muted">جارٍ التحميل...</p>
-      </main>
+      </PageMain>
     );
   }
 
@@ -824,7 +826,7 @@ export default function DayScreen({
     : (0 as Piastres);
 
   return (
-    <main className={`mx-auto max-w-3xl px-6 py-6 ${toastState ? "pb-28" : "pb-16"}`}>
+    <PageMain className={`pt-6 ${toastState ? "pb-28" : "pb-16"}`}>
       {/* Everything but the sheets below (each of which manages its own
           print:hidden/print:block split) — printing only ever shows a
           sheet's own print target, never the day grid behind it. */}
@@ -894,21 +896,27 @@ export default function DayScreen({
                 ]
           }
           splitSharePercent={isQueueMode ? queueCellsForCurrent.splitSharePercent : slotsSlab.splitSharePercent}
+          // `.split-leg`: slots "اكتمل 4 من 5 · باقي 1", queue "اكتمل 4 · مستنيين 4".
           splitCompletedText={
             <>
               {dayScreenStrings.slabSplitCompletedPrefix}{" "}
               <b>
                 <Ltr>{finalStateCount}</Ltr>
-              </b>{" "}
-              {dayScreenStrings.slabSplitOfWord}{" "}
-              <b>
-                <Ltr>{currentPractitionerVisits.length}</Ltr>
               </b>
+              {!isQueueMode && (
+                <>
+                  {" "}
+                  {dayScreenStrings.slabSplitOfWord}{" "}
+                  <b>
+                    <Ltr>{currentPractitionerVisits.length}</Ltr>
+                  </b>
+                </>
+              )}
             </>
           }
           splitRemainingText={
             <>
-              {dayScreenStrings.slabSplitRemainingPrefix}{" "}
+              {isQueueMode ? dayScreenStrings.queueSummaryWaitingLabel : dayScreenStrings.slabSplitRemainingPrefix}{" "}
               <b>
                 <Ltr>{currentPractitionerVisits.length - finalStateCount}</Ltr>
               </b>
@@ -1060,7 +1068,6 @@ export default function DayScreen({
               onSendToEnd={handleSendToEnd}
               onOpenVisitForm={handleOpenVisitForm}
               onOpenDaySheet={practitioner.id === currentPractitionerId ? () => setIsDaySheetOpen(true) : undefined}
-              onCallNextInQueue={practitioner.id === currentPractitionerId ? handleCallNextInQueue : undefined}
             />
           );
         })}
@@ -1113,7 +1120,12 @@ export default function DayScreen({
         <InvoiceSheet
           invoiceId={invoiceSheetInvoiceId}
           showPractitionerName={showPractitionerLabel}
-          onDismiss={() => setInvoiceSheetInvoiceId(null)}
+          printReceiptForPaymentId={receiptToPrintPaymentId ?? undefined}
+          onReceiptPrinted={() => setReceiptToPrintPaymentId(null)}
+          onDismiss={() => {
+            setReceiptToPrintPaymentId(null);
+            setInvoiceSheetInvoiceId(null);
+          }}
           onRequestPayment={handleRequestPayment}
           onVoided={handleInvoiceVoided}
         />
@@ -1152,8 +1164,19 @@ export default function DayScreen({
           date={today}
           onDismiss={() => setIsCashCloseOpen(false)}
           onClosed={handleCashClosed}
+          onPrintSummary={() => setDaySummaryPrintNonce(Date.now())}
           onNoShowMarked={handleCashClosePastDueMarked}
           onRequestMove={handleCashClosePastDueMove}
+        />
+      )}
+
+      {daySummaryPrintNonce !== null && currentPractitioner && selectedLocationId && (
+        <DayCloseSummaryPrint
+          key={daySummaryPrintNonce}
+          orgId={currentPractitioner.org_id}
+          locationId={selectedLocationId}
+          date={today}
+          onDone={() => setDaySummaryPrintNonce(null)}
         />
       )}
 
@@ -1187,6 +1210,6 @@ export default function DayScreen({
       {toastState && (
         <UndoToast message={toastState.message} onUndo={toastState.undo ? handleUndo : undefined} />
       )}
-    </main>
+    </PageMain>
   );
 }

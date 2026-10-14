@@ -1,50 +1,48 @@
-import { AuditAction, type AuditLog } from "../../db/types";
+import type { AuditLog } from "../../db/types";
 
-export type AuditEntityFilter =
-  | "all"
-  | "visits"
-  | "patients"
-  | "invoices"
-  | "payments"
-  | "cash_close"
-  | "visit_form_data"
-  | "settings";
-export type AuditActionFilter = "all" | AuditAction;
+/** The audit sheet's four filters, the prototype's `.filts`: الكل، زيارات، فواتير، إعدادات. */
+export type AuditFilter = "all" | "visits" | "invoices" | "settings";
+export type AuditGroup = Exclude<AuditFilter, "all">;
 
-// Entities listed under another entity's filter rather than one of their
-// own: a visit's prescription and its drugs are part of the visit, as are a
-// care plan and its sessions (booked as visits), a message is about its
-// patient, and a practitioner's profile and a message template are settings.
-const ENTITY_FILTER_GROUP: Partial<Record<string, AuditEntityFilter>> = {
+// Which filter each audited entity is listed under. Visits gathers
+// everything about a patient's care — the visit itself, its form and note
+// (a visit update), its prescription and drugs, care plans and their
+// sessions, the patient record and its messages; invoices the money
+// (invoices, payments, the cash close); settings everything the owner
+// configures (services and their prices, working hours, staff and their
+// scopes, practitioners, message templates). An entity in no group is
+// still listed under "الكل".
+const ENTITY_GROUP: Partial<Record<string, AuditGroup>> = {
+  visits: "visits",
+  visit_form_data: "visits",
   prescriptions: "visits",
   prescription_items: "visits",
   care_plans: "visits",
   care_plan_items: "visits",
-  messages: "patients",
+  patients: "visits",
+  messages: "visits",
+  invoices: "invoices",
+  payments: "invoices",
+  cash_close: "invoices",
+  services: "settings",
+  service_price_overrides: "settings",
+  schedules: "settings",
+  users: "settings",
+  memberships: "settings",
+  membership_locations: "settings",
+  membership_practitioners: "settings",
   practitioners: "settings",
   message_templates: "settings",
 };
 
-/** The entity filter a row is listed under: its own entity's, unless ENTITY_FILTER_GROUP files it under another. */
-export function auditEntityFilterOf(entity: string): string {
-  return ENTITY_FILTER_GROUP[entity] ?? entity;
+/** The filter a row's entity is listed under, or null for one listed under "الكل" only. */
+export function auditGroupOf(entity: string): AuditGroup | null {
+  return ENTITY_GROUP[entity] ?? null;
 }
 
-/** Applies the audit sheet's two independent filters: entity type and action. Either left at "all" matches every row. */
-export function filterAuditRows<T extends Pick<AuditLog, "entity" | "action">>(
-  rows: readonly T[],
-  entityFilter: AuditEntityFilter,
-  actionFilter: AuditActionFilter,
-): T[] {
-  return rows.filter((row) => {
-    if (entityFilter !== "all" && auditEntityFilterOf(row.entity) !== entityFilter) {
-      return false;
-    }
-    if (actionFilter !== "all" && row.action !== actionFilter) {
-      return false;
-    }
-    return true;
-  });
+/** The rows a filter shows: every row for "all", else the rows whose entity is in that group. */
+export function filterAuditRows<T extends Pick<AuditLog, "entity">>(rows: readonly T[], filter: AuditFilter): T[] {
+  return filter === "all" ? [...rows] : rows.filter((row) => auditGroupOf(row.entity) === filter);
 }
 
 /**

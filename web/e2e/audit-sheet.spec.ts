@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
   addDrug,
+  ASSISTANT_NAME,
   closeSheet,
   type Drug,
   gotoRealDay,
@@ -58,54 +59,55 @@ async function bookNewPatient(page: Page, name: string) {
   await expect(page.getByText(S.visitBooked)).toBeVisible();
 }
 
-test("the audit sheet opens from the rail with its title and filters", async ({ page }) => {
+test("the audit sheet opens from the rail with its badge, title and the prototype's four filters", async ({ page }) => {
   await openAudit(page);
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByText(S.auditSheetTitle)).toBeVisible();
-  await expect(dialog.getByRole("button", { name: S.auditFilterEntityVisits, exact: true })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: S.auditFilterActionCreate, exact: true })).toBeVisible();
+  await expect(dialog.getByText(S.auditSheetBadge, { exact: true })).toBeVisible();
+  await expect(dialog.getByText(S.auditSheetTitle, { exact: true })).toBeVisible();
+  const filters = dialog.getByRole("group", { name: S.auditFilterGroupLabel });
+  await expect(filters.getByRole("button")).toHaveText([S.auditFilterAll, S.auditFilterVisits, S.auditFilterInvoices, S.auditFilterSettings]);
 });
 
-test("each row shows a verb, an entity description and the actor label", async ({ page }) => {
+test("each row reads verb · patient, then the actor's bare name · the visit's time", async ({ page }) => {
   await bookExisting(page, PATIENTS.mona);
   await openAudit(page);
   const dialog = page.getByRole("dialog");
-
-  // The verb leads the row; description names the patient; the actor is
-  // named on the line under it (the seeded assistant, سارة حسن / المساعد).
-  await expect(dialog.getByText("سجّل حجز", { exact: true }).first()).toBeVisible();
-  await expect(dialog.getByText(PATIENTS.mona).first()).toBeVisible();
-  await expect(dialog.getByText(/سارة حسن/).first()).toBeVisible();
+  const row = dialog.getByRole("listitem").filter({ has: page.getByText("أنشأ حجز", { exact: true }) });
+  await expect(row).toHaveCount(1);
+  await expect(row.getByText(PATIENTS.mona, { exact: true })).toBeVisible();
+  // The seeded assistant, by name only — no "(المساعد)".
+  await expect(row.getByText(ASSISTANT_NAME, { exact: true })).toBeVisible();
+  await expect(row.getByText(new RegExp(`^${S.auditContextSlotPrefix} \\d{2}:\\d{2}$`))).toBeVisible();
 });
 
-test("the entity and action filters both switch the visible rows", async ({ page }) => {
+test("the four filters switch the visible rows, and every row stays under الكل", async ({ page }) => {
   await bookExisting(page, PATIENTS.mona); // منى: visits / create
   await rowFor(page, PATIENTS.mona).locator("button").filter({ hasText: PATIENTS.mona }).click(); // منى: visits / update
   await expect(page.getByText(S.attendanceMarked)).toBeVisible();
   await bookNewPatient(page, "عبير اختبار"); // عبير: patients / create AND visits / create
   await openAudit(page);
   const dialog = page.getByRole("dialog");
+  const count = (n: number) => dialog.getByText(`${n} ${S.auditEventCountUnit}`, { exact: true });
 
-  // Baseline: both patients represented.
+  // الكل: the four rows, both patients.
+  await expect(count(4)).toBeVisible();
   await expect(dialog.getByText(PATIENTS.mona).first()).toBeVisible();
   await expect(dialog.getByText("عبير اختبار").first()).toBeVisible();
 
-  // Entity filter — منى never appears as a patient row (she already existed).
-  await dialog.getByRole("button", { name: S.auditFilterEntityPatients, exact: true }).click();
-  await expect(dialog.getByText(PATIENTS.mona)).toHaveCount(0);
-  await expect(dialog.getByText("عبير اختبار").first()).toBeVisible();
+  // زيارات: the visits and the new patient's own record alike.
+  await dialog.getByRole("button", { name: S.auditFilterVisits, exact: true }).click();
+  await expect(count(4)).toBeVisible();
+  await expect(dialog.getByText("أضاف مريض", { exact: true })).toHaveCount(1);
 
-  await dialog.getByRole("button", { name: S.auditFilterEntityVisits, exact: true }).click();
-  await expect(dialog.getByText(PATIENTS.mona).first()).toBeVisible();
+  // فواتير and إعدادات: nothing of the kind happened.
+  await dialog.getByRole("button", { name: S.auditFilterInvoices, exact: true }).click();
+  await expect(count(0)).toBeVisible();
+  await expect(dialog.getByText(S.auditSheetEmpty, { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: S.auditFilterSettings, exact: true }).click();
+  await expect(count(0)).toBeVisible();
 
-  // Action filter (within visits): عبير's visit is a create only, so it
-  // vanishes under "update" and returns under "create".
-  await dialog.getByRole("button", { name: S.auditFilterActionUpdate, exact: true }).click();
-  await expect(dialog.getByText(PATIENTS.mona).first()).toBeVisible();
-  await expect(dialog.getByText("عبير اختبار")).toHaveCount(0);
-
-  await dialog.getByRole("button", { name: S.auditFilterActionCreate, exact: true }).click();
-  await expect(dialog.getByText("عبير اختبار").first()).toBeVisible();
+  await dialog.getByRole("button", { name: S.auditFilterAll, exact: true }).click();
+  await expect(count(4)).toBeVisible();
 });
 
 test("a new booking appears in the audit list without a manual refresh", async ({ page }) => {
@@ -131,15 +133,14 @@ test("the rail's السجل item is active while the audit log is open, and the 
   await expect(dayItem).toHaveAttribute("aria-current", "page");
 });
 
-test("the head counts the events listed, and the filter groups are labelled", async ({ page }) => {
+test("the head counts the events listed, and the filter group is labelled", async ({ page }) => {
   await bookExisting(page, PATIENTS.mona);
   await openAudit(page);
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText(`1 ${S.auditEventCountUnit}`, { exact: true })).toBeVisible();
-  await expect(dialog.getByRole("group", { name: S.auditFilterEntityGroupLabel })).toBeVisible();
-  await expect(dialog.getByRole("group", { name: S.auditFilterActionGroupLabel })).toBeVisible();
+  await expect(dialog.getByRole("group", { name: S.auditFilterGroupLabel })).toBeVisible();
 
-  await dialog.getByRole("button", { name: S.auditFilterEntityPayments, exact: true }).click();
+  await dialog.getByRole("button", { name: S.auditFilterInvoices, exact: true }).click();
   await expect(dialog.getByText(`0 ${S.auditEventCountUnit}`, { exact: true })).toBeVisible();
   await expect(dialog.getByText(S.auditSheetEmpty, { exact: true })).toBeVisible();
 });
@@ -170,7 +171,7 @@ test("a prescription's events are listed under the visits filter, naming the pat
 
   await openAudit(page);
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: S.auditFilterEntityVisits, exact: true }).click();
+  await dialog.getByRole("button", { name: S.auditFilterVisits, exact: true }).click();
   for (const [verb, count] of [
     ["كتب وصفة", 1],
     ["أضاف دواء", 2],
@@ -188,8 +189,8 @@ test("a prescription's events are listed under the visits filter, naming the pat
   await expect(dialog).not.toContainText(ibuprofen.name);
   await expect(dialog).not.toContainText(amoxicillin.instructions);
 
-  // Not under another entity's filter.
-  await dialog.getByRole("button", { name: S.auditFilterEntityInvoices, exact: true }).click();
+  // Not under another filter.
+  await dialog.getByRole("button", { name: S.auditFilterInvoices, exact: true }).click();
   await expect(dialog.getByText("كتب وصفة", { exact: true })).toHaveCount(0);
 });
 
@@ -277,12 +278,12 @@ test("a care plan's events are listed under the visits filter, naming the patien
 
   await openAudit(page);
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: S.auditFilterEntityVisits, exact: true }).click();
+  await dialog.getByRole("button", { name: S.auditFilterVisits, exact: true }).click();
   // The link cleared and the plan re-dated by the cancel, the plan re-dated by the undo.
   const edits = dialog.getByRole("listitem").filter({ has: page.getByText("عدّل خطة رعاية", { exact: true }) });
   await expect(edits).toHaveCount(3);
   // The visit's booking, and the session's link restored by the undo.
-  const bookings = dialog.getByRole("listitem").filter({ has: page.getByText("سجّل حجز", { exact: true }) });
+  const bookings = dialog.getByRole("listitem").filter({ has: page.getByText("أنشأ حجز", { exact: true }) });
   await expect(bookings).toHaveCount(2);
   for (const row of [...(await edits.all()), ...(await bookings.all())]) {
     await expect(row).toContainText(PATIENTS.karim);
@@ -290,7 +291,7 @@ test("a care plan's events are listed under the visits filter, naming the patien
   await expect(dialog).not.toContainText("استعادة الحركة");
   await expect(dialog).not.toContainText("التهاب وتر");
 
-  // Not under another entity's filter.
-  await dialog.getByRole("button", { name: S.auditFilterEntityPatients, exact: true }).click();
+  // Not under another filter.
+  await dialog.getByRole("button", { name: S.auditFilterInvoices, exact: true }).click();
   await expect(dialog.getByText("عدّل خطة رعاية", { exact: true })).toHaveCount(0);
 });

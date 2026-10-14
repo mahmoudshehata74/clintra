@@ -12,8 +12,9 @@ type SoftBadgeVariant = { appearance: "soft"; tone: Exclude<BadgeTone, "eligible
 type SolidBadgeVariant = { appearance: "solid"; tone: BadgeTone; shape?: BadgeShape };
 type DashedBadgeVariant = { appearance: "dashed"; tone: "green" | "copper" | "warning" | "danger"; shape?: BadgeShape };
 type OnDarkBadgeVariant = { appearance: "onDark" };
+type TintedBadgeVariant = { appearance: "tinted"; tone: "warning" | "eligible" | "danger" };
 
-type BadgeVariant = SoftBadgeVariant | SolidBadgeVariant | DashedBadgeVariant | OnDarkBadgeVariant;
+type BadgeVariant = SoftBadgeVariant | SolidBadgeVariant | DashedBadgeVariant | OnDarkBadgeVariant | TintedBadgeVariant;
 
 export type BadgeProps = Omit<HTMLAttributes<HTMLSpanElement>, "color"> & BadgeVariant;
 
@@ -25,6 +26,16 @@ const SHAPE_RADIUS: Record<BadgeShape, string> = {
 // `.c-head .badge` reproduced exactly — the only onDark source.
 const ONDARK_CLASSES =
   "rounded-chip border border-white/[0.14] bg-white/[0.08] px-[9px] py-[3px] text-[10.5px] font-semibold tracking-[0.05em] text-on-dark-dim";
+
+// `.inv-status` / `.inv-status.paid` reproduced exactly: a 22% tint of the
+// tone with the full tone as text and border, on the dark invoice head. Void
+// has no reference class; it takes the same look in danger.
+const TINTED_CLASSES = "rounded-chip border px-2.5 py-[3px] text-[11px] font-bold tracking-[0.05em]";
+const TINTED_LOOK: Record<"warning" | "eligible" | "danger", string> = {
+  warning: "border-warning bg-[color-mix(in_srgb,var(--color-warning)_22%,transparent)] text-warning",
+  eligible: "border-eligible bg-[color-mix(in_srgb,var(--color-eligible)_22%,transparent)] text-eligible",
+  danger: "border-danger bg-[color-mix(in_srgb,var(--color-danger)_22%,transparent)] text-danger",
+};
 
 // Soft chip sizing is shared across its four sources (`.brief-h .tag` /
 // `.tag.warn`, `.rx-head .c`, `.set-row .mode`, `.inv-status`) rather than
@@ -106,6 +117,16 @@ export default function Badge(props: BadgeProps) {
   if (props.appearance === "onDark") {
     const { className, children, ...rest } = props;
     const classes = [ONDARK_CLASSES, className ?? ""].filter(Boolean).join(" ");
+    return (
+      <span className={classes} {...omitVariantProps(rest)}>
+        {children}
+      </span>
+    );
+  }
+
+  if (props.appearance === "tinted") {
+    const { tone, className, children, ...rest } = props;
+    const classes = [TINTED_CLASSES, TINTED_LOOK[tone], className ?? ""].filter(Boolean).join(" ");
     return (
       <span className={classes} {...omitVariantProps(rest)}>
         {children}

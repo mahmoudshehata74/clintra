@@ -45,7 +45,7 @@ import {
 const LAILA = "ليلى مراد";
 const LAILA_PHONE = "01001234567";
 const LAILA_E164 = "+201001234567";
-const LAILA_DISPLAY = "010 0123 4567";
+const LAILA_DISPLAY = "0100 123 4567";
 // The seeded organization and location (db/seed.ts).
 const CLINIC_NAME = "عيادة النور";
 const CLINIC_PHONE = "+20221234567";
@@ -171,7 +171,7 @@ test("WhatsApp from the visit menu opens the exact wa.me link, lists the message
   for (const line of await messageLines.all()) {
     const shown = await line.innerText();
     expect(shown).not.toContain(LAILA_DISPLAY);
-    expect(shown).not.toContain("0123");
+    expect(shown).not.toContain("123 4567");
     expect(shown).not.toContain("اتأكد حجزك");
   }
 });
@@ -244,5 +244,5 @@ test("a prescription offers WhatsApp and SMS only once printed, with its text in
   const sheet = sendSheet(page);
   await expect(sheet.getByRole("group", { name: MSG.sendTemplateLabel }).getByRole("button", { pressed: true })).toHaveText("رسالة مخصصة");
   const body = sheet.getByLabel(MSG.sendBodyLabel, { exact: true });
-  await expect(body).toHaveValue(/^الوصفة RX-\d{4}-\d{4}\nالمريض: كريم فتحي\n1\. Amoxicillin 500mg — Capsule: كبسولة كل 8 ساعات · 5 أيام\nد\. أحمد المصري$/);
+  await expect(body).toHaveValue(/^الوصفة RX-\d{4}-\d{4}\nالمريض: كريم فتحي\n1\. Amoxicillin 500mg — Capsule: كبسولة كل 8 ساعات · لمدة 5 أيام\nد\. أحمد المصري$/);
 });

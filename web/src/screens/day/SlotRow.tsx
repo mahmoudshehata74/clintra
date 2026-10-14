@@ -9,7 +9,7 @@ import type { Patient, Service, Visit } from "../../db/types";
 import { computeActorRecency } from "./actorRecency";
 import { computeElapsedLabel } from "./elapsedLabel";
 import { dayScreenStrings } from "./strings";
-import { STATUS_LABEL, statusVisual } from "./statusStyle";
+import { arrivedWord, statusVisual, visitStatusLabel } from "./statusStyle";
 import VisitMenu, { type VisitMenuActions } from "./VisitMenu";
 
 interface SlotRowProps {
@@ -49,9 +49,9 @@ const REOPENED_STATUSES = new Set<string>([VisitStatus.Cancelled, VisitStatus.No
  * ?seedDay=1 pin's timestamps against real now; completed's own duration is
  * gated the same way, for one consistent rule across the three).
  */
-function untilText(visit: Visit, today: ClinicDay, now: Date): string | null {
+function untilText(visit: Visit, patient: Patient | undefined, today: ClinicDay, now: Date): string | null {
   if (visit.status === VisitStatus.Arrived && visit.arrived_at) {
-    return `${dayScreenStrings.untilArrivedPrefix} ${clockTimeInCairo(visit.arrived_at)}`;
+    return `${arrivedWord(patient?.gender)} ${clockTimeInCairo(visit.arrived_at)}`;
   }
   if (visit.status === VisitStatus.InRoom && visit.started_at) {
     const elapsed = computeElapsedLabel(visit.started_at, now.toISOString(), today, now);
@@ -76,8 +76,8 @@ const LIVE_UNTIL_STATUSES = new Set<string>([VisitStatus.InRoom, VisitStatus.NoS
  * pill, with a 3px left accent stripe carrying the status colour
  * (statusStyle.ts). The row's primary button still covers the time+patient
  * area and keeps its exact advance/open-form/cooldown behaviour from before
- * this task; the overflow menu and visit-form pill sit in their own trailing
- * column, under the status pill.
+ * this task; the overflow menu and visit-form pill sit beside the status
+ * pill in the trailing column, all centred in the row.
  */
 export default function SlotRow({
   time,
@@ -138,7 +138,7 @@ export default function SlotRow({
 
   const phoneDisplay = patient?.phone ? formatEgyptianPhoneForDisplay(patient.phone) : null;
   const recency = computeActorRecency(visit.created_at, today);
-  const until = untilText(visit, today, new Date());
+  const until = untilText(visit, patient, today, new Date());
 
   const timeBlock = (
     <span className={`text-sm font-bold leading-none tracking-[-0.02em] tabular-nums ${visual.timeClassName}`}>
@@ -204,24 +204,22 @@ export default function SlotRow({
           {whoBlock}
         </div>
       )}
-      <div className="flex flex-none flex-col items-end gap-1">
+      {/* `.slot .state`, centred in the row like the prototype's; the
+          visit-form chip and the menu sit beside it on the same line. */}
+      <div className="flex flex-none items-center gap-1.5">
         <Badge {...visual.badge} shape="pill">
-          {STATUS_LABEL[visit.status]}
+          {visitStatusLabel(visit.status, patient?.gender)}
         </Badge>
-        {(onOpenVisitForm || menu) && (
-          <div className="flex items-center gap-1">
-            {onOpenVisitForm && (
-              <button
-                type="button"
-                onClick={onOpenVisitForm}
-                className="shrink-0 rounded-chip bg-field px-2 py-0.5 text-xs text-muted hover:bg-green-wash hover:text-green"
-              >
-                {dayScreenStrings.visitFormPillLabel}
-              </button>
-            )}
-            {menu && <VisitMenu actions={menu} />}
-          </div>
+        {onOpenVisitForm && (
+          <button
+            type="button"
+            onClick={onOpenVisitForm}
+            className="shrink-0 rounded-chip bg-field px-2 py-0.5 text-xs text-muted hover:bg-green-wash hover:text-green"
+          >
+            {dayScreenStrings.visitFormPillLabel}
+          </button>
         )}
+        {menu && <VisitMenu actions={menu} />}
       </div>
     </li>
   );

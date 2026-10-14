@@ -168,8 +168,15 @@
   --color-eligible: #186b4b;
   --color-on-dark: #f2f7f5;
   --color-on-dark-dim: #87a29a;
+  /* The print note's yellow (`.print-header`, `.rx-print-header`). */
+  --color-print-note: #fff8e1;
+  --color-print-note-line: #d4a017;
+  --color-print-note-ink: #856d00;
   /* WhatsApp's own green — the prototype's `.msg-item .icn.wa` and `.msg-ch-toggle .wa` only. */
   --color-whatsapp: #25d366;
+
+  /* The shared content width of every rail page (components/PageMain.tsx): the prototype's `.app` frame. */
+  --container-page: 1116px;
 
   --radius-chip: 6px;
   --radius-control: 9px;
@@ -232,6 +239,19 @@ body {
 @layer utilities {
   .rx-print-target {
     page: prescription;
+  }
+}
+
+/* Screen 7: the closed day's printed summary is one A4 portrait page
+   (DayCloseSummaryPrint.tsx's `.day-close-print-target`). */
+@page day-close {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@layer utilities {
+  .day-close-print-target {
+    page: day-close;
   }
 }
 

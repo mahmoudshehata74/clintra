@@ -1,8 +1,16 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import { formatWeekdayDayMonth, formatWeekdayFullDate } from "../src/domain/displayDate";
+import { todayInCairo } from "../src/domain/time";
 import {
+  advanceRowTo,
+  ASSISTANT_NAME,
+  bookFirstOpenSlot,
   gotoRealDay,
   gotoSeededDay,
+  invoiceTotals,
+  labeledRowValue,
   openBookingSheet,
+  parsePounds,
   PATIENTS,
   pickSearchResult,
   QUEUE_DR,
@@ -216,4 +224,138 @@ test("on a narrow viewport a tall sheet's close button is fully visible and not 
     return { centre: isOwn(midX, rect.y + rect.height / 2), topEdge: isOwn(midX, rect.y + 2) };
   });
   expect(uncoveredAt).toEqual({ centre: true, topEdge: true });
+});
+
+/** Counts window.print calls instead of opening the dialog, so the print target stays mounted. Before navigation. */
+async function countPrints(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const counted = window as unknown as { printCalls: number };
+    counted.printCalls = 0;
+    window.print = () => {
+      counted.printCalls += 1;
+    };
+  });
+}
+const printCalls = (page: Page) => page.evaluate(() => (window as unknown as { printCalls: number }).printCalls);
+
+/** The printed summary's row value beside a label (DayCloseSummaryPrint.tsx's `.print-tbl`). */
+function summaryRow(page: Page, label: string) {
+  return page.getByRole("row").filter({ has: page.getByRole("cell", { name: label, exact: true }) }).getByRole("cell").last();
+}
+
+test("the cash close's head and summary cells follow the prototype", async ({ page }) => {
+  await gotoRealDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await openCashClose(page);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText(S.cashCloseHeadBadge, { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: `${S.cashCloseHeadTitlePrefix} ${formatWeekdayDayMonth(todayInCairo())}`, exact: true })).toBeVisible();
+  await expect(dialog.getByText(new RegExp(`^\\d{2}:\\d{2} · ${S.cashCloseHeadSubtitleSuffix}$`))).toBeVisible();
+  // `.close-cell`: label and value on one line.
+  const label = dialog.getByText(S.cashCloseExpectedLabel, { exact: true });
+  const value = label.locator("xpath=following-sibling::*[1]");
+  const [labelBox, valueBox] = [await label.boundingBox(), await value.boundingBox()];
+  expect(Math.abs(labelBox!.y + labelBox!.height - (valueBox!.y + valueBox!.height))).toBeLessThanOrEqual(4);
+});
+
+test("closing the day prints its one-page summary with every figure", async ({ page }) => {
+  await countPrints(page);
+  await gotoRealDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+
+  // One completed visit, paid in full in cash.
+  await bookFirstOpenSlot(page, PATIENTS.mona);
+  await advanceRowTo(page, PATIENTS.mona, S.statusArrived);
+  await advanceRowTo(page, PATIENTS.mona, S.statusInRoom);
+  await advanceRowTo(page, PATIENTS.mona, S.statusCompleted);
+  await rowFor(page, PATIENTS.mona).getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
+  await page.getByRole("menuitem", { name: S.invoiceMenuLabel, exact: true }).click();
+  const invoice = page.getByRole("dialog");
+  const totalText = await labeledRowValue(invoiceTotals(invoice), S.invoiceTotalLabel);
+  const total = parsePounds(totalText);
+  await invoice.getByRole("button", { name: S.recordPaymentAction }).click();
+  const payment = page.getByRole("dialog");
+  await payment.getByRole("textbox").first().fill(total.toFixed(2));
+  await payment.getByRole("button", { name: S.paymentConfirmButton, exact: true }).click();
+  await expect(page.getByText(S.invoiceStatusPaid)).toBeVisible();
+  await expect.poll(() => printCalls(page)).toBe(1); // the receipt
+  await page.getByRole("dialog").getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).first().click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await openCashClose(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder(S.cashCloseCollectedPlaceholder).fill(total.toFixed(2));
+  await expect(dialog.getByText(S.cashCloseMatchedTitle)).toBeVisible();
+  await confirmButton(dialog).click();
+  await expect(page.getByText(S.cashCloseToastMessage)).toBeVisible();
+  await expect.poll(() => printCalls(page)).toBe(2); // the summary, in the same tap
+
+  await page.emulateMedia({ media: "print" });
+  await expect(page.getByText(`${S.cashCloseHeadTitlePrefix} ${formatWeekdayFullDate(todayInCairo())}`, { exact: true })).toBeVisible();
+  const amount = `${totalText.replace(/\s*ج\.م$/, "")} ${S.tileCurrencyUnit}`;
+  const zero = `0 ${S.tileCurrencyUnit}`;
+  for (const [label, expected] of [
+    [S.daySummarySeenLabel, "1"],
+    [S.slabNoShowCellLabel, "0"],
+    [S.daySummaryCancelledLabel, "0"],
+    [`${S.daySummaryCollectedByPrefix} ${S.paymentMethodCash}`, amount],
+    [`${S.daySummaryCollectedByPrefix} ${S.paymentMethodCard}`, zero],
+    [`${S.daySummaryCollectedByPrefix} ${S.paymentMethodWallet}`, zero],
+    [`${S.daySummaryCollectedByPrefix} ${S.paymentMethodTransfer}`, zero],
+    [S.daySummaryTotalCollectedLabel, amount],
+    [S.daySummaryExpectedCashLabel, amount],
+    [S.cashCloseActualCashFieldLabel, amount],
+    [S.cashCloseDifferenceLabel, `${zero} · ${S.cashCloseNoDifferenceNoteLabel}`],
+    [S.daySummaryClosedByLabel, ASSISTANT_NAME],
+  ] as const) {
+    await expect(summaryRow(page, label)).toHaveText(expected);
+  }
+  await expect(page.getByText(new RegExp(`^${S.printedAtPrefix} \\d{1,2} \\S+ \\d{2}:\\d{2}$`))).toBeVisible();
+  await expect(page.getByText("Clintra v1.0.0", { exact: true })).toBeVisible();
+  // One A4 page: its target is laid out on the named page.
+  expect(await page.locator(".day-close-print-target").evaluate((el) => getComputedStyle(el).page)).toBe("day-close");
+  await page.emulateMedia({ media: null });
+});
+
+test("a refused close prints nothing", async ({ page }) => {
+  await countPrints(page);
+  await gotoRealDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await openCashClose(page);
+  const dialog = page.getByRole("dialog");
+  // A difference with no note is refused before anything is written.
+  await dialog.getByPlaceholder(S.cashCloseCollectedPlaceholder).fill("5");
+  await confirmButton(dialog).click();
+  await expect(dialog.getByText(S.cashCloseNoteRequiredError)).toBeVisible();
+  expect(await printCalls(page)).toBe(0);
+  await page.emulateMedia({ media: "print" });
+  await expect(page.getByText(S.daySummaryClosedByLabel, { exact: true })).toHaveCount(0);
+  await page.emulateMedia({ media: null });
+});
+
+test("a closed day reprints its summary from the closed state", async ({ page }) => {
+  await countPrints(page);
+  await gotoRealDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await openCashClose(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder(S.cashCloseCollectedPlaceholder).fill("0");
+  await confirmButton(dialog).click();
+  await expect(page.getByText(S.cashCloseToastMessage)).toBeVisible();
+  await expect.poll(() => printCalls(page)).toBe(1);
+  // The print dialog closing takes the printed page away again.
+  await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
+  await expect(page.locator(".day-close-print-target")).toHaveCount(0);
+
+  await openCashClose(page);
+  const closedDialog = page.getByRole("dialog");
+  await expect(closedDialog.getByText(S.cashCloseClosedAtLabel)).toBeVisible();
+  await closedDialog.getByRole("button", { name: S.cashClosePrintSummaryAction, exact: true }).click();
+  await expect.poll(() => printCalls(page)).toBe(2);
+  await page.emulateMedia({ media: "print" });
+  await expect(page.getByText(`${S.cashCloseHeadTitlePrefix} ${formatWeekdayFullDate(todayInCairo())}`, { exact: true })).toBeVisible();
+  await expect(summaryRow(page, S.daySummaryClosedByLabel)).toHaveText(ASSISTANT_NAME);
+  // The sheet itself stays off paper.
+  await expect(page.getByRole("button", { name: S.cashClosePrintSummaryAction, exact: true })).toBeHidden();
+  await page.emulateMedia({ media: null });
 });

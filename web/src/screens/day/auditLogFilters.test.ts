@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterAuditRows, isAuditRowInScope } from "./auditLogFilters";
+import { auditGroupOf, filterAuditRows, isAuditRowInScope } from "./auditLogFilters";
 import { AuditAction, type AuditLog } from "../../db/types";
 
 function row(overrides: Partial<AuditLog>): Pick<AuditLog, "entity" | "action" | "before" | "after"> {
@@ -9,67 +9,66 @@ function row(overrides: Partial<AuditLog>): Pick<AuditLog, "entity" | "action" |
 describe("filterAuditRows", () => {
   const rows = [
     row({ entity: "visits", action: AuditAction.Create }),
-    row({ entity: "visits", action: AuditAction.Update }),
+    row({ entity: "visit_form_data", action: AuditAction.Update }),
+    row({ entity: "prescriptions", action: AuditAction.Create }),
+    row({ entity: "prescription_items", action: AuditAction.Delete }),
+    row({ entity: "care_plans", action: AuditAction.Create }),
+    row({ entity: "care_plan_items", action: AuditAction.Update }),
     row({ entity: "patients", action: AuditAction.Create }),
+    row({ entity: "messages", action: AuditAction.Create }),
     row({ entity: "invoices", action: AuditAction.Delete }),
+    row({ entity: "payments", action: AuditAction.Create }),
+    row({ entity: "cash_close", action: AuditAction.Create }),
+    row({ entity: "services", action: AuditAction.Update }),
+    row({ entity: "service_price_overrides", action: AuditAction.Create }),
+    row({ entity: "schedules", action: AuditAction.Update }),
+    row({ entity: "users", action: AuditAction.Create }),
+    row({ entity: "memberships", action: AuditAction.Update }),
+    row({ entity: "membership_locations", action: AuditAction.Create }),
+    row({ entity: "membership_practitioners", action: AuditAction.Create }),
+    row({ entity: "practitioners", action: AuditAction.Update }),
+    row({ entity: "message_templates", action: AuditAction.Delete }),
+    row({ entity: "day_state", action: AuditAction.Update }),
   ];
+  const entitiesOf = (filter: Parameters<typeof filterAuditRows>[1]) => filterAuditRows(rows, filter).map((r) => r.entity);
 
-  it("matches every row when both filters are 'all'", () => {
-    expect(filterAuditRows(rows, "all", "all")).toHaveLength(4);
+  it("lists every row under الكل, including one in no group", () => {
+    expect(entitiesOf("all")).toEqual(rows.map((r) => r.entity));
   });
 
-  it("filters by entity type alone", () => {
-    const result = filterAuditRows(rows, "visits", "all");
-    expect(result).toHaveLength(2);
-    expect(result.every((r) => r.entity === "visits")).toBe(true);
-  });
-
-  it("filters by action alone", () => {
-    const result = filterAuditRows(rows, "all", AuditAction.Create);
-    expect(result).toHaveLength(2);
-    expect(result.every((r) => r.action === AuditAction.Create)).toBe(true);
-  });
-
-  it("filters by entity type and action together", () => {
-    const result = filterAuditRows(rows, "visits", AuditAction.Create);
-    expect(result).toHaveLength(1);
-    expect(result[0].entity).toBe("visits");
-    expect(result[0].action).toBe(AuditAction.Create);
-  });
-
-  it("returns an empty list when no row matches both filters", () => {
-    expect(filterAuditRows(rows, "patients", AuditAction.Delete)).toHaveLength(0);
-  });
-
-  it("lists prescription and prescription_items rows under the visits filter", () => {
-    const withRx = [
-      ...rows,
-      row({ entity: "prescriptions", action: AuditAction.Create }),
-      row({ entity: "prescription_items", action: AuditAction.Delete }),
-    ];
-    expect(filterAuditRows(withRx, "visits", "all").map((r) => r.entity)).toEqual([
+  it("lists visits, visit forms, prescriptions, care plans, patients and messages under زيارات", () => {
+    expect(entitiesOf("visits")).toEqual([
       "visits",
-      "visits",
+      "visit_form_data",
       "prescriptions",
       "prescription_items",
-    ]);
-    expect(filterAuditRows(withRx, "visits", AuditAction.Delete).map((r) => r.entity)).toEqual(["prescription_items"]);
-    expect(filterAuditRows(withRx, "invoices", "all").map((r) => r.entity)).toEqual(["invoices"]);
-  });
-
-  it("lists care_plans and care_plan_items rows under the visits filter", () => {
-    const withPlan = [
-      ...rows,
-      row({ entity: "care_plans", action: AuditAction.Create }),
-      row({ entity: "care_plan_items", action: AuditAction.Update }),
-    ];
-    expect(filterAuditRows(withPlan, "visits", "all").map((r) => r.entity)).toEqual([
-      "visits",
-      "visits",
       "care_plans",
       "care_plan_items",
+      "patients",
+      "messages",
     ]);
-    expect(filterAuditRows(withPlan, "patients", "all").map((r) => r.entity)).toEqual(["patients"]);
+  });
+
+  it("lists invoices, payments and the cash close under فواتير", () => {
+    expect(entitiesOf("invoices")).toEqual(["invoices", "payments", "cash_close"]);
+  });
+
+  it("lists services, prices, hours, staff, practitioners and templates under إعدادات", () => {
+    expect(entitiesOf("settings")).toEqual([
+      "services",
+      "service_price_overrides",
+      "schedules",
+      "users",
+      "memberships",
+      "membership_locations",
+      "membership_practitioners",
+      "practitioners",
+      "message_templates",
+    ]);
+  });
+
+  it("puts an entity in no group in none of the three", () => {
+    expect(auditGroupOf("day_state")).toBeNull();
   });
 });
 
