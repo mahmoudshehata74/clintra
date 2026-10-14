@@ -890,8 +890,8 @@ lookup `effectiveBody` needs. The key alone is unique locally, not
 
 A patient's course of treatment with one practitioner and its sessions
 (screen 17 of the prototype). Both tables were declared in v1 with no
-writer; v20 gives them writers, sync and a narrower policy. Data only so
-far — no screen writes them yet.
+writer; v20 gives them writers, sync and a narrower policy. Screen 17
+writes them (`web/src/screens/carePlan/`).
 
 **care_plans**: id, org_id, location_id, template_id, patient_id,
 practitioner_id, goal, diagnosis, planned_count, total_price, paid, status
@@ -953,7 +953,7 @@ Owner decisions:
    `template_id` is the general specialty template, as the visit form
    resolves it.
 3. **Linked through `care_plan_items.visit_id` only.** Booking a session
-   (`bookExistingPatientVisit`'s `carePlanItemId`) sets it; moving the visit
+   (`bookExistingPatientVisit`'s or `addToQueue`'s `carePlanItemId`) sets it; moving the visit
    (`moveVisit`) carries it to the new visit; cancelling it or marking a
    no-show (`cancelVisit`, `markVisitNoShow`) clears it — each in the
    visit write's own transaction, which also rewrites the plan's derived
@@ -967,6 +967,9 @@ Owner decisions:
    neither done nor booked (`skipCarePlanSession`,
    `unskipCarePlanSession`; `care_plan_session_not_skippable`), stop and
    resume (`stopCarePlan`, `resumeCarePlan`). Nothing is ever deleted.
+   A patient has at most one plan under way (active and not completed)
+   with a practitioner: creating or resuming another is refused
+   (`plan_already_active`), on the device only.
    Only the plan's own practitioner creates or edits a plan
    (`not_plan_practitioner`), enforced on the device; the server does not
    check who writes — the same known gap as prescriptions

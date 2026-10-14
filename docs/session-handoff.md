@@ -142,6 +142,13 @@ session's booking) restores the session link with the visit, in the same
 transaction (`db/visitUndo.ts`); a plan is completed only with at least one
 done session; the audit sheet lists care plan rows under "الزيارات".
 
+17 care plan (step 7): done — `web/src/screens/carePlan/` (CarePlanSheet
+with its create and edit forms, CarePlanEntry in the visit workspace,
+CarePlanBookingSheet, pure helpers in `carePlanModel.ts`); writes go
+through `db/carePlans.ts`, bookings through the day screen's BookingSheet
+with an optional prefill. The owner decisions it implements are listed
+under "Screen 17 (care plan)" below.
+
 This changes the earlier plan below ("templates seeded by migration"):
 defaults now ship with the app and only overrides live in the database,
 because a seed would only reach the organizations that exist when the
@@ -155,6 +162,15 @@ migration runs — every organization provisioned later would have none.
 - e. `.msg-sent` "آخر الرسائل": the 20 most recent messages the membership can see (organization, and its locations unless it covers all), newest first: `.icn.wa` / `.icn.sms`, "name · phone" (local display, left to right), `.snip` = the body's first line cut to 60 characters with "…", and a status button: "اتفتحت" (`.st.pending`) marks it sent, "اتبعتت" unmarks it. Empty: "لسه مفيش رسائل".
 - f. Below 768px `.msg-side` is a horizontal row of template chips above `.msg-main`.
 - WhatsApp's green (`#25D366`, `.icn.wa` and the toggle's dot) is the `whatsapp` token (`docs/design-tokens.md`).
+
+### Screen 17 (care plan) — owner decisions over the prototype
+- a. Entry points, in the visit workspace (at the top of `.visit-main`): with a plan under way (active, not completed) between the patient and the visit's practitioner, s10's `.plan-badge` "خطة رعاية جارية: {goal}" with `.p` "جلسة {n} من {count}" (n = the session this visit books, else the done sessions + 1, over the sessions not skipped), opening the plan; without one, the visit's own practitioner gets "ابدأ خطة رعاية" on an in_room or completed visit, opening the create form in the same sheet. One plan under way per patient per practitioner: `createCarePlan` and `resumeCarePlan` refuse another with `plan_already_active` (a stopped or completed plan does not count).
+- b. Create form (shared Field/TextInput/TextArea/ToggleGroup): "الهدف" (required), "التشخيص" (from the visit form, required), session groups — service (active services, with their effective price), "عدد الجلسات" (≥ 1), "كل كام يوم" (≥ 0), "＋ نوع جلسات تاني", "شيل" while more than one — and a live preview of the sessions (number, service, suggested "d / m": the first today, each later one its group's gap after the one before) with their total. Messages show after the first "ابدأ الخطة"; nothing is written until it succeeds; a refusal shows as one line.
+- c. CarePlanSheet per s17: `.plan-hero` (avatar initial, name, "الهدف: …" · "التشخيص: …", `.kbd` "{count} جلسات" with arabicCount), `.plan-progress` ("التقدم", "{done} / {count} جلسة", bar = done/count), `.plan-legs` (بدأت, متوقع الانتهاء — "—" while no session has a date —, الإجمالي, المدفوع: "d / m / yyyy", money as "2,500 ج.م"); a status line: "الخطة اكتملت", else "الخطة متوقفة", else the stalled warning "المريض متوقف من N يوم". `.plan-sessions`: `.n` = sequence; name = service; `.meta` "d / m · د. {doctor} · {duration} دقيقة" for done and booked (booked adds "h:mm" after the day, the app's 24-hour clock without a leading zero), "d / m · مقترح" for a dated suggestion, nothing for an undated or skipped one; `.st` "تمّت" (`.done`), "التالية" (`.next`, the first booked session) or "محجوزة" (a later booked one), "مقترحة" (`.st.plan`), "مؤجلة" (muted). The plan's practitioner gets "أجّل" on a suggested row and "رجّع" on a skipped one.
+- d. `.split`: "احجز الجلسة التالية" (anyone) opens the day screen's BookingSheet with an optional prefill — the plan's patient, the session's service (fixed), the session's suggested day (today when it has passed or there is none), a day at a time either way but never before today, and the session's id, linked by `bookExistingPatientVisit` or, in queue mode, `addToQueue` (which now takes `carePlanItemId` too); without a prefill the sheet is unchanged. Disabled with "الجلسة التالية محجوزة {d / m · h:mm}" while the first open session is booked; absent when the plan is stopped or completed, or has only skipped sessions left. A booking made here offers no undo toast. "عدّل الخطة" (plan's practitioner only): goal, diagnosis, "＋ ضيف جلسات" (one group), "وقّف الخطة" / "رجّع الخطة". "أرسل تذكير للمريض" opens SendMessageSheet for the first booked session's visit with `care_plan_session_reminder` preselected (its own filled text); disabled with "احجز الجلسة الأول" while nothing is booked.
+- e. The doctor day's attention card gets no stalled-plan item; screen 18 will show it.
+- A plan whose every session is skipped is not completed (it reads as active with nothing to book).
+- e2e: a write made straight into IndexedDB (a past visit, another device's plan) needs `syncSettled` first — the demo server's pull puts back its own copy of every pushed row — and a reload after (`reloadAs`): Dexie answers live queries from its own cache.
 
 ## Backlog
 - Messages: a "suggested today" list on the messages page (tomorrow's appointment reminders, follow-ups due, balances a week old), so the suggested templates are offered for the right patients instead of being opened one visit at a time.
