@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { formatAppBarDate } from "../../components/appBarDate";
 import Ltr from "../../components/Ltr";
-import Badge, { type BadgeTone } from "../../components/ui/Badge";
+import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import { CardFooter } from "../../components/ui/Card";
 import { SheetPanelCloseButton } from "../../components/ui/SheetPanel";
@@ -9,7 +10,8 @@ import { formatMoneyAmount } from "../money";
 import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo } from "../../domain/time";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { voidInvoice } from "../../db/invoiceVoid";
-import { InvoiceStatus, PaymentMethod, type Invoice, type InvoiceItem, type Patient, type Payment, type Practitioner } from "../../db/types";
+import { AuditAction, InvoiceStatus, PaymentMethod, type Invoice, type InvoiceItem, type Patient, type Payment, type Practitioner } from "../../db/types";
+import { withDoctorPrefix } from "./doctorName";
 import { formatBareInvoiceNumber, formatBareReceiptNumber, formatInvoiceNumber, formatReceiptNumber } from "./invoiceNumber";
 import { STATUS_LABEL } from "./invoiceStatusLabel";
 import { PrintClinicBlock, PrintHeaderNote, PrintPage, PrintTable, PrintTd } from "./PrintPage";
@@ -21,6 +23,14 @@ interface InvoiceSheetProps {
   invoiceId: string;
   /** More than one practitioner is visible today — the head names this one only then. */
   showPractitionerName: boolean;
+  /**
+   * A payment just recorded from the payment sheet ("أكّد الدفعة واطبع
+   * إيصال"): its receipt prints once the sheet has it, through the same
+   * print path as the payment row's own "طباعة" reprint.
+   */
+  printReceiptForPaymentId?: string;
+  /** Called once that receipt's print dialog has closed. */
+  onReceiptPrinted?: () => void;
   onDismiss: () => void;
   onRequestPayment: (invoiceId: string) => void;
   onVoided: () => void;
@@ -32,23 +42,18 @@ interface InvoiceData {
   payments: Payment[];
   patient: Patient | undefined;
   practitioner: Practitioner | undefined;
+  /** Who created the invoice, from its audit row — `.runrow .count`'s name; null when this device has no such row. */
+  createdByName: string | null;
 }
 
-// `.inv-status` (unpaid/partial) / `.inv-status.paid` (paid) reproduced via
-// the shared Badge: both soft+warning. Paid is "eligible" per
-// docs/design-tokens.md's own "done, arrived, paid, matched" entry for that
-// token, but Badge has no soft+eligible look (design-tokens.md defines no
-// eligible-wash/eligible-line pair) — solid+eligible is the closest its
-// existing API offers, a deliberate deviation from `.inv-status.paid`'s own
-// tinted look rather than a new token pair invented for this one spot. Void
-// has no reference class at all; danger (this app's own tone for a
-// cancelled/nullified record elsewhere — VisitMenu.tsx's cancel/no-show)
-// plus the line-through the pre-restyle version already used.
-const STATUS_BADGE: Record<string, { appearance: "soft"; tone: Exclude<BadgeTone, "eligible"> } | { appearance: "solid"; tone: BadgeTone }> = {
-  [InvoiceStatus.Unpaid]: { appearance: "soft", tone: "warning" },
-  [InvoiceStatus.Partial]: { appearance: "soft", tone: "warning" },
-  [InvoiceStatus.Paid]: { appearance: "solid", tone: "eligible" },
-  [InvoiceStatus.Void]: { appearance: "soft", tone: "danger" },
+// `.inv-status` (unpaid/partial) / `.inv-status.paid` (paid) through the
+// shared Badge's tinted look. Void has no reference class; danger (this
+// app's own tone for a cancelled record) plus a line-through.
+const STATUS_TONE: Record<string, "warning" | "eligible" | "danger"> = {
+  [InvoiceStatus.Unpaid]: "warning",
+  [InvoiceStatus.Partial]: "warning",
+  [InvoiceStatus.Paid]: "eligible",
+  [InvoiceStatus.Void]: "danger",
 };
 
 const METHOD_LABEL: Record<string, string> = {
@@ -69,38 +74,71 @@ const CURRENCY_UNIT = dayScreenStrings.tileCurrencyUnit;
  * props, matching how SyncStatusChip is self-contained — the caller only
  * needs to know which invoice to show.
  */
-export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismiss, onRequestPayment, onVoided }: InvoiceSheetProps) {
+export default function InvoiceSheet({
+  invoiceId,
+  showPractitionerName,
+  printReceiptForPaymentId,
+  onReceiptPrinted,
+  onDismiss,
+  onRequestPayment,
+  onVoided,
+}: InvoiceSheetProps) {
   const [printTarget, setPrintTarget] = useState<PrintTarget | null>(null);
   const [isVoiding, setIsVoiding] = useState(false);
-
-  useEffect(() => {
-    if (!printTarget) {
-      return;
-    }
-    window.print();
-    function handleAfterPrint() {
-      setPrintTarget(null);
-    }
-    window.addEventListener("afterprint", handleAfterPrint);
-    return () => window.removeEventListener("afterprint", handleAfterPrint);
-  }, [printTarget]);
 
   const data = useLiveQuery<InvoiceData | null>(async () => {
     const invoice = await db.invoices.get(invoiceId);
     if (!invoice) {
       return null;
     }
-    const [items, payments, patient, practitioner] = await Promise.all([
+    const [items, payments, patient, practitioner, createdRow] = await Promise.all([
       db.invoice_items.where("invoice_id").equals(invoiceId).toArray(),
       db.payments.where("invoice_id").equals(invoiceId).toArray(),
       db.patients.get(invoice.patient_id),
       db.practitioners.get(invoice.practitioner_id),
+      db.audit_log
+        .filter((row) => row.entity === "invoices" && row.entity_id === invoiceId && row.action === AuditAction.Create)
+        .first(),
     ]);
-    return { invoice, items, payments: payments.sort((a, b) => a.created_at.localeCompare(b.created_at)), patient, practitioner };
+    const creator = createdRow ? await db.memberships.get(createdRow.actor_membership_id) : undefined;
+    const creatorUser = creator ? await db.users.get(creator.user_id) : undefined;
+    return {
+      invoice,
+      items,
+      payments: payments.sort((a, b) => a.created_at.localeCompare(b.created_at)),
+      patient,
+      practitioner,
+      createdByName: creatorUser?.full_name ?? null,
+    };
   }, [invoiceId]);
   // Called before the loading return below so the hook order never changes;
   // "" just resolves to no location (and so an empty block) until it loads.
   const clinic = usePrintClinic(data?.invoice.location_id ?? "");
+
+  // The receipt of a payment just recorded prints as soon as the sheet has
+  // it, through the reprint's own target below.
+  const receiptToPrint = printReceiptForPaymentId
+    ? data?.payments.find((payment) => payment.id === printReceiptForPaymentId)
+    : undefined;
+  const activeTarget: PrintTarget | null = printTarget ?? (receiptToPrint ? { kind: "receipt", payment: receiptToPrint } : null);
+  const activeTargetKey = activeTarget ? (activeTarget.kind === "receipt" ? `receipt:${activeTarget.payment.id}` : "invoice") : null;
+  const isAutoReceipt = printTarget === null && receiptToPrint !== undefined;
+
+  useEffect(() => {
+    if (!activeTargetKey) {
+      return;
+    }
+    window.print();
+    function handleAfterPrint() {
+      setPrintTarget(null);
+      if (isAutoReceipt) {
+        onReceiptPrinted?.();
+      }
+    }
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => window.removeEventListener("afterprint", handleAfterPrint);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one print per target; the callback's identity must not reprint.
+  }, [activeTargetKey]);
 
   if (!data) {
     return (
@@ -110,7 +148,7 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
     );
   }
 
-  const { invoice, items, payments, patient, practitioner } = data;
+  const { invoice, items, payments, patient, practitioner, createdByName } = data;
   const remaining = (invoice.total - invoice.paid) as typeof invoice.total;
   const hasRemaining = remaining > 0;
   const canRecordPayment = invoice.status === InvoiceStatus.Unpaid || invoice.status === InvoiceStatus.Partial;
@@ -137,14 +175,18 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
             <span className="font-mono text-sm font-bold tracking-[0.02em] text-on-dark tabular-nums">
               <Ltr>{formatInvoiceNumber(invoice)}</Ltr>
             </span>
-            <Badge {...STATUS_BADGE[invoice.status]} className={invoice.status === InvoiceStatus.Void ? "line-through" : undefined}>
+            <Badge
+              appearance="tinted"
+              tone={STATUS_TONE[invoice.status]}
+              className={invoice.status === InvoiceStatus.Void ? "line-through" : undefined}
+            >
               {STATUS_LABEL[invoice.status]}
             </Badge>
             <div className="me-auto border-s border-white/[0.14] ps-[14px]">
               <p className="text-[13px] font-semibold text-on-dark">{patient?.full_name ?? ""}</p>
               <p className="-mt-px text-[11px] text-on-dark-dim">
-                {showPractitionerName && practitioner ? `${practitioner.full_name} · ` : ""}
-                {formatCairoDisplayDate(todayInCairo(new Date(invoice.issued_at)))}
+                {showPractitionerName && practitioner ? `${withDoctorPrefix(practitioner.full_name)} · ` : ""}
+                {formatAppBarDate(todayInCairo(new Date(invoice.issued_at))).dateLine}
               </p>
             </div>
             <Button variant="onDark" size="sm" onClick={() => setPrintTarget({ kind: "invoice" })}>
@@ -257,13 +299,29 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
             )}
           </div>
 
-          {canRecordPayment && (
-            <CardFooter>
+          {/* `.runrow`: record a payment while one is owed; `.count` "إنشاء {time} · {staff}". */}
+          <CardFooter
+            count={
+              <>
+                {dayScreenStrings.invoiceCreatedPrefix}{" "}
+                <b>
+                  <Ltr>{clockTimeInCairo(invoice.issued_at)}</Ltr>
+                </b>
+                {createdByName && (
+                  <>
+                    {" · "}
+                    <b>{createdByName}</b>
+                  </>
+                )}
+              </>
+            }
+          >
+            {canRecordPayment && (
               <Button variant="primary" onClick={() => onRequestPayment(invoiceId)}>
                 {dayScreenStrings.recordPaymentAction} ({formatMoneyAmount(remaining)} {CURRENCY_UNIT})
               </Button>
-            </CardFooter>
-          )}
+            )}
+          </CardFooter>
 
           {/* Voiding stays visually separate from the daily actions above. */}
           <div className="border-t border-hair px-[18px] py-[14px]">
@@ -279,7 +337,7 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
         </Sheet>
       </div>
 
-      {printTarget?.kind === "invoice" && (
+      {activeTarget?.kind === "invoice" && (
         <div className="hidden print:block">
           <PrintPage>
             <PrintHeaderNote>{dayScreenStrings.printHeaderWarning}</PrintHeaderNote>
@@ -324,15 +382,15 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
         </div>
       )}
 
-      {printTarget?.kind === "receipt" && (
+      {activeTarget?.kind === "receipt" && (
         <div className="hidden print:block">
           <PrintPage>
             <PrintHeaderNote>{dayScreenStrings.printHeaderWarning}</PrintHeaderNote>
             <PrintClinicBlock {...clinic} />
             <p className="mt-4 text-center text-sm text-black/60">{dayScreenStrings.paymentReceiptNumberPrefix}</p>
-            <h2 className="text-center text-2xl font-semibold text-black">{formatBareReceiptNumber(printTarget.payment)}</h2>
+            <h2 className="text-center text-2xl font-semibold text-black">{formatBareReceiptNumber(activeTarget.payment)}</h2>
             <p className="mt-6 text-center text-4xl font-semibold text-black">
-              {formatMoneyAmount(printTarget.payment.amount)}
+              {formatMoneyAmount(activeTarget.payment.amount)}
             </p>
             <div className="mt-6 flex flex-col gap-1 text-sm">
               <p className="flex justify-between text-black">
@@ -345,16 +403,16 @@ export default function InvoiceSheet({ invoiceId, showPractitionerName, onDismis
               </p>
               <p className="flex justify-between text-black">
                 <span className="text-black/60">{dayScreenStrings.paymentMethodLabel}</span>
-                <span>{METHOD_LABEL[printTarget.payment.method]}</span>
+                <span>{METHOD_LABEL[activeTarget.payment.method]}</span>
               </p>
               <p className="flex justify-between text-black">
                 <span className="text-black/60">{dayScreenStrings.invoiceDateLabel}</span>
-                <span>{formatCairoDisplayDate(todayInCairo(new Date(printTarget.payment.created_at)))}</span>
+                <span>{formatCairoDisplayDate(todayInCairo(new Date(activeTarget.payment.created_at)))}</span>
               </p>
-              {printTarget.payment.note && (
+              {activeTarget.payment.note && (
                 <p className="flex justify-between text-black">
                   <span className="text-black/60">{dayScreenStrings.paymentNotePlaceholder}</span>
-                  <span>{printTarget.payment.note}</span>
+                  <span>{activeTarget.payment.note}</span>
                 </p>
               )}
             </div>

@@ -24,6 +24,7 @@ import type {
   Location,
   Membership,
   Patient,
+  Payment,
   Practitioner,
   Schedule,
   Service,
@@ -183,6 +184,9 @@ export default function DayScreen({
   const [openMenuVisitId, setOpenMenuVisitId] = useState<string | null>(null);
   const [rowActionSheet, setRowActionSheet] = useState<RowActionSheetState>(null);
   const [invoiceSheetInvoiceId, setInvoiceSheetInvoiceId] = useState<string | null>(null);
+  // The payment just recorded from the payment sheet: the invoice sheet it
+  // returns to prints that payment's receipt once.
+  const [receiptToPrintPaymentId, setReceiptToPrintPaymentId] = useState<string | null>(null);
   // The visit whose patient the send sheet is open for (VisitMenu's "ابعت رسالة").
   const [sendMessageVisitId, setSendMessageVisitId] = useState<string | null>(null);
   // The patient whose profile is open (VisitMenu's "ملف المريض").
@@ -717,11 +721,12 @@ export default function DayScreen({
     setPaymentSheetInvoiceId(invoiceId);
   }
 
-  function handlePaymentRecorded(undo: UndoAction) {
+  function handlePaymentRecorded(undo: UndoAction, payment: Payment) {
     const invoiceId = paymentSheetInvoiceId;
     setPaymentSheetInvoiceId(null);
     // Back to the invoice sheet so the assistant sees the updated totals,
-    // not just a toast claiming something changed.
+    // not just a toast claiming something changed, and its receipt prints.
+    setReceiptToPrintPaymentId(payment.id);
     setInvoiceSheetInvoiceId(invoiceId);
     setToastState({ message: dayScreenStrings.paymentToastMessage, undo });
   }
@@ -1110,7 +1115,12 @@ export default function DayScreen({
         <InvoiceSheet
           invoiceId={invoiceSheetInvoiceId}
           showPractitionerName={showPractitionerLabel}
-          onDismiss={() => setInvoiceSheetInvoiceId(null)}
+          printReceiptForPaymentId={receiptToPrintPaymentId ?? undefined}
+          onReceiptPrinted={() => setReceiptToPrintPaymentId(null)}
+          onDismiss={() => {
+            setReceiptToPrintPaymentId(null);
+            setInvoiceSheetInvoiceId(null);
+          }}
           onRequestPayment={handleRequestPayment}
           onVoided={handleInvoiceVoided}
         />

@@ -98,6 +98,9 @@ export const dayScreenStrings = {
   // only recolours the qnum.
   queueNextBadge: "التالي",
   queueNextActionNumberPrefix: "نمرة",
+  // Before a practitioner's name wherever the prototype names the doctor
+  // ("د. أحمد المصري") — see doctorName.ts.
+  doctorPrefix: "د.",
   // The booking sheet's title prefix ("حجز · 11:30 · د. أحمد المصري").
   bookingButtonLabel: "حجز",
   // The slots card's `.run` that opens the booking sheet.
@@ -114,8 +117,9 @@ export const dayScreenStrings = {
   // Shown only once the search query is non-empty and matches nothing. An
   // empty query renders no results and no message at all.
   bookingNoResults: "مفيش نتائج",
-  // Shown on a result row in place of a last-visit date, for a patient with
-  // no completed visit on record.
+  // `.rr .m`: "آخر زيارة {relative}" (the doctor's day's relative helper),
+  // or bookingFirstVisit for a patient with no completed visit on record.
+  bookingLastVisitPrefix: "آخر زيارة",
   bookingFirstVisit: "أول زيارة",
   bookingBackAction: "رجوع",
   // Shown on the slots step when the practitioner's schedule has no empty
@@ -141,9 +145,9 @@ export const dayScreenStrings = {
   // getMintingSeries); nothing is written.
   deviceSeriesUnknownError: "الجهاز ده محتاج يتصل بالإنترنت مرة واحدة قبل ما يطلّع فواتير أو إيصالات",
   // Prefixes the typed search text on the always-present "create new
-  // patient" row, e.g. "+ مريض جديد باسم «أحم»" — shown as the list's last
-  // row whether or not any real match was found, not only on zero results.
-  newPatientButtonPrefix: "+ مريض جديد باسم",
+  // patient" row (`.rr.new`), e.g. "＋ إضافة مريض جديد باسم «أحم»" — shown as
+  // the list's last row whether or not any real match was found.
+  newPatientButtonPrefix: "＋ إضافة مريض جديد باسم",
   newPatientNamePlaceholder: "اسم المريض",
   newPatientPhonePlaceholder: "رقم التليفون (اختياري)",
   // Toggle that disables and clears the phone field.
@@ -263,9 +267,9 @@ export const dayScreenStrings = {
   // The items table's leading column header.
   invoiceItemLabel: "البند",
   invoiceItemQtyLabel: "الكمية",
-  invoiceItemUnitPriceLabel: "سعر الوحدة",
+  invoiceItemUnitPriceLabel: "السعر",
   invoiceItemTotalLabel: "الإجمالي",
-  invoiceTotalLabel: "إجمالي الفاتورة",
+  invoiceTotalLabel: "الإجمالي",
   invoicePaidLabel: "المدفوع",
   invoiceRemainingLabel: "المتبقي",
   invoiceStatusUnpaid: "غير مدفوعة",
@@ -273,7 +277,9 @@ export const dayScreenStrings = {
   invoiceStatusPaid: "مدفوعة بالكامل",
   invoiceStatusVoid: "ملغاة",
   recordPaymentAction: "تسجيل دفعة",
-  printInvoiceAction: "إيصال الفاتورة",
+  printInvoiceAction: "طباعة",
+  // `.runrow .count`: "إنشاء 10:00 · سارة حسن".
+  invoiceCreatedPrefix: "إنشاء",
   voidInvoiceAction: "إلغاء الفاتورة",
   // Shown instead of an enabled voidInvoiceAction once any payment exists.
   voidInvoiceDisabledReason: "مفيش إلغاء بعد تسجيل دفعة",
@@ -283,11 +289,11 @@ export const dayScreenStrings = {
   paymentReceiptNumberPrefix: "إيصال رقم",
   printReceiptAction: "طباعة",
 
-  // The "تسجيل دفعة" prompt.
-  paymentSheetTitle: "تسجيل دفعة",
+  // The payment sheet (`.book-head h3`: "دفعة · فاتورة INV-2026-0142").
+  paymentSheetTitle: "دفعة",
   // `.book-head h3`'s own connector word, e.g. "دفعة · فاتورة INV-2026-0142".
   paymentSheetInvoiceConnector: "فاتورة",
-  paymentAmountPlaceholder: "المبلغ (جنيه)",
+  paymentAmountPlaceholder: "المبلغ",
   // `.field .hint` under the amount field.
   paymentAmountHint: "اكتب رقم أقل عشان دفعة جزئية تانية",
   paymentAmountInvalidError: "المبلغ ده مش صحيح",
@@ -304,7 +310,8 @@ export const dayScreenStrings = {
   // The note field's own example placeholder text (`.field .in` placeholder),
   // distinct from paymentNotePlaceholder above, which is the field's label.
   paymentNoteExamplePlaceholder: "مثلًا: باقي المبلغ الأسبوع الجاي",
-  paymentConfirmButton: "تسجيل",
+  // Records the payment, then prints its receipt (the reprint's own path).
+  paymentConfirmButton: "أكّد الدفعة واطبع إيصال",
   paymentToastMessage: "اتسجلت الدفعة",
   // Shown when undoing a payment reverses the invoice's paid/status but then
   // deleting the payment row itself fails — the assistant must know the

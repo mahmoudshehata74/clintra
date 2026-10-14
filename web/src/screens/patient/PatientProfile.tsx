@@ -103,7 +103,13 @@ async function loadProfile(patientId: string): Promise<PatientProfileSource | nu
 }
 
 /** What is open over the profile: one sheet at a time. */
-type OpenSheet = ProfileEventTarget | { kind: "payment"; invoiceId: string } | { kind: "plan"; planId: string } | null;
+type OpenSheet =
+  | ProfileEventTarget
+  | { kind: "payment"; invoiceId: string }
+  // The invoice again after a payment, printing that payment's receipt once.
+  | { kind: "invoice_after_payment"; invoiceId: string; paymentId: string }
+  | { kind: "plan"; planId: string }
+  | null;
 
 /**
  * The patient profile (reference screen 18, "ملف المريض"): `.pt-hero`
@@ -405,12 +411,27 @@ function ProfileSheets({ openSheet, onChange }: { openSheet: OpenSheet; onChange
         />,
         document.body,
       );
+    case "invoice_after_payment":
+      return createPortal(
+        <InvoiceSheet
+          invoiceId={openSheet.invoiceId}
+          showPractitionerName
+          printReceiptForPaymentId={openSheet.paymentId}
+          onReceiptPrinted={() => onChange({ kind: "invoice", invoiceId: openSheet.invoiceId })}
+          onDismiss={close}
+          onRequestPayment={(invoiceId) => onChange({ kind: "payment", invoiceId })}
+          onVoided={close}
+        />,
+        document.body,
+      );
     case "payment":
       return createPortal(
         <PaymentSheet
           invoiceId={openSheet.invoiceId}
           onDismiss={close}
-          onRecorded={() => onChange({ kind: "invoice", invoiceId: openSheet.invoiceId })}
+          onRecorded={(_undo, payment) =>
+            onChange({ kind: "invoice_after_payment", invoiceId: openSheet.invoiceId, paymentId: payment.id })
+          }
         />,
         document.body,
       );

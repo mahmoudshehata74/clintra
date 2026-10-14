@@ -10,7 +10,7 @@ import { useLiveQuery } from "../../db/useLiveQuery";
 import { type Piastres } from "../../domain/money";
 import { formatMoneyAmount } from "../money";
 import { recordPayment } from "../../db/payments";
-import { PaymentMethod, type Invoice, type Patient } from "../../db/types";
+import { PaymentMethod, type Invoice, type Patient, type Payment } from "../../db/types";
 import { formatInvoiceNumber } from "./invoiceNumber";
 import { validatePaymentForm } from "./paymentForm";
 import Sheet from "./Sheet";
@@ -21,7 +21,8 @@ import type { UndoAction } from "./undoAction";
 interface PaymentSheetProps {
   invoiceId: string;
   onDismiss: () => void;
-  onRecorded: (undo: UndoAction) => void;
+  /** After a successful write only: the caller returns to the invoice and prints this payment's receipt there. */
+  onRecorded: (undo: UndoAction, payment: Payment) => void;
 }
 
 const METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
@@ -37,7 +38,10 @@ interface PaymentData {
 }
 
 /**
- * The compact "تسجيل دفعة" prompt: amount, method, an optional note. Reads
+ * The compact payment prompt (`.book`, #s6): amount, method, an optional
+ * note, and one "أكّد الدفعة واطبع إيصال" that records the payment and hands
+ * it back for the receipt print — a refused or failed write prints nothing.
+ * Reads
  * the invoice itself live (rather than taking one as a prop) so the
  * remaining-balance validation always reflects the invoice's current state,
  * not a snapshot that could go stale while this sheet is open.
@@ -90,11 +94,14 @@ export default function PaymentSheet({ invoiceId, onDismiss, onRecorded }: Payme
         setAmountError(dayScreenStrings.paymentAmountExceedsRemainingError);
         return;
       }
-      onRecorded({
-        kind: "payment",
-        paymentAuditLogId: result.paymentAuditLogId,
-        invoiceAuditLogId: result.invoiceAuditLogId,
-      });
+      onRecorded(
+        {
+          kind: "payment",
+          paymentAuditLogId: result.paymentAuditLogId,
+          invoiceAuditLogId: result.invoiceAuditLogId,
+        },
+        result.payment,
+      );
     } catch (error) {
       // No receipt number can be minted yet, so nothing was recorded; any
       // other failure is not this sheet's to explain.
