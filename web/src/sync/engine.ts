@@ -4,6 +4,7 @@ import type { ClintraDatabase } from "../db/database";
 import { getDeviceId } from "../db/deviceRegistration";
 import { MUTATION_EVENT_NAME } from "../db/mutate";
 import { AuditAction, type SyncOp } from "../db/types";
+import { applyPulledRow, familyTables, foldChildOpsOfRejectedCreate } from "./pullCollisions";
 import { SyncAuthError, type SyncTransport } from "./transport";
 
 const DEFAULT_INTERVAL_MS = 10_000;
@@ -132,7 +133,11 @@ export function describeFailedOpEscalation(op: SyncOp): { referenceCode: string 
  *   additionally writes the server's returned rev back to the local row
  *   (skipped for a delete — there is no local row left to write it to).
  * - rejected (a genuine business conflict) writes a sync_review row and
- *   leaves the sync_op exactly as it was — unchanged from before this task.
+ *   leaves the sync_op exactly as it was. A rejected create also takes its
+ *   children's queued ops out of the queue and into that review row's
+ *   payload (sync/pullCollisions.ts's foldChildOpsOfRejectedCreate): on the
+ *   server each would only fail on its foreign key, and a failed op is
+ *   retried indefinitely.
  * - failed (a server bug, never a business conflict — docs/sync-plan.md's
  *   Q11) never enters sync_review; it increments the op's own failure
  *   counter and sets next_retry_at per backoffMsFor, so it is retried
@@ -208,24 +213,30 @@ export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport
     }
 
     // rejected
-    await db.sync_review.add({
-      id: id(),
-      op_id: op.op_id,
-      entity: op.entity,
-      entity_id: op.entity_id,
-      reason: result.reason,
-      payload: op.payload,
-      needs_review: true,
-      created_at: now,
-      action: op.action,
-      base_rev: op.base_rev,
+    const reason = result.reason;
+    await db.transaction("rw", [...familyTables(db, op.entity), db.sync_ops, db.sync_review], async () => {
+      const payload = op.action === AuditAction.Create ? await foldChildOpsOfRejectedCreate(db, op) : op.payload;
+      await db.sync_review.add({
+        id: id(),
+        op_id: op.op_id,
+        entity: op.entity,
+        entity_id: op.entity_id,
+        reason,
+        payload,
+        needs_review: true,
+        created_at: now,
+        action: op.action,
+        base_rev: op.base_rev,
+      });
     });
   }
 }
 
 /**
- * Applies one pulled/bootstrapped change to its entity's local table — a
- * plain upsert by id, or a delete when payload is null. Shared by
+ * Applies one pulled/bootstrapped change to its entity's local table — an
+ * upsert by id (sync/pullCollisions.ts's applyPulledRow, which also settles a
+ * local row of a different id holding the same unique key, so a collision
+ * never fails the cycle), or a delete when payload is null. Shared by
  * runBootstrapWindow and runPullCycle's own loop below: both receive the
  * identical PulledChange shape, and both apply it the same way.
  */
@@ -234,7 +245,7 @@ async function applyChange(db: ClintraDatabase, change: { entity: string; entity
   if (change.payload === null) {
     await table.delete(change.entity_id);
   } else {
-    await table.put(change.payload);
+    await applyPulledRow(db, change.entity, change.payload);
   }
 }
 

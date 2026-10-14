@@ -3,7 +3,7 @@ import type { Piastres } from "../domain/money";
 import { todayInCairo } from "../domain/time";
 import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
-import { getMintingSeries } from "./deviceRegistration";
+import { getMintingSeries, numberMarkKey, reserveNextNumber } from "./deviceRegistration";
 import { runAtomicMutations } from "./mutate";
 import { AuditAction, InvoiceStatus, type Invoice, type Payment, type PaymentMethod } from "./types";
 
@@ -37,14 +37,16 @@ export type RecordPaymentResult =
  * current max for this location and series inside the transaction and add
  * one, so IndexedDB's serialization of overlapping readwrite transactions on
  * the payments store rules out a race on this device, and the series rules
- * one out against every other device. Throws device_series_unknown, with
+ * one out against every other device. The device's high-water mark
+ * (reserveNextNumber) keeps a displaced payment's receipt number reserved.
+ * Throws device_series_unknown, with
  * nothing written, while this device does not know its series yet.
  */
 export async function recordPayment(db: ClintraDatabase, input: RecordPaymentInput): Promise<RecordPaymentResult> {
   const actor = await resolveActingMembership(db);
   const series = await getMintingSeries(db);
 
-  return runAtomicMutations(db, [db.invoices, db.payments, db.cash_close], async (write) => {
+  return runAtomicMutations(db, [db.invoices, db.payments, db.cash_close, db.device], async (write) => {
     const invoice = await db.invoices.get(input.invoiceId);
     if (!invoice) {
       return { ok: false, reason: "invoice_not_found" };
@@ -72,10 +74,13 @@ export async function recordPayment(db: ClintraDatabase, input: RecordPaymentInp
       .first();
 
     const paymentsAtLocation = await db.payments.where("location_id").equals(invoice.location_id).toArray();
-    const nextReceiptNumber =
+    const nextReceiptNumber = await reserveNextNumber(
+      db,
+      numberMarkKey("receipt", invoice.location_id, series, null),
       paymentsAtLocation
         .filter((payment) => payment.series === series)
-        .reduce((max, payment) => Math.max(max, Number(payment.receipt_number)), 0) + 1;
+        .reduce((max, payment) => Math.max(max, Number(payment.receipt_number)), 0),
+    );
 
     const payment: Payment = {
       id: id(),

@@ -1,33 +1,39 @@
 import { expect, test, type Page } from "@playwright/test";
-import type { Patient, SyncOp, SyncReview, Visit } from "../src/db/types";
+import type { DeviceRegistration, Invoice, Patient, Payment, Prescription, PrescriptionItem, SyncOp, SyncReview, Visit } from "../src/db/types";
 import { emptySlotTiles, gotoSeededDay, login, PATIENTS, pickSearchResult, S, selectPractitioner, SLOTS_DR } from "./support";
 
-/** Reads every row from an object store in the app's own "clintra" database, straight out of IndexedDB. */
-async function readIndexedDbStore<T>(page: Page, storeName: string): Promise<T[]> {
-  return page.evaluate(async (name) => {
-    const req = indexedDB.open("clintra");
-    const database: IDBDatabase = await new Promise((resolve, reject) => {
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    try {
-      const store = database.transaction(name, "readonly").objectStore(name);
-      return await new Promise<T[]>((resolve, reject) => {
-        const getAll = store.getAll();
-        getAll.onsuccess = () => resolve(getAll.result as T[]);
-        getAll.onerror = () => reject(getAll.error);
+/** The database the app's FakeTransport keeps as its stand-in server (sync/fakeTransport.ts's FAKE_SERVER_DB_NAME). */
+const FAKE_SERVER_DB = "clintra-fake-server";
+
+/** Reads every row from an object store in the app's own "clintra" database (or another, by name), straight out of IndexedDB. */
+async function readIndexedDbStore<T>(page: Page, storeName: string, dbName = "clintra"): Promise<T[]> {
+  return page.evaluate(
+    async ({ name, databaseName }) => {
+      const req = indexedDB.open(databaseName);
+      const database: IDBDatabase = await new Promise((resolve, reject) => {
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
       });
-    } finally {
-      database.close();
-    }
-  }, storeName);
+      try {
+        const store = database.transaction(name, "readonly").objectStore(name);
+        return await new Promise<T[]>((resolve, reject) => {
+          const getAll = store.getAll();
+          getAll.onsuccess = () => resolve(getAll.result as T[]);
+          getAll.onerror = () => reject(getAll.error);
+        });
+      } finally {
+        database.close();
+      }
+    },
+    { name: storeName, databaseName: dbName },
+  );
 }
 
-/** Writes rows directly into the app's own "clintra" database, straight into IndexedDB. */
-async function putIndexedDbRows<T>(page: Page, storeName: string, rows: readonly T[]): Promise<void> {
+/** Writes rows directly into the app's own "clintra" database (or another, by name), straight into IndexedDB. */
+async function putIndexedDbRows<T>(page: Page, storeName: string, rows: readonly T[], dbName = "clintra"): Promise<void> {
   await page.evaluate(
-    async ({ name, items }) => {
-      const req = indexedDB.open("clintra");
+    async ({ name, items, databaseName }) => {
+      const req = indexedDB.open(databaseName);
       const database: IDBDatabase = await new Promise((resolve, reject) => {
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
@@ -46,7 +52,7 @@ async function putIndexedDbRows<T>(page: Page, storeName: string, rows: readonly
         database.close();
       }
     },
-    { name: storeName, items: rows },
+    { name: storeName, items: rows, databaseName: dbName },
   );
 }
 
@@ -184,4 +190,314 @@ test("'شيلها' on a lost slot conflict removes the phantom local visit entir
   const opsAfter = await readIndexedDbStore<SyncOp>(page, "sync_ops");
   expect(opsAfter.find((op) => op.op_id === plantedOpId)).toBeUndefined();
   expect(opsAfter.some((op) => op.entity_id === myVisit.id && op.synced_at === null)).toBe(false);
+});
+
+/**
+ * Asks the running sync engine for a cycle now, as coming back to the tab
+ * does (sync/engine.ts's visibilitychange handler), instead of waiting for
+ * its timer: the app's first cycle after a load runs before the seeded
+ * device is registered, so its first real pull would otherwise only come
+ * with the next tick.
+ */
+async function requestSyncCycle(page: Page): Promise<void> {
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+}
+
+async function readDevice(page: Page): Promise<DeviceRegistration> {
+  const [device] = await readIndexedDbStore<DeviceRegistration>(page, "device");
+  return device;
+}
+
+/** A row the fake server accepted from another device: the row in its own store, and the applied op its pullSince serves. */
+async function plantServerRow<T extends { id: string }>(page: Page, entity: string, row: T, appliedAt: string): Promise<void> {
+  await putIndexedDbRows(page, entity, [row], FAKE_SERVER_DB);
+  await putIndexedDbRows<SyncOp>(
+    page,
+    "sync_ops",
+    [
+      {
+        op_id: crypto.randomUUID(),
+        entity,
+        entity_id: row.id,
+        action: "create",
+        payload: row,
+        device_id: "e2e-other-device",
+        created_at: appliedAt,
+        synced_at: appliedAt,
+        base_rev: null,
+        failure_count: 0,
+        next_retry_at: null,
+      },
+    ],
+    FAKE_SERVER_DB,
+  );
+}
+
+test("a prescription another device got onto the server first replaces this device's own: the review lists its drugs with only 'تمام', and later pulls keep arriving", async ({
+  page,
+}) => {
+  await gotoSeededDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+
+  // The engine has completed a pull, so the fake server's database exists to plant into.
+  await expect
+    .poll(async () => {
+      await requestSyncCycle(page);
+      return (await readDevice(page))?.pull_cursor ?? null;
+    })
+    .not.toBeNull();
+
+  const prescribedVisitIds = new Set((await readIndexedDbStore<Prescription>(page, "prescriptions")).map((rx) => rx.visit_id));
+  const visit = (await readIndexedDbStore<Visit>(page, "visits")).find((candidate) => !prescribedVisitIds.has(candidate.id));
+  if (!visit) throw new Error("no seeded visit without a prescription");
+  const device = await readDevice(page);
+
+  const now = Date.now();
+  const prescriptionFor = (series: number, number: number, createdAt: string): Prescription => ({
+    id: crypto.randomUUID(),
+    org_id: visit.org_id,
+    location_id: visit.location_id,
+    visit_id: visit.id,
+    patient_id: visit.patient_id,
+    practitioner_id: visit.practitioner_id,
+    series,
+    issued_year: 2026,
+    number,
+    diagnosis: null,
+    printed_at: null,
+    created_by: visit.created_by,
+    created_at: createdAt,
+    rev: 1,
+  });
+  const itemFor = (prescriptionId: string, name: string, position: number): PrescriptionItem => ({
+    id: crypto.randomUUID(),
+    prescription_id: prescriptionId,
+    name,
+    form: null,
+    instructions: "قرص بعد الأكل",
+    duration: null,
+    note: null,
+    position,
+    rev: 1,
+  });
+
+  // This device's own prescription for the visit, which the server refused:
+  // the state runSyncCycle leaves behind — the create still queued under an
+  // open rejection, its items' ops already folded into that review
+  // (sync/pullCollisions.ts's foldChildOpsOfRejectedCreate).
+  const mine = prescriptionFor(device.series ?? 1, 900, new Date(now - 60_000).toISOString());
+  const myItems = [itemFor(mine.id, "Brufen 400mg", 1), itemFor(mine.id, "Voltaren Gel", 2)];
+  const myCreateOpId = crypto.randomUUID();
+  await putIndexedDbRows(page, "prescriptions", [mine]);
+  await putIndexedDbRows(page, "prescription_items", myItems);
+  await putIndexedDbRows<SyncOp>(page, "sync_ops", [
+    {
+      op_id: myCreateOpId,
+      entity: "prescriptions",
+      entity_id: mine.id,
+      action: "create",
+      payload: mine,
+      device_id: device.id,
+      created_at: mine.created_at,
+      synced_at: null,
+      base_rev: null,
+      failure_count: 0,
+      next_retry_at: null,
+    },
+  ]);
+  await putIndexedDbRows<SyncReview>(page, "sync_review", [
+    {
+      id: crypto.randomUUID(),
+      op_id: myCreateOpId,
+      entity: "prescriptions",
+      entity_id: mine.id,
+      reason: "conflict_visit_has_prescription",
+      payload: {
+        row: mine,
+        child_ops: myItems.map((item) => ({
+          op_id: crypto.randomUUID(),
+          entity: "prescription_items",
+          entity_id: item.id,
+          action: "create",
+          payload: item,
+        })),
+      },
+      needs_review: true,
+      created_at: new Date(now).toISOString(),
+      action: "create",
+      base_rev: null,
+    },
+  ]);
+
+  // The other device's prescription for the same visit, which the server accepted.
+  const theirs = prescriptionFor(99, 1, new Date(now - 120_000).toISOString());
+  const theirItem = itemFor(theirs.id, "Panadol 500mg", 1);
+  await plantServerRow(page, "prescriptions", theirs, new Date(now).toISOString());
+  await plantServerRow(page, "prescription_items", theirItem, new Date(now + 1).toISOString());
+
+  // A reload makes every liveQuery re-read what was planted.
+  await page.reload();
+  await login(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await expect
+    .poll(async () => {
+      await requestSyncCycle(page);
+      return (await readIndexedDbStore<SyncReview>(page, "sync_review")).filter((review) => review.needs_review).map((review) => review.reason);
+    })
+    .toEqual(["displaced_by_server"]);
+
+  await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet.getByText("وصفة — النسخة دي اتشالت لأن جهاز تاني سبقها على السيرفر", { exact: true })).toBeVisible();
+  await expect(sheet.getByText("الأدوية: Brufen 400mg، Voltaren Gel", { exact: true })).toBeVisible();
+  // One row: the displacement superseded the rejection, folded it in, and offers nothing to choose.
+  await expect(sheet.getByText("وصفة — الزيارة دي ليها وصفة بالفعل من جهاز تاني", { exact: true })).toHaveCount(0);
+  await expect(sheet.getByText("كانت مستنية مراجعة قبل كده: الزيارة دي ليها وصفة بالفعل من جهاز تاني", { exact: true })).toBeVisible();
+  await expect(sheet.getByRole("button", { name: S.syncReviewKeepAction, exact: true })).toHaveCount(0);
+  await expect(sheet.getByRole("button", { name: S.syncReviewRemoveAction, exact: true })).toHaveCount(0);
+
+  await sheet.getByRole("button", { name: S.syncReviewAcknowledgeAction, exact: true }).click();
+  await expect(page.getByRole("button", { name: S.syncNeedsReview, exact: true })).toHaveCount(0);
+
+  const prescriptions = await readIndexedDbStore<Prescription>(page, "prescriptions");
+  expect(prescriptions.filter((rx) => rx.visit_id === visit.id)).toEqual([theirs]);
+  const items = await readIndexedDbStore<PrescriptionItem>(page, "prescription_items");
+  expect(items.filter((item) => item.prescription_id === mine.id)).toEqual([]);
+  expect(items.find((item) => item.id === theirItem.id)).toEqual(theirItem);
+  const displacedIds = [mine.id, ...myItems.map((item) => item.id)];
+  const ops = await readIndexedDbStore<SyncOp>(page, "sync_ops");
+  expect(ops.filter((op) => op.synced_at === null && displacedIds.includes(op.entity_id))).toEqual([]);
+
+  // A later change on the server still reaches this device: sync is not wedged.
+  const later: Patient = {
+    id: crypto.randomUUID(),
+    org_id: visit.org_id,
+    full_name: "مريض من الجهاز التاني",
+    phone: null,
+    gender: null,
+    birth_year: null,
+    note: null,
+    created_at: new Date(now + 2).toISOString(),
+    rev: 1,
+  };
+  await plantServerRow(page, "patients", later, new Date(now + 2).toISOString());
+  await expect
+    .poll(async () => {
+      await requestSyncCycle(page);
+      return (await readIndexedDbStore<Patient>(page, "patients")).find((patient) => patient.id === later.id) ?? null;
+    })
+    .toEqual(later);
+});
+
+test("a visit another device got onto the server first takes this device's invoice and payment with it: the review spells out the payment and how to put it back", async ({
+  page,
+}) => {
+  await gotoSeededDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await expect
+    .poll(async () => {
+      await requestSyncCycle(page);
+      return (await readDevice(page))?.pull_cursor ?? null;
+    })
+    .not.toBeNull();
+
+  const seeded = (await readIndexedDbStore<Visit>(page, "visits")).find((candidate) => candidate.scheduled_at !== null);
+  if (!seeded) throw new Error("no seeded slot visit");
+  const device = await readDevice(page);
+  const now = Date.now();
+  // A slot no seeded visit holds, so the only collision is the planted one.
+  const slot = `${seeded.visit_date}T19:45:00.000Z`;
+  const visitFor = (position: number, createdAt: string): Visit => ({
+    ...seeded,
+    id: crypto.randomUUID(),
+    position,
+    scheduled_at: slot,
+    unique_scheduled_at: slot,
+    status: "completed",
+    created_at: createdAt,
+    rev: 1,
+  });
+
+  // This device's own visit, never accepted (its create still queued), already invoiced and paid.
+  const mine = visitFor(900, new Date(now - 60_000).toISOString());
+  const invoice: Invoice = {
+    id: crypto.randomUUID(),
+    org_id: mine.org_id,
+    location_id: mine.location_id,
+    number: 900,
+    issued_year: 2026,
+    series: device.series ?? 1,
+    patient_id: mine.patient_id,
+    practitioner_id: mine.practitioner_id,
+    visit_id: mine.id,
+    total: 15000 as Invoice["total"],
+    paid: 15000 as Invoice["paid"],
+    status: "paid",
+    issued_at: mine.created_at,
+    rev: 1,
+  };
+  const payment: Payment = {
+    id: crypto.randomUUID(),
+    invoice_id: invoice.id,
+    location_id: invoice.location_id,
+    amount: 15000 as Payment["amount"],
+    method: "card",
+    receipt_number: "900",
+    series: device.series ?? 1,
+    note: null,
+    after_close: false,
+    created_by: mine.created_by,
+    created_at: mine.created_at,
+    rev: 1,
+  };
+  await putIndexedDbRows(page, "visits", [mine]);
+  await putIndexedDbRows(page, "invoices", [invoice]);
+  await putIndexedDbRows(page, "payments", [payment]);
+  await putIndexedDbRows<SyncOp>(page, "sync_ops", [
+    {
+      op_id: crypto.randomUUID(),
+      entity: "visits",
+      entity_id: mine.id,
+      action: "create",
+      payload: mine,
+      device_id: device.id,
+      created_at: mine.created_at,
+      synced_at: null,
+      base_rev: null,
+      failure_count: 0,
+      next_retry_at: null,
+    },
+  ]);
+
+  // The other device's visit for the same slot, which the server accepted.
+  const theirs = visitFor(901, new Date(now - 120_000).toISOString());
+  await plantServerRow(page, "visits", theirs, new Date(now).toISOString());
+
+  await page.reload();
+  await login(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await expect
+    .poll(async () => {
+      await requestSyncCycle(page);
+      return (await readIndexedDbStore<SyncReview>(page, "sync_review")).filter((review) => review.needs_review).map((review) => review.reason);
+    })
+    .toEqual(["displaced_by_server"]);
+
+  await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(
+    sheet.getByText(
+      "زيارة — النسخة دي اتشالت لأن جهاز تاني سبقها على السيرفر. " +
+        "فيه دفعات اتحصّلت عليها ومش هتوصل للسيرفر: 150.00 ج.م فيزا (RCP-900). " +
+        "احجز للمريض من جديد وسجّل الدفعة تاني، واكتب رقم الإيصال القديم في ملاحظة الدفعة.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(sheet.getByRole("button", { name: S.syncReviewKeepAction, exact: true })).toHaveCount(0);
+  await sheet.getByRole("button", { name: S.syncReviewAcknowledgeAction, exact: true }).click();
+  await expect(page.getByRole("button", { name: S.syncNeedsReview, exact: true })).toHaveCount(0);
+
+  expect((await readIndexedDbStore<Payment>(page, "payments")).find((row) => row.id === payment.id)).toBeUndefined();
+  expect((await readIndexedDbStore<Invoice>(page, "invoices")).find((row) => row.id === invoice.id)).toBeUndefined();
+  expect((await readIndexedDbStore<Visit>(page, "visits")).find((row) => row.id === theirs.id)).toEqual(theirs);
 });

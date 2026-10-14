@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
+import { numberMarkKey } from "./deviceRegistration";
 import type {
   AuditLog,
   CarePlan,
@@ -453,6 +454,36 @@ export class ClintraDatabase extends Dexie {
       messages: "id, patient_id, location_id, attempted_at",
       message_templates: "id, &key",
     });
+
+    // Number high-water marks (DeviceRegistration.number_marks;
+    // db/deviceRegistration.ts's reserveNextNumber): a number minted on this
+    // device stays reserved after its row is displaced by a pulled row
+    // (sync/pullCollisions.ts). No index — the marks live on the one device
+    // row. Initialised from the numbers already in the local store, per
+    // numberMarkKey, so the first mint after the upgrade continues exactly
+    // where the local max would have.
+    this.version(19)
+      .stores({})
+      .upgrade(async (tx) => {
+        const marks: Record<string, number> = {};
+        const raise = (key: string, value: number) => {
+          marks[key] = Math.max(marks[key] ?? 0, value);
+        };
+        for (const invoice of await tx.table("invoices").toArray()) {
+          raise(numberMarkKey("invoice", invoice.location_id, invoice.series, invoice.issued_year), invoice.number);
+        }
+        for (const prescription of await tx.table("prescriptions").toArray()) {
+          raise(
+            numberMarkKey("prescription", prescription.location_id, prescription.series, prescription.issued_year),
+            prescription.number,
+          );
+        }
+        for (const payment of await tx.table("payments").toArray()) {
+          raise(numberMarkKey("receipt", payment.location_id, payment.series, null), Number(payment.receipt_number));
+        }
+        const devices = await tx.table("device").toArray();
+        await Promise.all(devices.map((device) => tx.table("device").update(device.id, { number_marks: marks })));
+      });
   }
 }
 

@@ -6,7 +6,8 @@ import { LocationScope, PractitionerScope } from "../domain/scope";
 import { VisitSource } from "../domain/visitSource";
 import { CancelReason, VisitStatus } from "../domain/visitStatus";
 import { runSyncCycle } from "./engine";
-import { discardMine, getReviewComparison, keepMine } from "./reviewActions";
+import { DISPLACED_BY_SERVER_REASON } from "./pullCollisions";
+import { acknowledgeReview, discardMine, getReviewComparison, keepMine } from "./reviewActions";
 import type { PullSinceResult, PushOpResult, SyncTransport } from "./transport";
 
 let db: ClintraDatabase;
@@ -352,5 +353,28 @@ describe("keepMine: conflict_day_closed — a permanent state block, never a reb
 
     expect(await db.day_state.get("day-1")).toEqual(localDayState);
     expect(await db.sync_ops.count()).toBe(0);
+  });
+});
+
+describe("acknowledgeReview: a row the server's version displaced", () => {
+  it("closes the review and writes nothing else — there is no version left to choose", async () => {
+    const before = { ops: await db.sync_ops.toArray(), audit: await db.audit_log.toArray() };
+    await db.sync_review.add({
+      id: "review-displaced",
+      op_id: "op-gone",
+      entity: "prescriptions",
+      entity_id: "rx-displaced",
+      reason: DISPLACED_BY_SERVER_REASON,
+      payload: { row: { id: "rx-displaced" }, children: [] },
+      needs_review: true,
+      created_at: "2026-09-07T08:00:00.000Z",
+      action: AuditAction.Create,
+      base_rev: null,
+    });
+
+    await acknowledgeReview(db, "review-displaced");
+
+    expect((await db.sync_review.get("review-displaced"))?.needs_review).toBe(false);
+    expect({ ops: await db.sync_ops.toArray(), audit: await db.audit_log.toArray() }).toEqual(before);
   });
 });

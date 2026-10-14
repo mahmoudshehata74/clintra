@@ -540,6 +540,17 @@ export interface DeviceRegistration {
    * never talks to a server, is series 1. Added in database version 15.
    */
   series: number | null;
+  /**
+   * The highest number this device has minted in each of its series
+   * (db/deviceRegistration.ts's numberMarkKey => number): invoices and
+   * prescriptions per location, series and issued year, receipts per
+   * location and series. Minting reads it together with the local max
+   * (reserveNextNumber), so a number stays reserved after the row that
+   * carried it is displaced by a pulled row and never reaches the server.
+   * Absent until the first mint on a device registered after version 19,
+   * which reads as no marks. Added in database version 19.
+   */
+  number_marks?: Record<string, number>;
 }
 
 // Declared now, unused in v1, no screens.

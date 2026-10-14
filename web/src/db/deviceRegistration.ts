@@ -143,3 +143,38 @@ export async function getMintingSeries(db: ClintraDatabase): Promise<number> {
   }
   return device.series;
 }
+
+/** The three kinds of number a device mints inside its series. */
+export type MintedNumberKind = "invoice" | "receipt" | "prescription";
+
+/**
+ * The key one series' high-water mark is stored under in
+ * DeviceRegistration.number_marks: kind, location and series, plus the
+ * issued year for the yearly numbers (invoices and prescriptions; receipt
+ * numbers run across all time).
+ */
+export function numberMarkKey(kind: MintedNumberKind, locationId: string, series: number, issuedYear: number | null): string {
+  return issuedYear === null ? `${kind}:${locationId}:${series}` : `${kind}:${locationId}:${series}:${issuedYear}`;
+}
+
+/**
+ * Reserves the next number in one series: one more than the larger of the
+ * highest number still in the local store (`localMax`) and the highest this
+ * device has ever minted there (its number_marks entry), and records it as
+ * the new mark. The mark is what keeps a number reserved once the row that
+ * carried it is gone — displaced by a pulled row (sync/pullCollisions.ts) —
+ * so a printed invoice, receipt or prescription number never comes back on
+ * a different document. Must run inside the minting write's own transaction,
+ * which must cover db.device, so the read, the mark and the row commit
+ * together.
+ */
+export async function reserveNextNumber(db: ClintraDatabase, key: string, localMax: number): Promise<number> {
+  const device = await db.device.get(getDeviceId());
+  if (!device) {
+    throw new Error("device_not_registered");
+  }
+  const marks = device.number_marks ?? {};
+  const next = Math.max(localMax, marks[key] ?? 0) + 1;
+  await db.device.update(device.id, { number_marks: { ...marks, [key]: next } });
+  return next;
+}

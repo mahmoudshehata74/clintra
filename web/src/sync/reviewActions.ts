@@ -26,6 +26,21 @@ function isCreateConflict(review: SyncReview): boolean {
   return review.action === AuditAction.Create;
 }
 
+/**
+ * Thrown by keepMine/discardMine on a create conflict whose local row no
+ * longer exists — a pull displaced it (sync/pullCollisions.ts), which also
+ * closed this review and folded it into the displacement's own row. There
+ * is no version of mine left to keep or remove; getReviewComparison reports
+ * `rowGone`, and the review sheet never offers either action then.
+ */
+export const REVIEW_ROW_GONE = "review_row_gone";
+
+async function assertCreateConflictRowExists(db: ClintraDatabase, review: SyncReview): Promise<void> {
+  if (isCreateConflict(review) && (await resolveTable(db, review.entity).get(review.entity_id)) === undefined) {
+    throw new Error(REVIEW_ROW_GONE);
+  }
+}
+
 export interface ReviewComparison {
   /** The rejected op's own payload — what the assistant was trying to do. */
   mine: unknown;
@@ -45,6 +60,11 @@ export interface ReviewComparison {
    * conflict — there is nothing to wait for.
    */
   ready: boolean;
+  /**
+   * True for a create conflict whose local row no longer exists (see
+   * REVIEW_ROW_GONE): neither keepMine nor discardMine may be offered.
+   */
+  rowGone: boolean;
 }
 
 /**
@@ -53,7 +73,9 @@ export interface ReviewComparison {
  */
 export async function getReviewComparison(db: ClintraDatabase, review: SyncReview): Promise<ReviewComparison> {
   if (isCreateConflict(review)) {
-    return { mine: review.payload, server: null, ready: true };
+    const current = await resolveTable(db, review.entity).get(review.entity_id);
+    const rowGone = current === undefined;
+    return { mine: review.payload, server: null, ready: !rowGone, rowGone };
   }
 
   const table = resolveTable(db, review.entity);
@@ -62,9 +84,9 @@ export async function getReviewComparison(db: ClintraDatabase, review: SyncRevie
   const pulled = review.base_rev !== null && currentRev !== undefined && currentRev > review.base_rev;
 
   if (!pulled) {
-    return { mine: review.payload, server: null, ready: false };
+    return { mine: review.payload, server: null, ready: false, rowGone: false };
   }
-  return { mine: review.payload, server: currentLocal ?? null, ready: true };
+  return { mine: review.payload, server: currentLocal ?? null, ready: true, rowGone: false };
 }
 
 async function closeReview(db: ClintraDatabase, review: SyncReview): Promise<void> {
@@ -94,6 +116,15 @@ async function closeReviewAndDropEntityHistory(db: ClintraDatabase, review: Sync
 }
 
 /**
+ * "تمام" on a displaced_by_server row (sync/pullCollisions.ts): the server's
+ * version has already replaced the local one, and the displaced row's queued
+ * ops are already gone, so the only thing left is to close the row.
+ */
+export async function acknowledgeReview(db: ClintraDatabase, reviewId: string): Promise<void> {
+  await db.sync_review.update(reviewId, { needs_review: false });
+}
+
+/**
  * "خليها كده" (keep mine) — docs/sync-plan.md's Q6/Q7. What this means
  * depends entirely on why the op was rejected:
  *
@@ -115,32 +146,32 @@ async function closeReviewAndDropEntityHistory(db: ClintraDatabase, review: Sync
  *   actually succeeds instead of failing the identical way again.
  *
  * Throws if called before `getReviewComparison` reports `ready` — the
- * caller (the review sheet) must not offer this action before then.
+ * caller (the review sheet) must not offer this action before then — and
+ * REVIEW_ROW_GONE on a create conflict whose local row a pull displaced.
  */
 export async function keepMine(db: ClintraDatabase, reviewId: string): Promise<void> {
   const review = await db.sync_review.get(reviewId);
   if (!review) {
     return;
   }
+  await assertCreateConflictRowExists(db, review);
   const actor = await resolveActingMembership(db);
   const table = resolveTable(db, review.entity);
 
   if (isCreateConflict(review)) {
+    const current = await table.get(review.entity_id);
     if (review.entity === "visits") {
-      const current = await table.get(review.entity_id);
-      if (current) {
-        const after = { ...(current as object), status: VisitStatus.Cancelled, cancel_reason: CancelReason.SyncConflict };
-        await mutate(db, {
-          table,
-          entity: review.entity,
-          entityId: review.entity_id,
-          action: AuditAction.Update,
-          before: current,
-          after,
-          actorMembershipId: actor.id,
-          orgId: actor.org_id,
-        });
-      }
+      const after = { ...(current as object), status: VisitStatus.Cancelled, cancel_reason: CancelReason.SyncConflict };
+      await mutate(db, {
+        table,
+        entity: review.entity,
+        entityId: review.entity_id,
+        action: AuditAction.Update,
+        before: current,
+        after,
+        actorMembershipId: actor.id,
+        orgId: actor.org_id,
+      });
     }
     await closeReviewAndDropEntityHistory(db, review);
     return;
@@ -207,7 +238,8 @@ export async function keepMine(db: ClintraDatabase, reviewId: string): Promise<v
  *   local table. Nothing to write; this only drops the now-pointless
  *   queued op.
  *
- * Throws if called before `getReviewComparison` reports `ready`, same as
+ * Throws if called before `getReviewComparison` reports `ready`, and
+ * REVIEW_ROW_GONE when the create conflict's local row is gone, same as
  * keepMine.
  */
 export async function discardMine(db: ClintraDatabase, reviewId: string): Promise<void> {
@@ -215,23 +247,22 @@ export async function discardMine(db: ClintraDatabase, reviewId: string): Promis
   if (!review) {
     return;
   }
+  await assertCreateConflictRowExists(db, review);
 
   if (isCreateConflict(review)) {
     const actor = await resolveActingMembership(db);
     const table = resolveTable(db, review.entity);
     const current = await table.get(review.entity_id);
-    if (current) {
-      await mutate(db, {
-        table,
-        entity: review.entity,
-        entityId: review.entity_id,
-        action: AuditAction.Delete,
-        before: current,
-        after: null,
-        actorMembershipId: actor.id,
-        orgId: actor.org_id,
-      });
-    }
+    await mutate(db, {
+      table,
+      entity: review.entity,
+      entityId: review.entity_id,
+      action: AuditAction.Delete,
+      before: current,
+      after: null,
+      actorMembershipId: actor.id,
+      orgId: actor.org_id,
+    });
     await closeReviewAndDropEntityHistory(db, review);
     return;
   }

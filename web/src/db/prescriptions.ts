@@ -3,7 +3,7 @@ import { cairoYear } from "../domain/time";
 import { VisitStatus } from "../domain/visitStatus";
 import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
-import { getMintingSeries } from "./deviceRegistration";
+import { getMintingSeries, numberMarkKey, reserveNextNumber } from "./deviceRegistration";
 import { runAtomicMutations } from "./mutate";
 import { AuditAction, type Membership, type Prescription, type PrescriptionItem, type Visit } from "./types";
 import { findGeneralFormDefinition, findVisitFormData, readVisitFormValues } from "./visitForm";
@@ -129,7 +129,9 @@ export interface AddPrescriptionItemResult {
  * The prescription's number is minted exactly as an invoice's
  * (db/visitCompletion.ts): inside this device's own number series, as the
  * max number for (location_id, issued_year, series) + 1, read inside the
- * write's own transaction. The series is read before the transaction opens,
+ * write's own transaction, together with the device's high-water mark
+ * (reserveNextNumber), so a displaced prescription's number is never minted
+ * again. The series is read before the transaction opens,
  * and only when the visit has no prescription yet — a device that does not
  * know its series (device_series_unknown) can still add to a prescription
  * that already exists, and refuses a new one with nothing written.
@@ -148,7 +150,7 @@ export async function addPrescriptionItem(
   const existing = await db.prescriptions.where("visit_id").equals(visitId).first();
   const series = existing ? null : await getMintingSeries(db);
 
-  return runAtomicMutations(db, [db.visits, db.prescriptions, db.prescription_items], async (write) => {
+  return runAtomicMutations(db, [db.visits, db.prescriptions, db.prescription_items, db.device], async (write) => {
     const visit = await db.visits.get(visitId);
     if (!visit) {
       throw new Error(PrescriptionError.VisitNotFound);
@@ -173,10 +175,13 @@ export async function addPrescriptionItem(
 
       const issuedYear = cairoYear(now);
       const atLocation = await db.prescriptions.where("location_id").equals(visit.location_id).toArray();
-      const number =
+      const number = await reserveNextNumber(
+        db,
+        numberMarkKey("prescription", visit.location_id, series, issuedYear),
         atLocation
           .filter((candidate) => candidate.issued_year === issuedYear && candidate.series === series)
-          .reduce((max, candidate) => Math.max(max, candidate.number), 0) + 1;
+          .reduce((max, candidate) => Math.max(max, candidate.number), 0),
+      );
 
       prescription = {
         id: id(),
