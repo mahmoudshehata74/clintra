@@ -3,7 +3,7 @@ import { id } from "../domain/id";
 import { resolveActingMembership } from "./actingMembership";
 import { getDeviceId } from "./deviceRegistration";
 import type { ClintraDatabase } from "./database";
-import { AuditAction } from "./types";
+import { AuditAction, type AuditLog } from "./types";
 
 /**
  * Dispatched on `window` right after every successful mutate() commit, so
@@ -25,6 +25,21 @@ export interface MutationInput<T> {
   after: T | null;
   actorMembershipId: string;
   orgId: string;
+}
+
+let lastQueuedAtMs = 0;
+
+/**
+ * A sync op's created_at: the clock, but always after the previous op this
+ * tab queued. runSyncCycle (sync/engine.ts) pushes ops in created_at order,
+ * and op ids are random, so two ops written in the same millisecond would
+ * otherwise push in either order — a transaction's writes must reach the
+ * server in the order they were made (a session's link restored before the
+ * visit it pointed to is deleted, a patient before the visit that names it).
+ */
+function nextQueuedAt(): string {
+  lastQueuedAtMs = Math.max(Date.now(), lastQueuedAtMs + 1);
+  return new Date(lastQueuedAtMs).toISOString();
 }
 
 /**
@@ -76,7 +91,7 @@ async function applyEntityWrite<T>(db: ClintraDatabase, input: MutationInput<T>)
     action: input.action,
     payload: input.after,
     device_id: getDeviceId(),
-    created_at: now,
+    created_at: nextQueuedAt(),
     synced_at: null,
     // The prior row's rev, for the server's base_rev check — never sent for
     // a create (there is no prior row), and read generically here rather
@@ -181,8 +196,10 @@ const UNDO_WINDOW_MS = 5 * 60 * 1000;
  * offers one (one-tap attendance, the booking sheet, and any future one), so
  * there is exactly one place that decides whether an undo is legitimate
  * rather than each flow inventing its own rule. Works against any entity
- * table (visits, patients, ...); see undoMostRecentVisitMutation and
- * undoMostRecentPatientMutation for the concrete wrappers call sites use.
+ * table (visits, patients, ...); see undoMostRecentPatientMutation below
+ * for the concrete wrappers call sites use, and db/visitUndo.ts's
+ * undoMostRecentVisitMutation for visits, whose undo also restores the care
+ * plan session links the visit's write changed.
  *
  * This is not a general status setter: it takes no target status and no
  * caller-supplied snapshot, and for visits it never calls
@@ -208,6 +225,33 @@ export async function undoMostRecentMutation<T>(
   entity: string,
   table: Table<T, string>,
 ): Promise<UndoOutcome> {
+  const check = await checkUndo(db, auditLogId, entity, table);
+  if (!check.ok) {
+    return check;
+  }
+  const actor = await resolveActingMembership(db);
+  await mutate(db, reversalOf(check, entity, table, actor.id));
+  return { ok: true };
+}
+
+/** An undo that may go ahead: the audit row it reverses and the record as it stands now. */
+export interface UndoCheck<T> {
+  ok: true;
+  auditRow: AuditLog;
+  currentRecord: T;
+}
+
+/**
+ * The checks undoMostRecentMutation makes before it writes anything (see
+ * its comment). Reads only audit_log and `table`, so it can run inside a
+ * caller's transaction that includes both.
+ */
+export async function checkUndo<T>(
+  db: ClintraDatabase,
+  auditLogId: string,
+  entity: string,
+  table: Table<T, string>,
+): Promise<UndoCheck<T> | { ok: false; reason: UndoRefusalReason }> {
   const auditRow = await db.audit_log.get(auditLogId);
   if (!auditRow || auditRow.entity !== entity) {
     return { ok: false, reason: "not_found" };
@@ -235,8 +279,12 @@ export async function undoMostRecentMutation<T>(
   if (!currentRecord) {
     return { ok: false, reason: "not_found" };
   }
+  return { ok: true, auditRow, currentRecord };
+}
 
-  const actor = await resolveActingMembership(db);
+/** The write that reverses a checked mutation: a create is deleted, an update put back to its before. */
+export function reversalOf<T>(check: UndoCheck<T>, entity: string, table: Table<T, string>, actorId: string): MutationInput<T> {
+  const { auditRow, currentRecord } = check;
   // Reuse the org the original mutation was scoped to, from the audit row
   // itself, rather than requiring every possible entity (e.g. day_state,
   // which has no org_id of its own) to carry an org_id field just so undo
@@ -244,36 +292,28 @@ export async function undoMostRecentMutation<T>(
   const orgId = auditRow.org_id;
 
   if (auditRow.action === AuditAction.Create) {
-    await mutate(db, {
+    return {
       table,
       entity,
       entityId: auditRow.entity_id,
       action: AuditAction.Delete,
       before: currentRecord,
       after: null,
-      actorMembershipId: actor.id,
+      actorMembershipId: actorId,
       orgId,
-    });
-  } else {
-    await mutate(db, {
-      table,
-      entity,
-      entityId: auditRow.entity_id,
-      action: AuditAction.Update,
-      before: currentRecord,
-      // Written by mutate() itself under this same audit row; trusted as a T.
-      after: auditRow.before as T,
-      actorMembershipId: actor.id,
-      orgId,
-    });
+    };
   }
-
-  return { ok: true };
-}
-
-/** The constrained undo mechanism, scoped to the visits table. */
-export function undoMostRecentVisitMutation(db: ClintraDatabase, auditLogId: string): Promise<UndoOutcome> {
-  return undoMostRecentMutation(db, auditLogId, "visits", db.visits);
+  return {
+    table,
+    entity,
+    entityId: auditRow.entity_id,
+    action: AuditAction.Update,
+    before: currentRecord,
+    // Written by mutate() itself under this same audit row; trusted as a T.
+    after: auditRow.before as T,
+    actorMembershipId: actorId,
+    orgId,
+  };
 }
 
 /** The constrained undo mechanism, scoped to the patients table. */

@@ -156,6 +156,24 @@ describe("describeAuditVerb", () => {
     expect(verb).toBe(expected);
   });
 
+  describe("care plans: verb only, never the goal or diagnosis", () => {
+    it.each<[string, string, AuditAction, Record<string, unknown> | null, Record<string, unknown> | null, string]>([
+      ["a plan created", "care_plans", AuditAction.Create, null, { status: "active", goal: "هدف" }, "بدأ خطة رعاية"],
+      ["a plan stopped", "care_plans", AuditAction.Update, { status: "active" }, { status: "stopped" }, "وقّف الخطة"],
+      ["a plan resumed", "care_plans", AuditAction.Update, { status: "stopped" }, { status: "active" }, "رجّع الخطة"],
+      ["a goal edited", "care_plans", AuditAction.Update, { status: "active", goal: "أ" }, { status: "active", goal: "ب" }, "عدّل خطة رعاية"],
+      ["totals recomputed", "care_plans", AuditAction.Update, { status: "active", planned_count: 3 }, { status: "active", planned_count: 2 }, "عدّل خطة رعاية"],
+      ["a session added", "care_plan_items", AuditAction.Create, null, { status: "planned", visit_id: null }, "أضاف جلسات للخطة"],
+      ["a session skipped", "care_plan_items", AuditAction.Update, { status: "planned", visit_id: null }, { status: "skipped", visit_id: null }, "أجّل جلسة"],
+      ["a session brought back", "care_plan_items", AuditAction.Update, { status: "skipped", visit_id: null }, { status: "planned", visit_id: null }, "رجّع جلسة"],
+      ["a session booked", "care_plan_items", AuditAction.Update, { status: "planned", visit_id: null }, { status: "planned", visit_id: "v1" }, "سجّل حجز"],
+      ["a booked session moved", "care_plan_items", AuditAction.Update, { status: "planned", visit_id: "v1" }, { status: "planned", visit_id: "v2" }, "نقل الميعاد"],
+      ["a session freed by a cancel", "care_plan_items", AuditAction.Update, { status: "planned", visit_id: "v1" }, { status: "planned", visit_id: null }, "عدّل خطة رعاية"],
+    ])("reads %s", (_label, entity, action, before, after, expected) => {
+      expect(describeAuditVerb({ entity, action, before, after })).toBe(expected);
+    });
+  });
+
   it("falls back to a generic create verb for an entity with no specific one", () => {
     const verb = describeAuditVerb({ entity: "schedules", action: AuditAction.Create, before: null, after: { id: "x" } });
     expect(verb).toBe("أنشأ (schedules)");

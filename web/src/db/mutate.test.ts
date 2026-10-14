@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { id } from "../domain/id";
 import { VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "./database";
-import { mutate, undoMostRecentPatientMutation, undoMostRecentVisitMutation } from "./mutate";
+import { mutate, runAtomicMutations, undoMostRecentPatientMutation } from "./mutate";
+import { undoMostRecentVisitMutation } from "./visitUndo";
 import { seedDatabase } from "./seed";
 import { AuditAction, type Patient } from "./types";
 import { markVisitArrived } from "./visitAttendance";
@@ -127,6 +128,37 @@ describe("mutate", () => {
     expect(stored).toEqual(visit1);
     expect(await db.audit_log.count()).toBe(0);
     expect(await db.sync_ops.count()).toBe(0);
+  });
+});
+
+describe("sync op order", () => {
+  it("stamps the ops of one transaction in the order they were written, so they push in that order", async () => {
+    await seedDatabase(db);
+    const [membership] = await db.memberships.toArray();
+    const visits = await db.visits.toArray();
+
+    await runAtomicMutations(db, [db.visits], async (write) => {
+      for (const visit of visits) {
+        await write({
+          table: db.visits,
+          entity: "visits",
+          entityId: visit.id,
+          action: AuditAction.Update,
+          before: visit,
+          after: { ...visit, note: "x" },
+          actorMembershipId: membership.id,
+          orgId: visit.org_id,
+        });
+      }
+    });
+
+    const writeOrder = (await db.audit_log.orderBy("seq").toArray()).map((row) => row.entity_id);
+    const pushOrder = (await db.sync_ops.toArray())
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .map((op) => op.entity_id);
+    expect(visits.length).toBeGreaterThan(2);
+    expect(pushOrder).toEqual(writeOrder);
+    expect(new Set((await db.sync_ops.toArray()).map((op) => op.created_at)).size).toBe(visits.length);
   });
 });
 

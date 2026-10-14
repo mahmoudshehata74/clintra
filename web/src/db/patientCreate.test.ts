@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { ClintraDatabase } from "./database";
-import { undoMostRecentPatientMutation, undoMostRecentVisitMutation } from "./mutate";
+import { undoMostRecentPatientMutation } from "./mutate";
+import { undoMostRecentVisitMutation } from "./visitUndo";
 import { createPatient } from "./patientCreate";
 import { findSeededSlotsPractitioner, seedDatabase, seededVisitsDate } from "./seed";
 import { bookExistingPatientVisit } from "./visitBooking";

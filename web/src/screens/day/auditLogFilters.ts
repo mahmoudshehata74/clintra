@@ -12,12 +12,14 @@ export type AuditEntityFilter =
 export type AuditActionFilter = "all" | AuditAction;
 
 // Entities listed under another entity's filter rather than one of their
-// own: a visit's prescription and its drugs are part of the visit, a message
-// is about its patient, and a practitioner's profile and a message template
-// are settings.
+// own: a visit's prescription and its drugs are part of the visit, as are a
+// care plan and its sessions (booked as visits), a message is about its
+// patient, and a practitioner's profile and a message template are settings.
 const ENTITY_FILTER_GROUP: Partial<Record<string, AuditEntityFilter>> = {
   prescriptions: "visits",
   prescription_items: "visits",
+  care_plans: "visits",
+  care_plan_items: "visits",
   messages: "patients",
   practitioners: "settings",
   message_templates: "settings",

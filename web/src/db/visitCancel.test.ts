@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CancelReason, VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "./database";
-import { undoMostRecentVisitMutation } from "./mutate";
+import { undoMostRecentVisitMutation } from "./visitUndo";
 import { seedDatabase } from "./seed";
 import { cancelVisit, markVisitNoShow } from "./visitCancel";
 

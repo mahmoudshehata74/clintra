@@ -3,7 +3,7 @@ import { Role } from "../domain/role";
 import { VisitSource } from "../domain/visitSource";
 import { VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "./database";
-import { undoMostRecentVisitMutation } from "./mutate";
+import { undoMostRecentVisitMutation } from "./visitUndo";
 import { seedDatabase } from "./seed";
 import { bookExistingPatientVisit } from "./visitBooking";
 

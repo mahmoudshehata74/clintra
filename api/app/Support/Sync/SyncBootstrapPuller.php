@@ -2,6 +2,7 @@
 
 namespace App\Support\Sync;
 
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -23,7 +24,9 @@ use InvalidArgumentException;
  * patient_id), the prescriptions of those visits with their items (a
  * prescription belongs to exactly one visit, so it is windowed through it),
  * every one of the org's practitioners, the messages attempted inside the
- * window, and every one of the org's message template overrides.
+ * window, every one of the org's message template overrides, and the care
+ * plans of the windowed patients (plus every active plan) with their
+ * sessions.
  * It is deliberately additive: GET /api/sync/pull's own SQL,
  * cursor format, and monotonic seq guarantee are completely untouched by
  * this class, so a device that has already synced before (pull_cursor is
@@ -52,9 +55,13 @@ class SyncBootstrapPuller
      * practitioners are the org's few prescribers, not windowed at all:
      * every one, so a fresh device prints the current name, title and
      * syndicate number. messages are windowed by their own attempted_at, and
-     * message_templates are the org's few overrides, not windowed. Each
-     * stage was appended after the existing ones, so a cursor minted before
-     * it existed keeps its meaning.
+     * message_templates are the org's few overrides, not windowed.
+     * care_plans have no principled date of their own (a plan can run for
+     * months): a plan comes when its patient has a visit in the window — the
+     * same patients stage 2 returns — or when it is still active, so a
+     * stalled patient's plan reaches a fresh device too; care_plan_items
+     * come with their plans. Each stage was appended after the existing
+     * ones, so a cursor minted before it existed keeps its meaning.
      */
     private const STAGE_DAY_STATE = 0;
 
@@ -72,7 +79,11 @@ class SyncBootstrapPuller
 
     private const STAGE_MESSAGE_TEMPLATES = 7;
 
-    private const STAGE_DONE = 8;
+    private const STAGE_CARE_PLANS = 8;
+
+    private const STAGE_CARE_PLAN_ITEMS = 9;
+
+    private const STAGE_DONE = 10;
 
     /**
      * @return array{cursor: string, has_more: bool, rows: list<array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}>}
@@ -174,8 +185,37 @@ class SyncBootstrapPuller
                 ->orderBy('id')
                 ->limit(self::PAGE_SIZE + 1)
                 ->get(),
+            self::STAGE_CARE_PLANS => $this->carePlansQuery($from, $to)
+                ->when($afterId !== null, fn ($q) => $q->where('id', '>', $afterId))
+                ->orderBy('id')
+                ->limit(self::PAGE_SIZE + 1)
+                ->get(),
+            self::STAGE_CARE_PLAN_ITEMS => DB::table('care_plan_items')
+                ->whereIn('care_plan_id', fn ($q) => $this->carePlansQuery($from, $to, $q)->select('id'))
+                ->when($afterId !== null, fn ($q) => $q->where('id', '>', $afterId))
+                ->orderBy('id')
+                ->limit(self::PAGE_SIZE + 1)
+                ->get(),
             default => throw new InvalidArgumentException("unknown bootstrap stage: {$stage}"),
         };
+    }
+
+    /**
+     * The care plans a fresh device gets: those of a patient with a visit in
+     * the window, and every active one. Built on $query when given (a
+     * subquery's builder), otherwise on a new query.
+     */
+    private function carePlansQuery(string $from, string $to, ?Builder $query = null): Builder
+    {
+        return ($query ?? DB::query())->from('care_plans')
+            ->where(function ($q) use ($from, $to) {
+                $q->where('status', 'active')
+                    ->orWhereIn('patient_id', function ($visits) use ($from, $to) {
+                        $visits->select('patient_id')->from('visits')
+                            ->whereBetween('visit_date', [$from, $to])
+                            ->whereNotNull('patient_id');
+                    });
+            });
     }
 
     /**
@@ -192,6 +232,8 @@ class SyncBootstrapPuller
             self::STAGE_PRACTITIONERS => 'practitioners',
             self::STAGE_MESSAGES => 'messages',
             self::STAGE_MESSAGE_TEMPLATES => 'message_templates',
+            self::STAGE_CARE_PLANS => 'care_plans',
+            self::STAGE_CARE_PLAN_ITEMS => 'care_plan_items',
         };
 
         return [
@@ -211,7 +253,7 @@ class SyncBootstrapPuller
             return [self::STAGE_DAY_STATE, null];
         }
 
-        if (! preg_match('/^([0-8]):([0-9a-fA-F-]*)$/', $cursor, $matches)) {
+        if (! preg_match('/^([0-9]|10):([0-9a-fA-F-]*)$/', $cursor, $matches)) {
             throw new InvalidArgumentException("malformed bootstrap cursor: {$cursor}");
         }
 

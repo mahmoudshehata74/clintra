@@ -671,6 +671,92 @@ one (`docs/auth-plan.md`), so it could not yet tell which person is
 writing in any case. Closing it needs a role check in the policy or the
 endpoint, a change v1 deliberately does not make.
 
+## Care plans
+
+`care_plans` and `care_plan_items` were declared in v1
+(`2026_09_11_170024`/`170025`) with policies from
+`2026_09_11_170029_enable_rls_policies.php` and no writer.
+`2026_09_12_000030_make_care_plans_syncable.php` (`docs/schema.md`'s v20
+additions) makes them syncable and narrows both policies.
+
+**Old → new policies** (both `USING` and `WITH CHECK`, before and after):
+
+```sql
+-- care_plans_scope, old
+org_id = current_org()
+
+-- care_plans_scope, new: the visits (and prescriptions) expression, verbatim
+org_id = current_org()
+AND location_id IN (SELECT * FROM allowed_locations())
+AND practitioner_id IN (SELECT * FROM allowed_practitioners())
+
+-- care_plan_items_scope, old
+care_plan_id IN (SELECT id FROM care_plans WHERE org_id = current_org())
+
+-- care_plan_items_scope, new
+care_plan_id IN (SELECT id FROM care_plans WHERE org_id = current_org()
+  AND location_id IN (SELECT * FROM allowed_locations())
+  AND practitioner_id IN (SELECT * FROM allowed_practitioners()))
+```
+
+A care plan carries a practitioner and is clinical data about one patient's
+treatment, so it is scoped like that practitioner's visits: a membership
+limited to other locations or to another practitioner sees neither the plan
+nor its sessions. `CarePlansTest.php` pins `care_plans_scope` to the visits
+policy's deparsed text and `care_plan_items_scope` to `prescription_items`'
+with the parent swapped, and proves both the cross-org and the
+cross-location/practitioner isolation, through the sync endpoints and
+directly.
+
+**The policies are changed only on empty tables.** Narrowing a policy over
+existing rows could hide them from the memberships that wrote them, so the
+migration first asserts that both tables are empty and aborts otherwise.
+A `SELECT` cannot make that check: the migration runs as `clintra_owner`,
+which `FORCE` binds and which has no membership, so it sees zero rows of any
+table. Validating a `CHECK` constraint is not subject to RLS — Postgres
+scans the table itself — so the guard adds `CHECK (false)` to each table and
+drops it again: on an empty table nothing is left behind; on a table with a
+row it raises "`<table>` is not empty", before any change. No RLS flag,
+policy, role or grant is touched by the check (`CarePlansTest.php` inserts a
+row only `clintra_fixtures` can see, and asserts the abort, the unchanged
+policies and that no guard constraint is left).
+
+Every per-table object, next to its prescriptions counterpart:
+
+| Object | care_plans | prescriptions | care_plan_items | prescription_items |
+|---|---|---|---|---|
+| RLS | ENABLE + FORCE (since v1) | ENABLE + FORCE | ENABLE + FORCE (since v1) | ENABLE + FORCE |
+| Policy | `care_plans_scope`, visits expression, USING + WITH CHECK (was org only) | `prescriptions_scope`, same expression | `care_plan_items_scope`, through `care_plans` (was org only) | `prescription_items_scope`, through `prescriptions` |
+| `clintra_app` grant | SELECT, INSERT, UPDATE, DELETE (since v1, unchanged) | same | same | same |
+| `rev` | integer NOT NULL DEFAULT 1 (added) | same | same (added) | same |
+| Trigger | `care_plans_enforce_rev` → `enforce_row_rev()` (added) | `prescriptions_enforce_rev` | `care_plan_items_enforce_rev` (added) | `prescription_items_enforce_rev` |
+| Unique keys | — | (location_id, issued_year, series, number), (visit_id) | — | — |
+| Plain indexes | org_id | org_id, location_id | care_plan_id, visit_id (added) | prescription_id |
+| Nullable change | — | — | `visit_id` NOT NULL → NULL | — |
+| Foreign keys | org, location, template, patient, practitioner; all RESTRICT | org, location, visit, patient, practitioner, created_by; RESTRICT | care_plan_id, service_id, visit_id, depends_on_item_id; all RESTRICT | prescription_id; RESTRICT |
+| Sync | `NAMES`, `DIRECT_ORG_ID_TABLES`, `CARE_PLAN_STATUSES` | `NAMES`, `DIRECT_ORG_ID_TABLES`, `ACTOR_COLUMNS`, number columns | `NAMES`, `CARE_PLAN_STATUSES`, `CARE_PLAN_ITEM_FIXED_COLUMNS` | `NAMES`, `PRINTED_LOCK_CHILDREN` |
+| Bootstrap | stage 8 | stage 3 | stage 9 | stage 4 |
+
+Neither table has an actor column, so neither is in `ACTOR_COLUMNS` (none
+was added). `clintra_fixtures` (test-only) holds the same privileges on both
+as on every other table; no provisioning role holds any.
+
+**The push endpoint's care plan rule** (`SyncOpApplier::applyCarePlanRule`):
+a delete of either table is `care_plan_immutable`; so is a session update
+that changes `care_plan_id`, `service_id` or `sequence`. A plan status
+outside `active`/`stopped`, a session status outside `planned`/`skipped`,
+and a `care_plans.paid` other than 0 are `care_plan_invalid`, and so is a
+session `visit_id` that does not name a visit — visible to the caller — of
+the plan's own patient and practitioner.
+
+**Known gap: who writes is not enforced by the server.** Only the plan's
+own practitioner creates or edits a plan; the web writers enforce it
+(`not_plan_practitioner`, `web/src/db/carePlans.ts`), but the policy admits
+any membership in scope of the practitioner. It is the same gap as
+prescriptions, for the same reasons (a role check per write is a policy
+change v1 does not make; device tokens are bound to the registering
+membership, not the PIN-switched one).
+
 ## Sequence-backed audit ordering
 
 Every provisioning function computed `audit_log.seq` the same way: `SELECT
@@ -1189,7 +1275,10 @@ windowed visits reference, so a name renders instead of a bare id, the
 `prescriptions` of those visits with their `prescription_items`, every
 one of the org's `practitioners` (not windowed: a fresh device prints the
 current name, title and syndicate number), the `messages` attempted inside
-the window and every one of the org's `message_templates`. It
+the window, every one of the org's `message_templates`, and the
+`care_plans` of the windowed patients plus every active plan (a plan has no
+principled date of its own; an active plan of a stalled patient must reach
+a fresh device too), with their `care_plan_items`. It
 never touches `sync_ledger`, never computes or returns a `seq`, and
 never writes `device.pull_cursor` — `GET /api/sync/pull`'s own SQL,
 cursor format, and monotonic-`seq` guarantee are completely untouched by
@@ -1230,10 +1319,11 @@ distinguish "genuinely fresh" from "merely behind."
   ordinary backfill reaches them. Extending coverage to those tables
   would mean more joins and more stages, a larger, separate change from
   this one.
-- Same-shape query complexity trade: eight keyset-paginated stages
+- Same-shape query complexity trade: ten keyset-paginated stages
   (`day_state`, `visits`, `patients`, `prescriptions`,
-  `prescription_items`, `practitioners`, `messages`, `message_templates` —
-  the last three each appended so an older cursor keeps its meaning)
+  `prescription_items`, `practitioners`, `messages`, `message_templates`,
+  `care_plans`, `care_plan_items` — the last five each appended so an
+  older cursor keeps its meaning)
   stitched by one small opaque
   cursor (`"{stage}:{last id}"`), rather than pull's single `seq`-ordered
   query — more moving parts, in exchange for windowing by each entity's

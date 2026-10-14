@@ -27,7 +27,11 @@ export interface CompleteVisitResult {
  * never left completed without an invoice or a stale average, and neither
  * is ever written without the visit actually completing. The invoice's
  * price comes from resolveServicePrice (domain/pricing.ts), which already
- * respects service_price_overrides for this practitioner and location. The
+ * respects service_price_overrides for this practitioner and location —
+ * except for a visit that books a care plan session (care_plan_items.visit_id),
+ * which is billed at that session's own price instead: a plan is billed per
+ * session, at the price it was planned at (docs/schema.md's v20 additions).
+ * Nothing else about completion depends on the plan. The
  * average is the median, not the mean, across every completed visit that
  * day (see domain/consultStats.ts and docs/schema.md for why).
  *
@@ -65,7 +69,16 @@ export async function completeVisitWithInvoice(
 
   return runAtomicMutations(
     db,
-    [db.visits, db.invoices, db.invoice_items, db.services, db.service_price_overrides, db.day_state, db.device],
+    [
+      db.visits,
+      db.invoices,
+      db.invoice_items,
+      db.services,
+      db.service_price_overrides,
+      db.care_plan_items,
+      db.day_state,
+      db.device,
+    ],
     async (write) => {
       const before = await db.visits.get(visitId);
       if (!before) {
@@ -89,8 +102,11 @@ export async function completeVisitWithInvoice(
       });
 
       const service = before.service_id ? await db.services.get(before.service_id) : undefined;
+      const session = await db.care_plan_items.where("visit_id").equals(visitId).first();
       let unitPrice: Piastres = 0 as Piastres;
-      if (service) {
+      if (service && session) {
+        unitPrice = session.price;
+      } else if (service) {
         const overrides = await db.service_price_overrides.toArray();
         unitPrice = resolveServicePrice(service, overrides, {
           practitionerId: before.practitioner_id,

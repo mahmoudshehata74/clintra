@@ -484,6 +484,27 @@ export class ClintraDatabase extends Dexie {
         const devices = await tx.table("device").toArray();
         await Promise.all(devices.map((device) => tx.table("device").update(device.id, { number_marks: marks })));
       });
+
+    // Care plans (db/carePlans.ts; the server's
+    // 2026_09_12_000030_make_care_plans_syncable.php; docs/schema.md's v20
+    // additions). Both stores existed since version 1 with no index and no
+    // writer, so they are empty: nothing to backfill.
+    // - care_plans:
+    //   - patient_id: a patient's plans (the visit workspace's plan badge and
+    //     the patient profile) without a table scan.
+    //   - practitioner_id: a practitioner's plans, e.g. the stalled ones.
+    // - care_plan_items:
+    //   - care_plan_id: one plan's sessions, as prescription_items'
+    //     prescription_id index.
+    //   - visit_id: the session a visit books — what booking, moving,
+    //     cancelling and completing a visit look up. Plain, not unique: the
+    //     server has no unique key on it either, so a pulled row can never
+    //     collide with a local one (docs/sync-plan.md's "Local unique
+    //     collisions on pull"), and most sessions carry null.
+    this.version(20).stores({
+      care_plans: "id, patient_id, practitioner_id",
+      care_plan_items: "id, care_plan_id, visit_id",
+    });
   }
 }
 

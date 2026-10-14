@@ -772,6 +772,9 @@ enforces and never cascades (`CHILD_LINKS`):
 - `visits` ← `prescriptions`, `visit_form_data`, `invoices` and `messages`
   (by `visit_id`)
 - `prescriptions` ← `prescription_items`
+- `care_plans` ← `care_plan_items` (by `care_plan_id`; a session's
+  `visit_id` is deliberately not a link — the session belongs to its plan
+  and exists on the server before it is ever linked)
 - `invoices` ← `invoice_items` and `payments`
 
 No descendant of a never-accepted row can exist on the server, because its

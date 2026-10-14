@@ -110,6 +110,11 @@ describe("templateValuesForVisit", () => {
     });
   });
 
+  it("fills the session label of the care plan session the visit books", () => {
+    expect(templateValuesForVisit({ ...base, sessionLabel: "جلسة 2 من 10 · علاج طبيعي" }).session_label).toBe("جلسة 2 من 10 · علاج طبيعي");
+    expect(templateValuesForVisit({ ...base, sessionLabel: null }).session_label).toBeNull();
+  });
+
   it("leaves the balance missing when paid in full, void or not invoiced, and the time missing in the queue", () => {
     expect(templateValuesForVisit({ ...base, invoice: { ...base.invoice, paid: 30000 as Piastres, status: InvoiceStatus.Paid } }).balance).toBeNull();
     expect(templateValuesForVisit({ ...base, invoice: { ...base.invoice, status: InvoiceStatus.Void } }).balance).toBeNull();

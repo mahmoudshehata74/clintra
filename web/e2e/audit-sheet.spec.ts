@@ -192,3 +192,105 @@ test("a prescription's events are listed under the visits filter, naming the pat
   await dialog.getByRole("button", { name: S.auditFilterEntityInvoices, exact: true }).click();
   await expect(dialog.getByText("كتب وصفة", { exact: true })).toHaveCount(0);
 });
+
+/**
+ * Gives كريم's booked visit a care plan session, written straight into the
+ * store as screen 17 would have created it (the plan rows themselves carry
+ * no audit line here): one active plan of the visit's practitioner whose
+ * only session links to that visit, its stored end on the visit's day.
+ */
+async function linkSessionToKarimsVisit(page: Page): Promise<void> {
+  await page.evaluate(async (patientName) => {
+    const req = indexedDB.open("clintra");
+    const database: IDBDatabase = await new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const all = <T,>(store: IDBObjectStore) =>
+      new Promise<T[]>((resolve, reject) => {
+        const getAll = store.getAll();
+        getAll.onsuccess = () => resolve(getAll.result as T[]);
+        getAll.onerror = () => reject(getAll.error);
+      });
+    try {
+      const read = database.transaction(["patients", "visits", "specialty_templates"], "readonly");
+      const patient = (await all<{ id: string; full_name: string }>(read.objectStore("patients"))).find(
+        (candidate) => candidate.full_name === patientName,
+      )!;
+      type StoredVisit = { id: string; org_id: string; location_id: string; practitioner_id: string; patient_id: string; service_id: string; visit_date: string; status: string };
+      const visit = (await all<StoredVisit>(read.objectStore("visits"))).find(
+        (candidate) => candidate.patient_id === patient.id && candidate.status === "booked",
+      )!;
+      const [template] = await all<{ id: string }>(read.objectStore("specialty_templates"));
+      const planId = crypto.randomUUID();
+      const write = database.transaction(["care_plans", "care_plan_items"], "readwrite");
+      write.objectStore("care_plans").put({
+        id: planId,
+        org_id: visit.org_id,
+        location_id: visit.location_id,
+        template_id: template.id,
+        patient_id: visit.patient_id,
+        practitioner_id: visit.practitioner_id,
+        goal: "استعادة الحركة",
+        diagnosis: "التهاب وتر",
+        planned_count: 1,
+        total_price: 25000,
+        paid: 0,
+        status: "active",
+        started_at: new Date().toISOString(),
+        expected_end: new Date(`${visit.visit_date}T00:00:00+03:00`).toISOString(),
+        rev: 1,
+      });
+      write.objectStore("care_plan_items").put({
+        id: crypto.randomUUID(),
+        care_plan_id: planId,
+        service_id: visit.service_id,
+        sequence: 1,
+        visit_id: visit.id,
+        min_gap_days: 0,
+        depends_on_item_id: null,
+        price: 25000,
+        status: "planned",
+        rev: 1,
+      });
+      await new Promise((resolve, reject) => {
+        write.oncomplete = () => resolve(undefined);
+        write.onerror = () => reject(write.error);
+      });
+    } finally {
+      database.close();
+    }
+  }, PATIENTS.karim);
+}
+
+test("a care plan's events are listed under the visits filter, naming the patient and never the goal", async ({ page }) => {
+  await bookExisting(page, PATIENTS.karim);
+  await linkSessionToKarimsVisit(page);
+
+  // Cancelling clears the session's link and re-dates the plan; undoing it puts both back.
+  await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
+  await page.getByRole("menuitem", { name: S.cancelMenuLabel, exact: true }).click();
+  await page.getByRole("button", { name: S.cancelReasonPatient, exact: true }).click();
+  await expect(rowFor(page, PATIENTS.karim)).toContainText(S.statusCancelled);
+  await page.getByRole("button", { name: S.undoAction, exact: true }).click();
+  await expect(rowFor(page, PATIENTS.karim)).toContainText(S.statusBooked);
+
+  await openAudit(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.auditFilterEntityVisits, exact: true }).click();
+  // The link cleared and the plan re-dated by the cancel, the plan re-dated by the undo.
+  const edits = dialog.getByRole("listitem").filter({ has: page.getByText("عدّل خطة رعاية", { exact: true }) });
+  await expect(edits).toHaveCount(3);
+  // The visit's booking, and the session's link restored by the undo.
+  const bookings = dialog.getByRole("listitem").filter({ has: page.getByText("سجّل حجز", { exact: true }) });
+  await expect(bookings).toHaveCount(2);
+  for (const row of [...(await edits.all()), ...(await bookings.all())]) {
+    await expect(row).toContainText(PATIENTS.karim);
+  }
+  await expect(dialog).not.toContainText("استعادة الحركة");
+  await expect(dialog).not.toContainText("التهاب وتر");
+
+  // Not under another entity's filter.
+  await dialog.getByRole("button", { name: S.auditFilterEntityPatients, exact: true }).click();
+  await expect(dialog.getByText("عدّل خطة رعاية", { exact: true })).toHaveCount(0);
+});

@@ -14,7 +14,6 @@ import {
   undoMostRecentInvoiceMutation,
   undoMostRecentPatientMutation,
   undoMostRecentPaymentMutation,
-  undoMostRecentVisitMutation,
 } from "../../db/mutate";
 import { seedDatabase, seededVisitsDate } from "../../db/seed";
 import type {
@@ -34,6 +33,7 @@ import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitArrived, markVisitCompleted, markVisitInRoom } from "../../db/visitAttendance";
 import { cancelVisit, markVisitNoShow, type VisitCancelReason } from "../../db/visitCancel";
 import { sendVisitToEndOfQueue, undoSendVisitToEndOfQueue } from "../../db/visitQueue";
+import { undoMostRecentVisitMutation } from "../../db/visitUndo";
 import type { Piastres } from "../../domain/money";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import { addDaysToClinicDay, clockTimeInCairo, todayInCairo, weekdayOf, type ClockTime } from "../../domain/time";
