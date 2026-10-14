@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import Ltr from "../../components/Ltr";
+import { printedBrand } from "../../domain/appVersion";
 import type { PrintClinicLines } from "./printClinic";
 
 /**
@@ -26,10 +27,15 @@ export function PrintPage({ children }: { children: ReactNode }) {
   return <div className="mx-auto w-[min(600px,100%)] rounded-panel border border-rule bg-white p-8 text-black shadow-l">{children}</div>;
 }
 
-/** `.print-header` — the placeholder/warning note; its text differs by context (see each caller) but never its own look. */
+/**
+ * `.print-header` — the placeholder/warning note behind a ✎; its text
+ * differs by context (see each caller) but never its own look, the
+ * prototype's yellow note (the `print-note` tokens).
+ */
 export function PrintHeaderNote({ children }: { children: ReactNode }) {
   return (
-    <p className="mb-5 rounded-control border border-dashed border-black/30 bg-black/5 p-3 text-center text-[12.5px] font-semibold text-black/70">
+    <p className="mb-5 rounded-control border-[1.5px] border-dashed border-print-note-line bg-print-note px-3.5 py-3 text-center text-[12.5px] font-semibold text-print-note-ink">
+      <span aria-hidden="true">✎ </span>
       {children}
     </p>
   );
@@ -91,12 +97,12 @@ export function PrintTd({ children, mono, colSpan }: { children: ReactNode; mono
   );
 }
 
-/** `.print-foot` */
+/** `.print-foot`: the print time, then "Clintra v{version}" (domain/appVersion.ts). */
 export function PrintFoot({ printedAt }: { printedAt: string }) {
   return (
     <div className="mt-5 flex justify-between border-t border-dashed border-black/20 pt-3 text-[11px] text-black/60">
       <span>{printedAt}</span>
-      <span>Clintra</span>
+      <Ltr>{printedBrand()}</Ltr>
     </div>
   );
 }

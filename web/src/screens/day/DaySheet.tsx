@@ -6,9 +6,11 @@ import { useLiveQuery } from "../../db/useLiveQuery";
 import type { ClinicDay, Patient, Schedule, Service, Visit } from "../../db/types";
 import { formatEgyptianPhoneForDisplay } from "../../domain/phone";
 import { ScheduleMode } from "../../domain/scheduleMode";
-import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo, weekdayOf } from "../../domain/time";
+import { formatWeekdayFullDate } from "../../domain/displayDate";
+import { clockTimeInCairo, weekdayOf } from "../../domain/time";
 import { SheetPanelBody } from "../../components/ui/SheetPanel";
 import { selectDaySheetVisits } from "./daySheetVisits";
+import { formatPrintedAt } from "./printedAt";
 import { PrintClinicBlock, PrintDayLine, PrintFoot, PrintHeaderNote, PrintPage, PrintTable, PrintTd, PrintTh } from "./PrintPage";
 import Sheet from "./Sheet";
 import { usePrintClinic } from "./usePrintClinic";
@@ -101,12 +103,10 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
   const clinic = usePrintClinic(locationId);
   const dayLine = (
     <>
-      {formatCairoDisplayDate(tomorrow)} <Ltr>{tomorrow.slice(0, 4)}</Ltr> — <Ltr>{rows.length}</Ltr>{" "}
-      {dayScreenStrings.daySheetPatientCountUnit}
+      {formatWeekdayFullDate(tomorrow)} — <Ltr>{rows.length}</Ltr> {dayScreenStrings.daySheetPatientCountUnit}
     </>
   );
-  const now = new Date();
-  const printedAt = `${dayScreenStrings.printedAtPrefix} ${formatCairoDisplayDate(todayInCairo(now))} ${clockTimeInCairo(now.toISOString())}`;
+  const printedAt = formatPrintedAt(new Date().toISOString());
 
   const pageBodyProps = {
     rows,
@@ -149,9 +149,6 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
   );
 }
 
-function phoneOrPlaceholder(patient: Patient | undefined): string {
-  return patient?.phone ? formatEgyptianPhoneForDisplay(patient.phone) : dayScreenStrings.daySheetNoPhone;
-}
 
 function positionOrTime(visit: Visit, isQueueMode: boolean): string {
   return isQueueMode ? String(visit.position) : clockTimeInCairo(visit.scheduled_at!);
@@ -208,9 +205,14 @@ function PageBody({
                 </PrintTd>
                 <PrintTd>{patient?.full_name ?? ""}</PrintTd>
                 <PrintTd>{service?.name ?? ""}</PrintTd>
-                <PrintTd mono>
-                  <Ltr>{phoneOrPlaceholder(patient)}</Ltr>
-                </PrintTd>
+                {/* `.print-tbl td .mono` for a number only: "بدون رقم" is Arabic text in the cell's own font. */}
+                {patient?.phone ? (
+                  <PrintTd mono>
+                    <Ltr>{formatEgyptianPhoneForDisplay(patient.phone)}</Ltr>
+                  </PrintTd>
+                ) : (
+                  <PrintTd>{dayScreenStrings.daySheetNoPhone}</PrintTd>
+                )}
               </tr>
             );
           })}

@@ -32,9 +32,10 @@ generates Tailwind utilities (`bg-*`, `text-*`, `border-*`, `rounded-*`,
 | `eligible` | `#186B4B` | Done, arrived, paid, matched. |
 | `warning` / `warning-wash` | `#96620B` / `#F7EEDA` | Delay, partial payment, needs attention. |
 | `danger` / `danger-wash` / `danger-line` | `#A32A21` / `#F7E3E0` / `#E4B9B4` | No-show, cancel, destructive actions, errors. |
+| `print-note` / `print-note-line` / `print-note-ink` | `#FFF8E1` / `#D4A017` / `#856D00` | The printed pages' note (`.print-header`, `.rx-print-header`): fill, dashed border, text. |
 | `whatsapp` | `#25D366` | WhatsApp's own mark only: the messages screen's channel icon and toggle dot (`.msg-item .icn.wa`, `.msg-ch-toggle .wa`). |
 
-## Radius and shadow
+## Radius, shadow and width
 
 | Token | Value | Use |
 |---|---|---|
@@ -43,6 +44,7 @@ generates Tailwind utilities (`bg-*`, `text-*`, `border-*`, `rounded-*`,
 | `rounded-card` | 12px | Inner cards, tiles, rows with a frame. |
 | `rounded-panel` | 14px | Cards, sheets, hero slab. |
 | `rounded-app` | 16px | The app frame. |
+| `max-w-page` | 1116px | The shared content width of every rail page (`PageMain`): the prototype's `.app` frame. |
 | `shadow-s` | `0 1px 2px` | Cards and tiles at rest. |
 | `shadow-m` | two-layer | App frame, sticky bars. |
 | `shadow-l` | deep, soft | Sheets, print previews, hero slab. |

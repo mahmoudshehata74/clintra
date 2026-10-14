@@ -1,8 +1,9 @@
 import { InvoiceStatus, PaymentMethod, type CashClose, type Invoice, type Payment, type Visit } from "../../db/types";
-import { formatDayMonthName, formatWeekdayFullDate } from "../../domain/displayDate";
+import { formatWeekdayFullDate } from "../../domain/displayDate";
 import type { Piastres } from "../../domain/money";
-import { clockTimeInCairo, todayInCairo, type ClinicDay, type Instant } from "../../domain/time";
+import { todayInCairo, type ClinicDay, type Instant } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
+import { formatPrintedAt } from "./printedAt";
 import { dayScreenStrings } from "./strings";
 
 // The printed summary of a closed day (screen 7's "اقفل اليوم واطبع
@@ -53,11 +54,6 @@ const METHODS: readonly { method: PaymentMethod; label: string }[] = [
   { method: PaymentMethod.Wallet, label: dayScreenStrings.paymentMethodWallet },
   { method: PaymentMethod.Transfer, label: dayScreenStrings.paymentMethodTransfer },
 ];
-
-/** The printed footer's "طُبعت d month HH:MM" for an instant. */
-export function formatPrintedAt(instant: Instant): string {
-  return `${dayScreenStrings.printedAtPrefix} ${formatDayMonthName(todayInCairo(new Date(instant)))} ${clockTimeInCairo(instant)}`;
-}
 
 /**
  * The summary as printed. Collected-by-method counts the payments of the

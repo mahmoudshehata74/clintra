@@ -168,6 +168,10 @@
   --color-eligible: #186b4b;
   --color-on-dark: #f2f7f5;
   --color-on-dark-dim: #87a29a;
+  /* The print note's yellow (`.print-header`, `.rx-print-header`). */
+  --color-print-note: #fff8e1;
+  --color-print-note-line: #d4a017;
+  --color-print-note-ink: #856d00;
   /* WhatsApp's own green — the prototype's `.msg-item .icn.wa` and `.msg-ch-toggle .wa` only. */
   --color-whatsapp: #25d366;
 
