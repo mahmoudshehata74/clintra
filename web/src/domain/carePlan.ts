@@ -134,6 +134,15 @@ export function isCarePlanCompleted(sessions: readonly CarePlanSession[]): boole
   return counted.length > 0 && counted.every((session) => session.state === CarePlanSessionState.Done);
 }
 
+/**
+ * Whether a plan is under way: active and not completed. A patient has at
+ * most one such plan with a practitioner (`plan_already_active`), and it
+ * is the one a visit with that practitioner shows.
+ */
+export function isCarePlanOngoing(plan: Pick<CarePlan, "status">, sessions: readonly CarePlanSession[]): boolean {
+  return plan.status === CarePlanStatus.Active && !isCarePlanCompleted(sessions);
+}
+
 /** The first suggested session in sequence order — "the next session" to book — or null. */
 export function nextSuggestedSession(sessions: readonly CarePlanSession[]): CarePlanSession | null {
   return sessions.find((session) => session.state === CarePlanSessionState.Suggested) ?? null;

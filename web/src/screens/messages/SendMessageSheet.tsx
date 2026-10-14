@@ -17,11 +17,16 @@ import SheetHeader from "../day/SheetHeader";
 import { initialMessageText, missingValuesWarning, templateValuesForVisit } from "./messagesModel";
 import { messagesStrings as T } from "./strings";
 
-/** What the sheet starts from instead of the first template — the printed prescription's custom text and channel. */
+/**
+ * What the sheet starts from instead of the first template: the printed
+ * prescription's custom text and channel, or the care plan's reminder
+ * template alone (its own filled text, WhatsApp).
+ */
 export interface SendMessageStart {
   templateKey: string;
-  body: string;
-  channel: MessageChannel;
+  /** The text to start from; without it, the template's own filled text. */
+  body?: string;
+  channel?: MessageChannel;
 }
 
 interface SendMessageSheetProps {
@@ -69,7 +74,7 @@ export default function SendMessageSheet({ visitId, start, onDismiss }: SendMess
   const [templateKey, setTemplateKey] = useState<string>(start?.templateKey ?? MESSAGE_TEMPLATES[0].key);
   // The text as edited for the selected template; null shows the template's own filled text.
   const [edited, setEdited] = useState<{ key: string; text: string } | null>(
-    start ? { key: start.templateKey, text: start.body } : null,
+    start?.body !== undefined ? { key: start.templateKey, text: start.body } : null,
   );
   const [channel, setChannel] = useState<MessageChannel>(start?.channel ?? MessageChannel.WhatsApp);
   const [error, setError] = useState<string | null>(null);

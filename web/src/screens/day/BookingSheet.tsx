@@ -15,7 +15,7 @@ import { resolveServicePrice } from "../../domain/pricing";
 import { generateTimeChoices } from "../../domain/schedule";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import type { ClinicDay, ClockTime } from "../../domain/time";
-import { clockTimeInCairo, formatCairoDisplayDate } from "../../domain/time";
+import { addDaysToClinicDay, clockTimeInCairo, formatCairoDisplayDate, formatCairoDisplayDateParts } from "../../domain/time";
 import { VisitSource } from "../../domain/visitSource";
 import { VisitStatus } from "../../domain/visitStatus";
 import {
@@ -31,6 +31,7 @@ import {
   type NewPatientFormState,
 } from "./newPatientForm";
 import { submitNewPatientForm } from "./newPatientSubmission";
+import { carePlanErrorMessage } from "../carePlan/carePlanModel";
 import type { DayScheduleState } from "./scheduleState";
 import Sheet from "./Sheet";
 import SheetHeader from "./SheetHeader";
@@ -79,6 +80,21 @@ type Step =
 
 export type BookingSheetMode = "booking" | "walk_in";
 
+/**
+ * Booking a care plan's session (screen 17's "احجز الجلسة التالية"): the
+ * patient and the session's service are already chosen, the booking links
+ * the visit to the session (db/visitBooking.ts's and db/visitQueue.ts's
+ * carePlanItemId), and the day — the caller's visitDate — moves a day at a
+ * time through onVisitDateChange, never before earliestDate.
+ */
+export interface BookingPrefill {
+  patient: Patient;
+  serviceId: string;
+  carePlanItemId: string;
+  earliestDate: ClinicDay;
+  onVisitDateChange: (date: ClinicDay) => void;
+}
+
 interface BookingSheetProps {
   practitioner: Practitioner;
   scheduleState: DayScheduleState;
@@ -103,6 +119,8 @@ interface BookingSheetProps {
    * open searching for a patient.
    */
   presetTime?: ClockTime;
+  /** Booking a care plan's session; absent, the sheet behaves exactly as it always has. */
+  prefill?: BookingPrefill;
   onDismiss: () => void;
   onBooked: (undo: UndoAction) => void;
   onCollision: () => void;
@@ -126,18 +144,31 @@ export default function BookingSheet({
   mode,
   showPractitionerName,
   presetTime,
+  prefill,
   onDismiss,
   onBooked,
   onCollision,
 }: BookingSheetProps) {
-  const [step, setStep] = useState<Step>({ kind: "search" });
+  const [step, setStep] = useState<Step>(() => {
+    if (!prefill) {
+      return { kind: "search" };
+    }
+    // A care plan's session starts with its patient chosen: the queue's
+    // confirm step, or the day's slots.
+    if (scheduleState.kind === "scheduled" && scheduleState.schedule.mode === ScheduleMode.Queue) {
+      const position = visitsForPractitioner.reduce((max, visit) => Math.max(max, visit.position), 0) + 1;
+      return { kind: "confirm_queue", patient: prefill.patient, position };
+    }
+    return { kind: "slots", patient: prefill.patient };
+  });
+  const [prefillError, setPrefillError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [isConfirming, setIsConfirming] = useState(false);
   const [newPatientForm, setNewPatientForm] = useState<NewPatientFormState>(EMPTY_NEW_PATIENT_FORM);
   const [newPatientSubmitted, setNewPatientSubmitted] = useState(false);
   const [isCreatingPatient, setIsCreatingPatient] = useState(false);
-  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(prefill?.serviceId ?? null);
   const inputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -158,7 +189,8 @@ export default function BookingSheet({
 
   const schedule = scheduleState.kind === "scheduled" ? scheduleState.schedule : null;
   const isQueueMode = schedule?.mode === ScheduleMode.Queue;
-  const noScheduleMessage = resolveBookingScheduleNote(scheduleState);
+  const noScheduleMessage =
+    prefill && scheduleState.kind === "day_off" ? dayScreenStrings.bookingPrefillDayOff : resolveBookingScheduleNote(scheduleState);
   const service = resolveSelectedService(services, selectedServiceId);
   const overrides = useLiveQuery(() => db.service_price_overrides.toArray(), []) ?? [];
 
@@ -264,6 +296,7 @@ export default function BookingSheet({
         status: mode === "walk_in" ? VisitStatus.Arrived : undefined,
         source: mode === "walk_in" ? VisitSource.Walkin : undefined,
         isOverbooked,
+        carePlanItemId: prefill?.carePlanItemId,
       });
 
       if (result.ok) {
@@ -282,6 +315,13 @@ export default function BookingSheet({
           ? { kind: "overbook_time", patient, newPatientAuditLogId }
           : { kind: "slots", patient, newPatientAuditLogId },
       );
+    } catch (error) {
+      // Only a session's booking can be refused here (it is no longer
+      // bookable, its plan was stopped); say so in the sheet.
+      if (!prefill) {
+        throw error;
+      }
+      setPrefillError(carePlanErrorMessage(error));
     } finally {
       setIsConfirming(false);
     }
@@ -302,6 +342,7 @@ export default function BookingSheet({
         visitDate,
         status: mode === "walk_in" ? VisitStatus.Arrived : undefined,
         source: mode === "walk_in" ? VisitSource.Walkin : undefined,
+        carePlanItemId: prefill?.carePlanItemId,
       });
 
       onBooked(
@@ -310,6 +351,11 @@ export default function BookingSheet({
           : { kind: "visit", auditLogId: result.auditLogId },
       );
       onDismiss();
+    } catch (error) {
+      if (!prefill) {
+        throw error;
+      }
+      setPrefillError(carePlanErrorMessage(error));
     } finally {
       setIsConfirming(false);
     }
@@ -325,6 +371,28 @@ export default function BookingSheet({
       <SheetHeader title={sheetTitle} onDismiss={onDismiss} />
 
       <SheetPanelBody>
+        {prefill && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13.5px] font-semibold text-text">
+              {formatCairoDisplayDateParts(visitDate).map((part, index) =>
+                part.type === "day" ? <Ltr key={index}>{part.value}</Ltr> : <span key={index}>{part.value}</span>,
+              )}
+            </span>
+            <span className="ms-auto flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={visitDate <= prefill.earliestDate}
+                onClick={() => prefill.onVisitDateChange(addDaysToClinicDay(visitDate, -1))}
+              >
+                {dayScreenStrings.bookingPrefillPrevDay}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => prefill.onVisitDateChange(addDaysToClinicDay(visitDate, 1))}>
+                {dayScreenStrings.bookingPrefillNextDay}
+              </Button>
+            </span>
+          </div>
+        )}
         {step.kind === "search" && (
           <>
             <Field label={dayScreenStrings.bookingSearchLabel} id="booking-search">
@@ -400,13 +468,15 @@ export default function BookingSheet({
 
         {step.kind === "slots" && (
           <>
-            <button type="button" onClick={() => setStep({ kind: "search" })} className={BACK_BUTTON_CLASS}>
-              {dayScreenStrings.bookingBackAction}
-            </button>
+            {!prefill && (
+              <button type="button" onClick={() => setStep({ kind: "search" })} className={BACK_BUTTON_CLASS}>
+                {dayScreenStrings.bookingBackAction}
+              </button>
+            )}
             <p className="text-[13.5px] font-semibold text-text">{step.patient.full_name}</p>
             {emptySlots.length === 0 ? (
               <p className="p-3 text-center text-[12.5px] text-muted">
-                {noScheduleMessage ?? dayScreenStrings.bookingNoEmptySlots}
+                {noScheduleMessage ?? (prefill ? dayScreenStrings.bookingPrefillNoEmptySlots : dayScreenStrings.bookingNoEmptySlots)}
               </p>
             ) : (
               <div className="flex flex-wrap gap-[6px]">
@@ -499,9 +569,10 @@ export default function BookingSheet({
               <span className="text-[15px] font-semibold text-text">{step.patient.full_name}</span>
               <span className="text-[12px] text-muted">
                 <Ltr>{step.time}</Ltr>
+                {prefill && ` · ${service.name}`}
               </span>
             </div>
-            {services.length >= 2 && (
+            {!prefill && services.length >= 2 && (
               <Field label={dayScreenStrings.bookingServiceFieldLabel} id="booking-service-confirm">
                 <ToggleGroup
                   variant="service"
@@ -517,16 +588,19 @@ export default function BookingSheet({
 
         {step.kind === "confirm_queue" && service && (
           <>
-            <button type="button" onClick={() => setStep({ kind: "search" })} className={BACK_BUTTON_CLASS}>
-              {dayScreenStrings.bookingBackAction}
-            </button>
+            {!prefill && (
+              <button type="button" onClick={() => setStep({ kind: "search" })} className={BACK_BUTTON_CLASS}>
+                {dayScreenStrings.bookingBackAction}
+              </button>
+            )}
             <div className="flex flex-col gap-1">
               <span className="text-[15px] font-semibold text-text">{step.patient.full_name}</span>
               <span className="text-[12px] text-muted">
                 {dayScreenStrings.addToQueueConfirmPrefix} <Ltr>{step.position}</Ltr>
+                {prefill && ` · ${service.name}`}
               </span>
             </div>
-            {services.length >= 2 && (
+            {!prefill && services.length >= 2 && (
               <Field label={dayScreenStrings.bookingServiceFieldLabel} id="booking-service-confirm-queue">
                 <ToggleGroup
                   variant="service"
@@ -538,6 +612,11 @@ export default function BookingSheet({
               </Field>
             )}
           </>
+        )}
+        {prefillError && (
+          <p role="alert" className="text-[12.5px] font-semibold text-danger">
+            {prefillError}
+          </p>
         )}
       </SheetPanelBody>
 

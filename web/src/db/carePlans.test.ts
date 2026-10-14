@@ -41,6 +41,7 @@ import { cancelVisit, markVisitNoShow } from "./visitCancel";
 import { completeVisitWithInvoice } from "./visitCompletion";
 import { saveVisitFormField } from "./visitForm";
 import { moveVisit } from "./visitMove";
+import { addToQueue } from "./visitQueue";
 import { undoMostRecentVisitMutation } from "./visitUndo";
 
 let db: ClintraDatabase;
@@ -244,6 +245,38 @@ describe("createCarePlan", () => {
   });
 });
 
+describe("one plan under way per patient and practitioner", () => {
+  it("refuses a second plan while one is under way, and writes nothing", async () => {
+    const { visit } = await makePlan();
+    const before = await writeCounts();
+    await expect(createCarePlan(db, { visitId: visit.id, goal: "هدف", diagnosis: "تشخيص", sessions: groups() })).rejects.toThrow(
+      CarePlanError.PlanAlreadyActive,
+    );
+    expect(await writeCounts()).toEqual(before);
+  });
+
+  it("allows a new plan once the first is stopped or completed, and refuses to resume the first while the new one is under way", async () => {
+    const { plan, visit } = await makePlan();
+    await stopCarePlan(db, plan.id);
+    const second = await createCarePlan(db, { visitId: visit.id, goal: "هدف", diagnosis: "تشخيص", sessions: [{ serviceId: physio.id, count: 1, gapDays: 0 }] });
+    await expect(resumeCarePlan(db, plan.id)).rejects.toThrow(CarePlanError.PlanAlreadyActive);
+    expect((await db.care_plans.get(plan.id))?.status).toBe(CarePlanStatus.Stopped);
+
+    // The second plan's only session done: it is completed, so a third may start and the first may resume.
+    const booked = await bookSession(second.items[0], "2026-10-27");
+    await db.visits.update(booked.id, { status: VisitStatus.Completed });
+    expect(await resumeCarePlan(db, plan.id)).not.toBeNull();
+    expect((await db.care_plans.get(plan.id))?.status).toBe(CarePlanStatus.Active);
+  });
+
+  it("does not count another patient's plan", async () => {
+    await makePlan();
+    const otherPatient = (await db.patients.toArray())[1];
+    const visit = await makeVisit({ patient_id: otherPatient.id, position: 40 });
+    await expect(createCarePlan(db, { visitId: visit.id, goal: "هدف", diagnosis: "تشخيص", sessions: groups() })).resolves.toBeTruthy();
+  });
+});
+
 describe("plan edits", () => {
   it("updates the goal and diagnosis, and writes nothing when they are unchanged", async () => {
     const { plan } = await makePlan();
@@ -385,6 +418,45 @@ describe("links kept by the visit writers", () => {
         ...overrides,
       }),
     ).rejects.toThrow(error);
+    expect(await writeCounts()).toEqual(before);
+  });
+
+  it("adding a session's visit to a queue links it in the same transaction", async () => {
+    const { plan, items } = await makePlan();
+    clearActiveSession(); // the assistant adds to the queue
+    const before = await writeCounts();
+    const { auditLogId } = await addToQueue(db, {
+      practitionerId: plan.practitioner_id,
+      locationId: plan.location_id,
+      orgId: plan.org_id,
+      patientId: plan.patient_id,
+      serviceId: items[0].service_id,
+      visitDate: "2026-10-27",
+      carePlanItemId: items[0].id,
+    });
+
+    const queued = (await db.audit_log.get(auditLogId))!.entity_id;
+    expect((await db.care_plan_items.get(items[0].id))?.visit_id).toBe(queued);
+    expect((await db.care_plans.get(plan.id))?.expected_end).toBe(cairoInstant("2026-11-10", "00:00"));
+    expect((await writeCounts()).auditRows - before.auditRows).toBe(3);
+    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "سجّل حجز"]);
+  });
+
+  it("refuses a queue visit for a session that is not bookable, and writes nothing", async () => {
+    const { plan, items } = await makePlan();
+    await skipCarePlanSession(db, items[1].id);
+    const before = await writeCounts();
+    await expect(
+      addToQueue(db, {
+        practitionerId: plan.practitioner_id,
+        locationId: plan.location_id,
+        orgId: plan.org_id,
+        patientId: plan.patient_id,
+        serviceId: items[1].service_id,
+        visitDate: "2026-10-27",
+        carePlanItemId: items[1].id,
+      }),
+    ).rejects.toThrow(CarePlanError.SessionNotBookable);
     expect(await writeCounts()).toEqual(before);
   });
 

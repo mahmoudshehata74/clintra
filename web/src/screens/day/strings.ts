@@ -113,6 +113,13 @@ export const dayScreenStrings = {
   // Shown on the slots step when the practitioner's schedule has no empty
   // slot left today.
   bookingNoEmptySlots: "مفيش مواعيد فاضية النهاردة",
+  // Booking a care plan's session (screen 17's "احجز الجلسة التالية"): the
+  // day the sheet books, which moves a day at a time from the suggested one,
+  // and what it says when that day has nothing to book.
+  bookingPrefillPrevDay: "اليوم اللي قبله",
+  bookingPrefillNextDay: "اليوم اللي بعده",
+  bookingPrefillNoEmptySlots: "مفيش مواعيد فاضية في اليوم ده",
+  bookingPrefillDayOff: "مفيش مواعيد في اليوم ده",
   bookingConfirmButton: "احجز",
   // Shown in the toast after a successful booking, with the same undo action
   // and five-minute window as the attendance toast.
