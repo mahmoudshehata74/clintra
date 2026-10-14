@@ -56,6 +56,8 @@ interface PractitionerColumnProps {
   onOpenInvoice: (invoiceId: string) => void;
   /** The overflow menu's "ابعت رسالة", offered on any visit whose patient exists (SendMessageSheet). */
   onSendMessage: (visit: Visit) => void;
+  /** The overflow menu's "ملف المريض", offered on any visit whose patient exists (PatientProfileSheet). */
+  onOpenProfile: (visit: Visit) => void;
   onSendToEnd: (visit: Visit) => void;
   onOpenVisitForm: (visit: Visit) => void;
   /** The slots card's trailing action ("ورقة الغد") — slots mode only. The audit log ("السجل") moved to AppShell's rail. */
@@ -90,6 +92,7 @@ export default function PractitionerColumn({
   onMarkNoShow,
   onOpenInvoice,
   onSendMessage,
+  onOpenProfile,
   onSendToEnd,
   onOpenVisitForm,
   onOpenDaySheet,
@@ -135,6 +138,7 @@ export default function PractitionerColumn({
         onMarkNoShow={onMarkNoShow}
         onOpenInvoice={onOpenInvoice}
         onSendMessage={onSendMessage}
+        onOpenProfile={onOpenProfile}
         onSendToEnd={onSendToEnd}
         onOpenVisitForm={onOpenVisitForm}
         onCallNext={onCallNextInQueue}
@@ -231,6 +235,7 @@ export default function PractitionerColumn({
                       onNoShow: administrable ? () => onMarkNoShow(visit) : undefined,
                       onInvoice: invoiceId ? () => onOpenInvoice(invoiceId) : undefined,
                       onSendMessage: patient ? () => onSendMessage(visit) : undefined,
+                      onOpenProfile: patient ? () => onOpenProfile(visit) : undefined,
                     }
                   : undefined
               }
@@ -292,6 +297,8 @@ interface QueueColumnProps {
   onOpenInvoice: (invoiceId: string) => void;
   /** The overflow menu's "ابعت رسالة", offered on any visit whose patient exists (SendMessageSheet). */
   onSendMessage: (visit: Visit) => void;
+  /** The overflow menu's "ملف المريض", offered on any visit whose patient exists (PatientProfileSheet). */
+  onOpenProfile: (visit: Visit) => void;
   onSendToEnd: (visit: Visit) => void;
   onOpenVisitForm: (visit: Visit) => void;
   onCallNext?: () => void;
@@ -323,6 +330,7 @@ function QueueColumn({
   onMarkNoShow,
   onOpenInvoice,
   onSendMessage,
+  onOpenProfile,
   onSendToEnd,
   onOpenVisitForm,
   onCallNext,
@@ -469,6 +477,7 @@ function QueueColumn({
                       onNoShow: isMenuEligible(visit.status) ? () => onMarkNoShow(visit) : undefined,
                       onInvoice: invoiceId ? () => onOpenInvoice(invoiceId) : undefined,
                       onSendMessage: patient ? () => onSendMessage(visit) : undefined,
+                      onOpenProfile: patient ? () => onOpenProfile(visit) : undefined,
                     }
                   : undefined
               }

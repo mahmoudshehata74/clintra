@@ -25,6 +25,9 @@ import {
 import { VisitStatus } from "../../domain/visitStatus";
 import CarePlanEntry from "../carePlan/CarePlanEntry";
 import { dayScreenStrings } from "../day/strings";
+import PatientProfileSheet from "../patient/PatientProfileSheet";
+import type { ProfileTab } from "../patient/profileModel";
+import { patientProfileStrings } from "../patient/strings";
 import PrescriptionPrintSheet from "../prescription/PrescriptionPrintSheet";
 import { computeRxPrintState } from "../prescription/printModel";
 import { visitWorkspaceStrings as T } from "./strings";
@@ -92,9 +95,11 @@ const FIELD_CONFIG: readonly { key: VisitFormFieldKey; label: string; placeholde
 /**
  * The visit workspace (reference screen 10, "الزيارة — النموذج المتكامل")
  * without its assistant panel (`.visit-aside` — no AI in v1, see
- * docs/design-rule.md): `.pt-summary`, then the single `.visit-main` column
- * (`.plan-badge` or "ابدأ خطة رعاية" — screens/carePlan/CarePlanEntry.tsx —
- * `.visit-history`, the two `.field`s, `.rx-section`), then `.runrow`.
+ * docs/design-rule.md): `.pt-summary` (its `.quick` buttons open the
+ * patient profile, screen 18, on "زيارات" or "مدفوعات"), then the single
+ * `.visit-main` column (`.plan-badge` or "ابدأ خطة رعاية" —
+ * screens/carePlan/CarePlanEntry.tsx — `.visit-history`, the two `.field`s,
+ * `.rx-section`), then `.runrow`.
  * Hosted by VisitFormSheet and by the "الزيارة الحالية" page.
  *
  * Reads everything itself via liveQuery; the host only names the visit and
@@ -111,6 +116,7 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
   // The session length runs live while in the room; nothing else re-renders
   // it, so this ticks once a minute (the doctor's day's own pattern).
   const [, forceMinuteTick] = useState(0);
+  const [profileTab, setProfileTab] = useState<ProfileTab | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => forceMinuteTick((tick) => tick + 1), 60_000);
@@ -250,7 +256,21 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
           </div>
           <PatientMeta summary={summary} />
         </div>
+        {data.patient && (
+          // `.quick` — `.qbtn` × 2.
+          <div className="flex gap-1.5">
+            <button type="button" onClick={() => setProfileTab("visits")} className={QUICK_BUTTON}>
+              {patientProfileStrings.historyQuick}
+            </button>
+            <button type="button" onClick={() => setProfileTab("payments")} className={QUICK_BUTTON}>
+              {patientProfileStrings.invoicesQuick}
+            </button>
+          </div>
+        )}
       </div>
+      {data.patient && profileTab && (
+        <PatientProfileSheet patientId={data.patient.id} initialTab={profileTab} onDismiss={() => setProfileTab(null)} />
+      )}
 
       {/* `.visit-main` */}
       <div className="flex flex-col gap-3.5 p-5">
@@ -303,6 +323,10 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
     </>
   );
 }
+
+// `.pt-summary .qbtn` (its 8px radius on the control token).
+const QUICK_BUTTON =
+  "cursor-pointer appearance-none rounded-control border-[1.5px] border-rule bg-card px-2.5 py-[5px] font-[inherit] text-[11px] font-semibold text-muted transition-colors duration-150 hover:border-green-line hover:text-green focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green";
 
 /** `.pt-summary .meta`: phone (mono, LTR) · visit count · last visit — each omitted without data. */
 function PatientMeta({ summary }: { summary: ReturnType<typeof summarizePatient> }) {

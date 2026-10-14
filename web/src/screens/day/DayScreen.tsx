@@ -59,6 +59,7 @@ import DaySheet from "./DaySheet";
 import DelayControl from "./DelayControl";
 import InvoiceSheet from "./InvoiceSheet";
 import SendMessageSheet from "../messages/SendMessageSheet";
+import PatientProfileSheet from "../patient/PatientProfileSheet";
 import MoveVisitSheet from "./MoveVisitSheet";
 import PaymentSheet from "./PaymentSheet";
 import PractitionerColumn from "./PractitionerColumn";
@@ -183,6 +184,8 @@ export default function DayScreen({
   const [invoiceSheetInvoiceId, setInvoiceSheetInvoiceId] = useState<string | null>(null);
   // The visit whose patient the send sheet is open for (VisitMenu's "ابعت رسالة").
   const [sendMessageVisitId, setSendMessageVisitId] = useState<string | null>(null);
+  // The patient whose profile is open (VisitMenu's "ملف المريض").
+  const [profilePatientId, setProfilePatientId] = useState<string | null>(null);
   const [paymentSheetInvoiceId, setPaymentSheetInvoiceId] = useState<string | null>(null);
   const [visitFormSheetVisitId, setVisitFormSheetVisitId] = useState<string | null>(null);
   const [isCashCloseOpen, setIsCashCloseOpen] = useState(false);
@@ -707,6 +710,11 @@ export default function DayScreen({
     setSendMessageVisitId(visit.id);
   }
 
+  function handleOpenProfile(visit: Visit) {
+    setOpenMenuVisitId(null);
+    setProfilePatientId(visit.patient_id);
+  }
+
   function handleOpenVisitForm(visit: Visit) {
     setOpenMenuVisitId(null);
     setVisitFormSheetVisitId(visit.id);
@@ -1048,6 +1056,7 @@ export default function DayScreen({
               onMarkNoShow={handleMarkNoShow}
               onOpenInvoice={handleOpenInvoice}
               onSendMessage={handleSendMessage}
+              onOpenProfile={handleOpenProfile}
               onSendToEnd={handleSendToEnd}
               onOpenVisitForm={handleOpenVisitForm}
               onOpenDaySheet={practitioner.id === currentPractitionerId ? () => setIsDaySheetOpen(true) : undefined}
@@ -1113,6 +1122,8 @@ export default function DayScreen({
       {sendMessageVisitId && (
         <SendMessageSheet visitId={sendMessageVisitId} onDismiss={() => setSendMessageVisitId(null)} />
       )}
+
+      {profilePatientId && <PatientProfileSheet patientId={profilePatientId} onDismiss={() => setProfilePatientId(null)} />}
 
       {paymentSheetInvoiceId && (
         <PaymentSheet
