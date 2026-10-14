@@ -12,8 +12,7 @@ type SlotBadgeProps =
   | { appearance: "solid"; tone: BadgeTone }
   | { appearance: "dashed"; tone: "green" | "copper" | "warning" | "danger" };
 
-/** Shared by SlotRow (slots mode) and QueueRow (queue mode) — the same seven statuses read the same way regardless of how a day is scheduled. */
-export const STATUS_LABEL: Record<string, string> = {
+const STATUS_LABEL: Record<string, string> = {
   [VisitStatus.Booked]: dayScreenStrings.statusBooked,
   [VisitStatus.Confirmed]: dayScreenStrings.statusConfirmed,
   [VisitStatus.Arrived]: dayScreenStrings.statusArrived,
@@ -22,6 +21,24 @@ export const STATUS_LABEL: Record<string, string> = {
   [VisitStatus.Cancelled]: dayScreenStrings.statusCancelled,
   [VisitStatus.NoShow]: dayScreenStrings.statusNoShow,
 };
+
+/** "وصلت" for a patient recorded as female, "وصل" otherwise (patients.gender). */
+export function arrivedWord(gender: string | null | undefined): string {
+  return gender === "female" ? dayScreenStrings.statusArrivedFemale : dayScreenStrings.statusArrived;
+}
+
+/**
+ * A visit status's word, shared by every surface that names one (SlotRow,
+ * QueueRow, the doctor's day, the patient profile) so the same status
+ * always reads the same way; arrived follows the patient's gender. A
+ * status with no word of its own (rescheduled) reads as its raw value.
+ */
+export function visitStatusLabel(status: string, gender?: string | null): string {
+  if (status === VisitStatus.Arrived) {
+    return arrivedWord(gender);
+  }
+  return STATUS_LABEL[status] ?? status;
+}
 
 export interface StatusVisual {
   /** `.slot::before` — the row's 3px left accent. */

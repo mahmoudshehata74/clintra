@@ -11,8 +11,6 @@ import {
   carePlanBadgeProgress,
   carePlanErrorMessage,
   derivePlanSessions,
-  formatDayMonth,
-  formatFullDate,
   formatPlanMoney,
   formatShortClock,
   ongoingPlanFor,
@@ -133,9 +131,7 @@ function prototypePlan() {
 const metaText = (row: SessionRow) => row.meta.map((part) => part.text).join(" · ");
 
 describe("formatting", () => {
-  it("formats days, times and money as the screen shows them", () => {
-    expect(formatDayMonth("2026-08-05")).toBe("5 / 8");
-    expect(formatFullDate("2026-11-15")).toBe("15 / 11 / 2026");
+  it("formats times and money as the screen shows them", () => {
     expect(formatShortClock(cairoInstant("2026-10-14", "09:30"))).toBe("9:30");
     expect(formatShortClock(cairoInstant("2026-10-14", "16:30"))).toBe("16:30");
     expect(formatPlanMoney(250000 as Piastres)).toBe("2,500 ج.م");

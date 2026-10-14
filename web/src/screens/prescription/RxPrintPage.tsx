@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Ltr from "../../components/Ltr";
+import SlashDate from "../../components/SlashDate";
 import { PrintPage } from "../day/PrintPage";
 import type { RxPrintDrug, RxPrintModel } from "./printModel";
 import { prescriptionPrintStrings as T } from "./strings";
@@ -44,7 +45,7 @@ export default function RxPrintPage({ model, preview }: { model: RxPrintModel; p
             <Ltr>{model.number}</Ltr>
           </p>
           <p>
-            <Ltr>{model.date}</Ltr>
+            <SlashDate>{model.date}</SlashDate>
           </p>
         </div>
       </div>

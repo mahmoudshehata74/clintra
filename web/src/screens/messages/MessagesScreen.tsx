@@ -1,4 +1,5 @@
 import { useState } from "react";
+import PageMain from "../../components/PageMain";
 import Ltr from "../../components/Ltr";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
@@ -77,7 +78,7 @@ export default function MessagesScreen({ membership }: MessagesScreenProps) {
   const selected = MESSAGE_TEMPLATES.find((template) => template.key === selectedKey) ?? MESSAGE_TEMPLATES[0];
 
   return (
-    <main className="mx-auto flex max-w-5xl flex-col gap-3.5 px-6 pt-6 pb-16 print:hidden">
+    <PageMain className="flex flex-col gap-3.5 pt-6 pb-16 print:hidden">
       {!data ? (
         <p className="text-muted">{T.loadingLabel}</p>
       ) : (
@@ -98,7 +99,7 @@ export default function MessagesScreen({ membership }: MessagesScreenProps) {
           </div>
         </Card>
       )}
-    </main>
+    </PageMain>
   );
 }
 

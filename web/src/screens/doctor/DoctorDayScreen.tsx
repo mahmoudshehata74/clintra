@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import PageMain from "../../components/PageMain";
 import Ltr from "../../components/Ltr";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
@@ -180,9 +181,9 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
 
   if (!data) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
+      <PageMain className="py-16">
         <p className="text-muted">{T.loadingLabel}</p>
-      </main>
+      </PageMain>
     );
   }
 
@@ -233,7 +234,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
   }
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-3.5 px-6 pt-6 pb-16 print:hidden">
+    <PageMain className="flex flex-col gap-3.5 pt-6 pb-16 print:hidden">
       {momentum && <MomentumBar momentum={momentum} isQueueMode={isQueueMode} />}
 
       {current ? (
@@ -334,7 +335,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
           }}
         />
       )}
-    </main>
+    </PageMain>
   );
 }
 

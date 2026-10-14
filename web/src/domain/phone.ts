@@ -95,9 +95,9 @@ export function normalizeEgyptianPhone(input: string): NormalizePhoneResult {
 }
 
 /**
- * Formats an E.164 Egyptian number for local display, grouping the trunk-prefixed area/operator
- * code separately from the subscriber number, e.g. +201001234567 -> "010 0123 4567" (mobile) or
- * +20221234567 -> "02 1234 5678" (landline).
+ * Formats an E.164 Egyptian number for local display. A mobile number reads 4-3-4, as the
+ * prototype writes it: +201001234567 -> "0100 123 4567". A landline groups the trunk-prefixed
+ * area code separately from the subscriber number: +20221234567 -> "02 2123 4567".
  */
 export function formatEgyptianPhoneForDisplay(e164: string): string {
   const match = /^\+20(\d+)$/.exec(e164);
@@ -109,6 +109,11 @@ export function formatEgyptianPhoneForDisplay(e164: string): string {
   const classification = classifyNationalNumber(national);
   if (!classification) {
     return e164;
+  }
+
+  if (classification.kind === PhoneKind.Mobile) {
+    const local = `0${national}`;
+    return [local.slice(0, 4), local.slice(4, 7), local.slice(7)].join(" ");
   }
 
   const prefix = `0${national.slice(0, classification.areaCodeLength)}`;

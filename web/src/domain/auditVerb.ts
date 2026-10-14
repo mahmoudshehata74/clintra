@@ -84,8 +84,8 @@ const VISIT_FORM_FALLBACK_VERB = "عدّل النموذج";
 // visit was: an assistant can cancel, mark no-show, or move a visit from
 // booked, confirmed, arrived or in_room alike.
 const VISIT_TERMINAL_VERBS: Partial<Record<VisitStatus, string>> = {
-  [VisitStatus.Cancelled]: "ألغى الزيارة",
-  [VisitStatus.NoShow]: "سجّل غياب",
+  [VisitStatus.Cancelled]: "ألغى الحجز",
+  [VisitStatus.NoShow]: "علّم لم يحضر",
   [VisitStatus.Rescheduled]: "نقل الميعاد",
 };
 
@@ -170,7 +170,7 @@ const CARE_PLAN_ITEM_STATUS_VERBS: Partial<Record<string, string>> = {
 // visit's own write. Booked and moved read as the visit's own verbs; a link
 // cleared by a cancel or a no-show (the session row alone cannot tell
 // which) reads as the plan's plain edit, beside the visit's own line.
-const CARE_PLAN_SESSION_BOOKED_VERB = "سجّل حجز";
+const CARE_PLAN_SESSION_BOOKED_VERB = "أنشأ حجز";
 const CARE_PLAN_SESSION_MOVED_VERB = "نقل الميعاد";
 const CARE_PLAN_EDIT_VERB = "عدّل خطة رعاية";
 
@@ -191,7 +191,7 @@ function describeCarePlanItemUpdate(row: AuditVerbRow): string | undefined {
 }
 
 const CREATE_VERBS: Partial<Record<string, string>> = {
-  visits: "سجّل حجز",
+  visits: "أنشأ حجز",
   patients: "أضاف مريض",
   invoices: "أنشأ فاتورة",
   payments: "سجّل دفعة",
@@ -203,7 +203,7 @@ const CREATE_VERBS: Partial<Record<string, string>> = {
 };
 
 const DELETE_VERBS: Partial<Record<string, string>> = {
-  visits: "حذف الزيارة",
+  visits: "حذف الحجز",
   patients: "حذف المريض",
   invoices: "حذف الفاتورة",
   payments: "حذف الدفعة",

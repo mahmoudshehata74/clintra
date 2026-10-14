@@ -6,7 +6,6 @@ import type { PrintClinicLines } from "../day/printClinic";
 import {
   buildRxPrintModel,
   computeRxPrintState,
-  formatRxDate,
   rxPrintErrorMessage,
   type RxPrintInput,
 } from "./printModel";
@@ -66,12 +65,6 @@ function input(overrides: Partial<RxPrintInput> = {}): RxPrintInput {
   };
 }
 
-describe("formatRxDate", () => {
-  it("reads d / m / yyyy without leading zeros", () => {
-    expect(formatRxDate("2026-09-30")).toBe("30 / 9 / 2026");
-    expect(formatRxDate("2027-01-05")).toBe("5 / 1 / 2027");
-  });
-});
 
 describe("buildRxPrintModel", () => {
   it("names the doctor, their title and the clinic lines in `.rx-doc`", () => {

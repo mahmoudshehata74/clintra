@@ -54,8 +54,6 @@ export const patientProfileStrings = {
   visitTitle: "زيارة",
   sessionPrefix: "جلسة",
   sessionOf: "من",
-  visitCancelled: "زيارة اتلغت",
-  visitNoShow: "ما حضرش",
   doctorPrefix: "د.",
   complaintPrefix: "شكوى:",
   prescribedPrefix: "وصف",

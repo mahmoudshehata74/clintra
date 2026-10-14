@@ -171,6 +171,9 @@
   /* WhatsApp's own green — the prototype's `.msg-item .icn.wa` and `.msg-ch-toggle .wa` only. */
   --color-whatsapp: #25d366;
 
+  /* The shared content width of every rail page (components/PageMain.tsx): the prototype's `.app` frame. */
+  --container-page: 1116px;
+
   --radius-chip: 6px;
   --radius-control: 9px;
   --radius-card: 12px;

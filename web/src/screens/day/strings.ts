@@ -20,14 +20,17 @@ export const dayScreenStrings = {
   scheduleNotConfiguredHint: "تتسجل من الإعدادات",
   emptySlot: "الموعد فاضي",
   // Short status words shown on every booked row, so status is never
-  // communicated by colour alone.
+  // communicated by colour alone — the prototype's own words (`.slot .state`),
+  // read through statusStyle.ts's visitStatusLabel. Arrived follows the
+  // patient's recorded gender ("وصلت" for female, "وصل" otherwise).
   statusBooked: "محجوز",
   statusConfirmed: "اتأكد",
   statusArrived: "وصل",
-  statusInRoom: "جوه",
-  statusCompleted: "خلص",
-  statusCancelled: "اتلغى",
-  statusNoShow: "غاب",
+  statusArrivedFemale: "وصلت",
+  statusInRoom: "في الكشف",
+  statusCompleted: "اكتمل",
+  statusCancelled: "ملغي",
+  statusNoShow: "لم يحضر",
   // Shown under the patient name on a cancelled or no_show row: the slot is
   // free again, but the screen stays read-only so this is text only.
   slotAvailableAgain: "الميعاد ده فاضي تاني",
@@ -86,6 +89,9 @@ export const dayScreenStrings = {
   // `.qwho .meta`'s in_room phrase ("دخل من 7د") — gender-neutral, unlike
   // the prototype's own per-row sample text.
   queueInRoomMetaPrefix: "دخل من",
+  // `.qwho .meta`'s completed phrase ("خلصت 12:04"), following the patient's gender.
+  queueFinishedMeta: "خلص",
+  queueFinishedMetaFemale: "خلصت",
   // Marks the single waiting row that is next in line. The redesigned row
   // (QueueRow.tsx) carries this as visually-hidden text for assistive
   // technology, not a visible badge — the prototype's own `.qrow.next`
@@ -202,7 +208,6 @@ export const dayScreenStrings = {
   slotsCardSubtitleBookedSuffix: "حجوزات",
   slotsCardSubtitleFreeSuffix: "فاضية",
   // `.slot .time .until` — shown under the time, state-dependent.
-  untilArrivedPrefix: "وصل",
   untilSincePrefix: "من",
   // The empty slot's own free-text line and its dashed quick-book button —
   // distinct from emptySlot above, which stays the button's accessible name.

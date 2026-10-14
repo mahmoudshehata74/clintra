@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Ltr from "../../components/Ltr";
+import SlashDate from "../../components/SlashDate";
 import Button from "../../components/ui/Button";
 import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
@@ -215,7 +216,7 @@ function Hero({ hero, onOpenPlan }: { hero: ProfileHero; onOpenPlan: (planId: st
   if (hero.firstVisit) {
     meta.push(
       <span key="first">
-        {T.firstVisitLabel} <Ltr>{hero.firstVisit}</Ltr>
+        {T.firstVisitLabel} <SlashDate>{hero.firstVisit}</SlashDate>
       </span>,
     );
   }

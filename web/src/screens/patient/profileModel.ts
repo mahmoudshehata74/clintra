@@ -23,7 +23,9 @@ import type { Piastres } from "../../domain/money";
 import { formatEgyptianPhoneForDisplay } from "../../domain/phone";
 import { todayInCairo, type ClinicDay, type Instant } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
-import { formatFullDate, formatShortClock } from "../carePlan/carePlanModel";
+import { formatShortClock } from "../carePlan/carePlanModel";
+import { formatSlashDate } from "../../domain/slashDate";
+import { visitStatusLabel } from "../day/statusStyle";
 import { formatInvoiceNumber } from "../day/invoiceNumber";
 import { dayScreenStrings } from "../day/strings";
 import { computeAge, formatRelativeVisitTime } from "../doctor/doctorDay";
@@ -139,7 +141,7 @@ export function buildProfileHero(source: PatientProfileSource, now: Date): Profi
     name: patient.full_name,
     ageLine: ageLine(patient, now),
     phone: patient.phone ? formatEgyptianPhoneForDisplay(patient.phone) : null,
-    firstVisit: firstDay === undefined ? null : formatFullDate(firstDay),
+    firstVisit: firstDay === undefined ? null : formatSlashDate(firstDay),
     visitCount: completed.length,
     plan: planStat,
     balance: formatMoneyAmount(patientBalance(source.invoices)),
@@ -254,12 +256,12 @@ function visitEvents(source: PatientProfileSource, itemsByPrescriptionId: Readon
     }
 
     const at = visitInstant(visit);
+    // A cancelled or no-show visit reads with the status word every screen
+    // uses: "زيارة — ملغي", "زيارة — لم يحضر".
     const title =
-      visit.status === VisitStatus.Cancelled
-        ? T.visitCancelled
-        : visit.status === VisitStatus.NoShow
-          ? T.visitNoShow
-          : (sessionTitle(visit, source) ?? (diagnosis ? `${T.visitTitle} — ${diagnosis}` : T.visitTitle));
+      visit.status === VisitStatus.Completed
+        ? (sessionTitle(visit, source) ?? (diagnosis ? `${T.visitTitle} — ${diagnosis}` : T.visitTitle))
+        : `${T.visitTitle} — ${visitStatusLabel(visit.status)}`;
     events.push({
       key: `visit:${visit.id}`,
       kind: "visit",
@@ -511,6 +513,6 @@ export function groupProfileEvents(
 export function lastVisitLine(lastVisitDate: ClinicDay | null): { label: string; date: string | null } {
   return lastVisitDate === null
     ? { label: T.noVisits, date: null }
-    : { label: T.lastVisitPrefix, date: formatFullDate(lastVisitDate) };
+    : { label: T.lastVisitPrefix, date: formatSlashDate(lastVisitDate) };
 }
 

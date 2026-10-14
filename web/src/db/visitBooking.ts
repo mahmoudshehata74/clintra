@@ -38,7 +38,7 @@ export interface BookExistingPatientVisitInput {
    * for this service (db/carePlans.ts's assertSessionBookable, which throws
    * before anything is written otherwise); the session's visit_id is set to
    * the booked visit in the same transaction. Its audit row reads as the
-   * booking does ("سجّل حجز").
+   * booking does ("أنشأ حجز").
    */
   carePlanItemId?: string;
 }

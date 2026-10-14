@@ -3,6 +3,7 @@ import type { Patient, Practitioner, Prescription, PrescriptionItem, Visit } fro
 import type { VisitFormFieldValues } from "../../db/visitForm";
 import { formatPrescriptionNumber } from "../../domain/numberSeries";
 import { practitionerTitleOf, syndicateNumberOf } from "../../domain/practitionerProfile";
+import { formatSlashDate } from "../../domain/slashDate";
 import { todayInCairo } from "../../domain/time";
 import type { PrintClinicLines } from "../day/printClinic";
 import { computeAge } from "../doctor/doctorDay";
@@ -11,12 +12,6 @@ import { prescriptionPrintStrings as T } from "./strings";
 
 // Pure derivations behind the printed prescription (reference screen 16).
 // None reads the database or the clock on its own.
-
-/** "2026-09-30" → "30 / 9 / 2026", `.rx-num`'s date. */
-export function formatRxDate(day: string): string {
-  const [year, month, date] = day.split("-").map(Number);
-  return `${date} / ${month} / ${year}`;
-}
 
 function nonEmpty(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? "";
@@ -89,7 +84,7 @@ export function buildRxPrintModel(input: RxPrintInput): RxPrintModel {
     doctorSpec: doctorSpec.title === null && doctorSpec.syndicateNumber === null ? null : doctorSpec,
     clinic: input.clinic,
     number: formatPrescriptionNumber(prescription),
-    date: formatRxDate(todayInCairo(issuedAt)),
+    date: formatSlashDate(todayInCairo(issuedAt)),
     patientName: patient?.full_name ?? "",
     age: computeAge(patient?.birth_year ?? null, issuedAt),
     diagnosis:

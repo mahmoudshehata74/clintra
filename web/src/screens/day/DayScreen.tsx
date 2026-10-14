@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import PageMain from "../../components/PageMain";
 import Ltr from "../../components/Ltr";
 import Button from "../../components/ui/Button";
 import ToggleGroup from "../../components/ui/ToggleGroup";
@@ -781,9 +782,9 @@ export default function DayScreen({
 
   if (!staticData) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
+      <PageMain className="py-16">
         <p className="text-muted">جارٍ التحميل...</p>
-      </main>
+      </PageMain>
     );
   }
 
@@ -824,7 +825,7 @@ export default function DayScreen({
     : (0 as Piastres);
 
   return (
-    <main className={`mx-auto max-w-3xl px-6 py-6 ${toastState ? "pb-28" : "pb-16"}`}>
+    <PageMain className={`pt-6 ${toastState ? "pb-28" : "pb-16"}`}>
       {/* Everything but the sheets below (each of which manages its own
           print:hidden/print:block split) — printing only ever shows a
           sheet's own print target, never the day grid behind it. */}
@@ -1187,6 +1188,6 @@ export default function DayScreen({
       {toastState && (
         <UndoToast message={toastState.message} onUndo={toastState.undo ? handleUndo : undefined} />
       )}
-    </main>
+    </PageMain>
   );
 }

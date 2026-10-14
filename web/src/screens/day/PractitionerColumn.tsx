@@ -15,7 +15,7 @@ import { computeExpectedWaitMinutes, computeQueueSummary } from "./queueSummary"
 import QueueRow, { type QueueRowKind } from "./QueueRow";
 import { resolveDayScheduleState } from "./scheduleState";
 import SlotRow from "./SlotRow";
-import { STATUS_LABEL, statusVisual } from "./statusStyle";
+import { arrivedWord, statusVisual, visitStatusLabel } from "./statusStyle";
 import { dayScreenStrings } from "./strings";
 import { isMenuEligible, isQueueWaiting, primaryAdvanceTarget } from "./visitActions";
 
@@ -389,19 +389,21 @@ function QueueColumn({
                   ? "next"
                   : "waiting";
 
-          // `.qwho .meta`'s state phrase, gender-neutral per the task's own
-          // wording — "{service} · {phrase}" is QueueRow.tsx's own concern,
-          // this only ever builds the phrase half.
+          // `.qwho .meta`'s state phrase ("خلصت 12:04", "وصل 12:28"), its verb
+          // following the patient's gender — "{service} · {phrase}" is
+          // QueueRow.tsx's own concern, this only ever builds the phrase half.
           let metaPhrase: ReactNode = null;
           if (visit.status === VisitStatus.Completed && visit.ended_at) {
-            metaPhrase = `${dayScreenStrings.statusCompleted} ${clockTimeInCairo(visit.ended_at)}`;
+            const finished =
+              patient?.gender === "female" ? dayScreenStrings.queueFinishedMetaFemale : dayScreenStrings.queueFinishedMeta;
+            metaPhrase = `${finished} ${clockTimeInCairo(visit.ended_at)}`;
           } else if (visit.status === VisitStatus.InRoom && visit.started_at) {
             const elapsed = computeElapsedLabel(visit.started_at, now.toISOString(), today, now);
             metaPhrase = elapsed ? `${dayScreenStrings.queueInRoomMetaPrefix} ${elapsed}` : dayScreenStrings.statusInRoom;
           } else if (visit.status === VisitStatus.Arrived && visit.arrived_at) {
-            metaPhrase = `${dayScreenStrings.statusArrived} ${clockTimeInCairo(visit.arrived_at)}`;
+            metaPhrase = `${arrivedWord(patient?.gender)} ${clockTimeInCairo(visit.arrived_at)}`;
           } else if (visit.status === VisitStatus.Booked || visit.status === VisitStatus.Confirmed) {
-            metaPhrase = STATUS_LABEL[visit.status];
+            metaPhrase = visitStatusLabel(visit.status);
           }
 
           let waitNode: ReactNode = null;
@@ -411,10 +413,10 @@ function QueueColumn({
             const visual = statusVisual(visit.status);
             waitNode = visual ? (
               <Badge {...visual.badge} shape="pill">
-                {STATUS_LABEL[visit.status]}
+                {visitStatusLabel(visit.status)}
               </Badge>
             ) : (
-              <b>{STATUS_LABEL[visit.status]}</b>
+              <b>{visitStatusLabel(visit.status)}</b>
             );
           } else if (isCompleted && visit.started_at && visit.ended_at) {
             const minutes = Math.round(

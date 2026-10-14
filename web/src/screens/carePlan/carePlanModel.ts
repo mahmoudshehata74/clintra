@@ -16,6 +16,7 @@ import {
 import type { Piastres } from "../../domain/money";
 import { addDaysToClinicDay, clockTimeInCairo, todayInCairo, type ClinicDay, type Instant } from "../../domain/time";
 import { CarePlanStatus } from "../../db/types";
+import { formatSlashDate, formatSlashDayMonth } from "../../domain/slashDate";
 import { VisitStatus } from "../../domain/visitStatus";
 import { formatMoneyAmount } from "../money";
 import { countPhrase } from "../visit/workspace";
@@ -34,17 +35,6 @@ export const SESSION_COUNT_FORMS: ArabicCountForms = {
 
 // ── Formatting ───────────────────────────────────────────────────────────
 
-/** "27 / 10" */
-export function formatDayMonth(day: ClinicDay): string {
-  const [, month, date] = day.split("-").map(Number);
-  return `${date} / ${month}`;
-}
-
-/** "27 / 10 / 2026" */
-export function formatFullDate(day: ClinicDay): string {
-  const [year] = day.split("-");
-  return `${formatDayMonth(day)} / ${year}`;
-}
 
 /** A visit's booked time as "h:mm" (the app's 24-hour clock, no leading zero): "9:30", "16:30". */
 export function formatShortClock(instant: Instant): string {
@@ -175,7 +165,7 @@ function nextOpenSession(sessions: readonly CarePlanSession[]): CarePlanSession 
 
 /** "27 / 10 · 9:30" — the day, and the time when the visit has one. */
 function bookedWhen(session: CarePlanSession, visit: Visit | null): string {
-  const day = session.date === null ? "" : formatDayMonth(session.date);
+  const day = session.date === null ? "" : formatSlashDayMonth(session.date);
   return visit?.scheduled_at ? `${day} · ${formatShortClock(visit.scheduled_at)}` : day;
 }
 
@@ -188,7 +178,7 @@ function sessionMeta(
   if (session.date === null) {
     return [];
   }
-  const date = { text: formatDayMonth(session.date), strong: false };
+  const date = { text: formatSlashDayMonth(session.date), strong: false };
   if (session.state === CarePlanSessionState.Suggested) {
     return [date, { text: T.suggestedMeta, strong: true }];
   }
@@ -297,8 +287,8 @@ export function buildCarePlanSheet(
     count,
     progressLabel: `${done} / ${count} ${T.progressUnit}`,
     progressPercent: count === 0 ? 0 : Math.round((done / count) * 100),
-    startedOn: formatFullDate(cairoDay(plan.started_at)),
-    expectedEnd: endDate === null ? T.noDate : formatFullDate(endDate),
+    startedOn: formatSlashDate(cairoDay(plan.started_at)),
+    expectedEnd: endDate === null ? T.noDate : formatSlashDate(endDate),
     total: formatPlanMoney(plan.total_price),
     paid: formatPlanMoney(carePlanPaid(source.items, source.invoices, source.payments)),
     statusLine,
@@ -486,7 +476,7 @@ export function previewCarePlanSessions(
     }
     for (let index = 0; index < count; index += 1) {
       const date: ClinicDay = previous === null ? start : addDaysToClinicDay(previous, gapDays);
-      rows.push({ n: rows.length + 1, serviceName: service.name, date: formatDayMonth(date) });
+      rows.push({ n: rows.length + 1, serviceName: service.name, date: formatSlashDayMonth(date) });
       total += priceOf(service);
       previous = date;
     }

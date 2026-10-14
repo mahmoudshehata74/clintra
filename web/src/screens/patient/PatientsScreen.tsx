@@ -1,5 +1,7 @@
 import { useState } from "react";
+import PageMain from "../../components/PageMain";
 import Ltr from "../../components/Ltr";
+import SlashDate from "../../components/SlashDate";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import Field, { TextInput } from "../../components/ui/Field";
@@ -25,20 +27,20 @@ export default function PatientsScreen() {
 
   if (patientId !== null) {
     return (
-      <main className="mx-auto flex max-w-5xl flex-col gap-3.5 px-6 pt-6 pb-16 max-[600px]:px-4 print:hidden">
+      <PageMain className="flex flex-col gap-3.5 pt-6 pb-16 print:hidden">
         <Button variant="secondary" size="sm" className="self-start" onClick={() => setPatientId(null)}>
           {T.backToSearch}
         </Button>
         <Card>
           <PatientProfile patientId={patientId} />
         </Card>
-      </main>
+      </PageMain>
     );
   }
 
   const hasQuery = query.trim() !== "";
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-3.5 px-6 pt-6 pb-16 max-[600px]:px-4 print:hidden">
+    <PageMain className="flex flex-col gap-3.5 pt-6 pb-16 print:hidden">
       <Card>
         <div className="px-[18px] py-4">
           <Field label={T.searchLabel} id="patient-search">
@@ -78,7 +80,7 @@ export default function PatientsScreen() {
                         {lastVisit.date && (
                           <>
                             {" "}
-                            <Ltr>{lastVisit.date}</Ltr>
+                            <SlashDate>{lastVisit.date}</SlashDate>
                           </>
                         )}
                       </span>
@@ -90,6 +92,6 @@ export default function PatientsScreen() {
           )
         )}
       </Card>
-    </main>
+    </PageMain>
   );
 }

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useGuardedActingMembership } from "../../auth/useActingMembership";
 import Ltr from "../../components/Ltr";
+import SlashDate from "../../components/SlashDate";
 import Button from "../../components/ui/Button";
 import Card, { CardHead } from "../../components/ui/Card";
 import Field, { TextArea, TextInput } from "../../components/ui/Field";
@@ -23,6 +24,7 @@ import { useLiveQuery } from "../../db/useLiveQuery";
 import { id } from "../../domain/id";
 import { MessageTemplateKey } from "../../domain/messageTemplates";
 import { resolveServicePrice } from "../../domain/pricing";
+import { isSlashDate } from "../../domain/slashDate";
 import { todayInCairo } from "../../domain/time";
 import Sheet from "../day/Sheet";
 import SheetHeader from "../day/SheetHeader";
@@ -296,12 +298,16 @@ function PlanHero({ model }: { model: CarePlanSheetModel }) {
   );
 }
 
-// A run of digits and separators alone ("15 / 8 / 2026", "9:30") reads left
-// to right; anything with an Arabic word in it ("2,500 ج.م", "30 دقيقة")
-// stays in the page's own direction, so the word keeps its side.
+// A slash date ("15 / 8 / 2026") keeps the page's right-to-left order, the
+// day on the right; any other run of digits and separators alone ("9:30")
+// reads left to right; anything with an Arabic word in it ("2,500 ج.م",
+// "30 دقيقة") stays in the page's own direction, so the word keeps its side.
 const NUMERIC_ONLY = /^[\d\s/:.,-]+$/;
 
 function NumberText({ text }: { text: string }) {
+  if (isSlashDate(text)) {
+    return <SlashDate>{text}</SlashDate>;
+  }
   return NUMERIC_ONLY.test(text) ? <Ltr>{text}</Ltr> : <>{text}</>;
 }
 
@@ -604,7 +610,7 @@ function Preview({ preview }: { preview: ReturnType<typeof previewCarePlanSessio
             </div>
             <div className="min-w-0 text-[13.5px] font-semibold text-text">{row.serviceName}</div>
             <span className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold ${STATUS_LOOK.suggested}`}>
-              <Ltr>{row.date}</Ltr>
+              <SlashDate>{row.date}</SlashDate>
             </span>
           </li>
         ))}
