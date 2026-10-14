@@ -12,6 +12,8 @@ import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type Displac
 // device_series_conflict row (sync/engine.ts's recordDeviceSeries), never an
 // op.
 const ENTITY_LABELS: Record<string, string> = {
+  care_plan_items: "جلسة في خطة رعاية",
+  care_plans: "خطة رعاية",
   cash_close: "إغلاق اليوم",
   day_state: "حالة اليوم",
   invoice_items: "بند في فاتورة",
@@ -55,6 +57,8 @@ const REASON_LABELS: Record<string, string> = {
   message_immutable: "الرسالة دي اتسجّلت ومينفعش تتغيّر أو تتمسح، غير علامة الإرسال",
   message_invalid: "الرسالة دي ناقصة أو غلط: لازم يكون ليها نص ورقم موبايل صحيح",
   template_invalid: "القالب ده مش صالح: لازم يكون ليه نص، 4000 حرف بالكتير",
+  care_plan_immutable: "خطط الرعاية وجلساتها مينفعش تتمسح، والجلسة مينفعش تتنقل لخطة أو خدمة أو ترتيب تاني",
+  care_plan_invalid: "بيانات خطة الرعاية دي مش صالحة: الحالة غلط أو الزيارة مش لنفس المريض والطبيب",
   conflict: "فيه تعارض في البيانات",
 };
 

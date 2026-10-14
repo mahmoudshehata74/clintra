@@ -3,7 +3,7 @@ import { id } from "../domain/id";
 import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
 import { mutate } from "./mutate";
-import { AuditAction, type FormDefinition, type VisitFormData } from "./types";
+import { AuditAction, type FormDefinition, type SpecialtyTemplate, type VisitFormData } from "./types";
 
 /** The general form's two v1 fields — see docs/schema.md's form_definitions/visit_form_data section. */
 export type VisitFormFieldKey = "complaint" | "diagnosis";
@@ -26,6 +26,20 @@ export interface VisitFormSchema {
 }
 
 /**
+ * The "general" specialty template — the one every v1 practitioner's visit
+ * form resolves to (docs/schema.md's Decisions), and the template a care
+ * plan records (db/carePlans.ts).
+ */
+export async function findGeneralSpecialtyTemplate(db: ClintraDatabase): Promise<SpecialtyTemplate> {
+  const templates = await db.specialty_templates.toArray();
+  const generalTemplate = templates.find((template) => template.key === GENERAL_SPECIALTY_KEY);
+  if (!generalTemplate) {
+    throw new Error("general_specialty_template_not_found");
+  }
+  return generalTemplate;
+}
+
+/**
  * The one current form_definition for the "general" specialty template. Both
  * stub tables are tiny (a handful of rows at most in v1 — no specialty
  * templates screen exists to grow them), so this reads each whole table and
@@ -33,11 +47,7 @@ export interface VisitFormSchema {
  * more than a few rows.
  */
 export async function findGeneralFormDefinition(db: ClintraDatabase): Promise<FormDefinition> {
-  const templates = await db.specialty_templates.toArray();
-  const generalTemplate = templates.find((template) => template.key === GENERAL_SPECIALTY_KEY);
-  if (!generalTemplate) {
-    throw new Error("general_specialty_template_not_found");
-  }
+  const generalTemplate = await findGeneralSpecialtyTemplate(db);
 
   const definitions = await db.form_definitions.toArray();
   const current = definitions.find(

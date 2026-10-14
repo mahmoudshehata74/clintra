@@ -607,6 +607,27 @@ export interface VisitFormData {
   rev: number;
 }
 
+/** A care plan's stored status (docs/schema.md's v20 additions); completed and stalled are derived, never stored (domain/carePlan.ts). */
+export const CarePlanStatus = {
+  Active: "active",
+  Stopped: "stopped",
+} as const;
+
+export type CarePlanStatus = (typeof CarePlanStatus)[keyof typeof CarePlanStatus];
+
+/** A session's stored status; done, booked and suggested are derived from its linked visit (domain/carePlan.ts). */
+export const CarePlanItemStatus = {
+  Planned: "planned",
+  Skipped: "skipped",
+} as const;
+
+export type CarePlanItemStatus = (typeof CarePlanItemStatus)[keyof typeof CarePlanItemStatus];
+
+/**
+ * A patient's course of treatment with one practitioner (docs/schema.md's
+ * v20 additions), created from a visit and written only through
+ * db/carePlans.ts.
+ */
 export interface CarePlan {
   id: string;
   org_id: string;
@@ -616,24 +637,45 @@ export interface CarePlan {
   practitioner_id: string;
   goal: string;
   diagnosis: string;
+  /** The number of sessions not skipped; kept current by the writers. */
   planned_count: number;
+  /** The sum of the prices of the sessions not skipped; kept current by the writers. */
   total_price: Piastres;
+  /**
+   * Always 0 and never read: what was paid is derived from the payments on
+   * the invoices of the plan's linked visits (domain/carePlan.ts's
+   * carePlanPaid).
+   */
   paid: Piastres;
-  status: string;
+  status: CarePlanStatus;
   started_at: Instant;
+  /**
+   * The last session's display date (Cairo midnight), recomputed by the
+   * writers; started_at while no session has a date yet.
+   */
   expected_end: Instant;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
+/** One session of a care plan. */
 export interface CarePlanItem {
   id: string;
   care_plan_id: string;
   service_id: string;
+  /** 1-based place in the plan, in creation order; never changes. */
   sequence: number;
-  visit_id: string;
+  /** The visit that books this session; null while it is not booked. The only link between the two (visits.care_plan_item_id stays null). */
+  visit_id: string | null;
+  /** Days after the previous session's date this one is suggested for; 0 for a plan's first session. */
   min_gap_days: number;
+  /** Unused in v1: always null. */
   depends_on_item_id: string | null;
+  /** The service's effective price when the session was planned; what its visit is billed at. */
   price: Piastres;
-  status: string;
+  status: CarePlanItemStatus;
+  /** Server-assigned; see rev's own doc comment on Visit. */
+  rev: number;
 }
 
 /** How a message was handed to the patient: the app opens WhatsApp or the SMS app; nothing is sent by a provider. */

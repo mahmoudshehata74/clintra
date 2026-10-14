@@ -612,6 +612,34 @@ describe("children of a rejected create", () => {
     expect(transport.calls).toHaveLength(1);
   });
 
+  it("a rejected care plan create takes its sessions' queued ops with it", async () => {
+    const deviceB = await newDevice();
+    const plan = {
+      id: id(), org_id: "org-1", location_id: "location-1", template_id: "template-1", patient_id: "patient-a",
+      practitioner_id: "practitioner-1", goal: "هدف", diagnosis: "تشخيص", planned_count: 1, total_price: 100,
+      paid: 0, status: "active", started_at: "2026-10-01T08:00:00.000Z", expected_end: "2026-10-01T08:00:00.000Z", rev: 1,
+    };
+    const session = {
+      id: id(), care_plan_id: plan.id, service_id: "service-1", sequence: 1, visit_id: null, min_gap_days: 0,
+      depends_on_item_id: null, price: 100, status: "planned", rev: 1,
+    };
+    await createLocally(deviceB, "care_plans", plan);
+    await createLocally(deviceB, "care_plan_items", session);
+    const [sessionOp] = (await deviceB.sync_ops.toArray()).filter((op) => op.entity === "care_plan_items");
+    const transport = new ScriptedPushTransport(new FakeTransport(serverDbName), (op): PushOpResult =>
+      op.entity === "care_plans"
+        ? { op_id: op.op_id, status: "rejected", reason: "care_plan_invalid" }
+        : { op_id: op.op_id, status: "failed", reason: "internal_error" },
+    );
+
+    await runSyncCycle(deviceB, transport);
+
+    expect((await deviceB.sync_ops.toArray()).filter((op) => op.entity === "care_plan_items")).toEqual([]);
+    const [review] = await deviceB.sync_review.toArray();
+    expect(review).toMatchObject({ entity: "care_plans", entity_id: plan.id, reason: "care_plan_invalid" });
+    expect((review.payload as RejectedCreatePayload).child_ops.map((op) => op.op_id)).toEqual([sessionOp.op_id]);
+  });
+
   it("a rejected create with no children keeps its plain row as the review payload", async () => {
     const deviceB = await newDevice();
     const template = makeTemplate();

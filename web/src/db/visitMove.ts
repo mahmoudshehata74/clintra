@@ -4,8 +4,9 @@ import { generateSlotTimes } from "../domain/schedule";
 import { cairoInstant, type ClinicDay, type ClockTime } from "../domain/time";
 import { CancelReason, occupiesSlot, VisitStatus } from "../domain/visitStatus";
 import { resolveActingMembership } from "./actingMembership";
+import { moveSessionLinks, sessionLinkTables } from "./carePlans";
 import type { ClintraDatabase } from "./database";
-import { mutate } from "./mutate";
+import { mutate, type AtomicWriter } from "./mutate";
 import { AuditAction, type Schedule, type Visit } from "./types";
 
 export interface MoveVisitInput {
@@ -35,6 +36,10 @@ export type MoveVisitResult =
  * The target slot's current state is re-read inside the same transaction as
  * both writes, exactly like bookExistingPatientVisit, so a stale slot in
  * whatever list the caller displayed cannot cause a lost update.
+ *
+ * A care plan session the original visit booked moves with it: its visit_id
+ * is set to the new visit in the same transaction (db/carePlans.ts's
+ * moveSessionLinks), so the session stays booked.
  */
 export async function moveVisit(db: ClintraDatabase, input: MoveVisitInput): Promise<MoveVisitResult> {
   const position = generateSlotTimes(input.toSchedule).indexOf(input.toTime) + 1;
@@ -49,9 +54,7 @@ export async function moveVisit(db: ClintraDatabase, input: MoveVisitInput): Pro
   try {
     return await db.transaction(
       "rw",
-      db.visits,
-      db.audit_log,
-      db.sync_ops,
+      [db.visits, ...sessionLinkTables(db), db.audit_log, db.sync_ops],
       async (): Promise<MoveVisitResult> => {
         const oldVisit = await db.visits.get(input.visitId);
         if (!oldVisit) {
@@ -141,6 +144,9 @@ export async function moveVisit(db: ClintraDatabase, input: MoveVisitInput): Pro
           actorMembershipId: actor.id,
           orgId: oldVisit.org_id,
         });
+
+        const write: AtomicWriter = (mutation) => mutate(db, mutation);
+        await moveSessionLinks(write, db, oldVisit, newVisit.id, actor.id);
 
         return { ok: true, oldVisitAuditLogId, newVisitAuditLogId };
       },

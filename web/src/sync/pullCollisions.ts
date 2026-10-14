@@ -33,7 +33,9 @@ interface ChildLink {
  * backoff indefinitely — sync/engine.ts's runSyncCycle). So a displaced row
  * takes its children with it, and a rejected create takes its children's
  * queued ops. visits.rescheduled_from is deliberately not a link: the visit
- * it names is another booking with a life of its own.
+ * it names is another booking with a life of its own. Neither is
+ * care_plan_items.visit_id: a session belongs to its plan, not to the visit
+ * that books it, and exists on the server before it is ever linked.
  */
 const CHILD_LINKS: Readonly<Record<string, readonly ChildLink[]>> = {
   visits: [
@@ -43,6 +45,7 @@ const CHILD_LINKS: Readonly<Record<string, readonly ChildLink[]>> = {
     { entity: "messages", column: "visit_id" },
   ],
   prescriptions: [{ entity: "prescription_items", column: "prescription_id" }],
+  care_plans: [{ entity: "care_plan_items", column: "care_plan_id" }],
   invoices: [
     { entity: "invoice_items", column: "invoice_id" },
     { entity: "payments", column: "invoice_id" },

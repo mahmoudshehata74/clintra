@@ -5,9 +5,10 @@ import { cairoInstant, type ClinicDay, type ClockTime } from "../domain/time";
 import { VisitSource } from "../domain/visitSource";
 import { occupiesSlot, VisitStatus } from "../domain/visitStatus";
 import { resolveActingMembership } from "./actingMembership";
+import { assertSessionBookable, linkSessionToVisit, sessionLinkTables } from "./carePlans";
 import type { ClintraDatabase } from "./database";
-import { mutate } from "./mutate";
-import { AuditAction, type Schedule, type Visit } from "./types";
+import { mutate, type AtomicWriter } from "./mutate";
+import { AuditAction, type CarePlanItem, type Schedule, type Visit } from "./types";
 
 export interface BookExistingPatientVisitInput {
   practitionerId: string;
@@ -31,6 +32,15 @@ export interface BookExistingPatientVisitInput {
    * unique_scheduled_at has the is_overbooked exception.
    */
   isOverbooked?: boolean;
+  /**
+   * The care plan session this booking books, if any. It must be a
+   * suggested session of an active plan of this patient and practitioner,
+   * for this service (db/carePlans.ts's assertSessionBookable, which throws
+   * before anything is written otherwise); the session's visit_id is set to
+   * the booked visit in the same transaction. Its audit row reads as the
+   * booking does ("سجّل حجز").
+   */
+  carePlanItemId?: string;
 }
 
 export type BookVisitResult = { ok: true; auditLogId: string } | { ok: false; reason: "slot_taken" };
@@ -63,9 +73,15 @@ export async function bookExistingPatientVisit(
   const source = input.source ?? VisitSource.Phone;
   const arrivedAt = status === VisitStatus.Arrived ? now : null;
   const isOverbooked = input.isOverbooked ?? false;
+  const write: AtomicWriter = (mutation) => mutate(db, mutation);
 
   try {
-    return await db.transaction("rw", db.visits, db.audit_log, db.sync_ops, async (): Promise<BookVisitResult> => {
+    const tables = [db.visits, ...sessionLinkTables(db), db.audit_log, db.sync_ops];
+    return await db.transaction("rw", tables, async (): Promise<BookVisitResult> => {
+      const session: CarePlanItem | null = input.carePlanItemId
+        ? await assertSessionBookable(db, input.carePlanItemId, input)
+        : null;
+
       if (isOverbooked) {
         const visitsForDay = await db.visits
           .where("[practitioner_id+visit_date]")
@@ -110,6 +126,9 @@ export async function bookExistingPatientVisit(
           actorMembershipId: actor.id,
           orgId: input.orgId,
         });
+        if (session) {
+          await linkSessionToVisit(write, db, session, after, actor.id);
+        }
 
         return { ok: true, auditLogId };
       }
@@ -183,6 +202,9 @@ export async function bookExistingPatientVisit(
         actorMembershipId: actor.id,
         orgId: input.orgId,
       });
+      if (session) {
+        await linkSessionToVisit(write, db, session, after, actor.id);
+      }
 
       return { ok: true, auditLogId };
     });

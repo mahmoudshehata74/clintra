@@ -5,6 +5,7 @@ import Button from "../../components/ui/Button";
 import Field, { TextArea } from "../../components/ui/Field";
 import { SheetPanelBody, SheetPanelFoot } from "../../components/ui/SheetPanel";
 import ToggleGroup from "../../components/ui/ToggleGroup";
+import { carePlanSessionLabelForVisit } from "../../db/carePlans";
 import { db } from "../../db/database";
 import { MessageError, recordMessageAttempt } from "../../db/messages";
 import { MessageChannel, type MessageTemplate, type Patient } from "../../db/types";
@@ -79,12 +80,13 @@ export default function SendMessageSheet({ visitId, start, onDismiss }: SendMess
     if (!visit) {
       return null;
     }
-    const [patient, practitioner, location, invoice, overrides] = await Promise.all([
+    const [patient, practitioner, location, invoice, overrides, sessionLabel] = await Promise.all([
       db.patients.get(visit.patient_id),
       db.practitioners.get(visit.practitioner_id),
       db.locations.get(visit.location_id),
       db.invoices.where("visit_id").equals(visit.id).first(),
       db.message_templates.toArray(),
+      carePlanSessionLabelForVisit(db, visit.id),
     ]);
     const organization = location ? await db.organizations.get(location.org_id) : undefined;
     return {
@@ -96,6 +98,7 @@ export default function SendMessageSheet({ visitId, start, onDismiss }: SendMess
         organization,
         location,
         invoice,
+        sessionLabel,
       }),
       overrides: new Map(overrides.map((override) => [override.key, override])),
     };

@@ -1,4 +1,4 @@
-import { AuditAction, InvoiceStatus, MessageChannel, type AuditLog } from "../db/types";
+import { AuditAction, CarePlanItemStatus, CarePlanStatus, InvoiceStatus, MessageChannel, type AuditLog } from "../db/types";
 import { findMessageTemplate } from "./messageTemplates";
 import { VisitStatus } from "./visitStatus";
 
@@ -153,6 +153,43 @@ function describeTemplateVerb(row: AuditVerbRow): string {
   return row.action === AuditAction.Delete ? `رجّع قالب «${name}» للأصل` : `عدّل قالب «${name}»`;
 }
 
+// Care plans (db/carePlans.ts). Verb only: a plan's goal and diagnosis
+// never appear in the audit line. Creating a plan writes the plan
+// ("بدأ خطة رعاية") and its sessions ("أضاف جلسات للخطة"); every other plan
+// write that changes neither status reads as an edit, including the
+// recomputed totals that ride along with a skip or an added session.
+const CARE_PLAN_STATUS_VERBS: Partial<Record<string, string>> = {
+  [`${CarePlanStatus.Active}->${CarePlanStatus.Stopped}`]: "وقّف الخطة",
+  [`${CarePlanStatus.Stopped}->${CarePlanStatus.Active}`]: "رجّع الخطة",
+};
+const CARE_PLAN_ITEM_STATUS_VERBS: Partial<Record<string, string>> = {
+  [`${CarePlanItemStatus.Planned}->${CarePlanItemStatus.Skipped}`]: "أجّل جلسة",
+  [`${CarePlanItemStatus.Skipped}->${CarePlanItemStatus.Planned}`]: "رجّع جلسة",
+};
+// A session's link to the visit that books it changes only with that
+// visit's own write. Booked and moved read as the visit's own verbs; a link
+// cleared by a cancel or a no-show (the session row alone cannot tell
+// which) reads as the plan's plain edit, beside the visit's own line.
+const CARE_PLAN_SESSION_BOOKED_VERB = "سجّل حجز";
+const CARE_PLAN_SESSION_MOVED_VERB = "نقل الميعاد";
+const CARE_PLAN_EDIT_VERB = "عدّل خطة رعاية";
+
+function describeCarePlanItemUpdate(row: AuditVerbRow): string | undefined {
+  const statusVerb = CARE_PLAN_ITEM_STATUS_VERBS[`${statusOf(row.before)}->${statusOf(row.after)}`];
+  if (statusVerb) {
+    return statusVerb;
+  }
+  const before = fieldOf(row.before, "visit_id") ?? null;
+  const after = fieldOf(row.after, "visit_id") ?? null;
+  if (before === after) {
+    return undefined;
+  }
+  if (before === null) {
+    return CARE_PLAN_SESSION_BOOKED_VERB;
+  }
+  return after === null ? CARE_PLAN_EDIT_VERB : CARE_PLAN_SESSION_MOVED_VERB;
+}
+
 const CREATE_VERBS: Partial<Record<string, string>> = {
   visits: "سجّل حجز",
   patients: "أضاف مريض",
@@ -161,6 +198,8 @@ const CREATE_VERBS: Partial<Record<string, string>> = {
   cash_close: "قفل اليوم",
   prescriptions: "كتب وصفة",
   prescription_items: "أضاف دواء",
+  care_plans: "بدأ خطة رعاية",
+  care_plan_items: "أضاف جلسات للخطة",
 };
 
 const DELETE_VERBS: Partial<Record<string, string>> = {
@@ -182,6 +221,8 @@ const FALLBACK_UPDATE_VERBS: Partial<Record<string, string>> = {
   // Verb only: a practitioner's name, title or syndicate number never
   // appears in the audit line (db/practitioners.ts).
   practitioners: "عدّل بيانات الطبيب",
+  care_plans: CARE_PLAN_EDIT_VERB,
+  care_plan_items: CARE_PLAN_EDIT_VERB,
 };
 
 /**
@@ -238,6 +279,20 @@ export function describeAuditVerb(row: AuditVerbRow): string {
     const invoiceVerb = INVOICE_TRANSITION_VERBS[`${beforeStatus}->${afterStatus}`];
     if (invoiceVerb) {
       return invoiceVerb;
+    }
+  }
+
+  if (row.entity === "care_plans" && statusChanged) {
+    const planVerb = CARE_PLAN_STATUS_VERBS[`${beforeStatus}->${afterStatus}`];
+    if (planVerb) {
+      return planVerb;
+    }
+  }
+
+  if (row.entity === "care_plan_items") {
+    const sessionVerb = describeCarePlanItemUpdate(row);
+    if (sessionVerb) {
+      return sessionVerb;
     }
   }
 

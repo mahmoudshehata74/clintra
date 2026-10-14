@@ -7,6 +7,8 @@
  * label, and database.test.ts to a real local store.
  */
 export const SYNCABLE_TABLES = [
+  "care_plan_items",
+  "care_plans",
   "cash_close",
   "day_state",
   "invoice_items",

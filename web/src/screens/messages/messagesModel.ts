@@ -119,6 +119,8 @@ export interface VisitMessageSources {
   organization: Pick<Organization, "name"> | undefined;
   location: Pick<Location, "phone"> | undefined;
   invoice: Pick<Invoice, "total" | "paid" | "status"> | undefined;
+  /** The care plan session the visit books, as "جلسة {n} من {count} · {service}" (db/carePlans.ts); null or absent when none. */
+  sessionLabel?: string | null;
 }
 
 /**
@@ -127,9 +129,9 @@ export interface VisitMessageSources {
  * block reads (the organization and the visit's location); the visit's day
  * and, for a booked time, its Cairo clock time; the visit's practitioner;
  * the balance — the invoice's total less what was paid, only while that is
- * above zero (a void invoice has none). The session label stays missing
- * until care plans (screen 17) exist. Anything missing is null, so
- * renderTemplate marks and reports it.
+ * above zero (a void invoice has none); the session label of the care plan
+ * session the visit books. Anything missing is null, so renderTemplate
+ * marks and reports it.
  */
 export function templateValuesForVisit(sources: VisitMessageSources): TemplateValues {
   const { visit, invoice } = sources;
@@ -141,7 +143,7 @@ export function templateValuesForVisit(sources: VisitMessageSources): TemplateVa
     date: visit.visit_date,
     time: visit.scheduled_at ? clockTimeInCairo(visit.scheduled_at) : null,
     doctor_name: sources.practitioner?.full_name ?? null,
-    session_label: null,
+    session_label: sources.sessionLabel ?? null,
     balance: remaining > 0 ? (remaining as Piastres) : null,
   };
 }
