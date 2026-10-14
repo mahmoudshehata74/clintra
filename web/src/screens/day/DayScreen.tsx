@@ -53,6 +53,7 @@ import AuditSheet from "./AuditSheet";
 import BookingSheet, { type BookingSheetMode } from "./BookingSheet";
 import CancelVisitSheet from "./CancelVisitSheet";
 import CashCloseSheet from "./CashCloseSheet";
+import DayCloseSummaryPrint from "./DayCloseSummaryPrint";
 import { computeDayCounters } from "./dayCounters";
 import { computeDaySlotsSlab } from "./daySlotsSlab";
 import DaySlab from "./DaySlab";
@@ -194,6 +195,9 @@ export default function DayScreen({
   const [paymentSheetInvoiceId, setPaymentSheetInvoiceId] = useState<string | null>(null);
   const [visitFormSheetVisitId, setVisitFormSheetVisitId] = useState<string | null>(null);
   const [isCashCloseOpen, setIsCashCloseOpen] = useState(false);
+  // A print of the closed day's summary, after closing or from the closed
+  // state's reprint; the nonce remounts it for each request.
+  const [daySummaryPrintNonce, setDaySummaryPrintNonce] = useState<number | null>(null);
   const [isDaySheetOpen, setIsDaySheetOpen] = useState(false);
   // Per visit id: blocks a row's primary button for ADVANCE_COOLDOWN_MS after
   // a status-advancing tap, so an accidental double-tap can't skip a status
@@ -739,6 +743,7 @@ export default function DayScreen({
   function handleCashClosed() {
     setIsCashCloseOpen(false);
     setToastState({ message: dayScreenStrings.cashCloseToastMessage, undo: null });
+    setDaySummaryPrintNonce(Date.now());
   }
 
   function handleCashClosePastDueMarked(undo: UndoAction) {
@@ -1159,8 +1164,19 @@ export default function DayScreen({
           date={today}
           onDismiss={() => setIsCashCloseOpen(false)}
           onClosed={handleCashClosed}
+          onPrintSummary={() => setDaySummaryPrintNonce(Date.now())}
           onNoShowMarked={handleCashClosePastDueMarked}
           onRequestMove={handleCashClosePastDueMove}
+        />
+      )}
+
+      {daySummaryPrintNonce !== null && currentPractitioner && selectedLocationId && (
+        <DayCloseSummaryPrint
+          key={daySummaryPrintNonce}
+          orgId={currentPractitioner.org_id}
+          locationId={selectedLocationId}
+          date={today}
+          onDone={() => setDaySummaryPrintNonce(null)}
         />
       )}
 

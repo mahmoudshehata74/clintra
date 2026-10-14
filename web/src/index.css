@@ -238,6 +238,19 @@ body {
   }
 }
 
+/* Screen 7: the closed day's printed summary is one A4 portrait page
+   (DayCloseSummaryPrint.tsx's `.day-close-print-target`). */
+@page day-close {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@layer utilities {
+  .day-close-print-target {
+    page: day-close;
+  }
+}
+
 @media print {
   body:has(> .rx-print-target) {
     background-color: white;

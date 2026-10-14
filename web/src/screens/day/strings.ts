@@ -329,9 +329,12 @@ export const dayScreenStrings = {
   // `.close-summary`, `.close-grid`, `.close-cell`, `.match`, `.diff`, `.field`,
   // `.runrow`).
   cashCloseButtonLabel: "إغلاق الصندوق",
+  // `.c-head .badge` and `.sub` ("6:12 م · قبل ما تسيبي الاستقبال").
+  cashCloseHeadBadge: "آخر اليوم",
+  cashCloseHeadSubtitleSuffix: "قبل ما تسيبي الاستقبال",
   cashCloseSheetTitle: "إغلاق الصندوق",
-  // `.c-head h3`'s own prefix, combined with formatCairoDisplayDate(date) —
-  // e.g. "إقفال يوم الاثنين 7 سبتمبر".
+  // `.c-head h3`'s own prefix, combined with displayDate.ts's
+  // formatWeekdayDayMonth(date) — e.g. "إقفال يوم الاثنين 7 سبتمبر".
   cashCloseHeadTitlePrefix: "إقفال يوم",
   cashCloseSummaryHeading: "ملخّص اليوم",
   // `.close-grid`'s four cells.
@@ -349,9 +352,10 @@ export const dayScreenStrings = {
   // The eligible/warning result banner once an amount has been typed.
   cashCloseMatchedTitle: "مطابق تمامًا",
   cashCloseMatchedSubtitle: "مفيش فرق بين المتوقع والمحصّل",
-  // Existing label kept as-is per the task's own instruction (no printing
-  // added here, unlike the prototype's own ".run" button text).
-  cashCloseConfirmButton: "إغلاق",
+  // `.runrow .run`: closes the day, then prints its summary (DayCloseSummaryPrint.tsx).
+  cashCloseConfirmButton: "اقفل اليوم واطبع الملخص",
+  // The closed state's reprint of that summary.
+  cashClosePrintSummaryAction: "اطبع الملخص",
   cashCloseExportCsvAction: "تصدير CSV",
   // `.runrow .count`'s own prefix, e.g. "هيقفله سارة حسن".
   cashCloseClosesCountPrefix: "هيقفله",
@@ -363,6 +367,15 @@ export const dayScreenStrings = {
   cashCloseClosedAtLabel: "اتقفل الساعة",
   cashCloseClosedByLabel: "بواسطة",
   cashCloseNoDifferenceNoteLabel: "مفيش ملاحظة",
+
+  // The printed day summary (DayCloseSummaryPrint.tsx); its other lines
+  // reuse the cash close's own labels.
+  daySummarySeenLabel: "مرضى اتكشفوا",
+  daySummaryCancelledLabel: "ملغي",
+  daySummaryCollectedByPrefix: "المحصّل",
+  daySummaryTotalCollectedLabel: "إجمالي المحصّل",
+  daySummaryExpectedCashLabel: "الكاش المتوقع",
+  daySummaryClosedByLabel: "قفله",
 
   // The past-due gate (screen 7): visits still booked/confirmed whose time
   // has already passed — see pastDueVisits.ts. Shown as its own list above
