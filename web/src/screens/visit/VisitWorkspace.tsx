@@ -23,6 +23,7 @@ import {
   type VisitFormFieldValues,
 } from "../../db/visitForm";
 import { VisitStatus } from "../../domain/visitStatus";
+import CarePlanEntry from "../carePlan/CarePlanEntry";
 import { dayScreenStrings } from "../day/strings";
 import PrescriptionPrintSheet from "../prescription/PrescriptionPrintSheet";
 import { computeRxPrintState } from "../prescription/printModel";
@@ -92,7 +93,8 @@ const FIELD_CONFIG: readonly { key: VisitFormFieldKey; label: string; placeholde
  * The visit workspace (reference screen 10, "الزيارة — النموذج المتكامل")
  * without its assistant panel (`.visit-aside` — no AI in v1, see
  * docs/design-rule.md): `.pt-summary`, then the single `.visit-main` column
- * (`.visit-history`, the two `.field`s, `.rx-section`), then `.runrow`.
+ * (`.plan-badge` or "ابدأ خطة رعاية" — screens/carePlan/CarePlanEntry.tsx —
+ * `.visit-history`, the two `.field`s, `.rx-section`), then `.runrow`.
  * Hosted by VisitFormSheet and by the "الزيارة الحالية" page.
  *
  * Reads everything itself via liveQuery; the host only names the visit and
@@ -252,6 +254,8 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
 
       {/* `.visit-main` */}
       <div className="flex flex-col gap-3.5 p-5">
+        <CarePlanEntry visit={visit} />
+
         {history.length > 0 && (
           <section
             aria-label={visitHistoryHeading(history.length)}
