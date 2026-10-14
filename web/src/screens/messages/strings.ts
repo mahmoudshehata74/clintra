@@ -54,8 +54,10 @@ export const messagesStrings = {
   rxSendWhatsApp: "واتساب",
   rxSendSms: "SMS",
 
-  // The send sheet's warning: placeholders the text still holds unfilled.
+  // The send sheet's warning: values the text still shows as "[label]".
   missingValuesPrefix: "فيه بيانات ناقصة:",
+  missingValuesFillPrefix: "— كمّلها في النص بدل",
+  missingValuesFillSuffix: "قبل الإرسال",
 
   // A printed prescription, as the custom template's text.
   rxMessageTitle: "الوصفة",

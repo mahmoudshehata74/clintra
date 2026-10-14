@@ -3,6 +3,8 @@ import { InvoiceStatus } from "../../db/types";
 import {
   findMessageTemplate,
   MessageTemplateKind,
+  missingValueMarker,
+  PLACEHOLDER_LABELS,
   renderTemplate,
   TemplatePlaceholder,
   type MessageTemplateDefinition,
@@ -19,17 +21,7 @@ import { messagesStrings as T } from "./strings";
 // Pure derivations behind the messages screen (reference screen 19) and the
 // send sheet. None reads the database or the clock on its own.
 
-/** `.msg-body .var`'s Arabic label for each known placeholder. */
-export const PLACEHOLDER_LABELS: Record<TemplatePlaceholder, string> = {
-  [TemplatePlaceholder.PatientName]: "اسم المريض",
-  [TemplatePlaceholder.ClinicName]: "اسم العيادة",
-  [TemplatePlaceholder.ClinicPhone]: "هاتف العيادة",
-  [TemplatePlaceholder.Date]: "التاريخ",
-  [TemplatePlaceholder.Time]: "الوقت",
-  [TemplatePlaceholder.DoctorName]: "اسم الطبيب",
-  [TemplatePlaceholder.SessionLabel]: "الجلسة",
-  [TemplatePlaceholder.Balance]: "المبلغ المتبقي",
-};
+export { PLACEHOLDER_LABELS };
 
 /** Every known placeholder, in the order the editor offers its insert chips. */
 export const PLACEHOLDERS: readonly TemplatePlaceholder[] = Object.values(TemplatePlaceholder);
@@ -137,7 +129,7 @@ export interface VisitMessageSources {
  * the balance — the invoice's total less what was paid, only while that is
  * above zero (a void invoice has none). The session label stays missing
  * until care plans (screen 17) exist. Anything missing is null, so
- * renderTemplate reports it.
+ * renderTemplate marks and reports it.
  */
 export function templateValuesForVisit(sources: VisitMessageSources): TemplateValues {
   const { visit, invoice } = sources;
@@ -154,13 +146,23 @@ export function templateValuesForVisit(sources: VisitMessageSources): TemplateVa
   };
 }
 
-/** The send sheet's warning for placeholders the text still holds unfilled ("فيه بيانات ناقصة: اسم الطبيب، الوقت"); null when none. */
+/**
+ * The send sheet's warning for values the text still lacks — each missing
+ * value's "[label]" marker still in the text, in order of first appearance:
+ * "فيه بيانات ناقصة: الجلسة — كمّلها في النص بدل [الجلسة] قبل الإرسال".
+ * Null once none is left. It never blocks sending.
+ */
 export function missingValuesWarning(text: string): string | null {
-  const { missing } = renderTemplate(text, {});
+  const missing = PLACEHOLDERS.map((placeholder) => ({ placeholder, at: text.indexOf(missingValueMarker(placeholder)) }))
+    .filter(({ at }) => at >= 0)
+    .sort((a, b) => a.at - b.at)
+    .map(({ placeholder }) => placeholder);
   if (missing.length === 0) {
     return null;
   }
-  return `${T.missingValuesPrefix} ${missing.map((placeholder) => PLACEHOLDER_LABELS[placeholder]).join("، ")}`;
+  const labels = missing.map((placeholder) => PLACEHOLDER_LABELS[placeholder]).join("، ");
+  const markers = missing.map(missingValueMarker).join("، ");
+  return `${T.missingValuesPrefix} ${labels} ${T.missingValuesFillPrefix} ${markers} ${T.missingValuesFillSuffix}`;
 }
 
 /** The send sheet's starting text for a template: its effective body, filled for the visit. */

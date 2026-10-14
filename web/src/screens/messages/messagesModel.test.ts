@@ -122,11 +122,22 @@ describe("templateValuesForVisit", () => {
     const text = initialMessageText("booking_confirmation", findMessageTemplate("booking_confirmation")!.defaultBody, values);
     expect(text).toContain("مرحباً كريم فتحي،");
     expect(text).toContain("اتصل: 02 2123 4567");
-    expect(text).toContain("{{doctor_name}}");
-    expect(missingValuesWarning(text)).toBe("فيه بيانات ناقصة: اسم الطبيب");
-    expect(missingValuesWarning(renderTemplate("{{session_label}} {{time}}", {}).text)).toBe("فيه بيانات ناقصة: الجلسة، الوقت");
+    expect(text).toContain("[اسم الطبيب]");
+    expect(text).not.toContain("{{");
+    expect(missingValuesWarning(text)).toBe("فيه بيانات ناقصة: اسم الطبيب — كمّلها في النص بدل [اسم الطبيب] قبل الإرسال");
+    expect(missingValuesWarning(renderTemplate("{{session_label}} {{time}}", {}).text)).toBe(
+      "فيه بيانات ناقصة: الجلسة، الوقت — كمّلها في النص بدل [الجلسة]، [الوقت] قبل الإرسال",
+    );
     expect(missingValuesWarning("مفيش حاجة ناقصة")).toBeNull();
     expect(initialMessageText("custom", "", values)).toBe("");
+  });
+
+  it("warns in the order the markers appear, and drops a marker once it is filled in", () => {
+    expect(missingValuesWarning("[الوقت] ثم [الجلسة] و[الوقت]")).toBe(
+      "فيه بيانات ناقصة: الوقت، الجلسة — كمّلها في النص بدل [الوقت]، [الجلسة] قبل الإرسال",
+    );
+    expect(missingValuesWarning("الجلسة 2 · [الوقت]")).toBe("فيه بيانات ناقصة: الوقت — كمّلها في النص بدل [الوقت] قبل الإرسال");
+    expect(missingValuesWarning("الجلسة 2 · 10:30")).toBeNull();
   });
 });
 

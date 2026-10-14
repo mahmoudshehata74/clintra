@@ -180,7 +180,7 @@ test("SMS opens the sms: link, and a missing value is a warning that does not bl
   const time = await lailaBooked(page);
   const sheet = await openSendSheetFromRow(page, LAILA);
   await sheet.getByRole("group", { name: MSG.sendTemplateLabel }).getByRole("button", { name: "تذكير جلسة خطة", exact: true }).click();
-  await expect(sheet.getByRole("status")).toHaveText("فيه بيانات ناقصة: الجلسة");
+  await expect(sheet.getByRole("status")).toHaveText("فيه بيانات ناقصة: الجلسة — كمّلها في النص بدل [الجلسة] قبل الإرسال");
   const text = renderTemplate(findMessageTemplate("care_plan_session_reminder")!.defaultBody, {
     patient_name: LAILA,
     clinic_name: CLINIC_NAME,
@@ -189,6 +189,9 @@ test("SMS opens the sms: link, and a missing value is a warning that does not bl
     time,
   }).text;
   await expect(sheet.getByLabel(MSG.sendBodyLabel, { exact: true })).toHaveValue(text);
+  const shownBody = await sheet.getByLabel(MSG.sendBodyLabel, { exact: true }).inputValue();
+  expect(shownBody).toContain("[الجلسة]");
+  expect(shownBody).not.toContain("{{");
 
   // An edit is this message's own.
   const edited = `${text}\nمع تحيات العيادة`;

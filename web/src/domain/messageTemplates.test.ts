@@ -5,8 +5,11 @@ import {
   isEditableTemplateKey,
   isMessageTemplateKey,
   MESSAGE_TEMPLATES,
+  missingValueMarker,
+  PLACEHOLDER_LABELS,
   renderTemplate,
   templateBodyLength,
+  TemplatePlaceholder,
   type TemplateValues,
 } from "./messageTemplates";
 
@@ -99,9 +102,12 @@ describe("renderTemplate", () => {
     ["a value trimmed", "[{{doctor_name}}]", { doctor_name: "  د. سلمى  " }, "[د. سلمى]", []],
     ["an unknown token untouched and unreported", "{{nickname}} {{patient_name}}", ALL_VALUES, "{{nickname}} كريم فتحي", []],
     ["a malformed token untouched", "{{ patient_name }} {patient_name}", ALL_VALUES, "{{ patient_name }} {patient_name}", []],
-    ["a missing value left as written and reported", "مرحباً {{patient_name}}", {}, "مرحباً {{patient_name}}", ["patient_name"]],
-    ["a null or blank value reported", "{{session_label}}{{doctor_name}}", { session_label: null, doctor_name: "  " }, "{{session_label}}{{doctor_name}}", ["session_label", "doctor_name"]],
-    ["each missing placeholder once, in order of first use", "{{date}} {{time}} {{date}}", { time: null }, "{{date}} {{time}} {{date}}", ["date", "time"]],
+    ["a missing value as its label in brackets, and reported", "مرحباً {{patient_name}}", {}, "مرحباً [اسم المريض]", ["patient_name"]],
+    ["a null or blank value as its label, and reported", "{{session_label}}{{doctor_name}}", { session_label: null, doctor_name: "  " }, "[الجلسة][اسم الطبيب]", ["session_label", "doctor_name"]],
+    ["a missing balance as its label", "متبقي {{balance}}", { balance: null }, "متبقي [المبلغ المتبقي]", ["balance"]],
+    ["a missing date, time, clinic name and phone as their labels", "{{date}} {{time}} {{clinic_name}} {{clinic_phone}}", {}, "[التاريخ] [الوقت] [اسم العيادة] [هاتف العيادة]", ["date", "time", "clinic_name", "clinic_phone"]],
+    ["each missing placeholder once, in order of first use", "{{date}} {{time}} {{date}}", { time: null }, "[التاريخ] [الوقت] [التاريخ]", ["date", "time"]],
+    ["a missing known value next to an unknown token", "{{nickname}} {{session_label}}", {}, "{{nickname}} [الجلسة]", ["session_label"]],
     ["no placeholders at all", "شكراً", {}, "شكراً", []],
   ])("renders %s", (_label, body, values, text, missing) => {
     expect(renderTemplate(body, values)).toEqual({ text, missing });
@@ -119,5 +125,23 @@ describe("renderTemplate", () => {
   it("reports what a default body is missing so a screen can warn before sending", () => {
     const { missing } = renderTemplate(MESSAGE_TEMPLATES[3].defaultBody, { patient_name: "عمر" });
     expect(missing).toEqual(["session_label", "clinic_name", "date", "time", "clinic_phone"]);
+  });
+
+  it.each(MESSAGE_TEMPLATES.map((template) => [template.key, template.defaultBody] as const))(
+    "never leaves a raw known token in %s rendered with no values",
+    (_key, body) => {
+      const { text, missing } = renderTemplate(body, {});
+      expect(text).not.toContain("{{");
+      for (const placeholder of missing) {
+        expect(text).toContain(missingValueMarker(placeholder));
+      }
+    },
+  );
+
+  it("labels every known placeholder", () => {
+    for (const placeholder of Object.values(TemplatePlaceholder)) {
+      expect(missingValueMarker(placeholder)).toBe(`[${PLACEHOLDER_LABELS[placeholder]}]`);
+      expect(PLACEHOLDER_LABELS[placeholder]).not.toBe("");
+    }
   });
 });
