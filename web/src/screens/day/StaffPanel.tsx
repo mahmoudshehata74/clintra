@@ -12,6 +12,7 @@ import { useLiveQuery } from "../../db/useLiveQuery";
 import { Role } from "../../domain/role";
 import { LocationScope, PractitionerScope } from "../../domain/scope";
 import { ROLE_LABELS } from "./actorLabel";
+import { withDoctorPrefix } from "./doctorName";
 import { SetBody, SetList, SetRow, SettingsFooter } from "./SettingsLayout";
 import { hasPinSet, isLastActiveOwner } from "./staffRows";
 import { dayScreenStrings } from "./strings";
@@ -217,10 +218,16 @@ function StaffRow({
   return (
     <SetRow layout="staff" muted={!membership.is_active} editor={editor}>
       <span className="min-w-0 text-[13.5px] font-semibold text-text">
-        {userName}
+        {/* A membership tied to a practitioner reads as the doctor: "د. أحمد
+            المصري" with "المالك · طبيب". */}
+        {membership.practitioner_id ? withDoctorPrefix(userName) : userName}
         {/* The space is load-bearing: with none, Chrome joins the name's
             last letter to the role's first across the element boundary. */}{" "}
-        <span className="ms-1 text-[11px] font-medium text-muted">{ROLE_LABELS[membership.role]}</span>
+        <span className="ms-1 text-[11px] font-medium text-muted">
+          {membership.practitioner_id && membership.role !== Role.Practitioner
+            ? `${ROLE_LABELS[membership.role]} · ${dayScreenStrings.staffPractitionerRoleSuffix}`
+            : ROLE_LABELS[membership.role]}
+        </span>
       </span>
       {pinIsSet ? (
         <Badge appearance="solid" tone="eligible">

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import Ltr from "../../components/Ltr";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Field, { TextInput } from "../../components/ui/Field";
@@ -155,9 +154,9 @@ export default function WorkingHoursPanel({
               }
             >
               <span className="text-[12.5px] font-bold text-text">{dayScreenStrings.weekdayNames[row.weekday]}</span>
-              <span className="text-[13.5px] font-semibold text-text tabular-nums">
-                <Ltr>{row.hours}</Ltr>
-              </span>
+              {/* `.set-row .hours` in the page's own right-to-left order, as
+                  the prototype renders it: the start time on the right. */}
+              <span className="text-[13.5px] font-semibold text-text tabular-nums">{row.hours}</span>
               <div className="flex items-center gap-1.5">
                 {/* `.set-row .mode`; the prototype tints the day-off label
                     faint, which Badge's neutral tone (muted) only

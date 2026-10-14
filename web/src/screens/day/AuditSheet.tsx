@@ -4,19 +4,17 @@ import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import type { AuditLog, CarePlan, ClinicDay, Membership, Patient, Prescription, User, Visit } from "../../db/types";
-import { AuditAction } from "../../db/types";
+import { PaymentMethod } from "../../db/types";
 import { describeAuditVerb, describeVisitFormChange } from "../../domain/auditVerb";
-import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo } from "../../domain/time";
-import { formatActorLabel } from "./actorLabel";
+import { formatWeekdayDayMonth } from "../../domain/displayDate";
+import type { Piastres } from "../../domain/money";
+import { clockTimeInCairo, todayInCairo } from "../../domain/time";
+import { formatMoneyAmount } from "../money";
+import { formatActorName } from "./actorLabel";
 import { auditDotTone, type AuditDotTone } from "./auditDotTone";
-import {
-  type AuditActionFilter,
-  type AuditEntityFilter,
-  filterAuditRows,
-  isAuditRowInScope,
-} from "./auditLogFilters";
+import { type AuditFilter, filterAuditRows, isAuditRowInScope } from "./auditLogFilters";
 import { computeElapsedLabel } from "./elapsedLabel";
-import { formatBareReceiptNumber } from "./invoiceNumber";
+import { formatBareReceiptNumber, formatInvoiceNumber } from "./invoiceNumber";
 import Sheet from "./Sheet";
 import SheetCardHead from "./SheetCardHead";
 import { dayScreenStrings } from "./strings";
@@ -31,28 +29,27 @@ interface AuditSheetProps {
 interface AuditRowView {
   row: AuditLog;
   verb: string;
-  description: string;
-  actorLabel: string;
+  /** What the row is about, after the verb ("أنشأ حجز · كريم فتحي"); "" for none. */
+  subject: string;
+  actorName: string;
+  /** After the actor ("سارة حسن · موعد 10:30"); "" for none. */
+  context: string;
   tone: AuditDotTone;
 }
 
-const ENTITY_FILTER_OPTIONS: readonly { value: AuditEntityFilter; label: string }[] = [
+const FILTER_OPTIONS: readonly { value: AuditFilter; label: string }[] = [
   { value: "all", label: dayScreenStrings.auditFilterAll },
-  { value: "visits", label: dayScreenStrings.auditFilterEntityVisits },
-  { value: "patients", label: dayScreenStrings.auditFilterEntityPatients },
-  { value: "invoices", label: dayScreenStrings.auditFilterEntityInvoices },
-  { value: "payments", label: dayScreenStrings.auditFilterEntityPayments },
-  { value: "cash_close", label: dayScreenStrings.auditFilterEntityCashClose },
-  { value: "visit_form_data", label: dayScreenStrings.auditFilterEntityVisitFormData },
-  { value: "settings", label: dayScreenStrings.auditFilterEntitySettings },
+  { value: "visits", label: dayScreenStrings.auditFilterVisits },
+  { value: "invoices", label: dayScreenStrings.auditFilterInvoices },
+  { value: "settings", label: dayScreenStrings.auditFilterSettings },
 ];
 
-const ACTION_FILTER_OPTIONS: readonly { value: AuditActionFilter; label: string }[] = [
-  { value: "all", label: dayScreenStrings.auditFilterAll },
-  { value: AuditAction.Create, label: dayScreenStrings.auditFilterActionCreate },
-  { value: AuditAction.Update, label: dayScreenStrings.auditFilterActionUpdate },
-  { value: AuditAction.Delete, label: dayScreenStrings.auditFilterActionDelete },
-];
+const METHOD_LABEL: Record<string, string> = {
+  [PaymentMethod.Cash]: dayScreenStrings.paymentMethodCash,
+  [PaymentMethod.Card]: dayScreenStrings.paymentMethodCard,
+  [PaymentMethod.Wallet]: dayScreenStrings.paymentMethodWallet,
+  [PaymentMethod.Transfer]: dayScreenStrings.paymentMethodTransfer,
+};
 
 const AUDITED_ENTITIES = new Set([
   "visits",
@@ -68,6 +65,13 @@ const AUDITED_ENTITIES = new Set([
   "message_templates",
   "care_plans",
   "care_plan_items",
+  "services",
+  "service_price_overrides",
+  "schedules",
+  "users",
+  "memberships",
+  "membership_locations",
+  "membership_practitioners",
 ]);
 
 function payloadOf(row: Pick<AuditLog, "before" | "after">): Record<string, unknown> | null {
@@ -88,12 +92,12 @@ const DOT_LOOK: Record<AuditDotTone, string> = {
  * reconstruct what happened, not staff surveillance. Prototype #s11:
  * `.c-head`, `.filts`/`.filt`, `.audit`, `.aud-row`, `.aud-dot`
  * (+ `.warn`/`.danger`, see auditDotTone.ts), `.aud-txt .verb`/`.who`,
- * `.aud-time`. The verb leads every row at the larger size; the actor is
- * named on the smaller muted line under it, beside the row's context.
+ * `.aud-time`. The verb leads every row at the larger size, with what it is
+ * about ("أنشأ حجز · كريم فتحي"); the smaller muted line under it names the
+ * actor and the row's context ("سارة حسن · موعد 10:30").
  */
 export default function AuditSheet({ practitionerId, locationId, today, onDismiss }: AuditSheetProps) {
-  const [entityFilter, setEntityFilter] = useState<AuditEntityFilter>("all");
-  const [actionFilter, setActionFilter] = useState<AuditActionFilter>("all");
+  const [filter, setFilter] = useState<AuditFilter>("all");
 
   const rows =
     useLiveQuery<AuditRowView[]>(async () => {
@@ -190,7 +194,11 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
 
       const scoped = candidateRows.filter(isInScope);
 
-      const membershipIds = [...new Set(scoped.map((row) => row.actor_membership_id))];
+      // A staff membership's own row names its staff member.
+      const subjectMembershipIds = scoped
+        .filter((row) => row.entity === "memberships")
+        .map((row) => row.entity_id);
+      const membershipIds = [...new Set([...scoped.map((row) => row.actor_membership_id), ...subjectMembershipIds])];
       const memberships = await db.memberships.bulkGet(membershipIds);
       const membershipsById = new Map(
         memberships.filter((m): m is Membership => m != null).map((m) => [m.id, m]),
@@ -230,13 +238,43 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
       const patients = await db.patients.bulkGet([...patientIds]);
       const patientsById = new Map(patients.filter((p): p is Patient => p != null).map((p) => [p.id, p]));
 
-      function actorLabelFor(membershipId: string): string {
+      function actorNameFor(membershipId: string): string {
         const membership = membershipsById.get(membershipId);
         const user = membership ? usersById.get(membership.user_id) : undefined;
-        return formatActorLabel(membership, user);
+        return formatActorName(membership, user);
       }
 
-      function descriptionFor(row: AuditLog): string {
+      function contextFor(row: AuditLog): string {
+        const payload = payloadOf(row);
+        if (!payload) {
+          return "";
+        }
+        if (row.entity === "visits") {
+          if (typeof payload.scheduled_at === "string") {
+            return `${dayScreenStrings.auditContextSlotPrefix} ${clockTimeInCairo(payload.scheduled_at)}`;
+          }
+          return typeof payload.position === "number" ? `${dayScreenStrings.auditContextQueuePrefix} ${payload.position}` : "";
+        }
+        if (row.entity === "invoices") {
+          const { number, issued_year: issuedYear, series } = payload;
+          return typeof number === "number" && typeof issuedYear === "number"
+            ? `${dayScreenStrings.auditContextInvoicePrefix} ${formatInvoiceNumber({ number, issued_year: issuedYear, series: typeof series === "number" ? series : 1 })}`
+            : "";
+        }
+        if (row.entity === "payments") {
+          const receiptNumber = payload.receipt_number;
+          // A payment audited before number series existed carries no
+          // series: it was minted as series 1, the value database version 15
+          // gave its row.
+          const series = typeof payload.series === "number" ? payload.series : 1;
+          return typeof receiptNumber === "string"
+            ? `${dayScreenStrings.paymentReceiptNumberPrefix} ${formatBareReceiptNumber({ receipt_number: receiptNumber, series })}`
+            : "";
+        }
+        return "";
+      }
+
+      function subjectFor(row: AuditLog): string {
         const payload = payloadOf(row);
         if (!payload) {
           return "";
@@ -261,21 +299,32 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
           return typeof payload.full_name === "string" ? payload.full_name : "";
         }
         if (row.entity === "payments") {
-          const receiptNumber = payload.receipt_number;
-          // A payment audited before number series existed carries no
-          // series: it was minted as series 1, the value database version 15
-          // gave its row.
-          const series = typeof payload.series === "number" ? payload.series : 1;
-          return typeof receiptNumber === "string"
-            ? `${dayScreenStrings.paymentReceiptNumberPrefix} ${formatBareReceiptNumber({ receipt_number: receiptNumber, series })}`
+          // `.aud-txt .verb`: "سجّل دفعة · 200 ج.م كاش".
+          const amount = payload.amount;
+          const method = typeof payload.method === "string" ? (METHOD_LABEL[payload.method] ?? "") : "";
+          return typeof amount === "number"
+            ? `${formatMoneyAmount(amount as Piastres)} ${dayScreenStrings.tileCurrencyUnit} ${method}`.trim()
             : "";
         }
         if (row.entity === "cash_close") {
           const date = payload.date;
-          return typeof date === "string" ? formatCairoDisplayDate(date) : "";
+          return typeof date === "string" ? formatWeekdayDayMonth(date) : "";
         }
         if (row.entity === "visit_form_data") {
           return describeVisitFormChange(row)?.excerpt ?? "";
+        }
+        // Settings name what was set — never a price, a PIN or a scope.
+        if (row.entity === "services" || row.entity === "users") {
+          const name = row.entity === "services" ? payload.name : payload.full_name;
+          return typeof name === "string" ? name : "";
+        }
+        if (row.entity === "memberships") {
+          const membership = membershipsById.get(row.entity_id);
+          return membership ? (usersById.get(membership.user_id)?.full_name ?? "") : "";
+        }
+        if (row.entity === "schedules") {
+          const weekday = payload.weekday;
+          return typeof weekday === "number" ? (dayScreenStrings.weekdayNames[weekday] ?? "") : "";
         }
         return "";
       }
@@ -286,29 +335,26 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         .map((row) => ({
           row,
           verb: describeAuditVerb(row),
-          description: descriptionFor(row),
-          actorLabel: actorLabelFor(row.actor_membership_id),
+          subject: subjectFor(row),
+          actorName: actorNameFor(row.actor_membership_id),
+          context: contextFor(row),
           tone: auditDotTone(row),
         }));
     }, [practitionerId, locationId, today]) ?? [];
 
   const filteredRows = filterAuditRows(
-    rows.map((item) => ({ ...item, entity: item.row.entity, action: item.row.action })),
-    entityFilter,
-    actionFilter,
+    rows.map((item) => ({ ...item, entity: item.row.entity })),
+    filter,
   );
 
   const now = new Date();
 
   return (
     <Sheet onDismiss={onDismiss} size="lg">
-      {/* `.c-head`: the title as before, with the count of events listed as `.sub`. */}
+      {/* `.c-head`: "اليوم", "سجل اليوم", and the count of events listed as `.sub`. */}
       <SheetCardHead
-        title={
-          <>
-            {dayScreenStrings.auditSheetTitle} — {formatCairoDisplayDate(today)}
-          </>
-        }
+        badge={dayScreenStrings.auditSheetBadge}
+        title={dayScreenStrings.auditSheetTitle}
         subtitle={
           <>
             <Ltr>{filteredRows.length}</Ltr> {dayScreenStrings.auditEventCountUnit}
@@ -317,21 +363,14 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         onDismiss={onDismiss}
       />
 
-      {/* `.filts` — the bar itself; each group is the shared `.filt` ToggleGroup. */}
-      <div className="flex flex-col gap-2 border-b border-hair bg-field px-[18px] py-3">
+      {/* `.filts` — the prototype's four `.filt`s, the shared ToggleGroup. */}
+      <div className="border-b border-hair bg-field px-[18px] py-3">
         <ToggleGroup
           variant="filter"
-          label={dayScreenStrings.auditFilterEntityGroupLabel}
-          value={entityFilter}
-          onChange={setEntityFilter}
-          options={ENTITY_FILTER_OPTIONS}
-        />
-        <ToggleGroup
-          variant="filter"
-          label={dayScreenStrings.auditFilterActionGroupLabel}
-          value={actionFilter}
-          onChange={setActionFilter}
-          options={ACTION_FILTER_OPTIONS}
+          label={dayScreenStrings.auditFilterGroupLabel}
+          value={filter}
+          onChange={setFilter}
+          options={FILTER_OPTIONS}
         />
       </div>
 
@@ -340,7 +379,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         <p className="px-[18px] py-[22px] text-center text-[12.5px] text-faint">{dayScreenStrings.auditSheetEmpty}</p>
       ) : (
         <ul className="flex flex-col">
-          {filteredRows.map(({ row, verb, description, actorLabel, tone }) => {
+          {filteredRows.map(({ row, verb, subject, actorName, context, tone }) => {
             const elapsed = computeElapsedLabel(row.at, now.toISOString(), today, now);
             return (
               <li
@@ -349,10 +388,13 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
               >
                 <span className={`h-[9px] w-[9px] rounded-full ${DOT_LOOK[tone]}`} aria-hidden="true" />
                 <div className="min-w-0">
-                  <p className="text-[13.5px] font-semibold text-text">{verb}</p>
+                  <p className="text-[13.5px] font-semibold text-text">
+                    {verb}
+                    {subject && <> · {subject}</>}
+                  </p>
                   <p className="mt-px text-[11.5px] text-muted">
-                    <b className="font-semibold text-text">{actorLabel}</b>
-                    {description && <> · {description}</>}
+                    <b className="font-semibold text-text">{actorName}</b>
+                    {context && <> · {context}</>}
                   </p>
                 </div>
                 <span className="whitespace-nowrap text-end text-[11px] text-faint tabular-nums">

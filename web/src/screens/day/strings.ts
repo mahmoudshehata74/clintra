@@ -466,26 +466,26 @@ export const dayScreenStrings = {
   // as a timeline of what happened rather than staff surveillance — see
   // domain/auditVerb.ts for how a row's verb is built from its before/after
   // diff, not just its entity name.
-  auditSheetTitle: "السجل",
+  auditSheetTitle: "سجل اليوم",
   // `.c-head .sub` — "{n} حدث", the count of events the list is showing.
   auditEventCountUnit: "حدث",
-  // The two filter groups' accessible names (role="group" has none of its own).
-  auditFilterEntityGroupLabel: "تصفية حسب النوع",
-  auditFilterActionGroupLabel: "تصفية حسب الإجراء",
+  // The filter group's accessible name (role="group" has none of its own).
+  auditFilterGroupLabel: "تصفية السجل",
   // `.aud-time`'s elapsed part, today only: "12:18 · من 3د".
   auditElapsedPrefix: "من",
   auditSheetEmpty: "مفيش حركة النهاردة",
+  // `.filts`: the prototype's four (auditLogFilters.ts's groups).
   auditFilterAll: "الكل",
-  auditFilterEntityVisits: "الزيارات",
-  auditFilterEntityPatients: "المرضى",
-  auditFilterEntityInvoices: "الفواتير",
-  auditFilterEntityPayments: "الدفعات",
-  auditFilterEntityCashClose: "إغلاق الصندوق",
-  auditFilterEntityVisitFormData: "الزيارة (النموذج)",
-  auditFilterEntitySettings: "الإعدادات",
-  auditFilterActionCreate: "إنشاء",
-  auditFilterActionUpdate: "تعديل",
-  auditFilterActionDelete: "حذف",
+  auditFilterVisits: "زيارات",
+  auditFilterInvoices: "فواتير",
+  auditFilterSettings: "إعدادات",
+  // `.c-head`: "اليوم" badge and "سجل اليوم" title.
+  auditSheetBadge: "اليوم",
+  // `.aud-txt .who`'s context after the actor: a slot visit's time, a
+  // queue visit's number, an invoice's number.
+  auditContextSlotPrefix: "موعد",
+  auditContextQueuePrefix: "نمرة",
+  auditContextInvoicePrefix: "فاتورة",
   // The actor label's role suffix, e.g. "سارة حسن (المساعد)" — see domain/role.ts's Role enum.
   roleOwner: "المالك",
   rolePractitioner: "الطبيب",
@@ -501,6 +501,9 @@ export const dayScreenStrings = {
   settingsTabsGroupLabel: "أقسام الإعدادات",
   settingsHoursHeadSubtitle: "مواعيد العمل الأسبوعية",
   settingsServicesHeadTitle: "خدمات العيادة",
+  // `.c-head .sub` on the services and staff tabs.
+  settingsServicesHeadActiveUnit: "خدمات نشطة",
+  settingsStaffHeadActiveUnit: "موظفين نشطين",
   settingsHoursTab: "مواعيد العمل",
   settingsServicesTab: "الخدمات",
   settingsStaffTab: "الموظفون",
@@ -565,7 +568,9 @@ export const dayScreenStrings = {
   staffLastOwnerError: "لازم يفضل مالك واحد نشط على الأقل",
   // The note box under the staff list when the last active owner's switch is locked.
   staffNoteLabel: "ملاحظة:",
-  staffLastOwnerNote: "العيادة لازم يكون ليها مالك واحد شغّال على الأقل",
+  staffLastOwnerNote: "مش قادر تخفّي المالك — العيادة لازم عندها مالك واحد شغّال على الأقل.",
+  // `.staff-name .role` after a membership tied to a practitioner ("المالك · طبيب").
+  staffPractitionerRoleSuffix: "طبيب",
   // `.runrow .count`: "حد أدنى: 1 مالك".
   staffMinimumPrefix: "حد أدنى:",
   staffMinimumOwner: "1 مالك",

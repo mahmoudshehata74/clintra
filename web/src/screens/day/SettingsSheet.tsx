@@ -2,7 +2,9 @@ import { useState } from "react";
 import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
+import { withDoctorPrefix } from "./doctorName";
 import PractitionersPanel from "./PractitionersPanel";
+import { countServicesByState } from "./serviceCounts";
 import ServicesPanel from "./ServicesPanel";
 import Sheet from "./Sheet";
 import SheetCardHead from "./SheetCardHead";
@@ -39,23 +41,42 @@ export default function SettingsSheet({ practitionerId, locationId, orgId, onDis
   const [panel, setPanel] = useState<Panel>("hours");
 
   const context = useLiveQuery(async () => {
-    const [practitioner, location] = await Promise.all([db.practitioners.get(practitionerId), db.locations.get(locationId)]);
-    return { practitionerName: practitioner?.full_name ?? "", locationName: location?.name ?? "" };
-  }, [practitionerId, locationId]);
+    const [practitioner, location, services, memberships] = await Promise.all([
+      db.practitioners.get(practitionerId),
+      db.locations.get(locationId),
+      db.services.toArray(),
+      db.memberships.toArray(),
+    ]);
+    return {
+      practitionerName: practitioner?.full_name ?? "",
+      locationName: location?.name ?? "",
+      serviceCounts: countServicesByState(services.filter((service) => service.org_id === orgId)),
+      activeStaffCount: memberships.filter((membership) => membership.org_id === orgId && membership.is_active).length,
+    };
+  }, [practitionerId, locationId, orgId]);
 
   // `.c-head h3` / `.sub` per tab, as the prototype words each: the
   // practitioner whose week this is (with the location as context), the
-  // clinic's services, the staff.
+  // clinic's services ("4 خدمات نشطة · 1 موقوفة"), the staff ("2 موظفين
+  // نشطين").
   const head =
     panel === "hours"
       ? {
-          title: context?.practitionerName ?? "",
+          title: context?.practitionerName ? withDoctorPrefix(context.practitionerName) : "",
           subtitle: [dayScreenStrings.settingsHoursHeadSubtitle, context?.locationName].filter(Boolean).join(" · "),
         }
       : panel === "services"
-        ? { title: dayScreenStrings.settingsServicesHeadTitle, subtitle: undefined }
+        ? {
+            title: dayScreenStrings.settingsServicesHeadTitle,
+            subtitle: context
+              ? `${context.serviceCounts.active} ${dayScreenStrings.settingsServicesHeadActiveUnit} · ${context.serviceCounts.inactive} ${dayScreenStrings.serviceCountInactiveUnit}`
+              : undefined,
+          }
         : panel === "staff"
-          ? { title: dayScreenStrings.settingsStaffTab, subtitle: undefined }
+          ? {
+              title: dayScreenStrings.settingsStaffTab,
+              subtitle: context ? `${context.activeStaffCount} ${dayScreenStrings.settingsStaffHeadActiveUnit}` : undefined,
+            }
           : { title: dayScreenStrings.settingsPractitionersTab, subtitle: undefined };
 
   return (
