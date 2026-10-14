@@ -38,6 +38,11 @@ import {
   readStore,
   reloadAs,
   syncSettled,
+  karimProfileFixture,
+  openProfileFromSearch,
+  PROFILE,
+  profileEvents,
+  searchPatientsPage,
 } from "./support";
 import { registrationStrings } from "../src/auth/registrationStrings";
 import { galleryStrings } from "../src/gallery/strings";
@@ -1126,4 +1131,36 @@ test("@screenshot care-plan-sheet", async ({ page }) => {
   await expect(sheet.getByText(PLAN.stateSuggested, { exact: true })).toHaveCount(4);
   await expect(sheet).toContainText(`${PLAN.paidLabel} 1,100 ج.م`);
   await shootTallSheet(page, sheet, "care-plan-sheet", tallHeight());
+});
+
+// Screen 18, the patient profile, on karimProfileFixture's day: كريم's
+// history on "الكل" — visits, a prescription, a message, payments and a note
+// across four days — and the patients page's results for "ر" (كريم, عمر,
+// هدى: each name has it at a different place, so the order is fixed).
+
+// The profile is taller than a phone's screen, and a full-page capture
+// paints the fixed bottom bar where the viewport ends — mid-timeline — so
+// the window grows to the whole page first.
+async function shootWholePage(page: Page, surface: string): Promise<void> {
+  const { width } = page.viewportSize()!;
+  const height = await page.evaluate(() => document.documentElement.scrollHeight);
+  await page.setViewportSize({ width, height });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight)).toBe(true);
+  await shoot(page, surface, true);
+}
+
+test("@screenshot patient-profile", async ({ page }) => {
+  await karimProfileFixture(page);
+  await openProfileFromSearch(page, PATIENTS.karim, PATIENTS.karim);
+  await expect(profileEvents(page)).toHaveCount(9);
+  await expect(page.getByRole("region", { name: PROFILE.timelineLabel, exact: true })).toContainText(PROFILE.planStartSuffix);
+  await shootWholePage(page, "patient-profile");
+});
+
+test("@screenshot patient-search", async ({ page }) => {
+  await karimProfileFixture(page);
+  const results = await searchPatientsPage(page, "ر");
+  await expect(results.getByRole("button")).toHaveCount(3);
+  await expect(results.getByRole("button").first()).toContainText(formatEgyptianPhoneForDisplay("+201112345678"));
+  await shoot(page, "patient-search", true);
 });

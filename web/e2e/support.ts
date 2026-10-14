@@ -18,6 +18,7 @@ import { carePlanStrings } from "../src/screens/carePlan/strings";
 import { dayScreenStrings } from "../src/screens/day/strings";
 import { doctorDayStrings } from "../src/screens/doctor/strings";
 import { messagesStrings } from "../src/screens/messages/strings";
+import { patientProfileStrings } from "../src/screens/patient/strings";
 import { prescriptionPrintStrings } from "../src/screens/prescription/strings";
 import { visitWorkspaceStrings } from "../src/screens/visit/strings";
 
@@ -27,6 +28,7 @@ export const VISIT = visitWorkspaceStrings;
 export const RX = prescriptionPrintStrings;
 export const MSG = messagesStrings;
 export const PLAN = carePlanStrings;
+export const PROFILE = patientProfileStrings;
 export const AUTH = authStrings;
 export const SIDEBAR = sidebarStrings;
 export { DEV_SEED_PINS };
@@ -499,4 +501,214 @@ export async function fillNewPlan(page: Page, workspace: Locator, goal: string, 
 export function dayMonth(day: string): string {
   const [, month, date] = day.split("-").map(Number);
   return `${date} / ${month}`;
+}
+
+// The patient profile (screen 18), shared by the profile and screenshot specs.
+
+/** The day the profile fixture lives on, pinned on the page clock. */
+export const PROFILE_DAY = "2026-10-14";
+export const profileAt = (day: string, time: ClockTime) => cairoInstant(day, time);
+
+export const profileSheet = (page: Page) =>
+  page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: PROFILE.sheetTitle, exact: true }) });
+
+/** The profile's tab for `label`, by its leading text (its count follows it). */
+export const profileTab = (scope: Locator | Page, label: string) =>
+  scope.getByRole("group", { name: PROFILE.tabsLabel, exact: true }).getByRole("button", { name: new RegExp(`^${label}`) });
+
+/** The timeline's event rows. */
+export const profileEvents = (scope: Locator | Page) =>
+  scope.getByRole("region", { name: PROFILE.timelineLabel, exact: true }).getByRole("listitem");
+
+/** Opens the patients page from the rail and searches for `query`. */
+export async function searchPatientsPage(page: Page, query: string): Promise<Locator> {
+  await sidebar(page).getByRole("button", { name: SIDEBAR.navPatients, exact: true }).click();
+  await page.getByPlaceholder(PROFILE.searchPlaceholder).fill(query);
+  return page.getByRole("list", { name: PROFILE.resultsLabel, exact: true });
+}
+
+/** Searches the patients page and opens the result named `name`. */
+export async function openProfileFromSearch(page: Page, query: string, name: string): Promise<void> {
+  const results = await searchPatientsPage(page, query);
+  await results.getByRole("button").filter({ hasText: name }).click();
+  await expect(page.getByRole("group", { name: PROFILE.tabsLabel, exact: true })).toBeVisible();
+}
+
+/**
+ * كريم's history on PROFILE_DAY, the owner signed in, the clock pinned. He
+ * is in the room at 09:00 today, where his visit starts a three-session
+ * plan (كشف عام every 14 days). Written straight into the store after that:
+ * his phone, age and gender; the plan started 9 / 9, its first session that
+ * day's visit (done — التهاب وتر الرضفة, a printed two-drug prescription, a
+ * note, 300 paid in cash) and its second today's visit; a visit on 30 / 9
+ * outside the plan (خشونة بسيطة, 100 of 250 paid by card, a follow-up
+ * message after it, marked sent); and a visit on 7 / 10 the patient
+ * cancelled. With the demo seed's completed visit on Monday 12 / 10 (د.
+ * سلمى إبراهيم): nine events on four days; three completed visits; 150 owed.
+ */
+export async function karimProfileFixture(page: Page): Promise<void> {
+  const day = (offset: number) => addDaysToClinicDay(PROFILE_DAY, offset);
+  await page.clock.install({ time: new Date(profileAt(PROFILE_DAY, "08:30")) });
+  await gotoRealDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
+  await bookFirstOpenSlot(page, PATIENTS.karim, "كشف عام");
+  await page.clock.setSystemTime(new Date(profileAt(PROFILE_DAY, "09:00")));
+  await advanceRowTo(page, PATIENTS.karim, S.statusArrived);
+  await advanceRowTo(page, PATIENTS.karim, S.statusInRoom);
+  const workspace = await openVisitSheet(page);
+  // A saved field gives the store a visit_form_data row to copy the form from.
+  await workspace.getByPlaceholder(S.visitFormComplaintPlaceholder).fill("متابعة");
+  await workspace.getByPlaceholder(S.visitFormDiagnosisPlaceholder).click();
+  await expect(workspace.getByText(S.visitFormSavedIndicator, { exact: true })).toBeVisible();
+  const plan = await fillNewPlan(page, workspace, "استعادة كامل حركة الركبة", [{ service: "كشف عام", count: "3", gap: "14" }]);
+  await plan.getByLabel(PLAN.diagnosisField, { exact: true }).fill("التهاب وتر الرضفة");
+  await plan.getByRole("button", { name: PLAN.startAction, exact: true }).click();
+  await expect(plan.getByRole("heading", { name: PLAN.sessionsHeading, exact: true })).toBeVisible();
+  await closeSheet(plan);
+  await closeSheet(workspace);
+
+  await syncSettled(page);
+  type Stored = Record<string, unknown> & { id: string };
+  const karim = (await readStore<Stored>(page, "patients")).find((patient) => patient.full_name === PATIENTS.karim)!;
+  const today = (await readStore<Stored>(page, "visits")).find(
+    (visit) => visit.patient_id === karim.id && visit.visit_date === PROFILE_DAY,
+  )!;
+  const form = (await readStore<Stored>(page, "visit_form_data")).find((row) => row.visit_id === today.id)!;
+  const storedPlan = (await readStore<Stored>(page, "care_plans")).find((row) => row.patient_id === karim.id)!;
+  const items = (await readStore<Stored & { sequence: number }>(page, "care_plan_items")).sort((a, b) => a.sequence - b.sequence);
+  const assistantUser = (await readStore<Stored>(page, "users")).find((user) => user.full_name === ASSISTANT_NAME)!;
+  const assistant = (await readStore<Stored>(page, "memberships")).find((membership) => membership.user_id === assistantUser.id)!;
+
+  const pastVisit = (id: string, visitDay: string, time: ClockTime, status: string, extra: Record<string, unknown> = {}) => ({
+    store: "visits",
+    value: {
+      ...today,
+      id,
+      visit_date: visitDay,
+      position: 1,
+      scheduled_at: profileAt(visitDay, time),
+      unique_scheduled_at: profileAt(visitDay, time),
+      status,
+      arrived_at: null,
+      started_at: null,
+      ended_at: null,
+      note: null,
+      created_at: profileAt(visitDay, "08:00"),
+      ...extra,
+    },
+  });
+  const done = (visitDay: string, start: ClockTime, end: ClockTime) => ({
+    arrived_at: profileAt(visitDay, start),
+    started_at: profileAt(visitDay, start),
+    ended_at: profileAt(visitDay, end),
+  });
+  const owned = { org_id: today.org_id, location_id: today.location_id };
+  const invoice = (id: string, number: number, visitId: string, total: number, paid: number, status: string, at: string) => ({
+    store: "invoices",
+    value: {
+      id,
+      ...owned,
+      number,
+      issued_year: 2026,
+      series: 9,
+      patient_id: karim.id,
+      practitioner_id: today.practitioner_id,
+      visit_id: visitId,
+      total,
+      paid,
+      status,
+      issued_at: at,
+      rev: 1,
+    },
+  });
+  const payment = (id: string, invoiceId: string, amount: number, method: string, receipt: string, at: string) => ({
+    store: "payments",
+    value: {
+      id,
+      invoice_id: invoiceId,
+      location_id: today.location_id,
+      amount,
+      method,
+      receipt_number: receipt,
+      series: 9,
+      note: null,
+      after_close: false,
+      created_by: assistant.id,
+      created_at: at,
+      rev: 1,
+    },
+  });
+  const drug = (position: number, name: string, instructions: string) => ({
+    store: "prescription_items",
+    value: {
+      id: `profile-drug-${position}`,
+      prescription_id: "profile-rx-1",
+      name,
+      form: null,
+      instructions,
+      duration: null,
+      note: null,
+      position,
+      rev: 1,
+    },
+  });
+  const formData = (id: string, visitId: string, complaint: string, diagnosis: string) => ({
+    store: "visit_form_data",
+    value: { ...form, id, visit_id: visitId, data: { complaint, diagnosis } },
+  });
+
+  await putRows(page, [
+    { store: "patients", value: { ...karim, phone: "+201112345678", gender: "male", birth_year: 1992 } },
+    { store: "care_plans", value: { ...storedPlan, started_at: profileAt(day(-35), "08:50") } },
+    { store: "care_plan_items", value: { ...items[0], visit_id: "profile-visit-1" } },
+    { store: "care_plan_items", value: { ...items[1], visit_id: today.id } },
+    pastVisit("profile-visit-1", day(-35), "09:00", "completed", { ...done(day(-35), "09:05", "09:30"), note: "تحسن ملحوظ في ثني الركبة" }),
+    pastVisit("profile-visit-2", day(-14), "10:00", "completed", done(day(-14), "10:05", "10:25")),
+    pastVisit("profile-visit-3", day(-7), "11:00", "cancelled", { cancel_reason: "patient" }),
+    formData("profile-form-1", "profile-visit-1", "ألم في الركبة اليمنى", "التهاب وتر الرضفة"),
+    formData("profile-form-2", "profile-visit-2", "تيبس الصبح", "خشونة بسيطة"),
+    {
+      store: "prescriptions",
+      value: {
+        id: "profile-rx-1",
+        ...owned,
+        visit_id: "profile-visit-1",
+        patient_id: karim.id,
+        practitioner_id: today.practitioner_id,
+        series: 9,
+        issued_year: 2026,
+        number: 1,
+        diagnosis: "التهاب وتر الرضفة",
+        printed_at: profileAt(day(-35), "09:25"),
+        created_by: today.created_by,
+        created_at: profileAt(day(-35), "09:20"),
+        rev: 1,
+      },
+    },
+    drug(1, "Diclofenac 50mg", "قرص بعد الأكل مرتين"),
+    drug(2, "Paracetamol 500mg", "قرص عند اللزوم"),
+    invoice("profile-invoice-1", 1, "profile-visit-1", 30000, 30000, "paid", profileAt(day(-35), "09:30")),
+    payment("profile-payment-1", "profile-invoice-1", 30000, "cash", "1", profileAt(day(-35), "09:35")),
+    invoice("profile-invoice-2", 2, "profile-visit-2", 25000, 10000, "partial", profileAt(day(-14), "10:25")),
+    payment("profile-payment-2", "profile-invoice-2", 10000, "card", "2", profileAt(day(-14), "10:30")),
+    {
+      store: "messages",
+      value: {
+        id: "profile-message-1",
+        ...owned,
+        patient_id: karim.id,
+        visit_id: "profile-visit-2",
+        template_key: "post_visit_followup",
+        channel: "whatsapp",
+        phone: "+201112345678",
+        body: "مرحباً كريم، نتمنى تكون أحسن بعد الزيارة\nلو عندك أي سؤال كلمنا",
+        attempted_at: profileAt(day(-14), "10:40"),
+        marked_sent_at: profileAt(day(-14), "10:45"),
+        created_by: assistant.id,
+        created_at: profileAt(day(-14), "10:40"),
+        rev: 1,
+      },
+    },
+  ]);
+  await reloadAs(page, { name: OWNER_NAME, pin: OWNER_PIN });
 }
