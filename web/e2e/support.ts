@@ -14,6 +14,7 @@ import { sidebarStrings } from "../src/components/strings";
 // these two calls (see its own doc comment) — reproduced here against the
 // same pure domain/time.ts helpers rather than against the db module.
 import { addDaysToClinicDay, cairoInstant, mostRecentWeekdayOnOrBefore, todayInCairo, type ClockTime } from "../src/domain/time";
+import { carePlanStrings } from "../src/screens/carePlan/strings";
 import { dayScreenStrings } from "../src/screens/day/strings";
 import { doctorDayStrings } from "../src/screens/doctor/strings";
 import { messagesStrings } from "../src/screens/messages/strings";
@@ -25,6 +26,7 @@ export const DOCTOR = doctorDayStrings;
 export const VISIT = visitWorkspaceStrings;
 export const RX = prescriptionPrintStrings;
 export const MSG = messagesStrings;
+export const PLAN = carePlanStrings;
 export const AUTH = authStrings;
 export const SIDEBAR = sidebarStrings;
 export { DEV_SEED_PINS };
@@ -376,3 +378,125 @@ export async function recordWindowOpen(page: Page): Promise<void> {
 }
 
 export const openedUrls = (page: Page) => page.evaluate(() => (window as unknown as { openedUrls: string[] }).openedUrls);
+
+// The app's IndexedDB, read and written straight from the browser: data that
+// no screen writes (a visit in the past, a plan another device synced). A
+// direct write is not audited, queues nothing, and is unseen by the app's
+// live queries, which Dexie answers from its own cache — the app reads it
+// once the page reloads (reloadAs). Wait for syncSettled first: the demo
+// server's pull puts back every row it was pushed, so a pull still to come
+// would overwrite a row written here with its older copy.
+
+/** Reloads the page and unlocks it again as `as`, on the slots doctor's day. */
+export async function reloadAs(page: Page, as: { name: string; pin: string }): Promise<void> {
+  await page.reload();
+  await login(page, as);
+  await selectPractitioner(page, SLOTS_DR);
+}
+
+/**
+ * Waits until every write so far has been pushed and pulled back: no op
+ * left unsent, and the device's pull cursor at or past the newest op. Each
+ * poll asks for a cycle, as coming back to the tab does (sync/engine.ts's
+ * visibilitychange handler), rather than waiting for the engine's timer.
+ */
+export async function syncSettled(page: Page): Promise<void> {
+  await expect
+    .poll(async () => {
+      await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+      const ops = await readStore<{ synced_at: string | null; created_at: string }>(page, "sync_ops");
+      const [device] = await readStore<{ pull_cursor: string | null }>(page, "device");
+      const newest = ops.reduce((latest, op) => (op.created_at > latest ? op.created_at : latest), "");
+      return ops.every((op) => op.synced_at !== null) && device?.pull_cursor != null && device.pull_cursor >= newest;
+    })
+    .toBe(true);
+}
+
+/** Every row of one of the app's stores. */
+export function readStore<T>(page: Page, store: string): Promise<T[]> {
+  return page.evaluate(async (storeName) => {
+    const req = indexedDB.open("clintra");
+    const database: IDBDatabase = await new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    try {
+      const getAll = database.transaction(storeName, "readonly").objectStore(storeName).getAll();
+      return await new Promise<T[]>((resolve, reject) => {
+        getAll.onsuccess = () => resolve(getAll.result as T[]);
+        getAll.onerror = () => reject(getAll.error);
+      });
+    } finally {
+      database.close();
+    }
+  }, store);
+}
+
+/** Puts rows into the app's stores, all in one transaction. */
+export async function putRows(page: Page, rows: readonly { store: string; value: unknown }[]): Promise<void> {
+  await page.evaluate(async (toPut) => {
+    const req = indexedDB.open("clintra");
+    const database: IDBDatabase = await new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    try {
+      const transaction = database.transaction([...new Set(toPut.map((row) => row.store))], "readwrite");
+      for (const row of toPut) {
+        transaction.objectStore(row.store).put(row.value);
+      }
+      await new Promise((resolve, reject) => {
+        transaction.oncomplete = () => resolve(undefined);
+        transaction.onerror = () => reject(transaction.error);
+      });
+    } finally {
+      database.close();
+    }
+  }, rows);
+}
+
+// The care plan (screen 17), shared by the care plan and screenshot specs.
+
+export const planSheet = (page: Page) =>
+  page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: PLAN.sheetTitle, exact: true }) });
+
+/** One group of the plan form, by its 1-based place. */
+export const planGroup = (sheet: Locator, index: number) =>
+  sheet.getByRole("group", { name: `${PLAN.groupHeading} ${index}`, exact: true });
+
+export interface PlanGroupInput {
+  service: string;
+  count: string;
+  gap: string;
+}
+
+/** Fills the plan form's group `index` (1-based): its service by name, its count and its gap. */
+export async function fillPlanGroup(sheet: Locator, index: number, group: PlanGroupInput): Promise<void> {
+  const scope = planGroup(sheet, index);
+  const option = scope.getByRole("button", { name: new RegExp(`^${group.service} ·`) });
+  await option.click();
+  await expect(option).toHaveAttribute("aria-pressed", "true");
+  await scope.getByLabel(PLAN.countField, { exact: true }).fill(group.count);
+  await scope.getByLabel(PLAN.gapField, { exact: true }).fill(group.gap);
+}
+
+/** Opens the create form from the workspace's "ابدأ خطة رعاية" and fills it: the goal, and each group (more than one adds groups). */
+export async function fillNewPlan(page: Page, workspace: Locator, goal: string, groups: readonly PlanGroupInput[]): Promise<Locator> {
+  await workspace.getByRole("button", { name: PLAN.startPlan, exact: true }).click();
+  const sheet = planSheet(page);
+  await expect(sheet.getByText(PLAN.createHeading, { exact: true })).toBeVisible();
+  await sheet.getByLabel(PLAN.goalField, { exact: true }).fill(goal);
+  for (const [index, group] of groups.entries()) {
+    if (index > 0) {
+      await sheet.getByRole("button", { name: PLAN.addGroup, exact: true }).click();
+    }
+    await fillPlanGroup(sheet, index + 1, group);
+  }
+  return sheet;
+}
+
+/** "d / m", as the plan shows a day. */
+export function dayMonth(day: string): string {
+  const [, month, date] = day.split("-").map(Number);
+  return `${date} / ${month}`;
+}

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { formatEgyptianPhoneForDisplay } from "../src/domain/phone";
-import { cairoInstant, todayInCairo, type ClockTime } from "../src/domain/time";
+import { addDaysToClinicDay, cairoInstant, todayInCairo, type ClockTime } from "../src/domain/time";
 import {
   advanceRowTo,
   ASSISTANT_NAME,
@@ -32,6 +32,12 @@ import {
   openMessagesPage,
   openSendSheetFromRow,
   recordWindowOpen,
+  fillNewPlan,
+  PLAN,
+  putRows,
+  readStore,
+  reloadAs,
+  syncSettled,
 } from "./support";
 import { registrationStrings } from "../src/auth/registrationStrings";
 import { galleryStrings } from "../src/gallery/strings";
@@ -964,4 +970,154 @@ test("@screenshot messages-send-sheet", async ({ page }) => {
   await sheet.getByRole("group", { name: MSG.sendTemplateLabel }).getByRole("button", { name: "تذكير جلسة خطة", exact: true }).click();
   await expect(sheet.getByRole("status")).toBeVisible();
   await shoot(page, "messages-send-sheet", false);
+});
+
+// The care plan (screen 17) for كريم on a fixed day, so every capture shows
+// the same dates: the plan is created from his visit in the room through
+// the form, the five sessions before today are written straight into the
+// store as visits of past weeks (three of them paid), and the sixth is
+// booked from the plan for today at 09:30 — five done, one booked, four
+// suggested, as the prototype shows. The sheet is taller than a screen, so
+// the window grows to show all of it.
+const PLAN_DAY = "2026-10-14";
+const planAt = (time: ClockTime) => new Date(cairoInstant(PLAN_DAY, time));
+const PLAN_GOAL = "استعادة كامل حركة الركبة اليمنى";
+const PLAN_DIAGNOSIS = "التهاب وتر الرضفة";
+
+/** كريم in the room at 09:00 on PLAN_DAY, as the owner, his workspace open. */
+async function karimWorkspaceOnPlanDay(page: Page): Promise<ReturnType<Page["getByRole"]>> {
+  await page.clock.install({ time: planAt("08:30") });
+  await gotoRealDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
+  await bookFirstOpenSlot(page, PATIENTS.karim, "كشف عام");
+  await page.clock.setSystemTime(planAt("09:00"));
+  await advanceRowTo(page, PATIENTS.karim, S.statusArrived);
+  await advanceRowTo(page, PATIENTS.karim, S.statusInRoom);
+  await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
+  const workspace = page.getByRole("dialog");
+  await expect(workspace.getByPlaceholder(S.visitFormComplaintPlaceholder)).toBeVisible();
+  return workspace;
+}
+
+async function shootTallSheet(page: Page, sheet: ReturnType<Page["getByRole"]>, surface: string, height: number): Promise<void> {
+  const { width } = page.viewportSize()!;
+  await page.setViewportSize({ width, height });
+  await sheet.evaluate((element) => element.scrollTo(0, 0));
+  await expect.poll(() => sheet.evaluate((element) => element.scrollTop)).toBe(0);
+  await shoot(page, surface, false);
+}
+
+const tallHeight = () => (test.info().project.name === "mobile" ? 2100 : 1500);
+
+test("@screenshot care-plan-create", async ({ page }) => {
+  const workspace = await karimWorkspaceOnPlanDay(page);
+  const sheet = await fillNewPlan(page, workspace, PLAN_GOAL, [
+    { service: "فحص شامل", count: "1", gap: "0" },
+    { service: "كشف عام", count: "6", gap: "7" },
+  ]);
+  await sheet.getByLabel(PLAN.diagnosisField, { exact: true }).fill(PLAN_DIAGNOSIS);
+  await expect(sheet.getByRole("list", { name: PLAN.previewHeading, exact: true }).getByRole("listitem")).toHaveCount(7);
+  await expect(sheet.getByRole("region", { name: PLAN.previewHeading, exact: true })).toContainText("2,300 ج.م");
+  await shootTallSheet(page, sheet, "care-plan-create", tallHeight());
+});
+
+test("@screenshot care-plan-sheet", async ({ page }) => {
+  const workspace = await karimWorkspaceOnPlanDay(page);
+  const created = await fillNewPlan(page, workspace, PLAN_GOAL, [
+    { service: "فحص شامل", count: "1", gap: "0" },
+    { service: "كشف عام", count: "9", gap: "7" },
+  ]);
+  await created.getByLabel(PLAN.diagnosisField, { exact: true }).fill(PLAN_DIAGNOSIS);
+  await created.getByRole("button", { name: PLAN.startAction, exact: true }).click();
+  await expect(created.getByRole("heading", { name: PLAN.sessionsHeading, exact: true })).toBeVisible();
+
+  // Sessions 1–5: visits of the five weeks before PLAN_DAY, done; 1–3 paid.
+  await syncSettled(page);
+  type Stored = Record<string, unknown> & { id: string };
+  const visits = await readStore<Stored>(page, "visits");
+  const karim = (await readStore<Stored>(page, "patients")).find((patient) => patient.full_name === PATIENTS.karim)!;
+  const today = visits.find((visit) => visit.patient_id === karim.id && visit.visit_date === PLAN_DAY)!;
+  const items = (await readStore<Stored & { sequence: number; price: number }>(page, "care_plan_items")).sort(
+    (a, b) => a.sequence - b.sequence,
+  );
+  const rows: { store: string; value: unknown }[] = [];
+  for (const [index, item] of items.slice(0, 5).entries()) {
+    const day = addDaysToClinicDay(PLAN_DAY, -35 + index * 7);
+    const at = cairoInstant(day, "09:00");
+    const visitId = `plan-visit-${index + 1}`;
+    rows.push({
+      store: "visits",
+      value: {
+        ...today,
+        id: visitId,
+        visit_date: day,
+        position: 1,
+        scheduled_at: at,
+        unique_scheduled_at: at,
+        status: "completed",
+        service_id: item.service_id,
+        arrived_at: at,
+        started_at: at,
+        ended_at: cairoInstant(day, "09:30"),
+        created_at: at,
+      },
+    });
+    rows.push({ store: "care_plan_items", value: { ...item, visit_id: visitId } });
+    if (index < 3) {
+      const invoiceId = `plan-invoice-${index + 1}`;
+      rows.push({
+        store: "invoices",
+        value: {
+          id: invoiceId,
+          org_id: today.org_id,
+          location_id: today.location_id,
+          number: index + 1,
+          issued_year: 2026,
+          series: 9,
+          patient_id: karim.id,
+          practitioner_id: today.practitioner_id,
+          visit_id: visitId,
+          total: item.price,
+          paid: item.price,
+          status: "paid",
+          issued_at: at,
+          rev: 1,
+        },
+      });
+      rows.push({
+        store: "payments",
+        value: {
+          id: `plan-payment-${index + 1}`,
+          invoice_id: invoiceId,
+          location_id: today.location_id,
+          amount: item.price,
+          method: "cash",
+          receipt_number: String(index + 1),
+          series: 9,
+          note: null,
+          after_close: false,
+          created_by: today.created_by,
+          created_at: at,
+          rev: 1,
+        },
+      });
+    }
+  }
+  await putRows(page, rows);
+  await reloadAs(page, { name: OWNER_NAME, pin: OWNER_PIN });
+
+  // Session 6, booked from the plan for today at 09:30.
+  await rowFor(page, PATIENTS.karim).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: new RegExp(PLAN.badgePrefix) }).click();
+  const sheet = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: PLAN.sheetTitle, exact: true }) });
+  await expect(sheet.getByText("5 / 10 جلسة", { exact: true })).toBeVisible();
+  await sheet.getByRole("button", { name: PLAN.bookNext, exact: true }).click();
+  const booking = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: new RegExp(`^${S.bookingButtonLabel}`) }) });
+  await booking.getByRole("button", { name: "09:30", exact: true }).click();
+  await booking.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
+  await expect(booking).toBeHidden();
+  await expect(sheet.getByText(PLAN.stateNext, { exact: true })).toBeVisible();
+  await expect(sheet.getByText(PLAN.stateSuggested, { exact: true })).toHaveCount(4);
+  await expect(sheet).toContainText(`${PLAN.paidLabel} 1,100 ج.م`);
+  await shootTallSheet(page, sheet, "care-plan-sheet", tallHeight());
 });
