@@ -1,0 +1,84 @@
+// Arabic strings for the care plan (reference screen 17, "خطة الرعاية"),
+// its create and edit forms, and its entry points in the visit workspace
+// (screen 10's `.plan-badge`).
+export const carePlanStrings = {
+  sheetTitle: "خطة الرعاية",
+  loadingLabel: "جارٍ التحميل...",
+
+  // screen 10's `.plan-badge`, and the button that starts a plan.
+  badgeIcon: "۩",
+  badgePrefix: "خطة رعاية جارية:",
+  startPlan: "ابدأ خطة رعاية",
+
+  // `.plan-hero`
+  goalLabel: "الهدف:",
+  diagnosisLabel: "التشخيص:",
+  sessionsOne: "جلسة واحدة",
+  sessionsTwo: "جلستين",
+  sessionsFew: "جلسات",
+  sessionsMany: "جلسة",
+  progressLabel: "التقدم",
+  progressUnit: "جلسة",
+  startedLabel: "بدأت:",
+  expectedEndLabel: "متوقع الانتهاء:",
+  totalLabel: "الإجمالي:",
+  paidLabel: "المدفوع:",
+  currencyUnit: "ج.م",
+  noDate: "—",
+  stoppedLine: "الخطة متوقفة",
+  completedLine: "الخطة اكتملت",
+
+  // The sessions card: `.c-head` and `.plan-sessions`.
+  sessionsBadge: "الجلسات",
+  sessionsHeading: "جدول الجلسات",
+  doneSuffix: "تمّت",
+  remainingSuffix: "متبقية",
+  doctorPrefix: "د.",
+  minutesUnit: "دقيقة",
+  suggestedMeta: "مقترح",
+  stateDone: "تمّت",
+  stateBooked: "محجوزة",
+  stateNext: "التالية",
+  stateSuggested: "مقترحة",
+  stateSkipped: "مؤجلة",
+  skipAction: "أجّل",
+  unskipAction: "رجّع",
+
+  // `.split`
+  bookNext: "احجز الجلسة التالية",
+  nextBookedPrefix: "الجلسة التالية محجوزة",
+  editPlan: "عدّل الخطة",
+  sendReminder: "أرسل تذكير للمريض",
+  bookFirst: "احجز الجلسة الأول",
+
+  // The create and edit forms.
+  createHeading: "خطة رعاية جديدة",
+  editHeading: "تعديل الخطة",
+  goalField: "الهدف",
+  goalPlaceholder: "مثال: استعادة كامل حركة الركبة",
+  diagnosisField: "التشخيص",
+  groupHeading: "نوع الجلسات",
+  serviceField: "الخدمة",
+  countField: "عدد الجلسات",
+  gapField: "كل كام يوم",
+  addGroup: "＋ نوع جلسات تاني",
+  addSessions: "＋ ضيف جلسات",
+  removeGroup: "شيل",
+  previewHeading: "الجلسات اللي هتتعمل",
+  previewTotal: "الإجمالي",
+  startAction: "ابدأ الخطة",
+  saveAction: "احفظ",
+  cancelAction: "إلغاء",
+  stopPlan: "وقّف الخطة",
+  resumePlan: "رجّع الخطة",
+
+  // Validation, and db/carePlans.ts's refusals as the doctor reads them.
+  errorGoalRequired: "اكتب الهدف",
+  errorDiagnosisRequired: "اكتب التشخيص",
+  errorCountInvalid: "عدد الجلسات لازم يكون 1 أو أكتر",
+  errorGapInvalid: "عدد الأيام لازم يكون 0 أو أكتر",
+  errorServiceRequired: "اختار الخدمة",
+  errorPlanAlreadyActive: "المريض عنده خطة رعاية جارية مع الدكتور ده",
+  errorNotPlanPractitioner: "الخطة بيعدّلها دكتور الخطة بس",
+  errorFailed: "ما اتحفظش، جرّب تاني",
+} as const;

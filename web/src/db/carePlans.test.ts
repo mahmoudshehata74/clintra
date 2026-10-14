@@ -244,6 +244,38 @@ describe("createCarePlan", () => {
   });
 });
 
+describe("one plan under way per patient and practitioner", () => {
+  it("refuses a second plan while one is under way, and writes nothing", async () => {
+    const { visit } = await makePlan();
+    const before = await writeCounts();
+    await expect(createCarePlan(db, { visitId: visit.id, goal: "هدف", diagnosis: "تشخيص", sessions: groups() })).rejects.toThrow(
+      CarePlanError.PlanAlreadyActive,
+    );
+    expect(await writeCounts()).toEqual(before);
+  });
+
+  it("allows a new plan once the first is stopped or completed, and refuses to resume the first while the new one is under way", async () => {
+    const { plan, visit } = await makePlan();
+    await stopCarePlan(db, plan.id);
+    const second = await createCarePlan(db, { visitId: visit.id, goal: "هدف", diagnosis: "تشخيص", sessions: [{ serviceId: physio.id, count: 1, gapDays: 0 }] });
+    await expect(resumeCarePlan(db, plan.id)).rejects.toThrow(CarePlanError.PlanAlreadyActive);
+    expect((await db.care_plans.get(plan.id))?.status).toBe(CarePlanStatus.Stopped);
+
+    // The second plan's only session done: it is completed, so a third may start and the first may resume.
+    const booked = await bookSession(second.items[0], "2026-10-27");
+    await db.visits.update(booked.id, { status: VisitStatus.Completed });
+    expect(await resumeCarePlan(db, plan.id)).not.toBeNull();
+    expect((await db.care_plans.get(plan.id))?.status).toBe(CarePlanStatus.Active);
+  });
+
+  it("does not count another patient's plan", async () => {
+    await makePlan();
+    const otherPatient = (await db.patients.toArray())[1];
+    const visit = await makeVisit({ patient_id: otherPatient.id, position: 40 });
+    await expect(createCarePlan(db, { visitId: visit.id, goal: "هدف", diagnosis: "تشخيص", sessions: groups() })).resolves.toBeTruthy();
+  });
+});
+
 describe("plan edits", () => {
   it("updates the goal and diagnosis, and writes nothing when they are unchanged", async () => {
     const { plan } = await makePlan();

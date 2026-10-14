@@ -11,6 +11,7 @@ import {
   carePlanTotals,
   deriveCarePlanSessions,
   isCarePlanCompleted,
+  isCarePlanOngoing,
   nextSuggestedSession,
   type SessionVisit,
 } from "./carePlan";
@@ -153,6 +154,18 @@ describe("plan totals, end and completion", () => {
     ]);
     expect(nextSuggestedSession(sessions)?.item.sequence).toBe(3);
     expect(nextSuggestedSession(derive([item(1, { visit_id: "done-1" })], [visit("done-1", VisitStatus.Completed, "2026-10-01")]))).toBeNull();
+  });
+});
+
+describe("isCarePlanOngoing", () => {
+  const visits = [visit("done-1", VisitStatus.Completed, "2026-10-01")];
+  it.each<[string, CarePlanStatus, CarePlanItem[], boolean]>([
+    ["active with a session left", CarePlanStatus.Active, [item(1, { visit_id: "done-1" }), item(2)], true],
+    ["active with every session skipped", CarePlanStatus.Active, [item(1, { status: CarePlanItemStatus.Skipped })], true],
+    ["active and completed", CarePlanStatus.Active, [item(1, { visit_id: "done-1" })], false],
+    ["stopped", CarePlanStatus.Stopped, [item(1), item(2)], false],
+  ])("is under way or not when %s", (_label, status, items, ongoing) => {
+    expect(isCarePlanOngoing({ status }, derive(items, visits))).toBe(ongoing);
   });
 });
 

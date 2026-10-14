@@ -4,6 +4,7 @@ import {
   carePlanTotals,
   CarePlanSessionState,
   deriveCarePlanSessions,
+  isCarePlanOngoing,
   type SessionVisit,
 } from "../domain/carePlan";
 import { id } from "../domain/id";
@@ -53,6 +54,8 @@ export const CarePlanError = {
   SessionMismatch: "care_plan_session_mismatch",
   /** A stopped plan's sessions cannot be booked until it is resumed. */
   PlanStopped: "care_plan_stopped",
+  /** The patient already has a plan under way (active, not completed) with this practitioner: creating or resuming another is refused. */
+  PlanAlreadyActive: "plan_already_active",
 } as const;
 
 export type CarePlanError = (typeof CarePlanError)[keyof typeof CarePlanError];
@@ -217,6 +220,31 @@ async function refreshPlan(write: AtomicWriter, db: ClintraDatabase, planId: str
   }
 }
 
+/**
+ * Refuses (plan_already_active) when the patient has a plan under way —
+ * active and not completed — with the practitioner, other than `exceptPlanId`.
+ * Reads the patient's plans on every path, so it keeps the transaction.
+ */
+async function assertNoOngoingPlan(
+  db: ClintraDatabase,
+  patientId: string,
+  practitionerId: string,
+  exceptPlanId: string | null,
+): Promise<void> {
+  const plans = await db.care_plans.where("patient_id").equals(patientId).toArray();
+  const candidates = plans.filter(
+    (plan) => plan.practitioner_id === practitionerId && plan.id !== exceptPlanId && plan.status === CarePlanStatus.Active,
+  );
+  for (const plan of candidates) {
+    const items = await loadPlanItems(db, plan.id);
+    const visitIds = linkedVisitIds(items);
+    const visits = visitIds.length === 0 ? [] : await db.visits.bulkGet(visitIds);
+    if (isCarePlanOngoing(plan, deriveCarePlanSessions(items, visitsById(visits), new Map()))) {
+      throw new Error(CarePlanError.PlanAlreadyActive);
+    }
+  }
+}
+
 const PLAN_TABLES = (db: ClintraDatabase) => [
   db.care_plans,
   db.care_plan_items,
@@ -241,7 +269,9 @@ export async function carePlanDraftForVisit(db: ClintraDatabase, visitId: string
  * previous one (the first session's gap is 0); the template the visit form
  * resolves (the general one). planned_count, total_price and expected_end
  * are derived from the sessions; paid is 0 and stays 0. One transaction:
- * the plan and every session together, or nothing.
+ * the plan and every session together, or nothing. Refused
+ * (plan_already_active) while the patient has a plan under way — active
+ * and not completed — with the visit's practitioner.
  */
 export async function createCarePlan(db: ClintraDatabase, input: CreateCarePlanInput): Promise<CarePlanWithItems> {
   const goal = requiredText(input.goal, CarePlanError.GoalRequired);
@@ -255,6 +285,7 @@ export async function createCarePlan(db: ClintraDatabase, input: CreateCarePlanI
       throw new Error(CarePlanError.VisitNotFound);
     }
     assertPlanPractitioner(actor, visit.practitioner_id);
+    await assertNoOngoingPlan(db, visit.patient_id, visit.practitioner_id, null);
     const template = await findGeneralSpecialtyTemplate(db);
 
     const now = new Date().toISOString();
@@ -425,7 +456,13 @@ async function setPlanStatus(db: ClintraDatabase, planId: string, status: CarePl
   return runAtomicMutations(db, PLAN_TABLES(db), async (write) => {
     const before = await loadPlanForEdit(db, planId, actor);
     const after = { ...before, status };
-    return samePlanFields(before, after) ? null : writePlanUpdate(write, db, before, after, actor.id);
+    if (samePlanFields(before, after)) {
+      return null;
+    }
+    if (status === CarePlanStatus.Active) {
+      await assertNoOngoingPlan(db, before.patient_id, before.practitioner_id, before.id);
+    }
+    return writePlanUpdate(write, db, before, after, actor.id);
   });
 }
 
@@ -434,7 +471,7 @@ export function stopCarePlan(db: ClintraDatabase, planId: string): Promise<strin
   return setPlanStatus(db, planId, CarePlanStatus.Stopped);
 }
 
-/** "رجّع الخطة". Null, writing nothing, when it is already active. */
+/** "رجّع الخطة". Null, writing nothing, when it is already active; refused (plan_already_active) while another plan of the patient's with this practitioner is under way. */
 export function resumeCarePlan(db: ClintraDatabase, planId: string): Promise<string | null> {
   return setPlanStatus(db, planId, CarePlanStatus.Active);
 }
