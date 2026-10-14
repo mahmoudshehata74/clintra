@@ -362,8 +362,12 @@ export function computeDayList(visits: readonly Visit[], isQueueMode: boolean): 
   return orderLikeDayScreen(visits, isQueueMode);
 }
 
-/** The day list's per-row action: review a finished visit, open the one in the room, or call a waiting one in. */
-export type DayListAction = "review" | "open" | "call" | null;
+/**
+ * The day list's per-row action: review a finished visit, open the one in
+ * the room, call a waiting one in, or — for a booked visit whose patient has
+ * not arrived yet — open the patient's profile (`.doc-item .go` "افتح الملف").
+ */
+export type DayListAction = "review" | "open" | "call" | "profile" | null;
 
 export function dayListAction(visit: Visit): DayListAction {
   if (visit.status === VisitStatus.Completed) {
@@ -371,6 +375,9 @@ export function dayListAction(visit: Visit): DayListAction {
   }
   if (visit.status === VisitStatus.InRoom) {
     return "open";
+  }
+  if (visit.status === VisitStatus.Booked || visit.status === VisitStatus.Confirmed) {
+    return "profile";
   }
   return canCallIn(visit) ? "call" : null;
 }

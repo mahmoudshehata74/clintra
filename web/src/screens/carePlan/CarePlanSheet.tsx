@@ -356,7 +356,8 @@ function Meta({ parts }: { parts: readonly MetaPart[] }) {
       {parts.map((part, index) => (
         <span key={index}>
           {index > 0 && " · "}
-          {part.strong ? <b>{part.text}</b> : <NumberText text={part.text} />}
+          {/* `.meta b`: the doctor and "مقترح" in bold, the meta's own colour. */}
+          {part.strong ? <b className="font-bold">{part.text}</b> : <NumberText text={part.text} />}
         </span>
       ))}
     </div>

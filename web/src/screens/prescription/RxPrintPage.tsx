@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Ltr from "../../components/Ltr";
 import SlashDate from "../../components/SlashDate";
+import RxDoseText from "../visit/RxDoseText";
 import { PrintPage } from "../day/PrintPage";
 import type { RxPrintDrug, RxPrintModel } from "./printModel";
 import { prescriptionPrintStrings as T } from "./strings";
@@ -21,14 +22,14 @@ import { prescriptionPrintStrings as T } from "./strings";
  * A drug never splits across two pages, and `.rx-sig` stays on the page of
  * the last drug: the two share one unbreakable block. Colours on paper are
  * the plain black/white/grey keywords design-rule.md's print exception
- * allows; the screen-only `.rx-print-header` uses the warning tokens.
+ * allows; the screen-only `.rx-print-header` uses the `print-note` tokens.
  */
 export default function RxPrintPage({ model, preview }: { model: RxPrintModel; preview: boolean }) {
   const lastDrug = model.drugs.at(-1);
   return (
     <RxPaper preview={preview}>
       {preview && (
-        <p className="mb-5 rounded-control border-[1.5px] border-dashed border-warning bg-warning-wash px-3.5 py-3 text-center text-xs font-semibold text-warning">
+        <p className="mb-5 rounded-control border-[1.5px] border-dashed border-print-note-line bg-print-note px-3.5 py-3 text-center text-xs font-semibold text-print-note-ink">
           {T.previewNote}
         </p>
       )}
@@ -67,8 +68,8 @@ export default function RxPrintPage({ model, preview }: { model: RxPrintModel; p
         )}
       </div>
 
-      {/* `.rx-title`, its `::after` rule drawn as a span */}
-      <div dir="ltr" className="mb-2.5 flex items-baseline gap-2 text-[15px] font-bold text-black">
+      {/* `.rx-title`, its `::after` rule drawn as a span: "Rx" on the right, the rule running left. */}
+      <div className="mb-2.5 flex items-baseline gap-2 text-[15px] font-bold text-black">
         Rx
         <span aria-hidden="true" className="flex-1 border-b-[1.5px] border-black" />
       </div>
@@ -119,7 +120,9 @@ function RxDrug({ drug, isLast }: { drug: RxPrintDrug; isLast: boolean }) {
         <p className="text-[14.5px] font-bold tracking-[-0.005em] text-black">
           <Ltr>{drug.name}</Ltr>
         </p>
-        <p className="mt-[3px] text-xs text-black/80 tabular-nums">{drug.dose}</p>
+        <p className="mt-[3px] text-xs text-black/80 tabular-nums">
+          <RxDoseText line={drug.dose} strongClassName="font-semibold text-black" />
+        </p>
         {drug.note && <p className="mt-0.5 text-[11.5px] text-black/60 italic">{drug.note}</p>}
       </div>
     </li>
@@ -149,7 +152,7 @@ function DoctorSpec({ spec }: { spec: NonNullable<RxPrintModel["doctorSpec"]> })
  * The second `.doc-spec` line: the clinic, from printClinic like every other
  * printed page — not PrintClinicBlock's centred block but, as `.rx-doc`
  * shows it, one line ("{organization} · {location} · {address}
- * · {phone}"), the phone its own left-to-right run.
+ * · هاتف: {phone}"), the phone its own left-to-right run.
  */
 function ClinicSpec({ clinic }: { clinic: RxPrintModel["clinic"] }) {
   const parts = [...(clinic.title ? [clinic.title] : []), ...clinic.details];
@@ -161,7 +164,13 @@ function ClinicSpec({ clinic }: { clinic: RxPrintModel["clinic"] }) {
       {parts.map((part, index) => (
         <span key={index}>
           {index > 0 && " · "}
-          {clinic.phone !== null && index === parts.length - 1 ? <Ltr>{part}</Ltr> : part}
+          {clinic.phone !== null && index === parts.length - 1 ? (
+            <>
+              {T.clinicPhonePrefix} <Ltr>{part}</Ltr>
+            </>
+          ) : (
+            part
+          )}
         </span>
       ))}
     </p>

@@ -7,7 +7,7 @@ import { formatSlashDate } from "../../domain/slashDate";
 import { todayInCairo } from "../../domain/time";
 import type { PrintClinicLines } from "../day/printClinic";
 import { computeAge } from "../doctor/doctorDay";
-import { rxDoseLine, sortRxItems } from "../visit/workspace";
+import { rxDoseLine, sortRxItems, type RxDoseLine } from "../visit/workspace";
 import { prescriptionPrintStrings as T } from "./strings";
 
 // Pure derivations behind the printed prescription (reference screen 16).
@@ -23,8 +23,8 @@ export interface RxPrintDrug {
   number: number;
   /** `.n`: "name — form", or the name alone without a form. Rendered left to right. */
   name: string;
-  /** `.dose`: "instructions · duration". */
-  dose: string;
+  /** `.dose`: the instructions and the duration ("· لمدة {duration}", the duration in bold). */
+  dose: RxDoseLine;
   /** `.note`; null when empty. */
   note: string | null;
 }
@@ -90,9 +90,9 @@ export function buildRxPrintModel(input: RxPrintInput): RxPrintModel {
     diagnosis:
       prescription.printed_at !== null ? nonEmpty(prescription.diagnosis) : nonEmpty(input.visitForm.diagnosis),
     drugs: sortRxItems(input.items).map((item, index) => {
-      const { dose, note } = rxDoseLine(item);
+      const dose = rxDoseLine(item);
       const form = nonEmpty(item.form);
-      return { number: index + 1, name: form ? `${item.name} — ${form}` : item.name, dose, note };
+      return { number: index + 1, name: form ? `${item.name} — ${form}` : item.name, dose, note: dose.note };
     }),
   };
 }

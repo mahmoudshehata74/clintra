@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useGuardedActingMembership } from "../../auth/useActingMembership";
 import Ltr from "../../components/Ltr";
+import RxDoseText from "./RxDoseText";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import { CardFooter } from "../../components/ui/Card";
@@ -578,20 +579,21 @@ function RxItemRow({
   onEdit: () => void;
   onRemove: () => void;
 }) {
-  const { dose, note } = rxDoseLine(item);
+  const line = rxDoseLine(item);
   const content = (
     <>
       <div className="text-[13px] font-bold text-text">
         <Ltr>{item.name}</Ltr>
       </div>
       <div className="mt-0.5 text-[11px] text-muted tabular-nums">
-        {dose}
-        {note && <span className="text-faint"> · {note}</span>}
+        <RxDoseText line={line} strongClassName="font-semibold text-text" />
+        {line.note && <span className="text-faint"> · {line.note}</span>}
       </div>
     </>
   );
   return (
-    <li className="grid grid-cols-[1fr_auto] items-center gap-2.5 rounded-control border border-rule bg-field px-3 py-2.5">
+    // `.rx-item`: the grid's default stretch, so `.rm` "حذف" spans the item's height.
+    <li className="grid grid-cols-[1fr_auto] gap-2.5 rounded-control border border-rule bg-field px-3 py-2.5">
       {canEdit ? (
         <button
           type="button"

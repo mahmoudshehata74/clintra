@@ -315,6 +315,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
                     : undefined
                 }
                 onOpenVisitForm={() => setVisitFormVisitId(visit.id)}
+                onOpenProfile={() => setProfilePatientId(visit.patient_id)}
                 callButton={callButton(visit, T.callInShort, "secondary", "sm")}
               />
             ))}
@@ -894,6 +895,8 @@ interface DayListRowProps {
   missingDiagnosis: boolean;
   previousVisitLabel: string | undefined;
   onOpenVisitForm: () => void;
+  /** A booked row's "افتح الملف": the patient profile sheet. */
+  onOpenProfile: () => void;
   callButton: ReactNode;
 }
 
@@ -908,6 +911,7 @@ function DayListRow({
   missingDiagnosis,
   previousVisitLabel,
   onOpenVisitForm,
+  onOpenProfile,
   callButton,
 }: DayListRowProps) {
   const action = dayListAction(visit);
@@ -1009,6 +1013,11 @@ function DayListRow({
           </Button>
         )}
         {action === "call" && callButton}
+        {action === "profile" && patient && (
+          <Button variant="secondary" size="sm" onClick={onOpenProfile}>
+            {patientProfileStrings.openProfile}
+          </Button>
+        )}
       </div>
     </li>
   );
