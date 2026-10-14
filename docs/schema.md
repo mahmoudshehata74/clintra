@@ -927,7 +927,9 @@ Derived, never stored (`web/src/domain/carePlan.ts`, pure):
   previous (not skipped) session's date plus its own `min_gap_days`;
   otherwise none, and it reads "جلسة {n}". Its **label** is its service's
   name.
-- A plan is **completed** when every session not skipped is done, and
+- A plan is **completed** when every session not skipped is done and at
+  least one is (a plan whose every session is skipped reads as active with
+  nothing to book), and
   **stalled** when it is active, nothing is booked and the next suggested
   session's date is more than 7 days past: "المريض متوقف من N يوم"
   (`arabicCount`).
@@ -975,7 +977,18 @@ The audit log reads "بدأ خطة رعاية", "عدّل خطة رعاية", "�
 "أجّل جلسة", "رجّع جلسة", "وقّف الخطة" and "رجّع الخطة"; a session's link
 reads as its visit's write ("سجّل حجز" when booked, "نقل الميعاد" when
 moved, "عدّل خطة رعاية" when a cancel or no-show clears it). Never a goal or
-a diagnosis. The audit sheet does not list either table yet.
+a diagnosis. The audit sheet lists both under "الزيارات", naming the
+patient; a session's row is scoped through its plan, as a prescription
+item's is through its prescription.
+
+Undoing a visit write (`undoMostRecentVisitMutation`, `db/visitUndo.ts`)
+puts back the session links that write changed, in the undo's own
+transaction and queued before the visit's own reversal: undoing a cancel or
+a no-show relinks the session, undoing a move's new visit carries it back to
+the original visit before that new visit is deleted, undoing a session's
+booking unlinks it before the visit is deleted. A session changed since
+keeps its later link. Sync ops are stamped strictly in write order per tab,
+so they push in that order.
 
 Server (`2026_09_12_000030_make_care_plans_syncable.php`): the policies
 become the visits expression (org + allowed locations + allowed

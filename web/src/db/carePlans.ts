@@ -16,6 +16,7 @@ import {
   AuditAction,
   CarePlanItemStatus,
   CarePlanStatus,
+  type AuditLog,
   type CarePlan,
   type CarePlanItem,
   type Membership,
@@ -562,6 +563,77 @@ export function clearSessionLinks(
   actorId: string,
 ): Promise<void> {
   return relinkSessions(write, db, visit.id, null, actorId, visit.org_id);
+}
+
+/** A session link a visit's undo puts back: the session as it stands, and as it was before the visit's write moved its link. */
+export interface SessionLinkRestore {
+  before: CarePlanItem;
+  after: CarePlanItem;
+}
+
+/**
+ * The session links a visit write changed along with it, to put back when
+ * that write is undone (db/visitUndo.ts). The visit writers above change a
+ * link in the visit's own transaction, right after the visit, so those
+ * links are the care_plan_items rows that directly follow the visit's audit
+ * row — with the plan's refreshed fields between them — before any row of
+ * another entity. A link is put back only while that row is still the
+ * session's latest write and the session still points where the row left
+ * it; a session changed since keeps its later link.
+ *
+ * Null when the undo deletes the visit (it reverses a create) and a session
+ * would still link to it: the server refuses that delete on the foreign
+ * key, so the caller refuses the undo instead of queueing it.
+ */
+export async function sessionLinksToRestore(db: ClintraDatabase, visitAuditRow: AuditLog): Promise<SessionLinkRestore[] | null> {
+  const later = await db.audit_log.where("seq").above(visitAuditRow.seq).toArray();
+  const carried: AuditLog[] = [];
+  for (const row of later) {
+    if (row.entity !== "care_plan_items" && row.entity !== "care_plans") {
+      break;
+    }
+    if (row.entity === "care_plan_items" && row.action === AuditAction.Update) {
+      carried.push(row);
+    }
+  }
+
+  const restores: SessionLinkRestore[] = [];
+  for (const row of carried) {
+    const latest = later.filter((candidate) => candidate.entity === row.entity && candidate.entity_id === row.entity_id).at(-1);
+    const linkBefore = (row.before as CarePlanItem).visit_id;
+    const linkAfter = (row.after as CarePlanItem).visit_id;
+    const current = await db.care_plan_items.get(row.entity_id);
+    if (latest?.id === row.id && current && linkBefore !== linkAfter && current.visit_id === linkAfter) {
+      restores.push({ before: current, after: { ...current, visit_id: linkBefore } });
+    }
+  }
+
+  const stillLinked = await db.care_plan_items.where("visit_id").equals(visitAuditRow.entity_id).toArray();
+  const deletesVisit = visitAuditRow.action === AuditAction.Create;
+  if (deletesVisit && stillLinked.some((item) => !restores.some((restore) => restore.before.id === item.id))) {
+    return null;
+  }
+  return restores;
+}
+
+/**
+ * After a visit's undo (and its link restores) are written: rewrites the
+ * derived fields of every plan a restored session belongs to and of every
+ * plan with a session linked to the visit, since the visit's status or day
+ * may have changed under it.
+ */
+export async function refreshPlansAfterVisitUndo(
+  write: AtomicWriter,
+  db: ClintraDatabase,
+  visitId: string,
+  restores: readonly SessionLinkRestore[],
+  actorId: string,
+): Promise<void> {
+  const linked = await db.care_plan_items.where("visit_id").equals(visitId).toArray();
+  const planIds = new Set([...restores.map((restore) => restore.before.care_plan_id), ...linked.map((item) => item.care_plan_id)]);
+  for (const planId of planIds) {
+    await refreshPlan(write, db, planId, actorId);
+  }
 }
 
 /**

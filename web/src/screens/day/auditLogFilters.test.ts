@@ -56,6 +56,21 @@ describe("filterAuditRows", () => {
     expect(filterAuditRows(withRx, "visits", AuditAction.Delete).map((r) => r.entity)).toEqual(["prescription_items"]);
     expect(filterAuditRows(withRx, "invoices", "all").map((r) => r.entity)).toEqual(["invoices"]);
   });
+
+  it("lists care_plans and care_plan_items rows under the visits filter", () => {
+    const withPlan = [
+      ...rows,
+      row({ entity: "care_plans", action: AuditAction.Create }),
+      row({ entity: "care_plan_items", action: AuditAction.Update }),
+    ];
+    expect(filterAuditRows(withPlan, "visits", "all").map((r) => r.entity)).toEqual([
+      "visits",
+      "visits",
+      "care_plans",
+      "care_plan_items",
+    ]);
+    expect(filterAuditRows(withPlan, "patients", "all").map((r) => r.entity)).toEqual(["patients"]);
+  });
 });
 
 describe("isAuditRowInScope", () => {

@@ -134,6 +134,10 @@ describe("plan totals, end and completion", () => {
     ["a skipped session left", [item(1, { visit_id: "done-1" }), item(2, { status: CarePlanItemStatus.Skipped })], true],
     ["a booked session left", [item(1, { visit_id: "done-1" }), item(2, { visit_id: "booked-1" })], false],
     ["a suggested session left", [item(1, { visit_id: "done-1" }), item(2)], false],
+    ["one done session alone", [item(1, { visit_id: "done-1" })], true],
+    ["every session skipped", [item(1, { status: CarePlanItemStatus.Skipped }), item(2, { status: CarePlanItemStatus.Skipped })], false],
+    ["no session at all", [], false],
+    ["only suggested sessions", [item(1), item(2)], false],
   ])("is completed or not with %s", (_label, items, completed) => {
     const sessions = derive(items, [
       visit("done-1", VisitStatus.Completed, "2026-10-01"),

@@ -137,14 +137,10 @@ implements:
 4. Stored statuses are only active/stopped and planned/skipped; done, booked, suggested, dates, completed and stalled are derived.
 5. Edits (goal, diagnosis, added sessions, skip/unskip, stop/resume) are the plan practitioner's only, enforced on the device; nothing is deleted.
 
-Open before screen 17: the day screen's undo of a move, cancel or no-show
-reverses the visit write only, not the session link it carried — undoing a
-moved session's visit would leave its session linked to a deleted visit
-(the server refuses that delete on the foreign key). A screen that books
-sessions must reverse the link with the visit, or not offer undo for a
-session's visit. The audit sheet does not list care plan rows yet
-(`care_plan_items` needs the join-based scope check `prescription_items`
-has).
+Before screen 17 (done): undoing a move, a cancel or a no-show (and a
+session's booking) restores the session link with the visit, in the same
+transaction (`db/visitUndo.ts`); a plan is completed only with at least one
+done session; the audit sheet lists care plan rows under "الزيارات".
 
 This changes the earlier plan below ("templates seeded by migration"):
 defaults now ship with the app and only overrides live in the database,

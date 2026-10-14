@@ -41,6 +41,7 @@ import { cancelVisit, markVisitNoShow } from "./visitCancel";
 import { completeVisitWithInvoice } from "./visitCompletion";
 import { saveVisitFormField } from "./visitForm";
 import { moveVisit } from "./visitMove";
+import { undoMostRecentVisitMutation } from "./visitUndo";
 
 let db: ClintraDatabase;
 let practitionerMembership: Membership;
@@ -442,6 +443,120 @@ describe("links kept by the visit writers", () => {
     await cancelVisit(db, visit.id, "clinic");
     expect((await writeCounts()).auditRows - before.auditRows).toBe(1);
     expect((await writeCounts()).syncOps - before.syncOps).toBe(1);
+  });
+});
+
+describe("undoing a visit write restores the session link with it", () => {
+  /** The queued ops in the order runSyncCycle pushes them (sync/engine.ts: by created_at). */
+  async function opsInPushOrder() {
+    return (await db.sync_ops.toArray()).sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
+  /**
+   * Replays the queued ops in push order as the server applies them, and
+   * returns every visit delete that a session would still point to at that
+   * moment — the deletes the server refuses on care_plan_items.visit_id's
+   * foreign key.
+   */
+  async function refusedVisitDeletes(): Promise<string[]> {
+    const links = new Map<string, string | null>();
+    const refused: string[] = [];
+    for (const op of await opsInPushOrder()) {
+      if (op.entity === "care_plan_items") {
+        links.set(op.entity_id, (op.payload as CarePlanItem).visit_id);
+      }
+      if (op.entity === "visits" && op.action === AuditAction.Delete && [...links.values()].includes(op.entity_id)) {
+        refused.push(op.entity_id);
+      }
+    }
+    return refused;
+  }
+
+  it("undoing a move carries the session back to the original visit and re-dates the plan", async () => {
+    const { plan, items } = await makePlan();
+    const booked = await bookSession(items[0], "2026-10-27");
+    const bookedEnd = (await db.care_plans.get(plan.id))!.expected_end;
+    const result = await moveVisit(db, { visitId: booked.id, toDate: "2026-11-03", toTime: slotTime(3), toSchedule: schedule });
+    if (!result.ok) throw new Error(result.reason);
+    const movedTo = (await db.care_plan_items.get(items[0].id))!.visit_id!;
+
+    // As DayScreen's "visit_move" undo: the new visit first, then the original.
+    expect(await undoMostRecentVisitMutation(db, result.newVisitAuditLogId)).toEqual({ ok: true });
+    expect(await undoMostRecentVisitMutation(db, result.oldVisitAuditLogId)).toEqual({ ok: true });
+
+    expect(await db.visits.get(movedTo)).toBeUndefined();
+    expect((await db.visits.get(booked.id))?.status).toBe(VisitStatus.Booked);
+    expect((await db.care_plan_items.get(items[0].id))?.visit_id).toBe(booked.id);
+    expect((await db.care_plans.get(plan.id))?.expected_end).toBe(bookedEnd);
+    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "سجّل حجز", "نقل الميعاد", "نقل الميعاد"]);
+  });
+
+  it("queues the session's restored link before the moved visit's delete, so the server never refuses that delete", async () => {
+    const { items } = await makePlan();
+    const booked = await bookSession(items[0], "2026-10-27");
+    const result = await moveVisit(db, { visitId: booked.id, toDate: "2026-11-03", toTime: slotTime(3), toSchedule: schedule });
+    if (!result.ok) throw new Error(result.reason);
+    const movedTo = (await db.care_plan_items.get(items[0].id))!.visit_id!;
+    await undoMostRecentVisitMutation(db, result.newVisitAuditLogId);
+    await undoMostRecentVisitMutation(db, result.oldVisitAuditLogId);
+
+    const ops = await opsInPushOrder();
+    const deleteIndex = ops.findIndex((op) => op.entity === "visits" && op.entity_id === movedTo && op.action === AuditAction.Delete);
+    const restoreIndex = ops.findLastIndex(
+      (op) => op.entity === "care_plan_items" && op.entity_id === items[0].id && (op.payload as CarePlanItem).visit_id === booked.id,
+    );
+    expect(deleteIndex).toBeGreaterThan(-1);
+    expect(restoreIndex).toBeGreaterThan(-1);
+    expect(restoreIndex).toBeLessThan(deleteIndex);
+    expect(await refusedVisitDeletes()).toEqual([]);
+  });
+
+  it.each<[string, (visitId: string) => Promise<string>]>([
+    ["a cancel", (visitId) => cancelVisit(db, visitId, "patient")],
+    ["a no-show", (visitId) => markVisitNoShow(db, visitId)],
+  ])("undoing %s relinks the session it freed and re-dates the plan, in one transaction", async (_label, free) => {
+    const { plan, items } = await makePlan();
+    const booked = await bookSession(items[0], "2026-10-27");
+    const bookedEnd = (await db.care_plans.get(plan.id))!.expected_end;
+    const auditLogId = await free(booked.id);
+    expect((await db.care_plan_items.get(items[0].id))?.visit_id).toBeNull();
+
+    const before = await writeCounts();
+    expect(await undoMostRecentVisitMutation(db, auditLogId)).toEqual({ ok: true });
+
+    expect((await db.visits.get(booked.id))?.status).toBe(VisitStatus.Booked);
+    expect((await db.care_plan_items.get(items[0].id))?.visit_id).toBe(booked.id);
+    expect((await db.care_plans.get(plan.id))?.expected_end).toBe(bookedEnd);
+    // The session, the visit and the plan's end: three writes, together.
+    expect((await writeCounts()).auditRows - before.auditRows).toBe(3);
+    expect(await verbsFor("care_plan_items", items[0].id)).toEqual(["أضاف جلسات للخطة", "سجّل حجز", "عدّل خطة رعاية", "سجّل حجز"]);
+  });
+
+  it("undoing a session's booking unlinks the session before the visit is deleted", async () => {
+    const { plan, items } = await makePlan();
+    const booked = await bookSession(items[0], "2026-10-27");
+    const bookingRow = (await db.audit_log.orderBy("seq").toArray()).find(
+      (row) => row.entity === "visits" && row.entity_id === booked.id,
+    )!;
+
+    expect(await undoMostRecentVisitMutation(db, bookingRow.id)).toEqual({ ok: true });
+
+    expect(await db.visits.get(booked.id)).toBeUndefined();
+    expect((await db.care_plan_items.get(items[0].id))?.visit_id).toBeNull();
+    expect((await db.care_plans.get(plan.id))?.expected_end).toBe(plan.started_at);
+    expect(await refusedVisitDeletes()).toEqual([]);
+  });
+
+  it("a session changed since keeps its later link", async () => {
+    const { items } = await makePlan();
+    const booked = await bookSession(items[0], "2026-10-27");
+    const auditLogId = await cancelVisit(db, booked.id, "patient");
+    const rebooked = await bookSession(items[0], "2026-11-03");
+
+    expect(await undoMostRecentVisitMutation(db, auditLogId)).toEqual({ ok: true });
+
+    expect((await db.visits.get(booked.id))?.status).toBe(VisitStatus.Booked);
+    expect((await db.care_plan_items.get(items[0].id))?.visit_id).toBe(rebooked.id);
   });
 });
 

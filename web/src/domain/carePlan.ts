@@ -124,9 +124,14 @@ export function carePlanExpectedEnd(startedAt: Instant, sessions: readonly CareP
   return end === null ? startedAt : cairoInstant(end, "00:00");
 }
 
-/** Whether every session not skipped is done. */
+/**
+ * Whether every session not skipped is done, with at least one done: a
+ * plan whose every session is skipped is not completed — it reads as
+ * active with nothing to book.
+ */
 export function isCarePlanCompleted(sessions: readonly CarePlanSession[]): boolean {
-  return countedSessions(sessions).every((session) => session.state === CarePlanSessionState.Done);
+  const counted = countedSessions(sessions);
+  return counted.length > 0 && counted.every((session) => session.state === CarePlanSessionState.Done);
 }
 
 /** The first suggested session in sequence order — "the next session" to book — or null. */

@@ -3,7 +3,7 @@ import Ltr from "../../components/Ltr";
 import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
-import type { AuditLog, ClinicDay, Membership, Patient, Prescription, User, Visit } from "../../db/types";
+import type { AuditLog, CarePlan, ClinicDay, Membership, Patient, Prescription, User, Visit } from "../../db/types";
 import { AuditAction } from "../../db/types";
 import { describeAuditVerb, describeVisitFormChange } from "../../domain/auditVerb";
 import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo } from "../../domain/time";
@@ -66,6 +66,8 @@ const AUDITED_ENTITIES = new Set([
   "practitioners",
   "messages",
   "message_templates",
+  "care_plans",
+  "care_plan_items",
 ]);
 
 function payloadOf(row: Pick<AuditLog, "before" | "after">): Record<string, unknown> | null {
@@ -144,6 +146,24 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         return typeof prescriptionId === "string" ? itemPrescriptionsById.get(prescriptionId) : undefined;
       }
 
+      // care_plan_items likewise: its payload carries only care_plan_id, and
+      // its plan carries the location, practitioner and patient.
+      const itemPlanIds = [
+        ...new Set(
+          candidateRows
+            .filter((row) => row.entity === "care_plan_items")
+            .map((row) => payloadOf(row)?.care_plan_id)
+            .filter((planId): planId is string => typeof planId === "string"),
+        ),
+      ];
+      const itemPlans = await db.care_plans.bulkGet(itemPlanIds);
+      const itemPlansById = new Map(itemPlans.filter((p): p is CarePlan => p != null).map((p) => [p.id, p]));
+
+      function itemPlanOf(row: AuditLog): CarePlan | undefined {
+        const planId = payloadOf(row)?.care_plan_id;
+        return typeof planId === "string" ? itemPlansById.get(planId) : undefined;
+      }
+
       function isInScope(row: AuditLog): boolean {
         if (row.entity === "visit_form_data") {
           const visitId = payloadOf(row)?.visit_id;
@@ -155,6 +175,10 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
           return prescription
             ? prescription.location_id === locationId && prescription.practitioner_id === practitionerId
             : false;
+        }
+        if (row.entity === "care_plan_items") {
+          const plan = itemPlanOf(row);
+          return plan ? plan.location_id === locationId && plan.practitioner_id === practitionerId : false;
         }
         // A practitioner's own row carries neither field, only its id: it
         // is in scope on that practitioner's log, at any location.
@@ -180,11 +204,15 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         if (row.entity === "prescription_items") {
           return itemPrescriptionOf(row)?.patient_id;
         }
+        if (row.entity === "care_plan_items") {
+          return itemPlanOf(row)?.patient_id;
+        }
         if (
           row.entity === "visits" ||
           row.entity === "invoices" ||
           row.entity === "prescriptions" ||
-          row.entity === "messages"
+          row.entity === "messages" ||
+          row.entity === "care_plans"
         ) {
           const patientId = payloadOf(row)?.patient_id;
           return typeof patientId === "string" ? patientId : undefined;
@@ -214,14 +242,17 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
           return "";
         }
         // A prescription's line names its patient, never a drug, its
-        // instructions or the diagnosis, and a message's never its body or
-        // phone (as their verbs, domain/auditVerb.ts).
+        // instructions or the diagnosis, a message's never its body or
+        // phone, and a care plan's never its goal or diagnosis (as their
+        // verbs, domain/auditVerb.ts).
         if (
           row.entity === "visits" ||
           row.entity === "invoices" ||
           row.entity === "prescriptions" ||
           row.entity === "prescription_items" ||
-          row.entity === "messages"
+          row.entity === "messages" ||
+          row.entity === "care_plans" ||
+          row.entity === "care_plan_items"
         ) {
           const patientId = patientIdOf(row);
           return patientId !== undefined ? (patientsById.get(patientId)?.full_name ?? "") : "";
