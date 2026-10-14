@@ -32,6 +32,7 @@ generates Tailwind utilities (`bg-*`, `text-*`, `border-*`, `rounded-*`,
 | `eligible` | `#186B4B` | Done, arrived, paid, matched. |
 | `warning` / `warning-wash` | `#96620B` / `#F7EEDA` | Delay, partial payment, needs attention. |
 | `danger` / `danger-wash` / `danger-line` | `#A32A21` / `#F7E3E0` / `#E4B9B4` | No-show, cancel, destructive actions, errors. |
+| `whatsapp` | `#25D366` | WhatsApp's own mark only: the messages screen's channel icon and toggle dot (`.msg-item .icn.wa`, `.msg-ch-toggle .wa`). |
 
 ## Radius and shadow
 

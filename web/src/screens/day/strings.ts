@@ -238,6 +238,8 @@ export const dayScreenStrings = {
 
   // The overflow menu's invoice entry, only shown once a visit has one.
   invoiceMenuLabel: "الفاتورة",
+  // The overflow menu's message entry (screens/messages/SendMessageSheet.tsx).
+  sendMessageMenuLabel: "ابعت رسالة",
 
   // The invoice sheet.
   invoiceNumberLabel: "رقم الفاتورة",

@@ -145,6 +145,23 @@ export type TemplatePlaceholder = (typeof TemplatePlaceholder)[keyof typeof Temp
 
 const KNOWN_PLACEHOLDERS: ReadonlySet<string> = new Set(Object.values(TemplatePlaceholder));
 
+/** Each known placeholder's Arabic label: the editor's `.var` chip, and the marker a missing value renders as. */
+export const PLACEHOLDER_LABELS: Record<TemplatePlaceholder, string> = {
+  [TemplatePlaceholder.PatientName]: "اسم المريض",
+  [TemplatePlaceholder.ClinicName]: "اسم العيادة",
+  [TemplatePlaceholder.ClinicPhone]: "هاتف العيادة",
+  [TemplatePlaceholder.Date]: "التاريخ",
+  [TemplatePlaceholder.Time]: "الوقت",
+  [TemplatePlaceholder.DoctorName]: "اسم الطبيب",
+  [TemplatePlaceholder.SessionLabel]: "الجلسة",
+  [TemplatePlaceholder.Balance]: "المبلغ المتبقي",
+};
+
+/** What a known placeholder with no value renders as: its label in square brackets, e.g. "[الجلسة]". */
+export function missingValueMarker(placeholder: TemplatePlaceholder): string {
+  return `[${PLACEHOLDER_LABELS[placeholder]}]`;
+}
+
 /** The values a template is rendered with. Raw values: each one goes through its domain formatter. */
 export interface TemplateValues {
   patient_name?: string | null;
@@ -160,7 +177,7 @@ export interface TemplateValues {
 
 export interface RenderedTemplate {
   text: string;
-  /** Known placeholders the body uses that had no value, in order of first use; each is left as written. */
+  /** Known placeholders the body uses that had no value, in order of first use; each renders as its missingValueMarker. */
   missing: TemplatePlaceholder[];
 }
 
@@ -193,9 +210,10 @@ const PLACEHOLDER_PATTERN = /\{\{([a-z_]+)\}\}/g;
  * through the existing domain formatters — the date as the app shows a clinic
  * day (Arabic weekday and month, Latin digits), the time as "HH:MM", money as
  * "12.50 ج.م", the clinic phone in the local display format. A known
- * placeholder with no value (missing, null or blank) is left as written and
- * reported in `missing`, so a screen can warn before sending; an unknown
- * {{token}} is left untouched and is not reported.
+ * placeholder with no value (missing, null or blank) renders as its Arabic
+ * label in square brackets ("[الجلسة]") — never as a raw {{token}} a patient
+ * would receive — and is reported in `missing`, so a screen can warn before
+ * sending; an unknown {{token}} is left untouched and is not reported.
  */
 export function renderTemplate(body: string, values: TemplateValues): RenderedTemplate {
   const missing: TemplatePlaceholder[] = [];
@@ -209,7 +227,7 @@ export function renderTemplate(body: string, values: TemplateValues): RenderedTe
       if (!missing.includes(placeholder)) {
         missing.push(placeholder);
       }
-      return token;
+      return missingValueMarker(placeholder);
     }
     return value;
   });

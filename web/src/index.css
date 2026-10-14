@@ -168,6 +168,8 @@
   --color-eligible: #186b4b;
   --color-on-dark: #f2f7f5;
   --color-on-dark-dim: #87a29a;
+  /* WhatsApp's own green — the prototype's `.msg-item .icn.wa` and `.msg-ch-toggle .wa` only. */
+  --color-whatsapp: #25d366;
 
   --radius-chip: 6px;
   --radius-control: 9px;

@@ -73,6 +73,14 @@ const ICON_PATHS: Record<NavItem["key"], ReactNode> = {
       <line x1="9" y1="18" x2="13" y2="18" />
     </>
   ),
+  // A speech bubble with two lines of text: a message.
+  messages: (
+    <>
+      <path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 3v-3H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" />
+      <line x1="7" y1="9" x2="17" y2="9" />
+      <line x1="7" y1="13" x2="14" y2="13" />
+    </>
+  ),
   // A timeline: three dots on a rail, each with its line of text.
   audit: (
     <>
@@ -130,8 +138,8 @@ const ITEM_ACTIVE = "border-copper bg-white/[0.14] text-on-dark";
  * a sidebar at all; "navigation is a role-dependent sidebar" is a settled
  * deviation from it, per docs/design-rule.md).
  *
- * Items come from navItemsFor(role, hasPractitioner) — today "day" and
- * "audit" (every role), "doctor" and "visit" (a membership tied to a practitioner) and
+ * Items come from navItemsFor(role, hasPractitioner) — today "day",
+ * "messages" and "audit" (every role), "doctor" and "visit" (a membership tied to a practitioner) and
  * "settings" (owner only, the same gate the day screen's own
  * settings entry always used). Rendering is generic over whatever that returns, so a later
  * task that appends an item needs no change here, only an icon entry above.
