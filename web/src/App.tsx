@@ -22,6 +22,8 @@ import { doctorDayStrings } from "./screens/doctor/strings";
 import { dayScreenStrings } from "./screens/day/strings";
 import MessagesScreen from "./screens/messages/MessagesScreen";
 import { messagesStrings } from "./screens/messages/strings";
+import PatientsScreen from "./screens/patient/PatientsScreen";
+import { patientProfileStrings } from "./screens/patient/strings";
 import CurrentVisitScreen from "./screens/visit/CurrentVisitScreen";
 import { visitWorkspaceStrings } from "./screens/visit/strings";
 import { SYNC_AUTH_ERROR_EVENT_NAME, startSyncEngine, type SyncEngineHandle } from "./sync/engine";
@@ -144,13 +146,15 @@ export default function App() {
   //
   // The messages page ("الرسائل") replaces the grid the same way, for every
   // role, on the same guarded membership — an owner's half-edited template
-  // survives an idle lock too.
-  const [selectedView, setSelectedView] = useState<"day" | "doctor" | "visit" | "messages">("day");
+  // survives an idle lock too. The patients page ("المرضى") — search and
+  // the patient profile — does the same, for every role.
+  const [selectedView, setSelectedView] = useState<"day" | "patients" | "doctor" | "visit" | "messages">("day");
   const viewingMembership = useGuardedActingMembership();
   const doctorPractitionerId = viewingMembership?.practitioner_id ?? null;
   const isDoctorViewShown = selectedView === "doctor" && doctorPractitionerId !== null;
   const isVisitViewShown = selectedView === "visit" && doctorPractitionerId !== null;
   const isMessagesViewShown = selectedView === "messages" && viewingMembership !== undefined;
+  const isPatientsViewShown = selectedView === "patients" && viewingMembership !== undefined;
   const [doctorPractitionerName, setDoctorPractitionerName] = useState<string | undefined>(undefined);
   const handlePractitionerName = useCallback((name: string) => setDoctorPractitionerName(name), []);
   // Reported up by DayScreen (its own subtitle, e.g. "يوم العيادة" or the
@@ -200,13 +204,21 @@ export default function App() {
         role={actingMembership?.role ?? Role.Assistant}
         hasPractitioner={Boolean(actingMembership?.practitioner_id)}
         activeItem={
-          isDoctorViewShown ? "doctor" : isVisitViewShown ? "visit" : isMessagesViewShown ? "messages" : (openSection ?? "day")
+          isDoctorViewShown
+            ? "doctor"
+            : isVisitViewShown
+              ? "visit"
+              : isMessagesViewShown
+                ? "messages"
+                : isPatientsViewShown
+                  ? "patients"
+                  : (openSection ?? "day")
         }
         onSelect={(key) => {
           // The audit and settings sheets open over the day screen, so
-          // picking either (or "اليوم") leaves the doctor's day, the visit
-          // and the messages page.
-          setSelectedView(key === "doctor" || key === "visit" || key === "messages" ? key : "day");
+          // picking either (or "اليوم") leaves the doctor's day, the visit,
+          // the messages page and the patients page.
+          setSelectedView(key === "doctor" || key === "visit" || key === "messages" || key === "patients" ? key : "day");
           setOpenSection(key === "audit" || key === "settings" ? key : null);
         }}
         title={
@@ -216,7 +228,9 @@ export default function App() {
               ? visitWorkspaceStrings.currentVisitTitle
               : isMessagesViewShown
                 ? messagesStrings.appBarTitle
-                : dayScreenTitle
+                : isPatientsViewShown
+                  ? patientProfileStrings.appBarTitle
+                  : dayScreenTitle
         }
         today={dayScreenToday}
         whoName={isDoctorViewShown ? doctorPractitionerName : undefined}
@@ -225,7 +239,7 @@ export default function App() {
             the current visit: it owns the seed/boot load, the day actually
             on screen (onTodayChange, which both read) and any sheet left
             open, none of which should restart on switching views. */}
-        <div className={isDoctorViewShown || isVisitViewShown || isMessagesViewShown ? "hidden" : undefined}>
+        <div className={isDoctorViewShown || isVisitViewShown || isMessagesViewShown || isPatientsViewShown ? "hidden" : undefined}>
           <DayScreen
             isSettingsOpen={isSettingsOpen}
             onCloseSettings={() => setOpenSection(null)}
@@ -250,6 +264,7 @@ export default function App() {
           />
         )}
         {isMessagesViewShown && <MessagesScreen membership={viewingMembership} />}
+        {isPatientsViewShown && <PatientsScreen />}
       </AppShell>
       {isLocked && <LockScreen defaultMembershipId={lastMembershipId} />}
     </>

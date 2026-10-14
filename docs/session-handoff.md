@@ -149,6 +149,17 @@ through `db/carePlans.ts`, bookings through the day screen's BookingSheet
 with an optional prefill. The owner decisions it implements are listed
 under "Screen 17 (care plan)" below.
 
+18 patient profile (step 8): done — `web/src/screens/patient/` (PatientProfile,
+PatientProfileSheet, PatientsScreen, pure helpers in `profileModel.ts`): the
+rail page "المرضى" (nav key `patients`) with search, and the same profile as
+a sheet from a visit. It reads every other screen's data and writes nothing
+of its own; what a row opens is that screen's own sheet. The owner decisions
+it implements are listed under "Screen 18 (patient profile)" below.
+
+All 19 screens are now built. Next step: the full screenshot re-capture
+(step 10) — `pnpm --dir web test:e2e:screenshots` for every screen, desktop
+and mobile, reviewed against the prototype.
+
 This changes the earlier plan below ("templates seeded by migration"):
 defaults now ship with the app and only overrides live in the database,
 because a seed would only reach the organizations that exist when the
@@ -171,6 +182,15 @@ migration runs — every organization provisioned later would have none.
 - e. The doctor day's attention card gets no stalled-plan item; screen 18 will show it.
 - A plan whose every session is skipped is not completed (it reads as active with nothing to book).
 - e2e: a write made straight into IndexedDB (a past visit, another device's plan) needs `syncSettled` first — the demo server's pull puts back its own copy of every pushed row — and a reload after (`reloadAs`): Dexie answers live queries from its own cache.
+
+### Screen 18 (patient profile) — owner decisions over the prototype
+- a. Rail item "المرضى" (nav key `patients`) for every role, right after "اليوم". The page: a shared TextInput "دوّر بالاسم أو رقم التليفون" over `db/patientSearch.ts`, results as rows (name, local phone left to right, "آخر زيارة d / m / yyyy" or "مفيش زيارات"), empty states "اكتب اسم أو رقم" / "مفيش مريض بالاسم ده". A row shows the profile on the same page with "رجوع للبحث". No prototype screen for the search: tokens and shared components only.
+- b. The same PatientProfile opens as a sheet (size lg, in a body-level portal so it stacks over another sheet) from the visit workspace's `.quick` buttons "التاريخ المرضي" (on "زيارات") and "الفواتير" (on "مدفوعات"), from the doctor's day's next-patient "افتح الملف" (`.brief-act`), and from VisitMenu's "ملف المريض" (owner-approved, any visit whose patient exists). Screen 9's decision c and screen 10's decision b are superseded.
+- c. `.pt-hero`: avatar initial; name with `.age` "N سنة · ذكر/أنثى" (each part omitted when unknown; gender only from `patients.gender` `male`/`female`); `.meta` phone (mono, local display) · "أول زيارة: d / m / yyyy" (earliest completed visit), each omitted without data. No file number. `.stat-row`: "زيارات" = completed visits; `.pt-stat.plan` "خطة" = اكتملت / متوقفة / جارية for the most recent plan by start (hidden without one; tapping opens CarePlanSheet, which now also opens on a plan without a visit); `.pt-stat.balance` "متبقي" = the sum over non-void invoices of total − paid, as "1,250", "0" when nothing is owed. Under the hero, "المريض متوقف من N يوم" when that plan is under way and stalled.
+- d. `.pt-tabs` (shared ToggleGroup, `patientTab`) with counts: الكل، زيارات، وصفات، رسائل، مدفوعات، ملاحظات.
+- e. `.pt-timeline` grouped by Cairo day, newest first; `.pt-day-h` "النهارده · d {month} yyyy" for today, else "d {month} · {the doctor's day's relative helper}", plus " · بداية خطة الرعاية" on a day a plan started. Events, time "H:mm": visit (`.visit`, "ز") — completed: "زيارة — {diagnosis}" (else "زيارة"), or "جلسة {service} · {n} من {count}" when a plan session links to it; `.d` "د. {doctor}" · `.dx` diagnosis · "شكوى: …" · "وصف N أدوية"; cancelled / no-show muted (field surface) as "زيارة اتلغت" / "ما حضرش"; nothing still to come (or in the room) shows; time = started_at, else scheduled_at. rx (`.rx`, "Rx") "وصفة طبية · N أدوية", bold drug names joined by "، " · "اتطبعت" / "لسه ما اتطبعتش" (a prescription with no drug left is not shown); time = created_at. msg (`.msg`, "✉") "{template} · واتساب/SMS", the body's first line · "اتفتحت" / "اتبعتت"; time = attempted_at. pay (`.pay`, "₤") "دفعة · {amount} ج.م {method}", "فاتورة {INV number} · <b>{staff}</b>"; time = created_at. note ("✎", no prototype class: the plain `.icn`) "ملاحظة الطبيب" with the visit's note, at the visit's time, only under "الكل" and "ملاحظات". The newest 100 events, "اعرض أقدم" for 100 more. Tapping a visit opens VisitFormSheet, a prescription the print sheet, a payment its InvoiceSheet (recording a payment there returns to the invoice); a message nothing.
+- f. Empty tab states: "لسه مفيش حاجة في ملف المريض", "لسه مفيش زيارات", "لسه مفيش وصفات", "لسه مفيش رسائل", "لسه مفيش مدفوعات", "لسه مفيش ملاحظات".
+- The method label is the app's own ("كاش", "فيزا", …), not the prototype's "نقدي".
 
 ## Backlog
 - Messages: a "suggested today" list on the messages page (tomorrow's appointment reminders, follow-ups due, balances a week old), so the suggested templates are offered for the right patients instead of being opened one visit at a time.

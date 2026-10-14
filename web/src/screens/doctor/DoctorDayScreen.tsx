@@ -15,6 +15,8 @@ import { VisitStatus } from "../../domain/visitStatus";
 import { arabicCount, type ArabicCountForms } from "../../domain/arabicText";
 import { formatElapsedMinutes } from "../day/elapsedLabel";
 import VisitFormSheet from "../day/VisitFormSheet";
+import PatientProfileSheet from "../patient/PatientProfileSheet";
+import { patientProfileStrings } from "../patient/strings";
 import {
   canCallIn,
   computeAge,
@@ -83,6 +85,7 @@ interface DoctorDayData {
 export default function DoctorDayScreen({ practitionerId, today, onPractitionerName }: DoctorDayScreenProps) {
   const [locationId, setLocationId] = useState<string | null>(null);
   const [visitFormVisitId, setVisitFormVisitId] = useState<string | null>(null);
+  const [profilePatientId, setProfilePatientId] = useState<string | null>(null);
   const { advance, isCoolingDown, advanceError } = useVisitAdvance();
   // Waits and "دخل من" are wall-clock-derived; nothing re-renders them on
   // its own, so this ticks once a minute (SlotRow.tsx's own pattern).
@@ -274,6 +277,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
           lastInvoice={findLastInvoiceState(data.nextPatientInvoices)}
           practitionerId={practitionerId}
           callButton={next ? callButton(next.visit, T.callIn, "primary", "sm", "flex-1") : null}
+          onOpenProfile={() => next && setProfilePatientId(next.visit.patient_id)}
         />
         <WaitingRoomCard
           waitingRoom={waitingRoom}
@@ -316,6 +320,8 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
           </ul>
         )}
       </Card>
+
+      {profilePatientId && <PatientProfileSheet patientId={profilePatientId} onDismiss={() => setProfilePatientId(null)} />}
 
       {visitFormVisitId && (
         <VisitFormSheet
@@ -578,6 +584,8 @@ interface NextPatientBriefProps {
   lastInvoice: ReturnType<typeof findLastInvoiceState>;
   practitionerId: string;
   callButton: ReactNode;
+  /** `.brief-act`'s "افتح الملف": the patient profile (screen 18). */
+  onOpenProfile: () => void;
 }
 
 function NextPatientBrief({
@@ -592,6 +600,7 @@ function NextPatientBrief({
   lastInvoice,
   practitionerId,
   callButton,
+  onOpenProfile,
 }: NextPatientBriefProps) {
   if (!next) {
     return (
@@ -686,7 +695,15 @@ function NextPatientBrief({
           </div>
         )}
 
-        {callButton && <div className="mt-3 flex flex-wrap items-center gap-1.5">{callButton}</div>}
+        {/* `.brief-act` */}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {callButton}
+          {patient && (
+            <Button variant="secondary" size="sm" onClick={onOpenProfile}>
+              {patientProfileStrings.openProfile}
+            </Button>
+          )}
+        </div>
       </div>
     </section>
   );

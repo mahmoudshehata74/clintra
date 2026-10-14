@@ -37,8 +37,8 @@ interface PrintData {
  * The printed prescription (reference screen 16, "الوصفة — للطباعة"): the
  * `.rx-print-page` preview in a sheet, and `.split`'s one action, "طباعة /
  * حفظ PDF" — the browser's print dialog both prints and saves a PDF.
- * Opened from the visit workspace's `.rx-section`; the patient profile
- * (screen 18) will open it too.
+ * Opened from the visit workspace's `.rx-section` and from a prescription
+ * on the patient profile's timeline (screen 18).
  *
  * The first print locks the prescription for good (markPrescriptionPrinted),
  * so it is the visit's practitioner's alone and is confirmed in the sheet

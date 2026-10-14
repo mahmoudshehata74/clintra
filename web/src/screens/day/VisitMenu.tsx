@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { patientProfileStrings } from "../patient/strings";
 import { dayScreenStrings } from "./strings";
 
 export interface VisitMenuActions {
@@ -15,6 +16,8 @@ export interface VisitMenuActions {
   onSendToEnd?: () => void;
   /** Any visit whose patient exists — opens the send sheet (screens/messages/SendMessageSheet.tsx). */
   onSendMessage?: () => void;
+  /** Any visit whose patient exists — opens the patient profile (screens/patient/PatientProfileSheet.tsx). */
+  onOpenProfile?: () => void;
 }
 
 interface VisitMenuProps {
@@ -110,8 +113,18 @@ export default function VisitMenu({ actions }: VisitMenuProps) {
               {dayScreenStrings.sendMessageMenuLabel}
             </button>
           )}
+          {actions.onOpenProfile && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={actions.onOpenProfile}
+              className="p-3 text-start hover:bg-field"
+            >
+              {patientProfileStrings.menuLabel}
+            </button>
+          )}
           {(actions.onCancel || actions.onNoShow) &&
-            (actions.onMove || actions.onSendToEnd || actions.onInvoice || actions.onSendMessage) && (
+            (actions.onMove || actions.onSendToEnd || actions.onInvoice || actions.onSendMessage || actions.onOpenProfile) && (
               <div className="border-t border-danger-line" />
             )}
           {actions.onCancel && (

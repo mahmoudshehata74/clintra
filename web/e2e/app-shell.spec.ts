@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { SYNC_AUTH_ERROR_EVENT_NAME } from "../src/sync/engine";
-import { gotoSeededDay, OWNER_NAME, OWNER_PIN, PATIENTS, rowFor, S, SIDEBAR, selectPractitioner, SLOTS_DR } from "./support";
+import { gotoSeededDay, OWNER_NAME, OWNER_PIN, PATIENTS, PROFILE, rowFor, S, SIDEBAR, selectPractitioner, SLOTS_DR } from "./support";
 
 // The owner, not the default assistant: settings only ever renders live for
 // an owner (unchanged from before this task — see settings.spec.ts), and
@@ -65,17 +65,22 @@ test("the active rail item's colour and border actually differ from an inactive 
   expect(activeBorder).not.toBe(inactiveBorder);
 });
 
-test("the four placeholder sections are gone; only اليوم, السجل and الإعدادات exist", async ({ page }) => {
+test("the placeholder sections are gone; المرضى is a real page beside اليوم, السجل and الإعدادات", async ({ page }) => {
   const nav = sidebar(page);
   await expect(nav.getByRole("button", { name: SIDEBAR.navDay, exact: true })).toBeVisible();
   await expect(nav.getByRole("button", { name: SIDEBAR.navAudit, exact: true })).toBeVisible();
   await expect(nav.getByRole("button", { name: SIDEBAR.navSettings, exact: true })).toBeVisible();
 
   // Removed from the nav model entirely — not disabled, not present as text.
-  for (const label of ["المرضى", "الطابور", "الفواتير", "التقارير"]) {
+  for (const label of ["الطابور", "الفواتير", "التقارير"]) {
     await expect(nav.getByText(label, { exact: true })).toHaveCount(0);
   }
   await expect(nav.getByText("جاي قريب")).toHaveCount(0);
+
+  // "المرضى" came back as the patients page (screen 18), not a placeholder.
+  await nav.getByRole("button", { name: SIDEBAR.navPatients, exact: true }).click();
+  await expect(nav.getByRole("button", { name: SIDEBAR.navPatients, exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByPlaceholder(PROFILE.searchPlaceholder)).toBeVisible();
 });
 
 test("an assistant sees the audit log but no settings item", async ({ page }) => {
