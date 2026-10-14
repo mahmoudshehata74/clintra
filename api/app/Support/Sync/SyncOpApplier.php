@@ -93,6 +93,12 @@ class SyncOpApplier
             return $templateRule;
         }
 
+        $carePlanRule = $this->applyCarePlanRule($op, $table);
+
+        if ($carePlanRule !== null) {
+            return $carePlanRule;
+        }
+
         $printedLock = $this->applyPrintedLock($op, $table);
 
         if ($printedLock !== null) {
@@ -592,6 +598,90 @@ class SyncOpApplier
             && mb_strlen($body) <= SyncableTables::TEMPLATE_BODY_MAX_LENGTH;
 
         return $isValid ? null : $this->rejected($op, 'template_invalid');
+    }
+
+    /**
+     * The care plan rule (docs/schema.md's v20 additions). Plans and their
+     * sessions are never deleted, a session never changes plan, service or
+     * place, and only what the device stores is accepted:
+     *
+     * - A delete of either table is refused as `care_plan_immutable`.
+     * - A care_plan_items update whose payload changes care_plan_id,
+     *   service_id or sequence from the stored value is refused as
+     *   `care_plan_immutable` (a column carried unchanged, as a device's whole
+     *   row is, is fine).
+     * - A status outside its table's set (plans: active, stopped; sessions:
+     *   planned, skipped), on a create or wherever an update names one, is
+     *   `care_plan_invalid`; so is a care_plans.paid other than 0 — a plan's
+     *   paid amount is derived on the device from the payments on its
+     *   sessions' invoices, and the column is never written with anything
+     *   else.
+     * - A session's visit_id, when not null, must name a visit of the plan's
+     *   own patient and practitioner (`care_plan_invalid`). The visit and the
+     *   plan are read through their own policies: a visit the caller cannot
+     *   see is refused the same way; a plan the caller cannot see (or a row it
+     *   cannot see, on an update) is left to the write itself, which then
+     *   fails or matches nothing exactly as it would without this rule.
+     *
+     * Who writes — only the plan's own practitioner — is enforced on the
+     * device only, the same known gap as prescriptions (api/docs/rls.md's
+     * "Care plans").
+     *
+     * @return array{op_id: string, status: string, reason: string}|null null means the op passes the rule.
+     */
+    private function applyCarePlanRule(array $op, string $table): ?array
+    {
+        if (! SyncableTables::isCarePlanTable($table)) {
+            return null;
+        }
+
+        if ($op['action'] === 'delete') {
+            return $this->rejected($op, 'care_plan_immutable');
+        }
+
+        $payload = $op['payload'] ?? [];
+        $current = $op['action'] === 'update' ? DB::table($table)->where('id', $op['entity_id'])->first() : null;
+
+        if ($op['action'] === 'update' && $current === null) {
+            return null;
+        }
+
+        if ($current !== null && $table === 'care_plan_items') {
+            foreach (SyncableTables::CARE_PLAN_ITEM_FIXED_COLUMNS as $column) {
+                if (array_key_exists($column, $payload) && ! $this->sameValue($payload[$column], $current->{$column})) {
+                    return $this->rejected($op, 'care_plan_immutable');
+                }
+            }
+        }
+
+        if (($op['action'] === 'create' || array_key_exists('status', $payload))
+            && ! in_array($payload['status'] ?? null, SyncableTables::CARE_PLAN_STATUSES[$table], true)) {
+            return $this->rejected($op, 'care_plan_invalid');
+        }
+
+        if ($table === 'care_plans') {
+            $paidIsZero = array_key_exists('paid', $payload) ? $payload['paid'] === 0 : $op['action'] === 'update';
+
+            return $paidIsZero ? null : $this->rejected($op, 'care_plan_invalid');
+        }
+
+        $visitId = $payload['visit_id'] ?? null;
+
+        if ($visitId === null) {
+            return null;
+        }
+
+        $plan = DB::table('care_plans')->where('id', $current->care_plan_id ?? $payload['care_plan_id'] ?? null)->first();
+
+        if ($plan === null) {
+            return null;
+        }
+
+        $visit = is_string($visitId) ? DB::table('visits')->where('id', $visitId)->first() : null;
+
+        return $visit !== null && $visit->patient_id === $plan->patient_id && $visit->practitioner_id === $plan->practitioner_id
+            ? null
+            : $this->rejected($op, 'care_plan_invalid');
     }
 
     private function isTimestamp(mixed $value): bool

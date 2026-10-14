@@ -13,12 +13,13 @@ namespace App\Support\Sync;
  * them (2026_09_12_000026_create_prescriptions_tables.php), and, for
  * practitioners, from 2026_09_12_000027_add_profile_and_rev_to_practitioners.php,
  * and, for messages and message_templates, from
- * 2026_09_12_000029_create_messages_tables.php.
+ * 2026_09_12_000029_create_messages_tables.php, and, for care_plans and
+ * care_plan_items, from 2026_09_12_000030_make_care_plans_syncable.php.
  */
 class SyncableTables
 {
     public const NAMES = [
-        'cash_close', 'day_state', 'invoice_items', 'invoices',
+        'care_plan_items', 'care_plans', 'cash_close', 'day_state', 'invoice_items', 'invoices',
         'membership_locations', 'membership_practitioners', 'memberships',
         'message_templates', 'messages', 'patients', 'payments',
         'practitioners', 'prescription_items', 'prescriptions', 'schedules',
@@ -36,7 +37,7 @@ class SyncableTables
      * etc.) and surfaces as a generic `failed` — see
      * SyncPushController::isRlsRefusal().
      */
-    public const DIRECT_ORG_ID_TABLES = ['invoices', 'memberships', 'message_templates', 'messages', 'patients', 'practitioners', 'prescriptions', 'services', 'visits'];
+    public const DIRECT_ORG_ID_TABLES = ['care_plans', 'invoices', 'memberships', 'message_templates', 'messages', 'patients', 'practitioners', 'prescriptions', 'services', 'visits'];
 
     /**
      * table => the payload column naming the acting membership. Always
@@ -160,6 +161,27 @@ class SyncableTables
         'messages' => ['marked_sent_at'],
     ];
 
+    /**
+     * table => the statuses a pushed row may store (`care_plan_invalid`
+     * otherwise — SyncOpApplier's care plan rule, docs/schema.md's v20
+     * additions). Every other state a plan or a session shows (completed,
+     * stalled, done, booked, suggested) is derived on the device, never
+     * stored.
+     *
+     * @var array<string, list<string>>
+     */
+    public const CARE_PLAN_STATUSES = [
+        'care_plans' => ['active', 'stopped'],
+        'care_plan_items' => ['planned', 'skipped'],
+    ];
+
+    /**
+     * The care_plan_items columns that never change once the session is
+     * written: which plan it belongs to, its service and its place in the
+     * plan. An update changing any of them is `care_plan_immutable`.
+     */
+    public const CARE_PLAN_ITEM_FIXED_COLUMNS = ['care_plan_id', 'service_id', 'sequence'];
+
     /** Every template key a message may be written from (web/src/domain/messageTemplates.ts). */
     public const MESSAGE_TEMPLATE_KEYS = [
         'booking_confirmation', 'appointment_reminder', 'post_visit_followup',
@@ -174,6 +196,11 @@ class SyncableTables
 
     /** The longest template body the push endpoint accepts, in characters. */
     public const TEMPLATE_BODY_MAX_LENGTH = 4000;
+
+    public static function isCarePlanTable(string $table): bool
+    {
+        return array_key_exists($table, self::CARE_PLAN_STATUSES);
+    }
 
     public static function hasNumberSeries(string $table): bool
     {
