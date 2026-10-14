@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AuditAction, type SyncReview } from "../db/types";
 import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type DisplacedPayload } from "./pullCollisions";
-import { describeDisplacedContent, describeReviewFieldDiffs, describeSyncReview } from "./reviewSummary";
+import { describeDisplacedContent, describeReviewFieldDiffs, describeSupersededReviews, describeSyncReview, displacedPayments } from "./reviewSummary";
 import { SYNCABLE_TABLES } from "./syncableTables";
 
 function makeReview(overrides: Partial<SyncReview> = {}): SyncReview {
@@ -117,5 +117,77 @@ describe("the pull side's two review reasons (sync/pullCollisions.ts)", () => {
   it("has nothing to add for any other review", () => {
     expect(describeDisplacedContent(makeReview(), new Map())).toBeNull();
     expect(describeDisplacedContent(displaced("visit_form_data", { visit_id: "visit-1" }), new Map())).toBeNull();
+  });
+});
+
+describe("money is never displaced silently", () => {
+  const payment = (overrides: Record<string, unknown>) => ({
+    id: "payment-1",
+    invoice_id: "invoice-1",
+    location_id: "location-1",
+    amount: 20000,
+    method: "cash",
+    receipt_number: "12",
+    series: 2,
+    note: null,
+    after_close: false,
+    created_by: "membership-1",
+    created_at: "2026-09-07T09:00:00.000Z",
+    rev: 1,
+    ...overrides,
+  });
+  const visitWithPayments = makeReview({
+    entity: "visits",
+    reason: DISPLACED_BY_SERVER_REASON,
+    payload: {
+      row: { id: "visit-1", patient_id: "patient-1", scheduled_at: null, position: 3 },
+      children: [
+        { entity: "invoices", row: { id: "invoice-1", visit_id: "visit-1" } },
+        { entity: "payments", row: payment({ id: "payment-2", amount: 5050, method: "card", receipt_number: "13", created_at: "2026-09-07T09:05:00.000Z" }) },
+        { entity: "payments", row: payment({}) },
+      ],
+    } satisfies DisplacedPayload,
+  });
+
+  it("a displaced visit's payments are listed by amount, method and full receipt number, in the order recorded, with what to do", () => {
+    expect(describeSyncReview(visitWithPayments)).toBe(
+      "زيارة — النسخة دي اتشالت لأن جهاز تاني سبقها على السيرفر. " +
+        "فيه دفعات اتحصّلت عليها ومش هتوصل للسيرفر: 200.00 ج.م كاش (RCP-B-12)، 50.50 ج.م فيزا (RCP-B-13). " +
+        "احجز للمريض من جديد وسجّل الدفعة تاني، واكتب رقم الإيصال القديم في ملاحظة الدفعة.",
+    );
+    expect(displacedPayments(visitWithPayments).map((row) => row.id)).toEqual(["payment-1", "payment-2"]);
+  });
+
+  it("a displaced invoice's payments and a displaced payment itself are listed too", () => {
+    const invoice = makeReview({
+      entity: "invoices",
+      reason: DISPLACED_BY_SERVER_REASON,
+      payload: { row: { id: "invoice-1" }, children: [{ entity: "payments", row: payment({ series: 1, receipt_number: "7" }) }] } satisfies DisplacedPayload,
+    });
+    expect(describeSyncReview(invoice)).toContain("فيه دفعات اتحصّلت عليها ومش هتوصل للسيرفر: 200.00 ج.م كاش (RCP-7).");
+    const own = makeReview({ entity: "payments", reason: DISPLACED_BY_SERVER_REASON, payload: { row: payment({ method: "wallet" }), children: [] } satisfies DisplacedPayload });
+    expect(describeSyncReview(own)).toContain("200.00 ج.م محفظة (RCP-B-12)");
+  });
+
+  it("an invoice without payments and a prescription keep the plain text", () => {
+    const invoice = makeReview({ entity: "invoices", reason: DISPLACED_BY_SERVER_REASON, payload: { row: { id: "invoice-1" }, children: [] } satisfies DisplacedPayload });
+    expect(describeSyncReview(invoice)).toBe("فاتورة — النسخة دي اتشالت لأن جهاز تاني سبقها على السيرفر");
+    const rx = makeReview({ entity: "prescriptions", reason: DISPLACED_BY_SERVER_REASON, payload: { row: { id: "rx-1" }, children: [] } satisfies DisplacedPayload });
+    expect(describeSyncReview(rx)).toBe("وصفة — النسخة دي اتشالت لأن جهاز تاني سبقها على السيرفر");
+    expect(displacedPayments(makeReview())).toEqual([]);
+  });
+
+  it("names the reviews a displacement closed, and nothing when it closed none", () => {
+    const folded = makeReview({
+      reason: DISPLACED_BY_SERVER_REASON,
+      payload: {
+        row: { id: "visit-1" },
+        children: [],
+        superseded: [{ entity: "visits", entity_id: "visit-1", reason: "conflict_slot_taken", action: AuditAction.Create, payload: {} }],
+      } satisfies DisplacedPayload,
+    });
+    expect(describeSupersededReviews(folded)).toBe("كانت مستنية مراجعة قبل كده: الميعاد ده اتحجز من جهاز تاني");
+    expect(describeSupersededReviews(visitWithPayments)).toBeNull();
+    expect(describeSupersededReviews(makeReview())).toBeNull();
   });
 });

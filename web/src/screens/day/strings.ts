@@ -233,6 +233,8 @@ export const dayScreenStrings = {
   syncReviewNoServerRow: "مفيش نسخة على السيرفر — الميعاد ده اتحجز لمريض تاني",
   // The one action on a row the server's version already replaced (sync/pullCollisions.ts's displaced_by_server).
   syncReviewAcknowledgeAction: "تمام",
+  // A create conflict whose local row is already gone (sync/reviewActions.ts's rowGone): neither action is offered, only syncReviewAcknowledgeAction.
+  syncReviewRowGone: "النسخة دي مبقتش موجودة على الجهاز",
 
   // The overflow menu's invoice entry, only shown once a visit has one.
   invoiceMenuLabel: "الفاتورة",

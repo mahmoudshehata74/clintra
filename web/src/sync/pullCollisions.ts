@@ -78,10 +78,24 @@ export interface ReviewedRow {
   row: Record<string, unknown>;
 }
 
-/** A displaced_by_server review's payload: the local row that was removed, and its children. */
+/** An open review a displacement closed, folded into the displacement's own row so it is the one thing left to review. */
+export interface SupersededReview {
+  entity: string;
+  entity_id: string;
+  reason: string;
+  action: AuditAction;
+  payload: unknown;
+}
+
+/**
+ * A displaced_by_server review's payload: the local row that was removed,
+ * its children, and the open reviews the displacement closed for any of
+ * them (absent on a row written before reviews were folded in).
+ */
 export interface DisplacedPayload {
   row: Record<string, unknown>;
   children: ReviewedRow[];
+  superseded?: SupersededReview[];
 }
 
 /** One queued child op folded into a rejected create's review instead of being retried. */
@@ -249,9 +263,12 @@ function isNeverAccepted(entityId: string, ops: readonly SyncOp[], reviews: read
 /**
  * Removes one never-accepted local row and everything that only exists
  * because of it: its descendants (CHILD_LINKS), every queued op for any of
- * them, and any review still open for any of them (superseded — this is now
- * the one thing to review). Leaves one displaced_by_server review row with
- * the removed rows in its payload.
+ * them, and any review still open for any of them — e.g. the create's own
+ * conflict_slot_taken, which offered keep/discard on a row that is now gone.
+ * Those are closed and folded into the payload (`superseded`), so the
+ * displacement is the one review left for the entity, acknowledge-only.
+ * Leaves one displaced_by_server review row with the removed rows in its
+ * payload.
  */
 async function displace(db: ClintraDatabase, entity: string, row: Row, now: string): Promise<void> {
   const ops = await db.sync_ops.toArray();
@@ -273,6 +290,17 @@ async function displace(db: ClintraDatabase, entity: string, row: Row, now: stri
   }
 
   const payload: DisplacedPayload = { row, children: descendants.rows };
+  if (superseded.length > 0) {
+    payload.superseded = superseded
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .map((review) => ({
+        entity: review.entity,
+        entity_id: review.entity_id,
+        reason: review.reason,
+        action: review.action,
+        payload: review.payload,
+      }));
+  }
   await db.sync_review.add({
     id: id(),
     op_id: ownCreate?.op_id ?? id(),

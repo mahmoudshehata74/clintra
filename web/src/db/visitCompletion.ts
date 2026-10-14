@@ -7,7 +7,7 @@ import { canTransitionVisitStatus } from "../domain/transitions";
 import { VisitStatus } from "../domain/visitStatus";
 import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
-import { getMintingSeries } from "./deviceRegistration";
+import { getMintingSeries, numberMarkKey, reserveNextNumber } from "./deviceRegistration";
 import { runAtomicMutations } from "./mutate";
 import { AuditAction, InvoiceStatus, type DayState, type Invoice, type InvoiceItem, type Visit } from "./types";
 
@@ -48,7 +48,9 @@ export interface CompleteVisitResult {
  * invoices store, so the second transaction's read never runs until the
  * first has already committed its own invoice row. Another device at the
  * same location mints in a different series, so it can never take the same
- * number, offline or not.
+ * number, offline or not. The device's high-water mark for the series
+ * (reserveNextNumber) is read and raised in the same transaction, so a
+ * number whose invoice was displaced by a pulled row is never minted again.
  *
  * A device that does not know its series yet (device_series_unknown, see
  * getMintingSeries) is refused before the transaction starts: nothing is
@@ -63,7 +65,7 @@ export async function completeVisitWithInvoice(
 
   return runAtomicMutations(
     db,
-    [db.visits, db.invoices, db.invoice_items, db.services, db.service_price_overrides, db.day_state],
+    [db.visits, db.invoices, db.invoice_items, db.services, db.service_price_overrides, db.day_state, db.device],
     async (write) => {
       const before = await db.visits.get(visitId);
       if (!before) {
@@ -98,10 +100,13 @@ export async function completeVisitWithInvoice(
 
       const issuedYear = cairoYear(now);
       const invoicesAtLocation = await db.invoices.where("location_id").equals(before.location_id).toArray();
-      const number =
+      const number = await reserveNextNumber(
+        db,
+        numberMarkKey("invoice", before.location_id, series, issuedYear),
         invoicesAtLocation
           .filter((invoice) => invoice.issued_year === issuedYear && invoice.series === series)
-          .reduce((max, invoice) => Math.max(max, invoice.number), 0) + 1;
+          .reduce((max, invoice) => Math.max(max, invoice.number), 0),
+      );
 
       const total: Piastres = service ? unitPrice : (0 as Piastres);
       const invoice: Invoice = {

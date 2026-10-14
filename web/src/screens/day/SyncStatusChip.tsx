@@ -3,7 +3,12 @@ import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type DisplacedPayload } from "../../sync/pullCollisions";
 import { acknowledgeReview, discardMine, getReviewComparison, keepMine, type ReviewComparison } from "../../sync/reviewActions";
-import { describeDisplacedContent, describeReviewFieldDiffs, describeSyncReview } from "../../sync/reviewSummary";
+import {
+  describeDisplacedContent,
+  describeReviewFieldDiffs,
+  describeSupersededReviews,
+  describeSyncReview,
+} from "../../sync/reviewSummary";
 import { useOnlineStatus } from "../../sync/useOnlineStatus";
 import { useServerUnreachable } from "../../sync/useTransportHealth";
 import type { SyncReview } from "../../db/types";
@@ -32,6 +37,8 @@ interface ReviewRow {
   comparison: ReviewComparison;
   /** What a displaced_by_server row held (reviewSummary.ts's describeDisplacedContent); null for every other row. */
   displacedContent: string | null;
+  /** The reviews a displacement closed and folded in (describeSupersededReviews); null for every other row. */
+  supersededSummary: string | null;
 }
 
 /** The patient behind a displaced visit, so its summary can name them; null for any other row. */
@@ -56,7 +63,10 @@ function displacedPatientId(review: SyncReview): string | null {
  * Two kinds of row offer no choice between versions (sync/pullCollisions.ts):
  * a row the server's version displaced shows what it held and only "تمام",
  * and a server_unique_conflict shows its reference code (in its description)
- * and nothing to press — it needs support.
+ * and nothing to press — it needs support. A displacement also lists the
+ * payments it removed (in its description) and the reviews it closed for
+ * the same rows; a create conflict whose local row is already gone offers
+ * only "تمام", never keep/discard (sync/reviewActions.ts's REVIEW_ROW_GONE).
  */
 export default function SyncStatusChip() {
   const isOnline = useOnlineStatus();
@@ -76,6 +86,7 @@ export default function SyncStatusChip() {
             review,
             comparison: await getReviewComparison(db, review),
             displacedContent: describeDisplacedContent(review, patientNames),
+            supersededSummary: describeSupersededReviews(review),
           };
         }),
       );
@@ -121,7 +132,7 @@ export default function SyncStatusChip() {
         <Sheet onDismiss={() => setIsListOpen(false)}>
           <p className="p-3 pb-1 text-sm font-medium">{dayScreenStrings.syncReviewListTitle}</p>
           <div className="flex flex-col overflow-y-auto">
-            {reviewRows.map(({ review, comparison, displacedContent }) => (
+            {reviewRows.map(({ review, comparison, displacedContent, supersededSummary }) => (
               <div key={review.id} className="flex flex-col gap-2 border-t border-rule p-3">
                 <p className="text-sm">{describeSyncReview(review)}</p>
 
@@ -130,6 +141,7 @@ export default function SyncStatusChip() {
                     {displacedContent && (
                       <p className="rounded-control bg-field p-2 text-xs">{displacedContent}</p>
                     )}
+                    {supersededSummary && <p className="text-xs text-muted">{supersededSummary}</p>}
                     <div className="flex shrink-0 gap-2">
                       <button
                         type="button"
@@ -140,7 +152,20 @@ export default function SyncStatusChip() {
                       </button>
                     </div>
                   </>
-                ) : review.reason === SERVER_UNIQUE_CONFLICT_REASON ? null : comparison.ready ? (
+                ) : review.reason === SERVER_UNIQUE_CONFLICT_REASON ? null : comparison.rowGone ? (
+                  <>
+                    <p className="text-xs text-muted">{dayScreenStrings.syncReviewRowGone}</p>
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => acknowledgeReview(db, review.id)}
+                        className="rounded-control border border-rule px-2 py-1 text-sm"
+                      >
+                        {dayScreenStrings.syncReviewAcknowledgeAction}
+                      </button>
+                    </div>
+                  </>
+                ) : comparison.ready ? (
                   <>
                     <ReviewComparisonTable comparison={comparison} />
                     <div className="flex shrink-0 gap-2">

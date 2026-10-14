@@ -1,7 +1,9 @@
-import type { SyncReview } from "../db/types";
+import { PaymentMethod, type Payment, type SyncReview } from "../db/types";
 import { findMessageTemplate } from "../domain/messageTemplates";
 import { formatPiastresForDisplay, type Piastres } from "../domain/money";
 import { clockTimeInCairo } from "../domain/time";
+import { formatReceiptNumber } from "../screens/day/invoiceNumber";
+import { dayScreenStrings } from "../screens/day/strings";
 import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type DisplacedPayload } from "./pullCollisions";
 
 // Every syncable table (sync/syncableTables.ts — reviewSummary.test.ts holds
@@ -71,14 +73,76 @@ function referenceCodeFor(review: SyncReview): string {
   return review.id.slice(0, 8).toUpperCase();
 }
 
-/** A short human-readable summary of one sync_review row, for the needs-review list. */
+const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  [PaymentMethod.Cash]: dayScreenStrings.paymentMethodCash,
+  [PaymentMethod.Card]: dayScreenStrings.paymentMethodCard,
+  [PaymentMethod.Wallet]: dayScreenStrings.paymentMethodWallet,
+  [PaymentMethod.Transfer]: dayScreenStrings.paymentMethodTransfer,
+};
+
+/**
+ * Every payment a displaced_by_server row removed — the displaced row itself
+ * when it is a payment, and every payment among its descendants (a displaced
+ * visit's invoice's, a displaced invoice's) — in the order they were
+ * recorded. Empty for any other review.
+ */
+export function displacedPayments(review: SyncReview): Payment[] {
+  if (review.reason !== DISPLACED_BY_SERVER_REASON) {
+    return [];
+  }
+  const { row, children } = review.payload as DisplacedPayload;
+  const rows = [
+    ...(review.entity === "payments" ? [row] : []),
+    ...children.filter((child) => child.entity === "payments").map((child) => child.row),
+  ] as unknown as Payment[];
+  return rows.sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
+/** One displaced payment, as the assistant re-enters it: "200.00 ج.م كاش (RCP-B-12)". */
+function describePayment(payment: Payment): string {
+  const method = PAYMENT_METHOD_LABELS[payment.method] ?? payment.method;
+  return `${formatPiastresForDisplay(payment.amount)} ${method} (${formatReceiptNumber(payment)})`;
+}
+
+/**
+ * A short human-readable summary of one sync_review row, for the
+ * needs-review list. Money is never displaced silently: a displaced row that
+ * took payments with it names each one (amount, method, receipt number) and
+ * says how to put them back, since none of them will reach the server.
+ */
 export function describeSyncReview(review: SyncReview): string {
   const entityLabel = ENTITY_LABELS[review.entity] ?? review.entity;
+  const payments = displacedPayments(review);
+  if (payments.length > 0) {
+    return (
+      `${entityLabel} — ${REASON_LABELS[DISPLACED_BY_SERVER_REASON]}. ` +
+      `فيه دفعات اتحصّلت عليها ومش هتوصل للسيرفر: ${payments.map(describePayment).join("، ")}. ` +
+      "احجز للمريض من جديد وسجّل الدفعة تاني، واكتب رقم الإيصال القديم في ملاحظة الدفعة."
+    );
+  }
   const reasonLabel =
     review.reason === SERVER_UNIQUE_CONFLICT_REASON
       ? `تعارض محتاج مراجعة من الدعم — كود المرجع: ${referenceCodeFor(review)}`
       : (REASON_LABELS[review.reason] ?? `فيه مشكلة تقنية — كود المرجع: ${referenceCodeFor(review)}`);
   return `${entityLabel} — ${reasonLabel}`;
+}
+
+/**
+ * The reviews a displacement closed for the same rows (DisplacedPayload's
+ * `superseded`, e.g. the create's own rejection), as one line — so what the
+ * assistant was asked before is not lost when only "تمام" is left. Null when
+ * it closed none, and for any other review.
+ */
+export function describeSupersededReviews(review: SyncReview): string | null {
+  if (review.reason !== DISPLACED_BY_SERVER_REASON) {
+    return null;
+  }
+  const superseded = (review.payload as DisplacedPayload).superseded ?? [];
+  if (superseded.length === 0) {
+    return null;
+  }
+  const labels = [...new Set(superseded.map((entry) => REASON_LABELS[entry.reason] ?? REASON_LABELS.conflict))];
+  return `كانت مستنية مراجعة قبل كده: ${labels.join("، ")}`;
 }
 
 /**

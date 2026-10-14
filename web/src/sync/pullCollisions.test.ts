@@ -20,6 +20,7 @@ import {
 } from "../db/types";
 import type { Piastres } from "../domain/money";
 import { runPullCycle, runSyncCycle } from "./engine";
+import { discardMine, getReviewComparison, keepMine, REVIEW_ROW_GONE } from "./reviewActions";
 import { FakeTransport } from "./fakeTransport";
 import {
   DISPLACED_BY_SERVER_REASON,
@@ -347,7 +348,8 @@ describe("a pulled row that collides with a never-accepted local row on a unique
       await createLocally(deviceB, entity, loser);
       await runSyncCycle(deviceB, server);
       // The server refused B's create: B now holds an open rejection.
-      expect((await openReviews(deviceB)).map((review) => review.entity_id)).toEqual([loser.id]);
+      const rejections = await openReviews(deviceB);
+      expect(rejections.map((review) => review.entity_id)).toEqual([loser.id]);
 
       await runPullCycle(deviceB, server);
 
@@ -359,7 +361,13 @@ describe("a pulled row that collides with a never-accepted local row on a unique
       const open = await openReviews(deviceB);
       expect(open).toHaveLength(1);
       expect(open[0]).toMatchObject({ entity, entity_id: loser.id, reason: DISPLACED_BY_SERVER_REASON, action: AuditAction.Create });
-      expect(open[0].payload).toEqual({ row: loser, children: [] } satisfies DisplacedPayload);
+      // The rejection is closed and folded in: one review per entity, acknowledge-only.
+      expect(open[0].payload).toEqual({
+        row: loser,
+        children: [],
+        superseded: [{ entity, entity_id: loser.id, reason: rejections[0].reason, action: AuditAction.Create, payload: loser }],
+      } satisfies DisplacedPayload);
+      expect((await deviceB.sync_review.get(rejections[0].id))?.needs_review).toBe(false);
 
       const { cursor } = await server.pullSince(null);
       expect((await deviceB.device.get(getDeviceId()))?.pull_cursor).toBe(cursor);
@@ -618,5 +626,50 @@ describe("children of a rejected create", () => {
 
     const [review] = await deviceB.sync_review.toArray();
     expect(review.payload).toEqual(template);
+  });
+});
+
+describe("one review per entity: a displacement supersedes the create's own rejection", () => {
+  async function rejectedThenDisplaced(sameCycle: boolean) {
+    const server = new FakeTransport(serverDbName);
+    const deviceA = await newDevice();
+    const deviceB = await newDevice();
+    const winner = makeVisit({ position: 1, patient_id: "patient-a" });
+    const loser = makeVisit({ position: 2, patient_id: "patient-b" });
+    await createLocally(deviceA, "visits", winner);
+    await runSyncCycle(deviceA, server);
+    await createLocally(deviceB, "visits", loser);
+
+    await runSyncCycle(deviceB, server);
+    const [rejection] = await openReviews(deviceB);
+    if (!sameCycle) {
+      // The sheet, opened between cycles, offers keep/discard on the rejection.
+      expect(rejection).toMatchObject({ entity_id: loser.id, action: AuditAction.Create });
+      expect(await getReviewComparison(deviceB, rejection)).toMatchObject({ ready: true, rowGone: false });
+    }
+    await runPullCycle(deviceB, server);
+    return { deviceB, loser, rejection };
+  }
+
+  it.each([
+    ["the rejection first, the pull in a later cycle", false],
+    ["the pull in the same cycle as the rejection", true],
+  ])("%s: only the displacement stays open, and keep/discard on the rejection throw a named error", async (_label, sameCycle) => {
+    const { deviceB, loser, rejection } = await rejectedThenDisplaced(sameCycle);
+
+    const open = await openReviews(deviceB);
+    expect(open).toHaveLength(1);
+    expect(open[0]).toMatchObject({ entity_id: loser.id, reason: DISPLACED_BY_SERVER_REASON });
+    expect((open[0].payload as DisplacedPayload).superseded).toEqual([
+      { entity: "visits", entity_id: loser.id, reason: rejection.reason, action: AuditAction.Create, payload: loser },
+    ]);
+
+    const closed = (await deviceB.sync_review.get(rejection.id))!;
+    expect(closed.needs_review).toBe(false);
+    expect(await getReviewComparison(deviceB, closed)).toMatchObject({ ready: false, rowGone: true });
+    await expect(keepMine(deviceB, rejection.id)).rejects.toThrow(REVIEW_ROW_GONE);
+    await expect(discardMine(deviceB, rejection.id)).rejects.toThrow(REVIEW_ROW_GONE);
+    expect(await deviceB.visits.get(loser.id)).toBeUndefined();
+    expect(await deviceB.sync_ops.filter((op) => op.synced_at === null).count()).toBe(0);
   });
 });

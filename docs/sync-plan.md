@@ -782,13 +782,34 @@ removed:
 
 - reason `displaced_by_server`
 - entity: the table
-- `payload = { row, children: [{ entity, row }] }`
+- `payload = { row, children: [{ entity, row }], superseded?: [{ entity, entity_id, reason, action, payload }] }`
 
 Then the pulled row is written. The review sheet shows "النسخة دي اتشالت
 لأن جهاز تاني سبقها على السيرفر" with the displaced content summarised by
 entity (a prescription's drug names, a template's name, a visit's patient
 and time, a day's delay, a cash close's total). It offers only "تمام",
 which closes the row (`reviewActions.ts`'s `acknowledgeReview`).
+
+- **Money is never displaced silently.** When the removed rows include
+  payments (the displaced row itself, or a displaced visit's or invoice's),
+  the text names each one — amount, method and full receipt number — and
+  says what to do: "… فيه دفعات اتحصّلت عليها ومش هتوصل للسيرفر: {list}.
+  احجز للمريض من جديد وسجّل الدفعة تاني، واكتب رقم الإيصال القديم في ملاحظة
+  الدفعة." (`reviewSummary.ts`'s `displacedPayments`). Invoices without
+  payments and prescriptions keep the plain text.
+- **Displaced numbers stay reserved.** Invoice, receipt and prescription
+  numbers are minted from the larger of the local max and the device's
+  durable high-water mark for that series (`device.number_marks`, keyed by
+  kind, location, series and — for the yearly numbers — issued year;
+  `deviceRegistration.ts`'s `reserveNextNumber`), raised in the minting
+  transaction. A number whose row was displaced is never minted again.
+  Database version 19 initialises the marks from the rows already stored.
+- **One review per entity.** The open reviews the displacement closes (e.g.
+  the create's own `conflict_slot_taken`) are folded into its payload as
+  `superseded`, and the sheet names them ("كانت مستنية مراجعة قبل كده: …"),
+  so only "تمام" is offered. `keepMine`/`discardMine` on a create conflict
+  whose local row is gone throw `review_row_gone`; `getReviewComparison`
+  reports `rowGone`, and the sheet then offers only "تمام".
 
 **b. The local row was accepted: nothing is touched.** The server enforces
 the same keys, so two rows it accepted should never share one. If they

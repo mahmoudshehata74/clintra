@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import type { DeviceRegistration, Patient, Prescription, PrescriptionItem, SyncOp, SyncReview, Visit } from "../src/db/types";
+import type { DeviceRegistration, Invoice, Patient, Payment, Prescription, PrescriptionItem, SyncOp, SyncReview, Visit } from "../src/db/types";
 import { emptySlotTiles, gotoSeededDay, login, PATIENTS, pickSearchResult, S, selectPractitioner, SLOTS_DR } from "./support";
 
 /** The database the app's FakeTransport keeps as its stand-in server (sync/fakeTransport.ts's FAKE_SERVER_DB_NAME). */
@@ -350,8 +350,9 @@ test("a prescription another device got onto the server first replaces this devi
   const sheet = page.getByRole("dialog");
   await expect(sheet.getByText("وصفة — النسخة دي اتشالت لأن جهاز تاني سبقها على السيرفر", { exact: true })).toBeVisible();
   await expect(sheet.getByText("الأدوية: Brufen 400mg، Voltaren Gel", { exact: true })).toBeVisible();
-  // One row: the displacement superseded the rejection, and it offers nothing to choose.
-  await expect(sheet.getByText("الزيارة دي ليها وصفة بالفعل من جهاز تاني")).toHaveCount(0);
+  // One row: the displacement superseded the rejection, folded it in, and offers nothing to choose.
+  await expect(sheet.getByText("وصفة — الزيارة دي ليها وصفة بالفعل من جهاز تاني", { exact: true })).toHaveCount(0);
+  await expect(sheet.getByText("كانت مستنية مراجعة قبل كده: الزيارة دي ليها وصفة بالفعل من جهاز تاني", { exact: true })).toBeVisible();
   await expect(sheet.getByRole("button", { name: S.syncReviewKeepAction, exact: true })).toHaveCount(0);
   await expect(sheet.getByRole("button", { name: S.syncReviewRemoveAction, exact: true })).toHaveCount(0);
 
@@ -386,4 +387,117 @@ test("a prescription another device got onto the server first replaces this devi
       return (await readIndexedDbStore<Patient>(page, "patients")).find((patient) => patient.id === later.id) ?? null;
     })
     .toEqual(later);
+});
+
+test("a visit another device got onto the server first takes this device's invoice and payment with it: the review spells out the payment and how to put it back", async ({
+  page,
+}) => {
+  await gotoSeededDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await expect
+    .poll(async () => {
+      await requestSyncCycle(page);
+      return (await readDevice(page))?.pull_cursor ?? null;
+    })
+    .not.toBeNull();
+
+  const seeded = (await readIndexedDbStore<Visit>(page, "visits")).find((candidate) => candidate.scheduled_at !== null);
+  if (!seeded) throw new Error("no seeded slot visit");
+  const device = await readDevice(page);
+  const now = Date.now();
+  // A slot no seeded visit holds, so the only collision is the planted one.
+  const slot = `${seeded.visit_date}T19:45:00.000Z`;
+  const visitFor = (position: number, createdAt: string): Visit => ({
+    ...seeded,
+    id: crypto.randomUUID(),
+    position,
+    scheduled_at: slot,
+    unique_scheduled_at: slot,
+    status: "completed",
+    created_at: createdAt,
+    rev: 1,
+  });
+
+  // This device's own visit, never accepted (its create still queued), already invoiced and paid.
+  const mine = visitFor(900, new Date(now - 60_000).toISOString());
+  const invoice: Invoice = {
+    id: crypto.randomUUID(),
+    org_id: mine.org_id,
+    location_id: mine.location_id,
+    number: 900,
+    issued_year: 2026,
+    series: device.series ?? 1,
+    patient_id: mine.patient_id,
+    practitioner_id: mine.practitioner_id,
+    visit_id: mine.id,
+    total: 15000 as Invoice["total"],
+    paid: 15000 as Invoice["paid"],
+    status: "paid",
+    issued_at: mine.created_at,
+    rev: 1,
+  };
+  const payment: Payment = {
+    id: crypto.randomUUID(),
+    invoice_id: invoice.id,
+    location_id: invoice.location_id,
+    amount: 15000 as Payment["amount"],
+    method: "card",
+    receipt_number: "900",
+    series: device.series ?? 1,
+    note: null,
+    after_close: false,
+    created_by: mine.created_by,
+    created_at: mine.created_at,
+    rev: 1,
+  };
+  await putIndexedDbRows(page, "visits", [mine]);
+  await putIndexedDbRows(page, "invoices", [invoice]);
+  await putIndexedDbRows(page, "payments", [payment]);
+  await putIndexedDbRows<SyncOp>(page, "sync_ops", [
+    {
+      op_id: crypto.randomUUID(),
+      entity: "visits",
+      entity_id: mine.id,
+      action: "create",
+      payload: mine,
+      device_id: device.id,
+      created_at: mine.created_at,
+      synced_at: null,
+      base_rev: null,
+      failure_count: 0,
+      next_retry_at: null,
+    },
+  ]);
+
+  // The other device's visit for the same slot, which the server accepted.
+  const theirs = visitFor(901, new Date(now - 120_000).toISOString());
+  await plantServerRow(page, "visits", theirs, new Date(now).toISOString());
+
+  await page.reload();
+  await login(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await expect
+    .poll(async () => {
+      await requestSyncCycle(page);
+      return (await readIndexedDbStore<SyncReview>(page, "sync_review")).filter((review) => review.needs_review).map((review) => review.reason);
+    })
+    .toEqual(["displaced_by_server"]);
+
+  await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(
+    sheet.getByText(
+      "زيارة — النسخة دي اتشالت لأن جهاز تاني سبقها على السيرفر. " +
+        "فيه دفعات اتحصّلت عليها ومش هتوصل للسيرفر: 150.00 ج.م فيزا (RCP-900). " +
+        "احجز للمريض من جديد وسجّل الدفعة تاني، واكتب رقم الإيصال القديم في ملاحظة الدفعة.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(sheet.getByRole("button", { name: S.syncReviewKeepAction, exact: true })).toHaveCount(0);
+  await sheet.getByRole("button", { name: S.syncReviewAcknowledgeAction, exact: true }).click();
+  await expect(page.getByRole("button", { name: S.syncNeedsReview, exact: true })).toHaveCount(0);
+
+  expect((await readIndexedDbStore<Payment>(page, "payments")).find((row) => row.id === payment.id)).toBeUndefined();
+  expect((await readIndexedDbStore<Invoice>(page, "invoices")).find((row) => row.id === invoice.id)).toBeUndefined();
+  expect((await readIndexedDbStore<Visit>(page, "visits")).find((row) => row.id === theirs.id)).toEqual(theirs);
 });

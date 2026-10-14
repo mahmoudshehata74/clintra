@@ -296,7 +296,7 @@ describe("version 14: visits.note backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const visits = await upgraded.visits.toArray();
 
-    expect(upgraded.verno).toBe(18);
+    expect(upgraded.verno).toBe(19);
     expect(visits.find((visit) => visit.id === withoutNote.id)).toHaveProperty("note", null);
     expect(visits.find((visit) => visit.id === pulledWithNote.id)?.note).toBe("حساسية بنسلين");
     upgraded.close();
@@ -380,7 +380,7 @@ describe("version 15: number series backfill", () => {
 
     const upgraded = new ClintraDatabase(name);
 
-    expect(upgraded.verno).toBe(18);
+    expect(upgraded.verno).toBe(19);
     expect((await upgraded.invoices.toArray()).map((invoice) => invoice.series)).toEqual([1, 1]);
     expect((await upgraded.payments.toArray()).map((payment) => payment.series)).toEqual([1, 1]);
     expect((await upgraded.device.get("seed-device"))?.series).toBe(1);
@@ -430,7 +430,7 @@ describe("version 17: practitioners' syndicate_number and rev backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const practitioners = await upgraded.practitioners.toArray();
 
-    expect(upgraded.verno).toBe(18);
+    expect(upgraded.verno).toBe(19);
     expect(practitioners.find((p) => p.id === local.id)).toEqual({ ...local, syndicate_number: null, rev: 1 });
     expect(practitioners.find((p) => p.id === pulled.id)).toEqual(pulled);
     upgraded.close();
@@ -440,7 +440,7 @@ describe("version 17: practitioners' syndicate_number and rev backfill", () => {
 describe("version 18: messages and message_templates", () => {
   it("adds both stores with their indexes, one template override per key", async () => {
     const local = new ClintraDatabase(`clintra-db-messages-test-${crypto.randomUUID()}`);
-    expect(local.verno).toBe(18);
+    expect(local.verno).toBe(19);
     expect(local.messages.schema.indexes.map((index) => index.src).sort()).toEqual([
       "attempted_at",
       "location_id",
@@ -460,6 +460,50 @@ describe("version 18: messages and message_templates", () => {
     await local.message_templates.add({ ...override, id: "template-1" });
     await expect(local.message_templates.add({ ...override, id: "template-2" })).rejects.toThrow();
     local.close();
+  });
+});
+
+describe("version 19: number high-water marks", () => {
+  it("initialises every device's marks from the numbers already in the local store", async () => {
+    const name = `clintra-db-upgrade-test-${crypto.randomUUID()}`;
+    const stores = Object.fromEntries(
+      new ClintraDatabase(name).tables.map((table) => [
+        table.name,
+        [table.schema.primKey.src, ...table.schema.indexes.map((index) => index.src)].join(", "),
+      ]),
+    );
+    const legacy = new Dexie(name);
+    legacy.version(18).stores(stores);
+    const invoiceBase = { org_id: ORG_ID, location_id: LOCATION_ID, visit_id: "visit-1", patient_id: PATIENT_ID, practitioner_id: PRACTITIONER_ID, total: 0, paid: 0, status: InvoiceStatus.Unpaid, issued_at: "2026-09-07T06:00:00.000Z", rev: 1 };
+    await legacy.table("invoices").bulkAdd([
+      { ...invoiceBase, id: "invoice-1", issued_year: 2025, series: 2, number: 9 },
+      { ...invoiceBase, id: "invoice-2", issued_year: 2026, series: 2, number: 3 },
+      { ...invoiceBase, id: "invoice-3", issued_year: 2026, series: 2, number: 5 },
+    ]);
+    const paymentBase = { invoice_id: "invoice-1", location_id: LOCATION_ID, amount: 100, method: "cash", series: 2, note: null, after_close: false, created_by: "membership-1", created_at: "2026-09-07T06:00:00.000Z", rev: 1 };
+    await legacy.table("payments").bulkAdd([
+      { ...paymentBase, id: "payment-1", receipt_number: "10" },
+      { ...paymentBase, id: "payment-2", receipt_number: "9" },
+    ]);
+    await legacy.table("prescriptions").add({
+      id: "rx-1", org_id: ORG_ID, location_id: LOCATION_ID, visit_id: "visit-1", patient_id: PATIENT_ID, practitioner_id: PRACTITIONER_ID,
+      series: 2, issued_year: 2026, number: 7, diagnosis: null, printed_at: null, created_by: "membership-1", created_at: "2026-09-07T06:00:00.000Z", rev: 1,
+    });
+    await legacy.table("device").add({
+      id: "device-1", org_id: ORG_ID, location_id: LOCATION_ID, registered_at: "2026-09-07T06:00:00.000Z",
+      pull_cursor: null, membership_id: null, token: null, series: 2,
+    });
+    legacy.close();
+
+    const upgraded = new ClintraDatabase(name);
+    expect(upgraded.verno).toBe(19);
+    expect((await upgraded.device.get("device-1"))?.number_marks).toEqual({
+      [`invoice:${LOCATION_ID}:2:2025`]: 9,
+      [`invoice:${LOCATION_ID}:2:2026`]: 5,
+      [`receipt:${LOCATION_ID}:2`]: 10,
+      [`prescription:${LOCATION_ID}:2:2026`]: 7,
+    });
+    upgraded.close();
   });
 });
 
