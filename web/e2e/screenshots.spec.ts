@@ -1040,7 +1040,12 @@ test("@screenshot care-plan-sheet", async ({ page }) => {
   const items = (await readStore<Stored & { sequence: number; price: number }>(page, "care_plan_items")).sort(
     (a, b) => a.sequence - b.sequence,
   );
-  const rows: { store: string; value: unknown }[] = [];
+  // The plan starts on the day of its first session, so its hero reads the
+  // same date as session 1.
+  const plan = (await readStore<Stored>(page, "care_plans")).find((row) => row.patient_id === karim.id)!;
+  const rows: { store: string; value: unknown }[] = [
+    { store: "care_plans", value: { ...plan, started_at: cairoInstant(addDaysToClinicDay(PLAN_DAY, -35), "09:00") } },
+  ];
   for (const [index, item] of items.slice(0, 5).entries()) {
     const day = addDaysToClinicDay(PLAN_DAY, -35 + index * 7);
     const at = cairoInstant(day, "09:00");
@@ -1111,6 +1116,7 @@ test("@screenshot care-plan-sheet", async ({ page }) => {
   await page.getByRole("dialog").getByRole("button", { name: new RegExp(PLAN.badgePrefix) }).click();
   const sheet = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: PLAN.sheetTitle, exact: true }) });
   await expect(sheet.getByText("5 / 10 جلسة", { exact: true })).toBeVisible();
+  await expect(sheet).toContainText(`${PLAN.startedLabel} 9 / 9 / 2026`);
   await sheet.getByRole("button", { name: PLAN.bookNext, exact: true }).click();
   const booking = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: new RegExp(`^${S.bookingButtonLabel}`) }) });
   await booking.getByRole("button", { name: "09:30", exact: true }).click();
