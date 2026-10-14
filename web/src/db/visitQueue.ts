@@ -3,9 +3,10 @@ import { VisitSource } from "../domain/visitSource";
 import { VisitStatus } from "../domain/visitStatus";
 import type { ClinicDay } from "../domain/time";
 import { resolveActingMembership } from "./actingMembership";
+import { assertSessionBookable, linkSessionToVisit, sessionLinkTables } from "./carePlans";
 import type { ClintraDatabase } from "./database";
-import { mutate, runAtomicMutations } from "./mutate";
-import { AuditAction, type Visit } from "./types";
+import { mutate, runAtomicMutations, type AtomicWriter } from "./mutate";
+import { AuditAction, type CarePlanItem, type Visit } from "./types";
 
 export interface AddToQueueInput {
   practitionerId: string;
@@ -18,6 +19,12 @@ export interface AddToQueueInput {
   status?: VisitStatus;
   /** Defaults to phone. Walk-in passes walkin. */
   source?: VisitSource;
+  /**
+   * The care plan session this queue visit books, if any — checked and
+   * linked exactly as bookExistingPatientVisit's own carePlanItemId
+   * (db/visitBooking.ts), in this same transaction.
+   */
+  carePlanItemId?: string;
 }
 
 export interface AddToQueueResult {
@@ -44,7 +51,12 @@ export async function addToQueue(db: ClintraDatabase, input: AddToQueueInput): P
   const source = input.source ?? VisitSource.Phone;
   const arrivedAt = status === VisitStatus.Arrived ? now : null;
 
-  return db.transaction("rw", db.visits, db.audit_log, db.sync_ops, async () => {
+  const write: AtomicWriter = (mutation) => mutate(db, mutation);
+
+  return db.transaction("rw", [db.visits, ...sessionLinkTables(db), db.audit_log, db.sync_ops], async () => {
+    const session: CarePlanItem | null = input.carePlanItemId
+      ? await assertSessionBookable(db, input.carePlanItemId, input)
+      : null;
     const visitsForDay = await db.visits
       .where("[practitioner_id+visit_date]")
       .equals([input.practitionerId, input.visitDate])
@@ -86,6 +98,9 @@ export async function addToQueue(db: ClintraDatabase, input: AddToQueueInput): P
       actorMembershipId: actor.id,
       orgId: input.orgId,
     });
+    if (session) {
+      await linkSessionToVisit(write, db, session, after, actor.id);
+    }
 
     return { auditLogId, position };
   });

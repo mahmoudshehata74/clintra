@@ -80,5 +80,7 @@ export const carePlanStrings = {
   errorServiceRequired: "اختار الخدمة",
   errorPlanAlreadyActive: "المريض عنده خطة رعاية جارية مع الدكتور ده",
   errorNotPlanPractitioner: "الخطة بيعدّلها دكتور الخطة بس",
+  errorSessionNotBookable: "الجلسة دي اتحجزت أو اتأجلت",
+  errorPlanStopped: "الخطة متوقفة",
   errorFailed: "ما اتحفظش، جرّب تاني",
 } as const;

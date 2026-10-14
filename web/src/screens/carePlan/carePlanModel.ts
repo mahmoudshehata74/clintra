@@ -510,6 +510,10 @@ export function carePlanErrorMessage(error: unknown): string {
       return T.errorPlanAlreadyActive;
     case CarePlanError.NotPlanPractitioner:
       return T.errorNotPlanPractitioner;
+    case CarePlanError.SessionNotBookable:
+      return T.errorSessionNotBookable;
+    case CarePlanError.PlanStopped:
+      return T.errorPlanStopped;
     default:
       return T.errorFailed;
   }

@@ -27,12 +27,14 @@ import { todayInCairo } from "../../domain/time";
 import Sheet from "../day/Sheet";
 import SheetHeader from "../day/SheetHeader";
 import SendMessageSheet from "../messages/SendMessageSheet";
+import CarePlanBookingSheet from "./CarePlanBookingSheet";
 import {
   buildCarePlanSheet,
   carePlanErrorMessage,
   formatPlanMoney,
   previewCarePlanSessions,
   validateCarePlanDraft,
+  type BookNextState,
   type CarePlanSheetModel,
   type CarePlanSheetSource,
   type DraftErrors,
@@ -124,6 +126,7 @@ function PlanView({ planId }: { planId: string }) {
   const actingPractitionerId = useGuardedActingMembership()?.practitioner_id ?? null;
   const [isEditing, setIsEditing] = useState(false);
   const [reminderVisitId, setReminderVisitId] = useState<string | null>(null);
+  const [booking, setBooking] = useState<BookNextState | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
   const data = useLiveQuery(() => loadPlan(planId), [planId]);
 
@@ -191,6 +194,15 @@ function PlanView({ planId }: { planId: string }) {
         )}
         {/* `.split` — the actions under the sessions. */}
         <div className="flex flex-wrap items-center gap-2 px-6 pb-5 pt-1 max-[600px]:px-[18px]">
+          {model.book && (
+            <Button
+              variant="primary"
+              disabled={model.book.disabledReason !== null}
+              onClick={() => setBooking(model.book)}
+            >
+              {T.bookNext}
+            </Button>
+          )}
           {model.canEdit && (
             <Button variant="secondary" onClick={() => setIsEditing(true)}>
               {T.editPlan}
@@ -203,11 +215,14 @@ function PlanView({ planId }: { planId: string }) {
           >
             {T.sendReminder}
           </Button>
+          {model.book?.disabledReason && <p className="basis-full text-[11.5px] text-muted">{model.book.disabledReason}</p>}
           {model.reminder.disabledReason && (
             <p className="basis-full text-[11.5px] text-muted">{model.reminder.disabledReason}</p>
           )}
         </div>
       </Card>
+
+      {booking && <CarePlanBookingSheet plan={plan} book={booking} onDismiss={() => setBooking(null)} />}
 
       {reminderVisitId && (
         <SendMessageSheet
