@@ -13,6 +13,7 @@ export const sidebarStrings = {
   navDay: "اليوم",
   navDoctor: "شاشة الطبيب",
   navVisit: "الزيارة الحالية",
+  navMessages: "الرسائل",
   navAudit: "السجل",
   navSettings: "الإعدادات",
 } as const;
