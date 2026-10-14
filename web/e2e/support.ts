@@ -578,6 +578,9 @@ export async function karimProfileFixture(page: Page): Promise<void> {
   const items = (await readStore<Stored & { sequence: number }>(page, "care_plan_items")).sort((a, b) => a.sequence - b.sequence);
   const assistantUser = (await readStore<Stored>(page, "users")).find((user) => user.full_name === ASSISTANT_NAME)!;
   const assistant = (await readStore<Stored>(page, "memberships")).find((membership) => membership.user_id === assistantUser.id)!;
+  // Invoices and receipts are minted in this device's own number series.
+  const [device] = await readStore<{ series: number | null }>(page, "device");
+  const series = device.series ?? 1;
 
   const pastVisit = (id: string, visitDay: string, time: ClockTime, status: string, extra: Record<string, unknown> = {}) => ({
     store: "visits",
@@ -610,7 +613,7 @@ export async function karimProfileFixture(page: Page): Promise<void> {
       ...owned,
       number,
       issued_year: 2026,
-      series: 9,
+      series,
       patient_id: karim.id,
       practitioner_id: today.practitioner_id,
       visit_id: visitId,
@@ -630,7 +633,7 @@ export async function karimProfileFixture(page: Page): Promise<void> {
       amount,
       method,
       receipt_number: receipt,
-      series: 9,
+      series,
       note: null,
       after_close: false,
       created_by: assistant.id,

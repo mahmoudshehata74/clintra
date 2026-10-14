@@ -94,7 +94,7 @@ test("the profile's hero, tabs and timeline match the patient's history", async 
   await expect(eventRow(page, "زيارة — خشونة بسيطة")).toBeVisible();
   await expect(eventRow(page, `${PROFILE.rxTitle} · دوائين`)).toContainText(`Diclofenac 50mg، Paracetamol 500mg · ${PROFILE.rxPrinted}`);
   await expect(eventRow(page, "متابعة بعد الزيارة · واتساب")).toContainText(PROFILE.msgSent);
-  await expect(eventRow(page, "دفعة · 100 ج.م فيزا")).toContainText("فاتورة INV-2026-I-0002 · سارة حسن");
+  await expect(eventRow(page, "دفعة · 100 ج.م فيزا")).toContainText("فاتورة INV-2026-0002 · سارة حسن");
 
   // A cancelled visit reads muted: the field surface instead of the card.
   const cancelled = eventRow(page, PROFILE.visitCancelled).getByRole("button");
@@ -124,7 +124,7 @@ test("tapping a visit, a prescription or a payment opens its sheet", async ({ pa
   await closeSheet(print);
 
   await eventRow(page, "دفعة · 100 ج.م فيزا").getByRole("button").click();
-  const invoice = invoiceSheet(page, "INV-2026-I-0002");
+  const invoice = invoiceSheet(page, "INV-2026-0002");
   await expect(invoice.getByRole("button", { name: `${S.recordPaymentAction} (150 ${S.tileCurrencyUnit})`, exact: true })).toBeVisible();
   await closeSheet(invoice);
 
@@ -148,7 +148,7 @@ test("the workspace's quick buttons, the day's menu and the doctor's day open th
   await expect(profileEvents(sheet)).toHaveCount(2);
   // A payment opened from the sheet stacks its invoice above it.
   await eventRow(sheet, "دفعة · 300 ج.م كاش").getByRole("button").click();
-  const invoice = invoiceSheet(page, "INV-2026-I-0001");
+  const invoice = invoiceSheet(page, "INV-2026-0001");
   await expect(invoice.getByText(S.invoiceStatusPaid, { exact: true })).toBeVisible();
   await closeSheet(invoice);
   await expect(sheet).toBeVisible();
