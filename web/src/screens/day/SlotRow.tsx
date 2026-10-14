@@ -76,8 +76,8 @@ const LIVE_UNTIL_STATUSES = new Set<string>([VisitStatus.InRoom, VisitStatus.NoS
  * pill, with a 3px left accent stripe carrying the status colour
  * (statusStyle.ts). The row's primary button still covers the time+patient
  * area and keeps its exact advance/open-form/cooldown behaviour from before
- * this task; the overflow menu and visit-form pill sit in their own trailing
- * column, under the status pill.
+ * this task; the overflow menu and visit-form pill sit beside the status
+ * pill in the trailing column, all centred in the row.
  */
 export default function SlotRow({
   time,
@@ -204,24 +204,22 @@ export default function SlotRow({
           {whoBlock}
         </div>
       )}
-      <div className="flex flex-none flex-col items-end gap-1">
+      {/* `.slot .state`, centred in the row like the prototype's; the
+          visit-form chip and the menu sit beside it on the same line. */}
+      <div className="flex flex-none items-center gap-1.5">
         <Badge {...visual.badge} shape="pill">
           {visitStatusLabel(visit.status, patient?.gender)}
         </Badge>
-        {(onOpenVisitForm || menu) && (
-          <div className="flex items-center gap-1">
-            {onOpenVisitForm && (
-              <button
-                type="button"
-                onClick={onOpenVisitForm}
-                className="shrink-0 rounded-chip bg-field px-2 py-0.5 text-xs text-muted hover:bg-green-wash hover:text-green"
-              >
-                {dayScreenStrings.visitFormPillLabel}
-              </button>
-            )}
-            {menu && <VisitMenu actions={menu} />}
-          </div>
+        {onOpenVisitForm && (
+          <button
+            type="button"
+            onClick={onOpenVisitForm}
+            className="shrink-0 rounded-chip bg-field px-2 py-0.5 text-xs text-muted hover:bg-green-wash hover:text-green"
+          >
+            {dayScreenStrings.visitFormPillLabel}
+          </button>
         )}
+        {menu && <VisitMenu actions={menu} />}
       </div>
     </li>
   );

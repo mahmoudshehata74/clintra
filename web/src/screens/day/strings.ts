@@ -98,8 +98,10 @@ export const dayScreenStrings = {
   // only recolours the qnum.
   queueNextBadge: "التالي",
   queueNextActionNumberPrefix: "نمرة",
-  // The floating action that opens the booking sheet.
+  // The booking sheet's title prefix ("حجز · 11:30 · د. أحمد المصري").
   bookingButtonLabel: "حجز",
+  // The slots card's `.run` that opens the booking sheet.
+  bookingRunButtonLabel: "احجز مريض جديد",
   // `.field label` above the search box — distinct from the placeholder
   // below, which stays its own (shorter) wording.
   bookingSearchLabel: "ابحث بالاسم أو التليفون",
@@ -394,8 +396,8 @@ export const dayScreenStrings = {
   queueSummaryCurrentTurnLabel: "الدور دلوقتي",
   queueSummaryWaitingLabel: "مستنيين",
   queueSummaryAverageLabel: "متوسط الكشف",
-  // Prefixes the expected-wait minutes on a waiting row, e.g. "متوقع دورك بعد ~٢٢ دقيقة".
-  queueExpectedWaitPrefix: "متوقع دورك بعد ~",
+  // `.qwait` on a waiting row: "متوقع" over the expected call time ("13:15").
+  queueExpectedCallPrefix: "متوقع",
   // Shown instead, on every waiting row, until at least two visits have
   // completed today — never extrapolated from a single data point.
   queueExpectedWaitUnknown: "لسه بدري نحسب المتوقع",
@@ -412,10 +414,9 @@ export const dayScreenStrings = {
   queueCardBadge: "الطابور",
   queueCardTitle: "الدور",
   queueCardSubtitle: "النمرة تلقائية للأقدم انتظار",
-  queueCallNextActionLabel: "استدعاء التالي",
   // `.qwait` — completed shows a duration, in_room a plain dash (the
   // prototype's own rendering: no elapsed time there), waiting reuses
-  // queueExpectedWaitPrefix/queueExpectedWaitUnknown above unchanged.
+  // queueExpectedCallPrefix/queueExpectedWaitUnknown above.
   queueWaitCompletedPrefix: "استغرق",
   queueWaitInRoomDash: "—",
   // `.runrow .count` on the queue card's footer.

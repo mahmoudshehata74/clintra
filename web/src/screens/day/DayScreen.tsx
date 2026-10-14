@@ -39,7 +39,7 @@ import type { Piastres } from "../../domain/money";
 import { ScheduleMode } from "../../domain/scheduleMode";
 import { addDaysToClinicDay, clockTimeInCairo, todayInCairo, weekdayOf, type ClockTime } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
-import { formatActorLabel } from "./actorLabel";
+import { formatActorName } from "./actorLabel";
 import {
   ADVANCE_COOLDOWN_MS,
   beginCooldown,
@@ -403,7 +403,7 @@ export default function DayScreen({
       for (const visit of visits) {
         const membership = membershipsById.get(visit.created_by);
         const user = membership ? usersById.get(membership.user_id) : undefined;
-        actorLabelByVisitId.set(visit.id, formatActorLabel(membership, user));
+        actorLabelByVisitId.set(visit.id, formatActorName(membership, user));
       }
 
       return {
@@ -484,15 +484,6 @@ export default function DayScreen({
       console.error(error);
     } finally {
       setAdvanceCooldown((prev) => settleCooldown(prev, visit.id));
-    }
-  }
-
-  async function handleCallNextInQueue() {
-    const sorted = [...currentPractitionerVisits].sort((a, b) => a.position - b.position);
-    const nextVisitId = computeQueueSummary(sorted).nextVisitId;
-    const nextVisit = sorted.find((visit) => visit.id === nextVisitId);
-    if (nextVisit) {
-      await handleAdvance(nextVisit, VisitStatus.InRoom);
     }
   }
 
@@ -895,21 +886,27 @@ export default function DayScreen({
                 ]
           }
           splitSharePercent={isQueueMode ? queueCellsForCurrent.splitSharePercent : slotsSlab.splitSharePercent}
+          // `.split-leg`: slots "اكتمل 4 من 5 · باقي 1", queue "اكتمل 4 · مستنيين 4".
           splitCompletedText={
             <>
               {dayScreenStrings.slabSplitCompletedPrefix}{" "}
               <b>
                 <Ltr>{finalStateCount}</Ltr>
-              </b>{" "}
-              {dayScreenStrings.slabSplitOfWord}{" "}
-              <b>
-                <Ltr>{currentPractitionerVisits.length}</Ltr>
               </b>
+              {!isQueueMode && (
+                <>
+                  {" "}
+                  {dayScreenStrings.slabSplitOfWord}{" "}
+                  <b>
+                    <Ltr>{currentPractitionerVisits.length}</Ltr>
+                  </b>
+                </>
+              )}
             </>
           }
           splitRemainingText={
             <>
-              {dayScreenStrings.slabSplitRemainingPrefix}{" "}
+              {isQueueMode ? dayScreenStrings.queueSummaryWaitingLabel : dayScreenStrings.slabSplitRemainingPrefix}{" "}
               <b>
                 <Ltr>{currentPractitionerVisits.length - finalStateCount}</Ltr>
               </b>
@@ -1061,7 +1058,6 @@ export default function DayScreen({
               onSendToEnd={handleSendToEnd}
               onOpenVisitForm={handleOpenVisitForm}
               onOpenDaySheet={practitioner.id === currentPractitionerId ? () => setIsDaySheetOpen(true) : undefined}
-              onCallNextInQueue={practitioner.id === currentPractitionerId ? handleCallNextInQueue : undefined}
             />
           );
         })}

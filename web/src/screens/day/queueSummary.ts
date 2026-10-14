@@ -50,6 +50,20 @@ export function computeExpectedWaitMinutes(
   return Math.max(0, position - currentTurnPosition) * avgConsultMinutes;
 }
 
+/**
+ * The clock time a waiting visit is expected to be called (the queue row's
+ * `.qwait` "متوقع 13:15"): `now` plus computeExpectedWaitMinutes.
+ */
+export function computeExpectedCallTime(
+  position: number,
+  currentTurnPosition: number,
+  avgConsultMinutes: number,
+  now: Instant,
+): ClockTime {
+  const minutes = computeExpectedWaitMinutes(position, currentTurnPosition, avgConsultMinutes);
+  return clockTimeInCairo(new Date(new Date(now).getTime() + minutes * 60_000).toISOString());
+}
+
 export interface QueueCellCounts {
   completedCount: number;
   inRoomCount: number;

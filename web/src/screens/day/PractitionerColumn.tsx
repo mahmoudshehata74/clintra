@@ -11,7 +11,7 @@ import type { Patient, Schedule, Service, Visit } from "../../db/types";
 import { computeGridRows } from "./dayGrid";
 import { computeElapsedLabel } from "./elapsedLabel";
 import { computeEmptySlots } from "./emptySlots";
-import { computeExpectedWaitMinutes, computeQueueSummary } from "./queueSummary";
+import { computeExpectedCallTime, computeQueueSummary } from "./queueSummary";
 import QueueRow, { type QueueRowKind } from "./QueueRow";
 import { resolveDayScheduleState } from "./scheduleState";
 import SlotRow from "./SlotRow";
@@ -62,8 +62,6 @@ interface PractitionerColumnProps {
   onOpenVisitForm: (visit: Visit) => void;
   /** The slots card's trailing action ("ورقة الغد") — slots mode only. The audit log ("السجل") moved to AppShell's rail. */
   onOpenDaySheet?: () => void;
-  /** The queue card's "استدعاء التالي" trailing action — advances the next waiting visit. */
-  onCallNextInQueue?: () => void;
 }
 
 export default function PractitionerColumn({
@@ -96,7 +94,6 @@ export default function PractitionerColumn({
   onSendToEnd,
   onOpenVisitForm,
   onOpenDaySheet,
-  onCallNextInQueue,
 }: PractitionerColumnProps) {
   const scheduleState = resolveDayScheduleState(todaysSchedule, hasAnySchedule);
 
@@ -141,7 +138,6 @@ export default function PractitionerColumn({
         onOpenProfile={onOpenProfile}
         onSendToEnd={onSendToEnd}
         onOpenVisitForm={onOpenVisitForm}
-        onCallNext={onCallNextInQueue}
         onOpenBooking={onOpenBooking}
         onWalkIn={onWalkIn}
         today={today}
@@ -256,7 +252,7 @@ export default function PractitionerColumn({
       >
         {onOpenBooking && (
           <Button variant="primary" size="sm" onClick={onOpenBooking}>
-            {dayScreenStrings.bookingButtonLabel}
+            {dayScreenStrings.bookingRunButtonLabel}
           </Button>
         )}
         {onWalkIn && (
@@ -301,7 +297,6 @@ interface QueueColumnProps {
   onOpenProfile: (visit: Visit) => void;
   onSendToEnd: (visit: Visit) => void;
   onOpenVisitForm: (visit: Visit) => void;
-  onCallNext?: () => void;
   onOpenBooking?: () => void;
   onWalkIn?: () => void;
   /** Today, for the elapsed in_room meta phrase's real-day gating — see elapsedLabel.ts. */
@@ -333,7 +328,6 @@ function QueueColumn({
   onOpenProfile,
   onSendToEnd,
   onOpenVisitForm,
-  onCallNext,
   onOpenBooking,
   onWalkIn,
   today,
@@ -343,8 +337,6 @@ function QueueColumn({
   const summary = computeQueueSummary(sortedVisits);
   const hasEnoughDataForEstimate = countCompletedConsultations(sortedVisits) >= MINIMUM_COMPLETED_FOR_ESTIMATE;
   const completedCount = sortedVisits.filter((visit) => visit.status === VisitStatus.Completed).length;
-  const someoneInRoom = sortedVisits.some((visit) => visit.status === VisitStatus.InRoom);
-  const canCallNext = Boolean(onCallNext && !someoneInRoom && summary.nextVisitId);
 
   return (
     <Card>
@@ -352,13 +344,6 @@ function QueueColumn({
         badge={dayScreenStrings.queueCardBadge}
         title={showLabel ? practitionerName : dayScreenStrings.queueCardTitle}
         subtitle={dayScreenStrings.queueCardSubtitle}
-        action={
-          canCallNext && (
-            <Button variant="onDark" size="sm" onClick={onCallNext}>
-              {dayScreenStrings.queueCallNextActionLabel}
-            </Button>
-          )
-        }
       />
       <ul>
         {sortedVisits.map((visit) => {
@@ -442,12 +427,18 @@ function QueueColumn({
             if (!hasEnoughDataForEstimate || avgConsultMinutes === null || summary.currentTurnPosition === null) {
               waitNode = dayScreenStrings.queueExpectedWaitUnknown;
             } else {
-              const minutes = computeExpectedWaitMinutes(visit.position, summary.currentTurnPosition, avgConsultMinutes);
+              // `.qwait`: "متوقع" over the expected call time, a clock time.
+              const callTime = computeExpectedCallTime(
+                visit.position,
+                summary.currentTurnPosition,
+                avgConsultMinutes,
+                now.toISOString(),
+              );
               waitNode = (
                 <>
-                  {dayScreenStrings.queueExpectedWaitPrefix}
+                  {dayScreenStrings.queueExpectedCallPrefix}
                   <b>
-                    <Ltr>{minutes}</Ltr> {dayScreenStrings.delayMinutesSuffix}
+                    <Ltr>{callTime}</Ltr>
                   </b>
                 </>
               );
