@@ -19,9 +19,16 @@ const BASE_URL = `http://localhost:${PORT}`;
  * The opt-in screenshot capture (screenshots.spec.ts, tagged @screenshot) is
  * excluded from the default run via --grep-invert in the test:e2e script, so
  * CI never runs it — see web/package.json and .github/workflows/ci.yml.
+ *
+ * The prototype comparison (compare.spec.ts) is ignored here outright and
+ * runs only under its own config, playwright.compare.config.ts
+ * (pnpm test:compare).
  */
+export const COMPARE_SPEC = /compare\.spec\.ts/;
+
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: COMPARE_SPEC,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   // The one CI retry stays for diagnosis (the second attempt's trace shows
@@ -65,7 +72,8 @@ export default defineConfig({
       // app) — it would only double CPU contention between parallel workers,
       // which is exactly what skews a timing measurement. It runs once, on
       // "desktop", below.
-      testIgnore: /hardening\.spec\.ts/,
+      // A project's testIgnore replaces the top-level one, so it repeats it.
+      testIgnore: [/hardening\.spec\.ts/, COMPARE_SPEC],
     },
   ],
   webServer: {
