@@ -25,7 +25,7 @@ screens are built on top of the existing data layer.
   commands, full RLS on every tenant table (see `api/docs/rls.md`).
 
 ## Verify
-Web: `pnpm --dir web test` (vitest, 1040 passed) · `pnpm --dir web
+Web: `pnpm --dir web test` (vitest, 1092 passed) · `pnpm --dir web
 exec tsc -b --noEmit` · `pnpm --dir web build` · `pnpm --dir web test:e2e`.
 API: `cd api && php artisan test` (Pest, 299 passed).
 
@@ -117,10 +117,30 @@ decisions it implements:
 3. No provider and no delivery status: `https://wa.me/<digits>?text=` and `sms:<E.164>?body=`, built by the pure `buildMessageLink`.
 4. Messages are scoped like invoices (org + locations), templates like practitioners (org); owner-only template editing is enforced on the device only — the same known server gap as other settings writes.
 
+19 messages (step 6): done — `web/src/screens/messages/` (MessagesScreen,
+SendMessageSheet, pure helpers in `messagesModel.ts`), the rail page
+"الرسائل" (nav key `messages`) and the send sheet opened from the day
+screen's VisitMenu and from a printed prescription; writes go through
+`db/messages.ts`. The owner decisions it implements are listed under
+"Screen 19 (messages)" below.
+
 This changes the earlier plan below ("templates seeded by migration"):
 defaults now ship with the app and only overrides live in the database,
 because a seed would only reach the organizations that exist when the
 migration runs — every organization provisioned later would have none.
+
+### Screen 19 (messages) — owner decisions over the prototype
+- a. Rail item "الرسائل" (nav key `messages`) for every role, after "الزيارة الحالية" (after "اليوم" for roles without the doctor items). The page follows `.msg-layout`: `.msg-side` lists the six templates in their defined order with `.icn`, name, description and badge ("مقترح" `.badge.auto`, "اختياري" plain, "يدوي" `.badge.manual`); `.msg-main` shows the selected one.
+- b. `.msg-preview` shows the effective body (override or default) with each known placeholder as a `.var` chip with its Arabic label (اسم المريض، اسم العيادة، هاتف العيادة، التاريخ، الوقت، اسم الطبيب، الجلسة، المبلغ المتبقي). `.ch` reads "قابل للتعديل" for the owner, "معدّل" when an override exists. Owner only: "تعديل" switches to the shared TextArea with the raw body and one insert chip per placeholder; "حفظ التعديلات" (`saveTemplateBody`), "إلغاء", and "رجّع النص الأصلي" when an override exists (`resetTemplate`). Others read it. Custom shows "الرسالة دي بتتكتب وقت الإرسال" and no editor.
+- c. The prototype's channel toggle is not on this page (templates are channel-agnostic); it lives in the send sheet.
+- d. SendMessageSheet, from VisitMenu's "ابعت رسالة" (any visit whose patient exists — an owner-approved addition) and from "واتساب" / "SMS" on a printed prescription (shown only once printed). Template picker (ToggleGroup; the prescription entry preselects custom with the prescription text: RX number, patient, one numbered line per drug "name — form: instructions · duration", note lines, "د. {name}"); the filled text in an editable TextArea (edits affect this message only); "فيه بيانات ناقصة: …" for unfilled placeholders, never blocking; the `.msg-ch-toggle` channel toggle, WhatsApp by default; "افتح واتساب" / "افتح SMS" call `recordMessageAttempt`, then open the link (`window.open` for wa.me, the location for sms:); refusals (no phone, empty text, device errors) show in the sheet and open nothing. Values: patient name; clinic name and phone from the printClinic sources (organization, the visit's location); the visit's date and booked time; the visit's practitioner's name; the balance (invoice total − paid, when above zero, as money); the session label stays missing until screen 17.
+- e. `.msg-sent` "آخر الرسائل": the 20 most recent messages the membership can see (organization, and its locations unless it covers all), newest first: `.icn.wa` / `.icn.sms`, "name · phone" (local display, left to right), `.snip` = the body's first line cut to 60 characters with "…", and a status button: "اتفتحت" (`.st.pending`) marks it sent, "اتبعتت" unmarks it. Empty: "لسه مفيش رسائل".
+- f. Below 768px `.msg-side` is a horizontal row of template chips above `.msg-main`.
+- WhatsApp's green (`#25D366`, `.icn.wa` and the toggle's dot) is the `whatsapp` token (`docs/design-tokens.md`).
+
+## Backlog
+- Messages: a "suggested today" list on the messages page (tomorrow's appointment reminders, follow-ups due, balances a week old), so the suggested templates are offered for the right patients instead of being opened one visit at a time.
+- Sync: the first pull after a load waits for the 10-second timer, because the first cycle runs before the device is registered; start a cycle as soon as registration completes.
 
 ## Data decisions for the rebuild
 - `visits.note text NULL` — the doctor's quick note.
