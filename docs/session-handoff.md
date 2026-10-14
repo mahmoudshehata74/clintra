@@ -25,7 +25,7 @@ screens are built on top of the existing data layer.
   commands, full RLS on every tenant table (see `api/docs/rls.md`).
 
 ## Verify
-Web: `pnpm --dir web test` (vitest, 1188 passed) · `pnpm --dir web
+Web: `pnpm --dir web test` (vitest, 1314 passed) · `pnpm --dir web
 exec tsc -b --noEmit` · `pnpm --dir web build` · `pnpm --dir web test:e2e`.
 API: `cd api && php artisan test` (Pest, 325 passed).
 
@@ -192,7 +192,99 @@ migration runs — every organization provisioned later would have none.
 - f. Empty tab states: "لسه مفيش حاجة في ملف المريض", "لسه مفيش زيارات", "لسه مفيش وصفات", "لسه مفيش رسائل", "لسه مفيش مدفوعات", "لسه مفيش ملاحظات".
 - The method label is the app's own ("كاش", "فيزا", …), not the prototype's "نقدي".
 
+## Settled deviations / decisions — prototype alignment
+
+The owner's answers to `docs/screen-comparison.md`'s questions (applied on
+`fix/prototype-alignment`). Where an answer says "keep", nothing changed.
+
+### Global
+- **Visit status words** follow the prototype everywhere, through one
+  `visitStatusLabel` (`web/src/screens/day/statusStyle.ts`): booked "محجوز",
+  arrived "وصل" / "وصلت" (`patients.gender` `female` → "وصلت", otherwise
+  "وصل"), in_room "في الكشف", completed "اكتمل", no_show "لم يحضر",
+  cancelled "ملغي". Kept for the other statuses: confirmed "اتأكد";
+  rescheduled has no word (its row reads as an empty slot, so none shows).
+  The queue row's `.qwho .meta` follows the patient's gender the same way
+  ("خلص" / "خلصت 12:04", "وصل" / "وصلت 12:28"), as does the slot row's
+  `.until` ("وصلت 08:52"). The profile's cancelled and no-show visits read
+  "زيارة — ملغي" / "زيارة — لم يحضر". The doctor's day shows no status word
+  of its own (its list keeps its phrases: "خلصت 09:28", "في الكشف من 12د",
+  "مستني" / "مستنية").
+- **Audit verbs**: "أنشأ حجز" (a visit created, and a care plan session
+  booked), "علّم لم يحضر", "ألغى الحجز"; aligned the same way: "حذف الحجز"
+  (a visit deleted, i.e. a booking undone). Unchanged: "علّم وصول", "حوّل
+  للكشف", "قفل الزيارة", "أكّد الحجز", "نقل الميعاد", "سجّل دفعة".
+- **Page width**: one shared content width for every rail page (day slots,
+  day queue, doctor day, current visit, patients and profile, messages):
+  `PageMain` (`web/src/components/PageMain.tsx`) with the `max-w-page`
+  token, **1116px** — the prototype's `.app` frame inside its 1160px
+  `.screen` — and `.content`'s side padding (20px, 12px below 600px). At
+  1280 wide the rail leaves about 1056px, so the column takes all of it.
+- **Slash dates** ("d / m / yyyy", "d / m") render in the page's own
+  right-to-left order, the day on the right, on screen and on paper:
+  `web/src/domain/slashDate.ts` formats them and
+  `web/src/components/SlashDate.tsx` isolates them right to left. The
+  spaceless "d/m" (visit history, the actor's earlier-day suffix) is
+  unchanged.
+- **Egyptian mobile numbers** display 4-3-4 ("0111 234 5678") in
+  `formatEgyptianPhoneForDisplay`; landlines keep their grouping ("02 2123
+  4567", "03 123 4567", "050 123 4567").
+- **Kept**: bottom sheets (not centred cards); the app bar's sync chip and
+  lock button; the practitioner's name as the day card's title; the extra
+  row chips, lines and buttons of screens 2, 3 and 5 ("التسجيل", "الزيارة
+  اتقفلت من غير تسجيل", "إغلاق الصندوق", "مريض جه دلوقتي", the receipt
+  reprint, the void block, the clinic-header hint); the two-step booking;
+  the staff active badge (the switch stays in the edit form); "قفل
+  الزيارة" without "(يفتح الفاتورة)"; per-row saving in working hours; the
+  one-line mobile hours; the doctor day's mobile quick note.
+
+### Per screen
+- **1 (PIN lock)**: keep the full-screen overlay — it now holds a `.pin-scr`
+  card on the page's paper; keep the neutral title "اكتب الرقم السري", the
+  reserved error line and "تبديل المستخدم".
+- **3 (queue)**: a waiting row's `.qwait` shows its expected call time as a
+  24-hour clock time ("متوقع" over "13:15"), from the existing expected-wait
+  computation (`computeExpectedCallTime`); no "استدعاء التالي" in the card
+  head (the slab's "التالي" covers it); no reorder button (backlog).
+- **6 (payment)**: the confirm button reads "أكّد الدفعة واطبع إيصال": it
+  records the payment, returns to the invoice and prints that payment's
+  receipt through the reprint's own print target, in one tap. A refused or
+  failed write prints nothing.
+- **7 (cash close)**: summary cells render label and value inline like
+  `.close-cell`. The confirm button reads "اقفل اليوم واطبع الملخص": it
+  closes the day, then prints a one-page A4 summary
+  (`DayCloseSummaryPrint.tsx`, named `@page day-close`, the shared PrintPage
+  and printClinic): the clinic block, "إقفال يوم {weekday d month yyyy}",
+  patients seen (completed), no-shows, cancellations, collected by method
+  (كاش، فيزا، محفظة، تحويل — the payments of the day's invoices, the same
+  invoices the expected total sums), total collected, expected cash (the
+  close's expected total), counted cash, the difference and its note, who
+  closed it, and "طُبعت {d month HH:MM}". A refused or failed close prints
+  nothing. The closed state offers "اطبع الملخص" to reprint it.
+- **8 (tomorrow's sheet)**: the footer brand reads "Clintra v{version}" from
+  web/package.json's version (`printedBrand()`, `web/src/domain/appVersion.ts`),
+  shared by every printed page's `.print-foot` (the day sheet and the day
+  summary; the invoice, the receipt and the prescription have no footer).
+- **9 (doctor day)**: a booked, not-yet-arrived row in "كل اليوم" gets "افتح
+  الملف", opening the patient profile sheet.
+- **10 (visit workspace)**: the dose line prefixes the duration with "لمدة"
+  and bolds the duration ("قرص مرتين يوميًا · لمدة <b>7 أيام</b>"), the same
+  on the printed prescription; a duration typed with its own "لمدة" is not
+  prefixed twice.
+- **11 (audit log)**: the filters are the prototype's four — الكل؛ زيارات
+  (visits, visit forms and notes, prescriptions and their drugs, care plans
+  and their sessions, patients, messages)؛ فواتير (invoices, payments, the
+  cash close)؛ إعدادات (services and their price overrides, working hours,
+  staff — users, memberships and their location and practitioner scopes —,
+  practitioners, message templates). The action filters are gone. Every
+  event the sheet lists stays reachable under "الكل"; the settings rows are
+  now listed too, each with its own verb and never a price, a PIN or a scope.
+- **13 (services)**: the list is sorted by name under Arabic collation, ties
+  broken by id (`sortServicesByName`), so the order is always the same.
+
 ## Backlog
+- Invoice item editing (screen 5's "تعديل بنود") — owner decision of the prototype alignment: recorded, not built.
+- Queue reordering (screen 3's "إعادة ترتيب") — owner decision of the prototype alignment: recorded, not built.
 - Messages: a "suggested today" list on the messages page (tomorrow's appointment reminders, follow-ups due, balances a week old), so the suggested templates are offered for the right patients instead of being opened one visit at a time.
 - Sync: the first pull after a load waits for the 10-second timer, because the first cycle runs before the device is registered; start a cycle as soon as registration completes.
 
