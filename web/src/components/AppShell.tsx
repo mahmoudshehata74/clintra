@@ -55,6 +55,13 @@ const ICON_PATHS: Record<NavItem["key"], ReactNode> = {
       <line x1="17" y1="2" x2="17" y2="6" />
     </>
   ),
+  // A person: a head over shoulders.
+  patients: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M5 21v-1a7 7 0 0 1 14 0v1" />
+    </>
+  ),
   // A stethoscope: two ear tubes joining into one, ending in the chest piece.
   doctor: (
     <>

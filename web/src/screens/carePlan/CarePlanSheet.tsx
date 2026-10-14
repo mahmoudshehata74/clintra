@@ -45,13 +45,20 @@ import {
 } from "./carePlanModel";
 import { carePlanStrings as T } from "./strings";
 
-interface CarePlanSheetProps {
-  /** The visit the sheet was opened from: the one a new plan is created from. */
-  visitId: string;
-  /** The plan to show; null opens the create form for the visit. */
-  planId: string | null;
-  onDismiss: () => void;
-}
+type CarePlanSheetProps = (
+  | {
+      /** The visit the sheet was opened from, or null when opened on a plan (the patient profile's plan stat). */
+      visitId: string | null;
+      /** The plan to show. */
+      planId: string;
+    }
+  | {
+      /** The visit a new plan is created from. */
+      visitId: string;
+      /** Null opens the create form for the visit. */
+      planId: null;
+    }
+) & { onDismiss: () => void };
 
 /**
  * The care plan (reference screen 17, "خطة الرعاية") in a sheet, opened
@@ -69,10 +76,10 @@ export default function CarePlanSheet({ visitId, planId, onDismiss }: CarePlanSh
     <div className="print:hidden">
       <Sheet onDismiss={onDismiss} size="lg">
         <SheetHeader title={T.sheetTitle} onDismiss={onDismiss} />
-        {shownPlanId === null ? (
-          <CreatePlanForm visitId={visitId} onCreated={setShownPlanId} onCancel={onDismiss} />
-        ) : (
+        {shownPlanId !== null ? (
           <PlanView planId={shownPlanId} />
+        ) : (
+          visitId !== null && <CreatePlanForm visitId={visitId} onCreated={setShownPlanId} onCancel={onDismiss} />
         )}
       </Sheet>
     </div>,

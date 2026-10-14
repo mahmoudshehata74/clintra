@@ -466,7 +466,7 @@ describe("paging", () => {
 
 describe("lastVisitLine", () => {
   it("reads the last visit's date, or that there is none", () => {
-    expect(lastVisitLine("2026-09-09")).toBe("آخر زيارة 9 / 9 / 2026");
-    expect(lastVisitLine(null)).toBe("مفيش زيارات");
+    expect(lastVisitLine("2026-09-09")).toEqual({ label: "آخر زيارة", date: "9 / 9 / 2026" });
+    expect(lastVisitLine(null)).toEqual({ label: "مفيش زيارات", date: null });
   });
 });

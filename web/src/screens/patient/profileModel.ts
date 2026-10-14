@@ -507,8 +507,10 @@ export function groupProfileEvents(
 
 // ── The patients page ────────────────────────────────────────────────────
 
-/** A search result's last-visit line: "آخر زيارة 9 / 9 / 2026", or "مفيش زيارات". */
-export function lastVisitLine(lastVisitDate: ClinicDay | null): string {
-  return lastVisitDate === null ? T.noVisits : `${T.lastVisitPrefix} ${formatFullDate(lastVisitDate)}`;
+/** A search result's last-visit line: "آخر زيارة" and "9 / 9 / 2026" (read left to right), or "مفيش زيارات" alone. */
+export function lastVisitLine(lastVisitDate: ClinicDay | null): { label: string; date: string | null } {
+  return lastVisitDate === null
+    ? { label: T.noVisits, date: null }
+    : { label: T.lastVisitPrefix, date: formatFullDate(lastVisitDate) };
 }
 
