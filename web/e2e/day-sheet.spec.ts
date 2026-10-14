@@ -1,12 +1,7 @@
-import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { formatWeekdayFullDate } from "../src/domain/displayDate";
 import { addDaysToClinicDay } from "../src/domain/time";
 import { AUTH, gotoSeededDay, PATIENTS, S, SEEDED_DAY, selectPractitioner, SIDEBAR, SLOTS_DR } from "./support";
-
-// Not imported: the Playwright loader cannot import JSON without an import
-// attribute (see support.ts) — the printed footer's version, read the same way.
-const APP_VERSION = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as { version: string }).version;
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -80,7 +75,7 @@ test("the page reads tomorrow without a comma, and its footer the print time and
   const tomorrow = addDaysToClinicDay(SEEDED_DAY, 1);
   await expect(dialog.getByText(`${formatWeekdayFullDate(tomorrow)} — 0 ${S.daySheetPatientCountUnit}`, { exact: true })).toBeVisible();
   await expect(dialog.getByText(new RegExp(`^${S.printedAtPrefix} \\d{1,2} \\S+ \\d{2}:\\d{2}$`))).toBeVisible();
-  await expect(dialog.getByText(`Clintra v${APP_VERSION}`, { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Clintra v1.0.0", { exact: true })).toBeVisible();
   // `.print-header`: the ✎ before the note, on the prototype's yellow.
   const note = dialog.getByText(`✎ ${S.printHeaderPlaceholder}`, { exact: true });
   await expect(note).toHaveCSS("background-color", "rgb(255, 248, 225)");

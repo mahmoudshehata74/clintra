@@ -51,7 +51,7 @@ App capture: the whole page — the seeded Monday for the slots doctor, كريم
 - [decided] Slab, tiles and card share the one page width, `max-w-page` (1116px, the `.app` frame); at 1280 the rail leaves the column about 1016px (`docs/session-handoff.md:217-222`).
 - [data] Practitioner switcher pills (أحمد المصري / سلمى إبراهيم): the demo has two practitioners, and the prototype's notes say switchers appear by themselves when a clinic grows.
 - [decided] The card head's title is the practitioner's name ("أحمد المصري") (`docs/session-handoff.md:232-239`).
-- [decided] Each row carries a "…" visit-menu trigger; the visit menu has no prototype counterpart (`docs/session-handoff.md:351-352`).
+- [decided] Each row carries a "…" visit-menu trigger; the visit menu has no prototype counterpart (`docs/session-handoff.md:356-357`).
 - [decided] The "التسجيل" chip on in-room and completed rows and the "الزيارة اتقفلت من غير تسجيل" line under a completed row without a visit form (`docs/session-handoff.md:232-239`).
 - [data] No `.until` sub-line under the times and no phone in `.meta`: the seeded day is in the past and the demo patients have no phone (the row renders both when present).
 - [data] Row statuses, the slab's and tiles' figures, and the number of empty slots (5 against 2).
@@ -68,12 +68,13 @@ App capture: the whole page — the seeded Monday for the queue doctor.
 - [decided] The one shared page width (`docs/session-handoff.md:217-222`).
 - [data] Practitioner switcher pills: two practitioners in the demo.
 - [decided] The card head's title is the practitioner's name ("سلمى إبراهيم"), with no "استدعاء التالي" (the slab's "التالي" covers it) (`docs/session-handoff.md:232-239`, `:245-248`).
-- [decided] `.slab-act` has no "إعادة ترتيب" (backlog) and adds "تسجيل تأخير الطبيب" and "إغلاق الصندوق" (`docs/session-handoff.md:245-248`, `:286-287`).
+- [decided] `.slab-act` has no "إعادة ترتيب" (backlog) and adds "تسجيل تأخير الطبيب" and "إغلاق الصندوق" (`docs/session-handoff.md:245-248`, `:289-290`).
 - [decided] "يتوقع خلاص 10:33" and each waiting row's `.qwait` "متوقع 10:11" use the 24-hour clock (`docs/session-handoff.md:180`, `:245-248`).
-- [decided] Each row carries the "…" visit-menu trigger (`docs/session-handoff.md:351-352`).
+- [decided] Each row carries the "…" visit-menu trigger (`docs/session-handoff.md:356-357`).
 - [decided] The "التسجيل" chip, the "الزيارة اتقفلت من غير تسجيل" line and the "مريض جه دلوقتي" pill (`docs/session-handoff.md:232-239`).
-- [fix] Mobile: the prototype's slab draws a vertical rule between `.hero` and the stacked `.side` cells; the app's side has none at 390 (its `max-[600px]:border-s-0`, `web/src/screens/day/DaySlab.tsx`).
 - [data] Names, numbers, the no-show row, and the prototype's walk-in line "جه من غير حجز".
+
+Mobile: the slab's vertical rule beside the stacked `.side` cells matches — in both it is the second and third cells' own start border (none beside the first, none on `.side` itself), at the same place and height; an earlier [fix] line here was withdrawn.
 
 ## 4. New booking (`#s4`)
 
@@ -81,7 +82,7 @@ App capture: the booking sheet opened from the 11:30 slot, searching «كريم�
 
 - [decided] Every sheet is a bottom sheet with a close × (`docs/session-handoff.md:232-239`).
 - [decided] The flow takes two steps — results first, then the service picker and the footer once a patient is picked (`docs/session-handoff.md:232-239`).
-- [ask] A result's `.rr .m` reads "آخر زيارة قبل يومين" (the doctor's day's relative helper, `docs/session-handoff.md:328`); the prototype reads "آخر زيارة من 20 يوم" — keep the shared helper's wording, or use "من N يوم" here?
+- [decided] A result's `.rr .m` reads "آخر زيارة قبل يومين", the doctor's day's shared relative helper, not the prototype's "آخر زيارة من 20 يوم" (`docs/session-handoff.md:249-251`).
 - [data] One «كريم» in the demo, without a phone (the prototype shows two, with phones).
 
 ## 5. Invoice (`#s5`)
@@ -93,7 +94,7 @@ App capture: the invoice sheet, half the total paid in cash.
 - [decided] The payment method reads "كاش", not "نقدي" (`docs/session-handoff.md:193`).
 - [decided] The receipt and creation times read "10:00", the 24-hour clock (`docs/session-handoff.md:180`).
 - [decided] The "طباعة" link on each payment row (`docs/session-handoff.md:232-239`).
-- [decided] No "تعديل بنود" pill: item editing is backlog (`docs/session-handoff.md:286`).
+- [decided] No "تعديل بنود" pill: item editing is backlog (`docs/session-handoff.md:289`).
 - [decided] The "إلغاء الفاتورة" block with "مفيش إلغاء بعد تسجيل دفعة" (`docs/session-handoff.md:232-239`).
 - [data] Invoice number, patient, items and amounts; the invoice is dated today although the seeded day is a past Monday (writes use the real clock).
 
@@ -103,7 +104,7 @@ App capture: the payment sheet over a partially paid invoice, the remaining amou
 
 - [decided] Bottom sheet against the prototype's centred `.book` card (`docs/session-handoff.md:232-239`).
 - [decided] The first method reads "كاش", not "نقدي" (`docs/session-handoff.md:193`).
-- [decided] "أكّد الدفعة واطبع إيصال" records the payment and prints its receipt in one tap (`docs/session-handoff.md:249-252`).
+- [decided] "أكّد الدفعة واطبع إيصال" records the payment and prints its receipt in one tap (`docs/session-handoff.md:252-255`).
 - [data] "75.00": the capture typed the amount with two decimals; patient and amounts.
 
 ## 7. Cash close (`#s7`)
@@ -112,7 +113,7 @@ App capture: the cash close sheet on the real day after one visit paid in full i
 
 - [decided] Bottom sheet against the prototype's page card; the summary grid is two across in the sheet against four across on the page (`docs/session-handoff.md:232-239`).
 - [decided] "تصدير CSV" instead of "تصدير Excel" (`docs/design-rule.md:52-54`).
-- [decided] "اقفل اليوم واطبع الملخص" closes the day and prints its summary (`docs/session-handoff.md:253-263`).
+- [decided] "اقفل اليوم واطبع الملخص" closes the day and prints its summary (`docs/session-handoff.md:256-266`).
 - [data] The sub-line's time is the capture's pinned clock ("09:00"); amounts, the invoice and no-show counts, and the closer's name (the owner ran the capture).
 
 ## 8. Tomorrow's sheet (`#s8`)
@@ -121,7 +122,7 @@ App capture: the tomorrow's-sheet preview, the seeded Monday's slots-doctor visi
 
 - [decided] The page is previewed inside a sheet (title "جدول زيارات الغد", "طباعة ورقة الغد", ×) (`docs/session-handoff.md:232-239`).
 - [decided] Footer and table times use the 24-hour clock (`docs/session-handoff.md:180`).
-- [decided] The footer's brand reads "Clintra v{version}" from web/package.json (`docs/session-handoff.md:264-267`).
+- [decided] The footer's brand reads "Clintra v{version}" from web/package.json (`docs/session-handoff.md:267-270`).
 - [data] The version itself: web/package.json says 0.0.0 ("Clintra v0.0.0" against the prototype's "v1.0").
 - [data] Clinic name and address, patients, services, the patient count; the demo patients have no phone ("بدون رقم").
 
@@ -134,13 +135,13 @@ App capture: the whole page — the doctor's day mid-morning.
 - [decided] The one shared page width (`docs/session-handoff.md:217-222`).
 - [data] The momentum bar is in its on-time state ("ماشي في الميعاد") against the prototype's late state; times and medians.
 - [data] No age in the brief (no birth year for that patient in the demo); one prior visit.
-- [decided] The last-visit block has no "موصوف" part (`docs/session-handoff.md:320`).
-- [decided] The quick note's placeholder reads "ملاحظة على الزيارة دي…" (`docs/session-handoff.md:324`).
+- [decided] The last-visit block has no "موصوف" part (`docs/session-handoff.md:323`).
+- [decided] The quick note's placeholder reads "ملاحظة على الزيارة دي…" (`docs/session-handoff.md:327`).
 - [data] The quick note's "حفظ" is disabled: nothing typed.
-- [decided] "استدعِ للكشف" is disabled with "فيه مريض في الكشف" while someone is in the room, in the brief and the day list (`docs/session-handoff.md:325`).
+- [decided] "استدعِ للكشف" is disabled with "فيه مريض في الكشف" while someone is in the room, in the brief and the day list (`docs/session-handoff.md:328`).
 - [data] Waiting rows show the booked time instead of "نمرة N": the capture is a slots day.
-- [decided] The attention card has no lab-referral item and the unpaid-invoice item no button (`docs/session-handoff.md:322`; `docs/design-rule.md:50-51`).
-- [decided] A booked visit not yet arrived gets "افتح الملف" in the day list (`docs/session-handoff.md:268-269`).
+- [decided] The attention card has no lab-referral item and the unpaid-invoice item no button (`docs/session-handoff.md:325`; `docs/design-rule.md:50-51`).
+- [decided] A booked visit not yet arrived gets "افتح الملف" in the day list (`docs/session-handoff.md:271-272`).
 - [decided] Mobile: the quick-note input stays inside its card (`docs/session-handoff.md:232-239`).
 - [decided] Times use the 24-hour clock (`docs/session-handoff.md:180`).
 
@@ -149,13 +150,13 @@ App capture: the whole page — the doctor's day mid-morning.
 App capture: the visit sheet for كريم in the room — history, complaint, diagnosis and three drugs (no plan under way).
 
 - [decided] The workspace is a bottom sheet titled "ملف الزيارة" with a close ×, the arrival time beside it (`docs/session-handoff.md:232-239`).
-- [decided] No `.visit-aside` assistant panel; one `.visit-main` column (`docs/design-rule.md:29-33`; `docs/session-handoff.md:331`).
+- [decided] No `.visit-aside` assistant panel; one `.visit-main` column (`docs/design-rule.md:29-33`; `docs/session-handoff.md:334`).
 - [data] "زيارتين · آخر زيارة قبل 3 أيام" and the age.
 - [decided] "ابدأ خطة رعاية" in place of `.plan-badge`: no plan is under way (`docs/session-handoff.md:178`).
-- [decided] The history's heading counts the real visits ("آخر زيارتين") and each row ends with the drug names (`docs/session-handoff.md:333`).
-- [decided] No field hint besides the autosave "اتحفظ" (`docs/session-handoff.md:331`).
-- [decided] The dose line reads "… · لمدة <b>7 أيام</b>"; only the duration is bold, not the counts (`docs/session-handoff.md:270-273`).
-- [decided] An extra "اطبع الوصفة" under the list (`docs/session-handoff.md:341`).
+- [decided] The history's heading counts the real visits ("آخر زيارتين") and each row ends with the drug names (`docs/session-handoff.md:336`).
+- [decided] No field hint besides the autosave "اتحفظ" (`docs/session-handoff.md:334`).
+- [decided] The dose line reads "… · لمدة <b>7 أيام</b>"; only the duration is bold, not the counts (`docs/session-handoff.md:273-276`).
+- [decided] An extra "اطبع الوصفة" under the list (`docs/session-handoff.md:344`).
 - [decided] The run button reads "قفل الزيارة", without "(يفتح الفاتورة)" (`docs/session-handoff.md:232-239`).
 - [data] Complaint, diagnosis, drugs and the session length.
 
@@ -164,7 +165,7 @@ App capture: the visit sheet for كريم in the room — history, complaint, di
 App capture: the audit sheet on the real day — three bookings, an arrival, a cancellation and a no-show.
 
 - [decided] Bottom sheet against the prototype's page card (`docs/session-handoff.md:232-239`).
-- [decided] The filters are the prototype's four, each with its own groups of events (`docs/session-handoff.md:274-281`).
+- [decided] The filters are the prototype's four, each with its own groups of events (`docs/session-handoff.md:277-284`).
 - [decided] Verbs read "أنشأ حجز / علّم لم يحضر / ألغى الحجز" (`docs/session-handoff.md:213-216`).
 - [decided] Times use the 24-hour clock (`docs/session-handoff.md:180`).
 - [data] Six events, all minutes old, so every row carries "من 5د"; names; the `.who` context is the visit's time ("موعد 10:00") where the prototype shows other contexts ("شاشة اليوم", «طلب المريضة»).
@@ -185,7 +186,7 @@ App capture: the settings sheet's services tab, as the owner, one service stoppe
 
 - [decided] Bottom sheet against the prototype's page card (`docs/session-handoff.md:232-239`).
 - [decided] The extra tab "الأطباء" (`docs/session-handoff.md:90-92`).
-- [decided] Services are listed by name under Arabic collation (`docs/session-handoff.md:282-283`).
+- [decided] Services are listed by name under Arabic collation (`docs/session-handoff.md:285-286`).
 - [data] Services, durations and prices.
 
 ## 14. Settings — staff (`#s14`)
@@ -210,10 +211,10 @@ App capture: the activation card before activating, both fields filled.
 App capture: the print sheet's preview for كريم's three drugs, before the first print.
 
 - [decided] The preview sits in a sheet titled "الوصفة" with a close × (`docs/session-handoff.md:232-239`).
-- [decided] One action, "طباعة / حفظ PDF", and no PDF, WhatsApp or SMS buttons before the first print (`docs/session-handoff.md:342`, `:172`).
-- [decided] The preview note names that one action ("دي معاينة للطباعة · اضغط «طباعة / حفظ PDF»") (`docs/session-handoff.md:342`).
+- [decided] One action, "طباعة / حفظ PDF", and no PDF, WhatsApp or SMS buttons before the first print (`docs/session-handoff.md:345`, `:172`).
+- [decided] The preview note names that one action ("دي معاينة للطباعة · اضغط «طباعة / حفظ PDF»") (`docs/session-handoff.md:345`).
 - [decided] The date reads right to left, the day furthest right (`docs/session-handoff.md:223-228`).
-- [decided] The dose line reads "· لمدة <b>7 أيام</b>" (`docs/session-handoff.md:270-273`).
+- [decided] The dose line reads "· لمدة <b>7 أيام</b>" (`docs/session-handoff.md:273-276`).
 - [data] Title "طبيب عام" without a syndicate number, the clinic, the RX number, the drugs' texts and forms.
 
 ## 17. Care plan (`#s17`)
@@ -221,7 +222,7 @@ App capture: the print sheet's preview for كريم's three drugs, before the fi
 App capture: the care plan sheet — five sessions done, the sixth booked, four suggested.
 
 - [decided] Bottom sheet titled "خطة الرعاية" against the prototype's two page cards (`docs/session-handoff.md:232-239`).
-- [decided] Session names are the services' names (`docs/session-handoff.md:307-310`).
+- [decided] Session names are the services' names (`docs/session-handoff.md:310-313`).
 - [decided] `.meta` reads "d / m · د. {doctor} · {duration} دقيقة", a booked session adding "h:mm" — "14 / 10 · 9:30" instead of "النهارده · 4:30 م" (`docs/session-handoff.md:180`).
 - [decided] Suggested rows carry "أجّل" (`docs/session-handoff.md:180`).
 - [decided] "احجز الجلسة التالية" is disabled with "الجلسة التالية محجوزة 14 / 10 · 9:30" while the next session is booked (`docs/session-handoff.md:181`).
@@ -262,8 +263,8 @@ App capture: the whole page — the messages page with three recent messages, th
 |---|---:|---:|---:|---:|---|
 | 1. PIN lock | 5 | 1 | 0 | 0 | matches |
 | 2. Day — slots | 8 | 4 | 0 | 0 | matches |
-| 3. Day — queue | 8 | 2 | 1 | 0 | small fixes |
-| 4. New booking | 2 | 1 | 0 | 1 | matches |
+| 3. Day — queue | 8 | 2 | 0 | 0 | matches |
+| 4. New booking | 3 | 1 | 0 | 0 | matches |
 | 5. Invoice | 7 | 1 | 0 | 0 | matches |
 | 6. Payment and receipt | 3 | 1 | 0 | 0 | matches |
 | 7. Cash close | 3 | 1 | 0 | 0 | matches |
@@ -279,4 +280,4 @@ App capture: the whole page — the messages page with three recent messages, th
 | 17. Care plan | 5 | 1 | 0 | 0 | matches |
 | 18. Patient profile | 11 | 1 | 0 | 0 | matches |
 | 19. Messages | 6 | 1 | 0 | 0 | matches |
-| **Total** | **100** | **28** | **1** | **1** | |
+| **Total** | **101** | **28** | **0** | **0** | |

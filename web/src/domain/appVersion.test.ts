@@ -5,6 +5,6 @@ import { APP_VERSION, printedBrand } from "./appVersion";
 describe("printedBrand", () => {
   it("reads web/package.json's version after the brand", () => {
     expect(APP_VERSION).toBe(packageJson.version);
-    expect(printedBrand()).toBe(`Clintra v${packageJson.version}`);
+    expect(printedBrand()).toBe("Clintra v1.0.0");
   });
 });

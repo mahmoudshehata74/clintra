@@ -246,6 +246,9 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
   24-hour clock time ("متوقع" over "13:15"), from the existing expected-wait
   computation (`computeExpectedCallTime`); no "استدعاء التالي" in the card
   head (the slab's "التالي" covers it); no reorder button (backlog).
+- **4 (new booking)**: keep the shared relative wording — a search result's
+  `.rr .m` reads "آخر زيارة قبل …" from the doctor's day's relative helper
+  (screen 9 j), not the prototype's "آخر زيارة من N يوم".
 - **6 (payment)**: the confirm button reads "أكّد الدفعة واطبع إيصال": it
   records the payment, returns to the invoice and prints that payment's
   receipt through the reprint's own print target, in one tap. A refused or
@@ -346,6 +349,8 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
 - f. After the first print the workspace shows the printed line and read-only list, and the button reads "اطبع تاني".
 
 ## Standing rules for the rebuild
+- Every commit passes tsc, lint and vitest on its own: tests land in the
+  same commit as the change they cover.
 - Existing logic and behaviour do not change; vitest and e2e stay green at
   every step, not just at the end.
 - Screens without a prototype counterpart (visit menu, move, cancel, sync

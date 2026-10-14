@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { formatWeekdayDayMonth, formatWeekdayFullDate } from "../src/domain/displayDate";
 import { todayInCairo } from "../src/domain/time";
@@ -20,10 +19,6 @@ import {
   selectPractitioner,
   SLOTS_DR,
 } from "./support";
-
-// Not imported: the Playwright loader cannot import JSON without an import
-// attribute (see support.ts) — the printed footer's version, read the same way.
-const APP_VERSION = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as { version: string }).version;
 
 // The seeded day (?seedDay=1) is always a past Monday relative to the real
 // current day (see support.ts's SEEDED_DAY), so every still-booked seeded
@@ -316,7 +311,7 @@ test("closing the day prints its one-page summary with every figure", async ({ p
     await expect(summaryRow(page, label)).toHaveText(expected);
   }
   await expect(page.getByText(new RegExp(`^${S.printedAtPrefix} \\d{1,2} \\S+ \\d{2}:\\d{2}$`))).toBeVisible();
-  await expect(page.getByText(`Clintra v${APP_VERSION}`, { exact: true })).toBeVisible();
+  await expect(page.getByText("Clintra v1.0.0", { exact: true })).toBeVisible();
   // One A4 page: its target is laid out on the named page.
   expect(await page.locator(".day-close-print-target").evaluate((el) => getComputedStyle(el).page)).toBe("day-close");
   await page.emulateMedia({ media: null });
