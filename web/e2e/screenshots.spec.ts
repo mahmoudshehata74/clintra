@@ -27,6 +27,11 @@ import {
   SLOTS_DR,
   QUEUE_DR,
   VISIT,
+  bookNewPatientWithPhone,
+  MSG,
+  openMessagesPage,
+  openSendSheetFromRow,
+  recordWindowOpen,
 } from "./support";
 import { registrationStrings } from "../src/auth/registrationStrings";
 import { galleryStrings } from "../src/gallery/strings";
@@ -880,4 +885,83 @@ test("@screenshot prescription-print-a5-3-drugs", async ({ page }) => {
 
 test("@screenshot prescription-print-a5-12-drugs", async ({ page }) => {
   await shootA5Print(page, await karimPrescriptionPreview(page, 9), "prescription-print-a5-12-drugs");
+});
+
+// Screen 19, the messages page and the send sheet. Three new patients with
+// phones booked on the real day by the owner, the clock pinned; messages
+// opened at fixed times — ليلى by WhatsApp at 09:00 (then marked sent), سامح
+// by SMS at 09:05 with the appointment reminder, نادية by WhatsApp at 09:10
+// with the follow-up — and the appointment reminder then overridden by the
+// owner and selected. window.open is recorded, never followed; an sms: link
+// stays a request the page does not leave for.
+const MESSAGE_PATIENTS = [
+  { name: "ليلى مراد", phone: "01001234567" },
+  { name: "سامح عادل", phone: "01112345678" },
+  { name: "نادية فؤاد", phone: "01223456789" },
+] as const;
+
+async function bookMessagePatients(page: Page): Promise<(time: ClockTime) => Date> {
+  const day = todayInCairo();
+  const at = (time: ClockTime) => new Date(cairoInstant(day, time));
+  await recordWindowOpen(page);
+  await page.clock.install({ time: at("08:30") });
+  await gotoRealDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
+  for (const patient of MESSAGE_PATIENTS) {
+    await bookNewPatientWithPhone(page, patient.name, patient.phone);
+  }
+  return at;
+}
+
+async function sendFromRow(page: Page, name: string, template: string | null, channel: "whatsapp" | "sms"): Promise<void> {
+  const sheet = await openSendSheetFromRow(page, name);
+  if (template) {
+    await sheet.getByRole("group", { name: MSG.sendTemplateLabel }).getByRole("button", { name: template, exact: true }).click();
+  }
+  if (channel === "sms") {
+    await sheet.getByRole("group", { name: MSG.sendChannelLabel }).getByRole("button", { name: MSG.channelSms, exact: true }).click();
+  }
+  await sheet.getByRole("button", { name: channel === "sms" ? MSG.openSms : MSG.openWhatsApp, exact: true }).click();
+  await expect(sheet).toBeHidden();
+}
+
+test("@screenshot messages-page", async ({ page }) => {
+  const at = await bookMessagePatients(page);
+  await page.clock.setSystemTime(at("09:00"));
+  await sendFromRow(page, MESSAGE_PATIENTS[0].name, null, "whatsapp");
+  await page.clock.setSystemTime(at("09:05"));
+  await sendFromRow(page, MESSAGE_PATIENTS[1].name, "تذكير بالموعد", "sms");
+  await page.clock.setSystemTime(at("09:10"));
+  await sendFromRow(page, MESSAGE_PATIENTS[2].name, "متابعة بعد الزيارة", "whatsapp");
+
+  await openMessagesPage(page);
+  const recent = page.getByRole("region", { name: MSG.recentHeading }).getByRole("listitem");
+  await expect(recent).toHaveCount(3);
+  await recent.filter({ hasText: MESSAGE_PATIENTS[0].name }).getByRole("button", { name: MSG.statusOpened, exact: true }).click();
+  await expect(recent.getByRole("button", { name: MSG.statusSent, exact: true })).toHaveCount(1);
+
+  const templates = page.getByRole("navigation", { name: MSG.templatesHeading });
+  await templates.getByRole("button", { name: /تذكير بالموعد/ }).click();
+  const reminder = page.getByRole("region", { name: `${MSG.previewPrefix} تذكير بالموعد` });
+  await reminder.getByRole("button", { name: MSG.editAction, exact: true }).click();
+  await reminder
+    .getByLabel(MSG.editorLabel, { exact: true })
+    .fill(
+      [
+        "أهلاً {{patient_name}}،",
+        "بنفكّرك بموعدك بكرة الساعة {{time}} مع {{doctor_name}}.",
+        "لو هتتأخر كلّمنا: {{clinic_phone}}",
+      ].join("\n"),
+    );
+  await reminder.getByRole("button", { name: MSG.saveAction, exact: true }).click();
+  await expect(reminder.getByText(MSG.chipOverridden, { exact: true })).toBeVisible();
+  await shoot(page, "messages-page", true);
+});
+
+test("@screenshot messages-send-sheet", async ({ page }) => {
+  await bookMessagePatients(page);
+  const sheet = await openSendSheetFromRow(page, MESSAGE_PATIENTS[0].name);
+  await sheet.getByRole("group", { name: MSG.sendTemplateLabel }).getByRole("button", { name: "تذكير جلسة خطة", exact: true }).click();
+  await expect(sheet.getByRole("status")).toBeVisible();
+  await shoot(page, "messages-send-sheet", false);
 });

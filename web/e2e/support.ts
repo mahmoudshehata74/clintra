@@ -16,6 +16,7 @@ import { sidebarStrings } from "../src/components/strings";
 import { addDaysToClinicDay, cairoInstant, mostRecentWeekdayOnOrBefore, todayInCairo, type ClockTime } from "../src/domain/time";
 import { dayScreenStrings } from "../src/screens/day/strings";
 import { doctorDayStrings } from "../src/screens/doctor/strings";
+import { messagesStrings } from "../src/screens/messages/strings";
 import { prescriptionPrintStrings } from "../src/screens/prescription/strings";
 import { visitWorkspaceStrings } from "../src/screens/visit/strings";
 
@@ -23,6 +24,7 @@ export const S = dayScreenStrings;
 export const DOCTOR = doctorDayStrings;
 export const VISIT = visitWorkspaceStrings;
 export const RX = prescriptionPrintStrings;
+export const MSG = messagesStrings;
 export const AUTH = authStrings;
 export const SIDEBAR = sidebarStrings;
 export { DEV_SEED_PINS };
@@ -314,3 +316,63 @@ export async function openPrintSheet(page: Page, workspace: Locator, label: stri
   await expect(sheet.getByText(RX.previewNote, { exact: true })).toBeVisible();
   return sheet;
 }
+
+// The messages screen (screen 19) and its send sheet, shared by the messages
+// and screenshot specs.
+
+/** Opens the messages page from the rail and waits for its recent-messages list. */
+export async function openMessagesPage(page: Page): Promise<void> {
+  await sidebar(page).getByRole("button", { name: SIDEBAR.navMessages, exact: true }).click();
+  await expect(page.getByRole("heading", { name: MSG.recentHeading, exact: true })).toBeVisible();
+}
+
+/**
+ * Books a new patient, with a phone, into the first open slot through the
+ * booking sheet's "+ مريض جديد" row, as a named service, waiting for their row.
+ */
+export async function bookNewPatientWithPhone(page: Page, name: string, phone: string, service = "كشف عام"): Promise<void> {
+  await openBookingSheet(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(name);
+  await dialog.getByRole("button", { name: S.newPatientButtonPrefix }).click();
+  await dialog.getByPlaceholder(S.newPatientPhonePlaceholder).fill(phone);
+  await dialog.getByRole("button", { name: S.newPatientSubmitButton, exact: true }).click();
+  await dialog.getByRole("button", { name: /^\d{1,2}:\d{2}$/ }).first().click();
+  const option = dialog.getByRole("button", { name: new RegExp(`^${service} ·`) });
+  await option.click();
+  await expect(option).toHaveAttribute("aria-pressed", "true");
+  await dialog.getByRole("button", { name: S.bookingConfirmButton, exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(rowFor(page, name)).toBeVisible();
+}
+
+export const sendSheet = (page: Page) =>
+  page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: MSG.sendSheetTitle, exact: true }) });
+
+/** Opens the send sheet from a day-grid row's overflow menu ("ابعت رسالة") and waits for its text. */
+export async function openSendSheetFromRow(page: Page, patientName: string): Promise<Locator> {
+  const row = rowFor(page, patientName);
+  await row.getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
+  await row.getByRole("menuitem", { name: S.sendMessageMenuLabel, exact: true }).click();
+  const sheet = sendSheet(page);
+  await expect(sheet.getByLabel(MSG.sendBodyLabel, { exact: true })).toBeVisible();
+  return sheet;
+}
+
+/**
+ * Replaces window.open, before navigation, with a recorder: the wa.me link
+ * the send sheet opens is kept in window.openedUrls instead of leaving the
+ * page. Read it back with openedUrls.
+ */
+export async function recordWindowOpen(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const recorded = window as unknown as { openedUrls: string[] };
+    recorded.openedUrls = [];
+    window.open = (url?: string | URL) => {
+      recorded.openedUrls.push(String(url));
+      return null;
+    };
+  });
+}
+
+export const openedUrls = (page: Page) => page.evaluate(() => (window as unknown as { openedUrls: string[] }).openedUrls);
