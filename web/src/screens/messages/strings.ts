@@ -34,6 +34,26 @@ export const messagesStrings = {
   chipEditable: "قابل للتعديل",
   chipOverridden: "معدّل",
 
+  // The send sheet.
+  sendSheetTitle: "ابعت رسالة",
+  sendRecipientPrefix: "إلى:",
+  sendTemplateLabel: "القالب",
+  sendBodyLabel: "نص الرسالة",
+  sendBodyHint: "التعديل هنا للرسالة دي بس",
+  sendChannelLabel: "القناة",
+  channelWhatsApp: "واتساب",
+  channelSms: "SMS",
+  openWhatsApp: "افتح واتساب",
+  openSms: "افتح SMS",
+  errorNoPhone: "المريض ده مالوش رقم موبايل صحيح، ضيفه الأول",
+  errorBodyEmpty: "اكتب نص الرسالة",
+  errorRecordMissing: "المريض أو الزيارة مش موجودين على الجهاز",
+  errorSendFailed: "الرسالة ما اتسجلتش، جرّب تاني",
+
+  // The printed prescription's own send buttons (screens/prescription/PrescriptionPrintSheet.tsx).
+  rxSendWhatsApp: "واتساب",
+  rxSendSms: "SMS",
+
   // The send sheet's warning: placeholders the text still holds unfilled.
   missingValuesPrefix: "فيه بيانات ناقصة:",
 

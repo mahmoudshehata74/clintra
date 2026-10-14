@@ -58,6 +58,7 @@ import DayTiles from "./DayTiles";
 import DaySheet from "./DaySheet";
 import DelayControl from "./DelayControl";
 import InvoiceSheet from "./InvoiceSheet";
+import SendMessageSheet from "../messages/SendMessageSheet";
 import MoveVisitSheet from "./MoveVisitSheet";
 import PaymentSheet from "./PaymentSheet";
 import PractitionerColumn from "./PractitionerColumn";
@@ -180,6 +181,8 @@ export default function DayScreen({
   const [openMenuVisitId, setOpenMenuVisitId] = useState<string | null>(null);
   const [rowActionSheet, setRowActionSheet] = useState<RowActionSheetState>(null);
   const [invoiceSheetInvoiceId, setInvoiceSheetInvoiceId] = useState<string | null>(null);
+  // The visit whose patient the send sheet is open for (VisitMenu's "ابعت رسالة").
+  const [sendMessageVisitId, setSendMessageVisitId] = useState<string | null>(null);
   const [paymentSheetInvoiceId, setPaymentSheetInvoiceId] = useState<string | null>(null);
   const [visitFormSheetVisitId, setVisitFormSheetVisitId] = useState<string | null>(null);
   const [isCashCloseOpen, setIsCashCloseOpen] = useState(false);
@@ -699,6 +702,11 @@ export default function DayScreen({
     setInvoiceSheetInvoiceId(invoiceId);
   }
 
+  function handleSendMessage(visit: Visit) {
+    setOpenMenuVisitId(null);
+    setSendMessageVisitId(visit.id);
+  }
+
   function handleOpenVisitForm(visit: Visit) {
     setOpenMenuVisitId(null);
     setVisitFormSheetVisitId(visit.id);
@@ -1039,6 +1047,7 @@ export default function DayScreen({
               onRequestCancel={handleRequestCancel}
               onMarkNoShow={handleMarkNoShow}
               onOpenInvoice={handleOpenInvoice}
+              onSendMessage={handleSendMessage}
               onSendToEnd={handleSendToEnd}
               onOpenVisitForm={handleOpenVisitForm}
               onOpenDaySheet={practitioner.id === currentPractitionerId ? () => setIsDaySheetOpen(true) : undefined}
@@ -1099,6 +1108,10 @@ export default function DayScreen({
           onRequestPayment={handleRequestPayment}
           onVoided={handleInvoiceVoided}
         />
+      )}
+
+      {sendMessageVisitId && (
+        <SendMessageSheet visitId={sendMessageVisitId} onDismiss={() => setSendMessageVisitId(null)} />
       )}
 
       {paymentSheetInvoiceId && (

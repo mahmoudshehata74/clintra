@@ -54,6 +54,8 @@ interface PractitionerColumnProps {
   onRequestCancel: (visit: Visit) => void;
   onMarkNoShow: (visit: Visit) => void;
   onOpenInvoice: (invoiceId: string) => void;
+  /** The overflow menu's "ابعت رسالة", offered on any visit whose patient exists (SendMessageSheet). */
+  onSendMessage: (visit: Visit) => void;
   onSendToEnd: (visit: Visit) => void;
   onOpenVisitForm: (visit: Visit) => void;
   /** The slots card's trailing action ("ورقة الغد") — slots mode only. The audit log ("السجل") moved to AppShell's rail. */
@@ -87,6 +89,7 @@ export default function PractitionerColumn({
   onRequestCancel,
   onMarkNoShow,
   onOpenInvoice,
+  onSendMessage,
   onSendToEnd,
   onOpenVisitForm,
   onOpenDaySheet,
@@ -131,6 +134,7 @@ export default function PractitionerColumn({
         onRequestCancel={onRequestCancel}
         onMarkNoShow={onMarkNoShow}
         onOpenInvoice={onOpenInvoice}
+        onSendMessage={onSendMessage}
         onSendToEnd={onSendToEnd}
         onOpenVisitForm={onOpenVisitForm}
         onCallNext={onCallNextInQueue}
@@ -188,7 +192,7 @@ export default function PractitionerColumn({
           const advanceTarget = visit ? primaryAdvanceTarget(visit.status) : null;
           const invoiceId = visit ? invoiceIdByVisitId.get(visit.id) : undefined;
           const administrable = Boolean(visit && isMenuEligible(visit.status));
-          const menuEligible = Boolean(visit && (administrable || invoiceId));
+          const menuEligible = Boolean(visit && (administrable || invoiceId || patient));
           const showVisitFormPill =
             visit != null && (visit.status === VisitStatus.InRoom || visit.status === VisitStatus.Completed);
           const openVisitForm = visit ? () => onOpenVisitForm(visit) : undefined;
@@ -226,6 +230,7 @@ export default function PractitionerColumn({
                       onCancel: administrable ? () => onRequestCancel(visit) : undefined,
                       onNoShow: administrable ? () => onMarkNoShow(visit) : undefined,
                       onInvoice: invoiceId ? () => onOpenInvoice(invoiceId) : undefined,
+                      onSendMessage: patient ? () => onSendMessage(visit) : undefined,
                     }
                   : undefined
               }
@@ -285,6 +290,8 @@ interface QueueColumnProps {
   onRequestCancel: (visit: Visit) => void;
   onMarkNoShow: (visit: Visit) => void;
   onOpenInvoice: (invoiceId: string) => void;
+  /** The overflow menu's "ابعت رسالة", offered on any visit whose patient exists (SendMessageSheet). */
+  onSendMessage: (visit: Visit) => void;
   onSendToEnd: (visit: Visit) => void;
   onOpenVisitForm: (visit: Visit) => void;
   onCallNext?: () => void;
@@ -315,6 +322,7 @@ function QueueColumn({
   onRequestCancel,
   onMarkNoShow,
   onOpenInvoice,
+  onSendMessage,
   onSendToEnd,
   onOpenVisitForm,
   onCallNext,
@@ -352,7 +360,7 @@ function QueueColumn({
           const invoiceId = invoiceIdByVisitId.get(visit.id);
           const isWaiting = isQueueWaiting(visit.status);
           const isNext = visit.id === summary.nextVisitId;
-          const menuEligible = Boolean(isMenuEligible(visit.status) || invoiceId || isWaiting);
+          const menuEligible = Boolean(isMenuEligible(visit.status) || invoiceId || isWaiting || patient);
           const showVisitFormPill = visit.status === VisitStatus.InRoom || visit.status === VisitStatus.Completed;
           const openVisitForm = () => onOpenVisitForm(visit);
           const isCompleted = visit.status === VisitStatus.Completed;
@@ -460,6 +468,7 @@ function QueueColumn({
                       onCancel: isMenuEligible(visit.status) ? () => onRequestCancel(visit) : undefined,
                       onNoShow: isMenuEligible(visit.status) ? () => onMarkNoShow(visit) : undefined,
                       onInvoice: invoiceId ? () => onOpenInvoice(invoiceId) : undefined,
+                      onSendMessage: patient ? () => onSendMessage(visit) : undefined,
                     }
                   : undefined
               }

@@ -5,12 +5,16 @@ import Button from "../../components/ui/Button";
 import { SheetPanelBody, SheetPanelFoot } from "../../components/ui/SheetPanel";
 import { db } from "../../db/database";
 import { markPrescriptionPrinted } from "../../db/prescriptions";
-import type { Patient, Practitioner, Prescription, PrescriptionItem, Visit } from "../../db/types";
+import { MessageChannel, type Patient, type Practitioner, type Prescription, type PrescriptionItem, type Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { findGeneralFormDefinition, findVisitFormData, readVisitFormValues, type VisitFormFieldValues } from "../../db/visitForm";
 import Sheet from "../day/Sheet";
 import SheetHeader from "../day/SheetHeader";
 import { usePrintClinic } from "../day/usePrintClinic";
+import { prescriptionMessageText } from "../messages/messagesModel";
+import SendMessageSheet from "../messages/SendMessageSheet";
+import { messagesStrings } from "../messages/strings";
+import { MessageTemplateKey } from "../../domain/messageTemplates";
 import { buildRxPrintModel, computeRxPrintState, rxPrintErrorMessage } from "./printModel";
 import RxPrintPage from "./RxPrintPage";
 import { prescriptionPrintStrings as T } from "./strings";
@@ -50,6 +54,10 @@ interface PrintData {
  * which also sets the A5 page). Like every printed page, the preview is
  * `print:hidden` and the flat target `hidden print:block`, mounted only
  * while a print is under way.
+ *
+ * Once printed — and only then — "واتساب" and "SMS" open the send sheet
+ * over this one with the custom template preselected and the prescription
+ * as its text (messagesModel.ts's prescriptionMessageText), on that channel.
  */
 export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: PrescriptionPrintSheetProps) {
   const actingPractitionerId = useGuardedActingMembership()?.practitioner_id ?? null;
@@ -59,6 +67,7 @@ export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: Pr
   // Bumped on every print request, so each one opens the dialog once; null
   // once the browser reports the dialog closed.
   const [printRun, setPrintRun] = useState<number | null>(null);
+  const [sendChannel, setSendChannel] = useState<MessageChannel | null>(null);
 
   const data = useLiveQuery<PrintData | null>(async () => {
     const prescription = await db.prescriptions.get(prescriptionId);
@@ -151,6 +160,16 @@ export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: Pr
           {/* `.split` */}
           <SheetPanelFoot>
             <div className="flex flex-1 flex-wrap items-center gap-2">
+              {isPrinted && !isConfirming && (
+                <>
+                  <Button variant="secondary" onClick={() => setSendChannel(MessageChannel.WhatsApp)}>
+                    {messagesStrings.rxSendWhatsApp}
+                  </Button>
+                  <Button variant="secondary" onClick={() => setSendChannel(MessageChannel.Sms)}>
+                    {messagesStrings.rxSendSms}
+                  </Button>
+                </>
+              )}
               {isConfirming ? (
                 <>
                   <p className="basis-full text-[13px] font-semibold text-text">{T.confirmQuestion}</p>
@@ -175,6 +194,23 @@ export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: Pr
           </SheetPanelFoot>
         </Sheet>
       </div>
+
+      {sendChannel !== null && (
+        <SendMessageSheet
+          visitId={data.prescription.visit_id}
+          start={{
+            templateKey: MessageTemplateKey.Custom,
+            channel: sendChannel,
+            body: prescriptionMessageText({
+              prescription: data.prescription,
+              items: data.items,
+              patientName: data.patient?.full_name ?? null,
+              doctorName: data.practitioner?.full_name ?? null,
+            }),
+          }}
+          onDismiss={() => setSendChannel(null)}
+        />
+      )}
 
       {printRun !== null && isPrinted && (
         <div className="rx-print-target hidden print:block">

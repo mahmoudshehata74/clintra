@@ -13,6 +13,8 @@ export interface VisitMenuActions {
   onInvoice?: () => void;
   /** Queue mode only, on a still-waiting row — see db/visitQueue.ts's sendVisitToEndOfQueue. */
   onSendToEnd?: () => void;
+  /** Any visit whose patient exists — opens the send sheet (screens/messages/SendMessageSheet.tsx). */
+  onSendMessage?: () => void;
 }
 
 interface VisitMenuProps {
@@ -98,9 +100,20 @@ export default function VisitMenu({ actions }: VisitMenuProps) {
               {dayScreenStrings.invoiceMenuLabel}
             </button>
           )}
-          {(actions.onCancel || actions.onNoShow) && (actions.onMove || actions.onSendToEnd || actions.onInvoice) && (
-            <div className="border-t border-danger-line" />
+          {actions.onSendMessage && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={actions.onSendMessage}
+              className="p-3 text-start hover:bg-field"
+            >
+              {dayScreenStrings.sendMessageMenuLabel}
+            </button>
           )}
+          {(actions.onCancel || actions.onNoShow) &&
+            (actions.onMove || actions.onSendToEnd || actions.onInvoice || actions.onSendMessage) && (
+              <div className="border-t border-danger-line" />
+            )}
           {actions.onCancel && (
             <button
               type="button"
