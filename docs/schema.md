@@ -159,13 +159,8 @@ visit_id, form_definition_id, data
 
 ## Declared now, unused in v1, no screens
 
-### care_plans
-id, org_id, location_id, template_id, patient_id, practitioner_id, goal,
-diagnosis, planned_count, total_price, paid, status, started_at, expected_end
-
-### care_plan_items
-id, care_plan_id, service_id, sequence, visit_id, min_gap_days,
-depends_on_item_id, price, status
+None left: `care_plans` and `care_plan_items` were declared here in v1 and
+are in use from v20 (see the v20 additions below).
 
 ## Decisions
 
@@ -825,8 +820,9 @@ Owner decisions:
   `balance`. `renderTemplate(body, values)` fills the known ones through the
   existing domain formatters (the clinic-day date with Latin digits,
   "HH:MM", money, the local phone display), leaves an unknown `{{token}}`
-  untouched, and reports every known placeholder that had no value so a
-  screen can warn before sending.
+  untouched, and renders every known placeholder that had no value as its
+  Arabic label in square brackets ("[الجلسة]") — never as a raw token — and
+  reports it so a screen can warn before sending.
 - **A message is written the moment the app opens WhatsApp or SMS for it**
   (`attempted_at`). Its body, phone, channel, template key, patient and
   `attempted_at` never change afterwards; only `marked_sent_at` may be set or
@@ -888,6 +884,122 @@ lookup `effectiveBody` needs. The key alone is unique locally, not
 `[org_id+key]`, because a device serves exactly one organization. Versions
 1-17 are unchanged.
 
+## v20 additions
+
+### care_plans, care_plan_items
+
+A patient's course of treatment with one practitioner and its sessions
+(screen 17 of the prototype). Both tables were declared in v1 with no
+writer; v20 gives them writers, sync and a narrower policy. Data only so
+far — no screen writes them yet.
+
+**care_plans**: id, org_id, location_id, template_id, patient_id,
+practitioner_id, goal, diagnosis, planned_count, total_price, paid, status
+(active|stopped), started_at, expected_end, rev
+
+**care_plan_items**: id, care_plan_id, service_id, sequence, visit_id?,
+min_gap_days, depends_on_item_id?, price, status (planned|skipped), rev
+
+- `care_plan_items.visit_id` is **nullable** now (it was NOT NULL in v1):
+  null while the session is not booked, otherwise the visit that books it.
+  The foreign key to `visits` stays (RESTRICT) and the column has a plain
+  index. It is the only link between a session and its visit:
+  `visits.care_plan_item_id` stays null, as it always has.
+- `care_plans.paid` is **unused**: written as 0 and never read. What a plan
+  has been paid is derived from the payments on the invoices of its linked
+  visits (`carePlanPaid`, `web/src/domain/carePlan.ts`); the server refuses
+  any other value (`care_plan_invalid`). Paying for a package up front is out
+  of scope.
+- `planned_count` (the sessions not skipped), `total_price` (their summed
+  prices) and `expected_end` (the last session's display date, at Cairo
+  midnight; `started_at` while no session has a date yet) are derived and
+  rewritten by every writer that changes them, in the same transaction.
+- `depends_on_item_id` is unused (always null); the order of sessions is
+  their `sequence`.
+
+Derived, never stored (`web/src/domain/carePlan.ts`, pure):
+
+- A session is **done** (its linked visit is completed), **booked** (its
+  linked visit still holds its slot: booked, confirmed, arrived, in_room) or
+  **suggested** (no link, or a link to a visit that no longer holds its
+  slot); a skipped session is left out of every count, total and date.
+- A session's **display date** is its linked visit's day; otherwise the
+  previous (not skipped) session's date plus its own `min_gap_days`;
+  otherwise none, and it reads "جلسة {n}". Its **label** is its service's
+  name.
+- A plan is **completed** when every session not skipped is done, and
+  **stalled** when it is active, nothing is booked and the next suggested
+  session's date is more than 7 days past: "المريض متوقف من N يوم"
+  (`arabicCount`).
+- The message placeholder `{{session_label}}` for a visit that books a
+  session reads "جلسة {n} من {count} · {service}", n and count over the
+  sessions not skipped.
+
+Owner decisions:
+
+1. **Billed per session.** A session's visit is billed when it is
+   completed, at the session's own `price` instead of the service's price
+   (`db/visitCompletion.ts`) — the only change to completion. A visit that
+   books no session is billed exactly as before.
+2. **Created from a visit** (`createCarePlan`, `db/carePlans.ts`): the
+   visit's practitioner, patient and location; goal and diagnosis required
+   (the diagnosis starts from the visit form's, `carePlanDraftForVisit`);
+   one or more groups of sessions (service, count ≥ 1, gap ≥ 0 days)
+   expanded into sessions with `sequence` 1..n, each priced at its service's
+   effective price at creation (`resolveServicePrice`, overrides included)
+   and `min_gap_days` = its group's gap (the plan's first session: 0).
+   `template_id` is the general specialty template, as the visit form
+   resolves it.
+3. **Linked through `care_plan_items.visit_id` only.** Booking a session
+   (`bookExistingPatientVisit`'s `carePlanItemId`) sets it; moving the visit
+   (`moveVisit`) carries it to the new visit; cancelling it or marking a
+   no-show (`cancelVisit`, `markVisitNoShow`) clears it — each in the
+   visit write's own transaction, which also rewrites the plan's derived
+   fields. Booking refuses a session that is not suggested
+   (`care_plan_session_not_bookable`), of a stopped plan
+   (`care_plan_stopped`), or for another patient, practitioner or service
+   (`care_plan_session_mismatch`).
+4. **Two stored statuses**, everything else derived (above).
+5. **Edits**: goal and diagnosis (`updateCarePlanDetails`), appended
+   sessions (`addCarePlanSessions`), skip and unskip of a session that is
+   neither done nor booked (`skipCarePlanSession`,
+   `unskipCarePlanSession`; `care_plan_session_not_skippable`), stop and
+   resume (`stopCarePlan`, `resumeCarePlan`). Nothing is ever deleted.
+   Only the plan's own practitioner creates or edits a plan
+   (`not_plan_practitioner`), enforced on the device; the server does not
+   check who writes — the same known gap as prescriptions
+   (`api/docs/rls.md`'s "Care plans"). Keeping links current (decision 3)
+   is part of the visit's write, by whoever writes the visit.
+
+The audit log reads "بدأ خطة رعاية", "عدّل خطة رعاية", "أضاف جلسات للخطة",
+"أجّل جلسة", "رجّع جلسة", "وقّف الخطة" and "رجّع الخطة"; a session's link
+reads as its visit's write ("سجّل حجز" when booked, "نقل الميعاد" when
+moved, "عدّل خطة رعاية" when a cancel or no-show clears it). Never a goal or
+a diagnosis. The audit sheet does not list either table yet.
+
+Server (`2026_09_12_000030_make_care_plans_syncable.php`): the policies
+become the visits expression (org + allowed locations + allowed
+practitioners), `care_plan_items` through its plan, both USING and WITH
+CHECK — changed only on empty tables, which the migration asserts first;
+`visit_id` nullable and indexed; `rev` with the `enforce_row_rev()` trigger
+on both; both in the syncable-table list (`care_plans` with a direct
+`org_id`; no actor column). The push endpoint refuses every delete
+(`care_plan_immutable`), a session update that changes `care_plan_id`,
+`service_id` or `sequence` (`care_plan_immutable`), a status outside its
+set or a `paid` other than 0 (`care_plan_invalid`), and a `visit_id` that is
+not a visit of the plan's own patient and practitioner
+(`care_plan_invalid`). Pull returns both; bootstrap returns, in two stages
+appended after `message_templates`, every active plan and every plan of a
+patient with a visit in the window, with their sessions.
+
+Local (database version 20): `care_plans: "id, patient_id,
+practitioner_id"` — a patient's plans and a practitioner's — and
+`care_plan_items: "id, care_plan_id, visit_id"` — a plan's sessions and the
+session a visit books. No unique index: the server has no unique key on
+either table beyond the id, so a pulled row can never collide with a local
+one. Both stores existed (empty) since version 1; versions 1-19 are
+unchanged.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.
@@ -905,6 +1017,10 @@ lookup `effectiveBody` needs. The key alone is unique locally, not
   per location per calendar year within the minting device's series, like
   an invoice's (v17 additions).
 - A printed prescription never changes, and neither do its items.
+- A care plan and its sessions are never deleted; a session never changes
+  plan, service or place. A session's `visit_id` names a visit of its plan's
+  own patient and practitioner, and a linked visit is billed at the
+  session's price.
 - A message never changes after it is written except for its sent mark, and
   is never deleted. An organization has at most one template override per
   key, and none for `custom`.

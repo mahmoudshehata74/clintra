@@ -25,9 +25,9 @@ screens are built on top of the existing data layer.
   commands, full RLS on every tenant table (see `api/docs/rls.md`).
 
 ## Verify
-Web: `pnpm --dir web test` (vitest, 1092 passed) · `pnpm --dir web
+Web: `pnpm --dir web test` (vitest, 1188 passed) · `pnpm --dir web
 exec tsc -b --noEmit` · `pnpm --dir web build` · `pnpm --dir web test:e2e`.
-API: `cd api && php artisan test` (Pest, 299 passed).
+API: `cd api && php artisan test` (Pest, 325 passed).
 
 ## Rebuild order (approved)
 1. `docs/design-rule.md` points at the prototype — done (PR #1).
@@ -123,6 +123,28 @@ SendMessageSheet, pure helpers in `messagesModel.ts`), the rail page
 screen's VisitMenu and from a printed prescription; writes go through
 `db/messages.ts`. The owner decisions it implements are listed under
 "Screen 19 (messages)" below.
+
+`care_plans` + `care_plan_items` (step 7, data only): done — migration
+(policies narrowed to the visits scope on empty tables, `visit_id`
+nullable, `rev`), sync (push rules, pull, bootstrap stages 8–9), local
+store (database version 20), audited writers in `web/src/db/carePlans.ts`,
+derivations in `web/src/domain/carePlan.ts`; no UI yet (`docs/schema.md`'s
+v20 additions; `api/docs/rls.md`'s "Care plans"). Owner decisions it
+implements:
+1. Billed per session: a session's visit is billed on completion at the session's own price; a plan's paid is derived from its linked visits' payments, and `care_plans.paid` stays 0, unread.
+2. A plan is created from a visit (its practitioner, patient, location; diagnosis from the visit form) with a goal and groups of sessions (service, count, gap), priced at the service's effective price at creation.
+3. `care_plan_items.visit_id` is the only link: booking a session sets it, moving the visit carries it, cancelling or a no-show clears it, each in the visit's own transaction.
+4. Stored statuses are only active/stopped and planned/skipped; done, booked, suggested, dates, completed and stalled are derived.
+5. Edits (goal, diagnosis, added sessions, skip/unskip, stop/resume) are the plan practitioner's only, enforced on the device; nothing is deleted.
+
+Open before screen 17: the day screen's undo of a move, cancel or no-show
+reverses the visit write only, not the session link it carried — undoing a
+moved session's visit would leave its session linked to a deleted visit
+(the server refuses that delete on the foreign key). A screen that books
+sessions must reverse the link with the visit, or not offer undo for a
+session's visit. The audit sheet does not list care plan rows yet
+(`care_plan_items` needs the join-based scope check `prescription_items`
+has).
 
 This changes the earlier plan below ("templates seeded by migration"):
 defaults now ship with the app and only overrides live in the database,
