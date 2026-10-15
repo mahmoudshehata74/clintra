@@ -131,6 +131,23 @@ test("@screenshot settings-hours", async ({ page }) => {
   await shoot(page, "settings-hours", false);
 });
 
+// Friday turned into a day off, then its editor open on the usual hours,
+// ready to become a working day again.
+test("@screenshot settings-hours-working-day", async ({ page }) => {
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
+  await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
+  const friday = page.getByRole("dialog").getByRole("listitem").filter({ hasText: S.weekdayNames[5] });
+  await friday.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  await friday.getByRole("button", { name: S.hoursMakeDayOffAction, exact: true }).click();
+  await expect(friday).toContainText(S.hoursModeDayOff);
+  await friday.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  await expect(friday.getByRole("button", { name: S.hoursAddWorkingDayAction, exact: true })).toBeVisible();
+  await shoot(page, "settings-hours-working-day", false);
+});
+
 test("@screenshot settings-services", async ({ page }) => {
   await page.goto("/?seedDay=1");
   await page.evaluate(() => localStorage.clear());

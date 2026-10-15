@@ -282,6 +282,17 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
   practitioners, message templates). The action filters are gone. Every
   event the sheet lists stays reachable under "الكل"; the settings rows are
   now listed too, each with its own verb and never a price, a PIN or a scope.
+- **12 (working hours)**: every row carries "تعديل", a day off's too, as in
+  the prototype. A day off's editor holds the hours only, starting from the
+  practitioner's most common hours at the location (ties: earlier start,
+  then earlier end; none: 09:00–17:00), and "خليه يوم شغل" creates the
+  weekday's schedule row (`addWorkingDay`), copying mode, slot length,
+  capacity and resource count from the earliest weekday with those hours
+  (none: slots, 30 minutes). A working day's editor adds "خليه إجازة"
+  (`removeWorkingDay`), which deletes the weekday's rows in one
+  transaction, refused while a visit on that weekday, today or later, still
+  holds its slot. Both are ordinary audited `schedules` creates and deletes;
+  no schema or server change.
 - **13 (services)**: the list is sorted by name under Arabic collation, ties
   broken by id (`sortServicesByName`), so the order is always the same.
 

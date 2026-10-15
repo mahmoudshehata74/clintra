@@ -78,6 +78,38 @@ test("editing slot_minutes is refused on a day with visits and allowed on an emp
   await expect(tuesday.getByRole("button", { name: S.hoursEditAction, exact: true })).toBeVisible();
 });
 
+test("the owner turns a working day off and back on, starting from the usual hours", async ({ page }) => {
+  await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+
+  // Wednesday (الأربعاء) has no visits; the seed gives every weekday the same hours.
+  const wednesday = dialog.getByRole("listitem").filter({ hasText: S.weekdayNames[3] });
+  const usualHours = (await wednesday.textContent())?.match(/(\d{2}:\d{2}) — (\d{2}:\d{2})/);
+  if (!usualHours) throw new Error("no hours on Wednesday's row");
+  const [, usualStart, usualEnd] = usualHours;
+
+  await wednesday.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  await wednesday.getByRole("button", { name: S.hoursMakeDayOffAction, exact: true }).click();
+  await expect(wednesday).toContainText(S.hoursModeDayOff);
+  await expect(wednesday).toContainText("—");
+
+  await wednesday.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  await expect(wednesday.getByLabel(S.hoursStartLabel, { exact: true })).toHaveValue(usualStart);
+  await expect(wednesday.getByLabel(S.hoursEndLabel, { exact: true })).toHaveValue(usualEnd);
+  await expect(wednesday.getByRole("spinbutton")).toHaveCount(0);
+  await wednesday.getByLabel(S.hoursEndLabel, { exact: true }).fill("13:00");
+  await wednesday.getByRole("button", { name: S.hoursAddWorkingDayAction, exact: true }).click();
+
+  await expect(wednesday).toContainText(`${usualStart} — 13:00`);
+  await expect(wednesday).toContainText(new RegExp(`${S.hoursModeSlots} [0-9]+${S.minutesShortUnit}`));
+  await expect(wednesday.getByRole("button", { name: S.hoursEditAction, exact: true })).toBeVisible();
+
+  const audit = await readStore<{ entity: string; action: string }>(page, "audit_log");
+  expect(audit.filter((row) => row.entity === "schedules").map((row) => row.action).sort()).toEqual(["create", "delete"]);
+});
+
 test("deactivating a service hides it from the booking picker but keeps a completed invoice's name", async ({
   page,
 }) => {

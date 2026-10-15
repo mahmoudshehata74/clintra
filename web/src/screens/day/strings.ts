@@ -528,6 +528,11 @@ export const dayScreenStrings = {
   hoursInvalidSlotError: "مدة الكشف لازم تكون أكبر من صفر",
   hoursInvalidCapacityError: "السعة لازم تكون أكبر من صفر",
   hoursVisitsOnOldGridError: "فيه مواعيد محجوزة على المدة القديمة، امسحها أو انقلها الأول",
+  // A day off's editor turns it into a working day; a working day's editor
+  // can turn it into a day off.
+  hoursAddWorkingDayAction: "خليه يوم شغل",
+  hoursMakeDayOffAction: "خليه إجازة",
+  hoursUpcomingVisitsError: "فيه حجوزات جاية في اليوم ده، انقلها أو الغيها الأول",
 
   // Panel B — services.
   serviceDurationSuffix: "دقيقة",
