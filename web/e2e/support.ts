@@ -1305,3 +1305,119 @@ export async function carePlanSheetFixture(page: Page): Promise<Locator> {
   await expect(sheet).toContainText(`${PLAN.paidLabel} 1,100 ج.م`);
   return sheet;
 }
+
+// "مقترح النهارده" on the messages page: one row of each kind, written
+// straight into the store on SUGGESTED_DAY with the clock pinned to 08:30 —
+// a fixed Thursday, so the seeded Monday's completed visit is never "two
+// days ago" and adds no row of its own —
+// منى booked tomorrow at 10:30 (appointment reminder), كريم booked tomorrow
+// at 09:30 for a care plan session (session reminder), ياسمين seen two days
+// ago (follow-up) and عمر, with no phone, owing 150 ج.م on an invoice a week
+// old (balance reminder). window.open is recorded, never followed.
+export const SUGGESTED_PHONES = { mona: "+201001234567", karim: "+201112345678", yasmin: "+201223456789" } as const;
+
+export const SUGGESTED_DAY = "2026-10-15";
+
+export async function suggestedMessagesFixture(page: Page): Promise<void> {
+  const today = SUGGESTED_DAY;
+  const day = (offset: number) => addDaysToClinicDay(today, offset);
+  await recordWindowOpen(page);
+  await page.clock.install({ time: new Date(cairoInstant(today, "08:30")) });
+  await gotoRealDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
+  await syncSettled(page);
+
+  type Stored = Record<string, unknown> & { id: string };
+  const patients = await readStore<Stored & { full_name: string }>(page, "patients");
+  const byName = (name: string) => patients.find((patient) => patient.full_name === name)!;
+  const [mona, karim, yasmin, omar] = [PATIENTS.mona, PATIENTS.karim, PATIENTS.yasmin, PATIENTS.omar].map(byName);
+  const template = (await readStore<Stored & { patient_id: string }>(page, "visits")).find((visit) => visit.patient_id === mona.id)!;
+  const [service] = await readStore<Stored>(page, "services");
+  const [specialty] = await readStore<Stored>(page, "specialty_templates");
+
+  const visit = (id: string, patientId: string, visitDay: string, time: ClockTime, position: number, status: string) => {
+    const at = cairoInstant(visitDay, time);
+    const done = status === "completed";
+    return {
+      ...template,
+      id,
+      patient_id: patientId,
+      visit_date: visitDay,
+      position,
+      scheduled_at: at,
+      unique_scheduled_at: at,
+      status,
+      arrived_at: done ? at : null,
+      started_at: done ? at : null,
+      ended_at: done ? at : null,
+      cancel_reason: null,
+      note: null,
+    };
+  };
+  const plan = {
+    id: "suggested-plan",
+    org_id: template.org_id,
+    location_id: template.location_id,
+    template_id: specialty.id,
+    patient_id: karim.id,
+    practitioner_id: template.practitioner_id,
+    goal: "تقوية عضلات الركبة",
+    diagnosis: "خشونة الركبة",
+    planned_count: 1,
+    total_price: service.default_price,
+    paid: 0,
+    status: "active",
+    started_at: cairoInstant(day(-14), "09:00"),
+    expected_end: cairoInstant(day(1), "00:00"),
+    rev: 1,
+  };
+  await putRows(page, [
+    { store: "patients", value: { ...mona, phone: SUGGESTED_PHONES.mona } },
+    { store: "patients", value: { ...karim, phone: SUGGESTED_PHONES.karim } },
+    { store: "patients", value: { ...yasmin, phone: SUGGESTED_PHONES.yasmin } },
+    { store: "visits", value: visit("suggested-mona", mona.id, day(1), "10:30", 101, "booked") },
+    { store: "visits", value: visit("suggested-karim", karim.id, day(1), "09:30", 102, "booked") },
+    { store: "visits", value: visit("suggested-yasmin", yasmin.id, day(-2), "13:00", 103, "completed") },
+    { store: "visits", value: visit("suggested-omar", omar.id, day(-7), "13:30", 104, "completed") },
+    { store: "care_plans", value: plan },
+    {
+      store: "care_plan_items",
+      value: {
+        id: "suggested-session",
+        care_plan_id: plan.id,
+        service_id: service.id,
+        sequence: 1,
+        visit_id: "suggested-karim",
+        min_gap_days: 0,
+        depends_on_item_id: null,
+        price: service.default_price,
+        status: "planned",
+        rev: 1,
+      },
+    },
+    {
+      store: "invoices",
+      value: {
+        id: "suggested-invoice",
+        org_id: template.org_id,
+        location_id: template.location_id,
+        number: 9001,
+        issued_year: Number(day(-7).slice(0, 4)),
+        series: 1,
+        patient_id: omar.id,
+        practitioner_id: template.practitioner_id,
+        visit_id: "suggested-omar",
+        total: 300_00,
+        paid: 150_00,
+        status: "partial",
+        issued_at: cairoInstant(day(-7), "13:45"),
+        rev: 1,
+      },
+    },
+  ]);
+  await reloadAs(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await openMessagesPage(page);
+}
+
+/** The "مقترح النهارده" section and its rows. */
+export const suggestedSection = (page: Page) => page.getByRole("region", { name: MSG.suggestedHeading });

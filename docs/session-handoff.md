@@ -174,6 +174,11 @@ migration runs — every organization provisioned later would have none.
 - f. Below 768px `.msg-side` is a horizontal row of template chips above `.msg-main`.
 - WhatsApp's green (`#25D366`, `.icn.wa` and the toggle's dot) is the `whatsapp` token (`docs/design-tokens.md`).
 
+### Messages: "مقترح النهارده"
+- Above "آخر الرسائل" on the messages page, for every role: "مقترح النهارده" with a count badge, one row per suggestion — the patient's name, the reason, and "ابعت", which opens SendMessageSheet on that visit with the row's template preselected; a patient without a usable mobile number reads a muted "مفيش رقم" and has no button. Empty: "مفيش رسائل مقترحة النهارده". No prototype counterpart: `.msg-item`'s row look, tokens and shared components.
+- Rules (`web/src/screens/messages/suggestedMessages.ts`, pure, Cairo days): appointment_reminder for tomorrow's booked or confirmed visits ("موعد بكرة 10:30"; a queue visit has no time); care_plan_session_reminder instead of it for a tomorrow visit that books a care plan session ("جلسة خطة بكرة 9:30"); post_visit_followup for visits completed exactly two days ago ("زيارة من يومين"); balance_reminder at most once per patient, on their oldest non-void invoice still owed and issued seven or more days ago, on that invoice's visit, reading what that invoice still owes ("عليه 150 ج.م من أسبوع", whole weeks).
+- A visit's row goes once a message with its template was opened for that visit; a balance row once a balance reminder was opened for the patient today or in the six days before. Only what the membership may see counts (messages' own scope: organization, and listed locations). Order: tomorrow's rows by time, then follow-ups, then balances, each by name.
+
 ### Screen 17 (care plan) — owner decisions over the prototype
 - a. Entry points, in the visit workspace (at the top of `.visit-main`): with a plan under way (active, not completed) between the patient and the visit's practitioner, s10's `.plan-badge` "خطة رعاية جارية: {goal}" with `.p` "جلسة {n} من {count}" (n = the session this visit books, else the done sessions + 1, over the sessions not skipped), opening the plan; without one, the visit's own practitioner gets "ابدأ خطة رعاية" on an in_room or completed visit, opening the create form in the same sheet. One plan under way per patient per practitioner: `createCarePlan` and `resumeCarePlan` refuse another with `plan_already_active` (a stopped or completed plan does not count).
 - b. Create form (shared Field/TextInput/TextArea/ToggleGroup): "الهدف" (required), "التشخيص" (from the visit form, required), session groups — service (active services, with their effective price), "عدد الجلسات" (≥ 1), "كل كام يوم" (≥ 0), "＋ نوع جلسات تاني", "شيل" while more than one — and a live preview of the sessions (number, service, suggested "d / m": the first today, each later one its group's gap after the one before) with their total. Messages show after the first "ابدأ الخطة"; nothing is written until it succeeds; a refusal shows as one line.
@@ -311,7 +316,6 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
 ## Backlog
 - Invoice item editing (screen 5's "تعديل بنود") — owner decision of the prototype alignment: recorded, not built.
 - Queue reordering (screen 3's "إعادة ترتيب") — owner decision of the prototype alignment: recorded, not built.
-- Messages: a "suggested today" list on the messages page (tomorrow's appointment reminders, follow-ups due, balances a week old), so the suggested templates are offered for the right patients instead of being opened one visit at a time.
 
 ## Data decisions for the rebuild
 - `visits.note text NULL` — the doctor's quick note.

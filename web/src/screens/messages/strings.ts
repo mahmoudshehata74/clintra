@@ -34,6 +34,22 @@ export const messagesStrings = {
   chipEditable: "قابل للتعديل",
   chipOverridden: "معدّل",
 
+  // "مقترح النهارده", above `.msg-sent` (suggestedMessages.ts).
+  suggestedHeading: "مقترح النهارده",
+  suggestedEmpty: "مفيش رسائل مقترحة النهارده",
+  suggestedSendAction: "ابعت",
+  suggestedNoPhone: "مفيش رقم",
+  suggestedAppointmentTomorrow: "موعد بكرة",
+  suggestedSessionTomorrow: "جلسة خطة بكرة",
+  suggestedFollowup: "زيارة من يومين",
+  suggestedOwes: "عليه",
+  suggestedCurrency: "ج.م",
+  suggestedSince: "من",
+  suggestedWeekOne: "من أسبوع",
+  suggestedWeekTwo: "من أسبوعين",
+  suggestedWeeksFew: "أسابيع",
+  suggestedWeeksMany: "أسبوع",
+
   // The send sheet.
   sendSheetTitle: "ابعت رسالة",
   sendRecipientPrefix: "إلى:",
