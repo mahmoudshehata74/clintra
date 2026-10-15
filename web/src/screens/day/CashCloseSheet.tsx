@@ -78,7 +78,7 @@ function CloseCell({
       <span className="text-[11px] font-semibold text-muted">{label}</span>{" "}
       <span className={`text-[19px] font-bold tabular-nums tracking-[-0.01em] ${valueToneClass}`}>
         <Ltr>{value}</Ltr>
-        {unit && <i className="ms-1 text-[11px] font-semibold not-italic text-faint">{unit}</i>}
+        {unit && <i className="ms-1 text-[11px] font-semibold not-italic text-muted">{unit}</i>}
       </span>
     </div>
   );

@@ -87,10 +87,10 @@ export default function SlotRow({
   if (!visual || !visit) {
     return (
       <li className="relative grid grid-cols-[60px_1fr_auto] items-center gap-3.5 border-b border-hair px-[18px] py-2.5 last:border-b-0 before:absolute before:inset-y-0 before:start-0 before:w-[3px] before:bg-transparent before:content-[''] hover:bg-field">
-        <span className="text-sm font-medium leading-none tracking-[-0.02em] text-faint tabular-nums">
+        <span className="text-sm font-medium leading-none tracking-[-0.02em] text-muted tabular-nums">
           {showTime && <Ltr>{time}</Ltr>}
         </span>
-        <span className="text-xs text-faint">{dayScreenStrings.emptySlotFreeLabel}</span>
+        <span className="text-xs text-muted">{dayScreenStrings.emptySlotFreeLabel}</span>
         {isTappable ? (
           <Button
             variant="dashed"
@@ -101,7 +101,7 @@ export default function SlotRow({
             {dayScreenStrings.emptySlotQuickActionLabel}
           </Button>
         ) : (
-          <span className="text-[11.5px] font-semibold text-faint" aria-hidden="true">
+          <span className="text-[11.5px] font-semibold text-muted" aria-hidden="true">
             {dayScreenStrings.emptySlotQuickActionLabel}
           </span>
         )}
@@ -141,7 +141,7 @@ export default function SlotRow({
         {REOPENED_STATUSES.has(visit.status) && <span>{dayScreenStrings.slotAvailableAgain}</span>}
       </span>
       {actorLabel && (
-        <span className="mt-0.5 text-[10px] text-faint">
+        <span className="mt-0.5 text-[10px] text-muted">
           {dayScreenStrings.recordedByPrefix} {actorLabel}
           {recency?.kind === "yesterday" && ` · ${dayScreenStrings.actorYesterdaySuffix}`}
           {recency?.kind === "earlier" && (

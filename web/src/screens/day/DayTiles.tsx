@@ -42,9 +42,9 @@ export default function DayTiles({ tiles }: { tiles: readonly TileData[] }) {
             className={`text-xl font-bold leading-[1.1] tracking-[-0.01em] tabular-nums ${VALUE_TONE[tile.tone ?? "default"]}`}
           >
             {tile.value}
-            {tile.unit && <i className="ms-1 text-[11.5px] font-semibold not-italic text-faint">{tile.unit}</i>}
+            {tile.unit && <i className="ms-1 text-[11.5px] font-semibold not-italic text-muted">{tile.unit}</i>}
           </span>
-          {tile.sub && <span className="mt-px text-[10.5px] text-faint">{tile.sub}</span>}
+          {tile.sub && <span className="mt-px text-[10.5px] text-muted">{tile.sub}</span>}
         </div>
       ))}
     </div>

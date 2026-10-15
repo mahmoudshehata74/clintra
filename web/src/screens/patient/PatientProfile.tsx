@@ -172,7 +172,7 @@ export default function PatientProfile({ patientId, initialTab = "all" }: Patien
       {/* `.pt-timeline` */}
       <section aria-label={T.timelineLabel} className="px-[18px] py-4">
         {days.length === 0 ? (
-          <p className="py-6 text-center text-xs text-faint">{empty}</p>
+          <p className="py-6 text-center text-xs text-muted">{empty}</p>
         ) : (
           days.map((day) => (
             // `.pt-day`
@@ -300,7 +300,7 @@ const ICON_LOOK: Record<ProfileEventKind | "muted", string> = {
   msg: "border-rule bg-field text-text",
   pay: "border-[color-mix(in_srgb,var(--color-eligible)_40%,transparent)] bg-[color-mix(in_srgb,var(--color-eligible)_15%,transparent)] text-eligible",
   note: "border-rule bg-field text-muted",
-  muted: "border-rule bg-field text-faint",
+  muted: "border-rule bg-field text-muted",
 };
 
 const ROW_BASE = "grid w-full grid-cols-[auto_1fr_auto] items-start gap-3 rounded-control border border-rule px-3 py-2.5 text-start";
@@ -357,7 +357,7 @@ function EventRow({ event, onOpen }: { event: ProfileEvent; onOpen?: () => void 
         )}
       </span>
       {/* `.time` */}
-      <span className="whitespace-nowrap text-[10.5px] text-faint tabular-nums">{event.time && <Ltr>{event.time}</Ltr>}</span>
+      <span className="whitespace-nowrap text-[10.5px] text-muted tabular-nums">{event.time && <Ltr>{event.time}</Ltr>}</span>
     </>
   );
   const surface = event.muted ? "bg-field" : "bg-card";

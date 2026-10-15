@@ -377,7 +377,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
 
       {/* `.audit` — a timeline of who did what: the verb leads, the actor follows. */}
       {filteredRows.length === 0 ? (
-        <p className="px-[18px] py-[22px] text-center text-[12.5px] text-faint">{dayScreenStrings.auditSheetEmpty}</p>
+        <p className="px-[18px] py-[22px] text-center text-[12.5px] text-muted">{dayScreenStrings.auditSheetEmpty}</p>
       ) : (
         <ul className="flex flex-col">
           {filteredRows.map(({ row, verb, subject, actorName, context, tone }) => {
@@ -408,7 +408,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
                     )}
                   </p>
                 </div>
-                <span className="whitespace-nowrap text-end text-[11px] text-faint tabular-nums">
+                <span className="whitespace-nowrap text-end text-[11px] text-muted tabular-nums">
                   <Ltr>{clockTimeInCairo(row.at)}</Ltr>
                   {elapsed && (
                     <>

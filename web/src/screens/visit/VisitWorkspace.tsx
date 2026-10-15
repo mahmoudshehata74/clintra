@@ -587,7 +587,7 @@ function RxItemRow({
       </div>
       <div className="mt-0.5 text-[11px] text-muted tabular-nums">
         <RxDoseText line={line} strongClassName="font-semibold text-text" />
-        {line.note && <span className="text-faint"> · {line.note}</span>}
+        {line.note && <span className="text-muted"> · {line.note}</span>}
       </div>
     </>
   );

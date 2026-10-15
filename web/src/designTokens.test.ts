@@ -1,5 +1,6 @@
 /// <reference types="node" />
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import prototypeHtml from "../../docs/reference/clintra-prototype.html?raw";
 
@@ -175,7 +176,7 @@ interface Pair {
  */
 const PAIRS: readonly Pair[] = [
   ...["paper", "paper-2", "card", "field"].flatMap((background) =>
-    ["text", "muted", "faint"].map((text) => ({ group: "Text on surfaces", text, background, use: "body, labels, hints, timestamps, empty states" })),
+    ["text", "muted"].map((text) => ({ group: "Text on surfaces", text, background, use: "body, labels, hints, timestamps, empty states" })),
   ),
   { group: "Text on surfaces", text: "text", background: "copper 12% over card", use: "the care-plan entry on the visit sheet" },
   ...["card", "field"].flatMap((background) =>
@@ -248,14 +249,6 @@ const PLACEHOLDERS: Readonly<Record<string, number>> = {
 const ACCEPTED_UNDER_AA: Readonly<Record<string, number>> = {
   // Decision 9: warning on warning-wash is accepted in light as it is.
   "light: warning on warning-wash": 4.49,
-  // Until decision 7 leaves faint to placeholders and disabled controls.
-  "light: faint on paper": 2.6,
-  "light: faint on paper-2": 2.77,
-  "light: faint on card": 2.92,
-  "light: faint on field": 2.75,
-  "dark: faint on paper-2": 4.33,
-  "dark: faint on card": 4.13,
-  "dark: faint on field": 3.88,
   // Until decision 8 makes the invoice head's status a solid badge.
   "light: warning on warning 22% over ink-2": 2.21,
   "light: eligible on eligible 22% over ink-2": 1.8,
@@ -287,6 +280,24 @@ describe("contrast", () => {
       const [text, background] = pair.split(" on ");
       expect(contrast(THEMES[name], text, background).toFixed(2), key).toBe(recorded.toFixed(2));
     }
+  });
+
+  it("faint is text only as a placeholder", () => {
+    const sources = (readdirSync(new URL(".", import.meta.url), { recursive: true }) as string[]).filter(
+      (file) => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file),
+    );
+    expect(sources).toContain(join("components", "ui", "Field.tsx"));
+    const faintText: string[] = [];
+    for (const file of sources) {
+      readFileSync(new URL(file.replaceAll("\\", "/"), import.meta.url), "utf8")
+        .split("\n")
+        .forEach((line, index) => {
+          if (/(?<![\w:-])text-faint(?![\w-])/.test(line)) {
+            faintText.push(`${file}:${index + 1}`);
+          }
+        });
+    }
+    expect(faintText).toEqual([]);
   });
 
   it("every accepted pair is one the app uses", () => {

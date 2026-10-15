@@ -286,7 +286,7 @@ export default function InvoiceSheet({
                       <span className="rounded-chip border border-rule bg-field px-[9px] py-[3px] text-[11.5px] font-semibold text-muted">
                         {METHOD_LABEL[payment.method]}
                       </span>
-                      <span className="font-mono text-[11px] tabular-nums text-faint">
+                      <span className="font-mono text-[11px] tabular-nums text-muted">
                         <Ltr>{formatReceiptNumber(payment)}</Ltr> · <Ltr>{clockTimeInCairo(payment.created_at)}</Ltr>
                       </span>
                       <button

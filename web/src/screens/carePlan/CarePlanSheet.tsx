@@ -328,7 +328,7 @@ const NUMBER_LOOK: Record<SessionTone, string> = {
   next: "border-copper-line bg-copper-wash text-copper-ink",
   booked: "border-rule bg-field text-muted",
   suggested: "border-rule bg-field text-muted",
-  skipped: "border-rule bg-field text-faint",
+  skipped: "border-rule bg-field text-muted",
 };
 
 // `.plan-session .name`: muted once done (`.done .name`), and for a skipped session.
@@ -337,7 +337,7 @@ const NAME_LOOK: Record<SessionTone, string> = {
   next: "text-text",
   booked: "text-text",
   suggested: "text-text",
-  skipped: "text-faint",
+  skipped: "text-muted",
 };
 
 // `.plan-session .st` per tone: `.done .st`, `.next .st`, `.st.plan`; a later
@@ -347,7 +347,7 @@ const STATUS_LOOK: Record<SessionTone, string> = {
   next: "border-copper-line bg-copper-wash text-copper-ink",
   booked: "border-rule bg-card text-text",
   suggested: "border-rule bg-field text-muted",
-  skipped: "border-transparent bg-transparent text-faint",
+  skipped: "border-transparent bg-transparent text-muted",
 };
 
 function Meta({ parts }: { parts: readonly MetaPart[] }) {

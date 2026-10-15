@@ -135,7 +135,7 @@ export default function ServicesPanel({ orgId }: { orgId: string }) {
                 {!service.is_active && (
                   <>
                     {" "}
-                    <span className="ms-1 text-[10.5px] font-normal text-faint">{dayScreenStrings.serviceInactiveTag}</span>
+                    <span className="ms-1 text-[10.5px] font-normal text-muted">{dayScreenStrings.serviceInactiveTag}</span>
                   </>
                 )}
               </span>

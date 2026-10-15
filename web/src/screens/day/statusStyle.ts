@@ -49,7 +49,7 @@ export interface StatusVisual {
   nameClassName: string;
   /** Classes for the time column's own text (not `.until`). */
   timeClassName: string;
-  /** Classes for the `.until` sub-line under the time — copper-ink for in_room, faint otherwise. */
+  /** Classes for the `.until` sub-line under the time — copper-ink for in_room, muted otherwise. */
   untilClassName: string;
   /** Classes for everything else on the row: service line, reopened-slot note, the "recorded by" byline. */
   metaClassName: string;
@@ -76,7 +76,7 @@ export function statusVisual(status: VisitStatusType): StatusVisual | null {
       rowBgClassName: "",
       nameClassName: "",
       timeClassName: "",
-      untilClassName: "text-faint",
+      untilClassName: "text-muted",
       metaClassName: "text-muted",
       badge: { appearance: "soft", tone: "neutral" },
     };
@@ -87,7 +87,7 @@ export function statusVisual(status: VisitStatusType): StatusVisual | null {
       rowBgClassName: "",
       nameClassName: "",
       timeClassName: "",
-      untilClassName: "text-faint",
+      untilClassName: "text-muted",
       metaClassName: "text-muted",
       badge: { appearance: "solid", tone: "eligible" },
     };
@@ -110,8 +110,8 @@ export function statusVisual(status: VisitStatusType): StatusVisual | null {
       rowBgClassName: "",
       nameClassName: "text-muted",
       timeClassName: "text-muted",
-      untilClassName: "text-faint",
-      metaClassName: "text-faint",
+      untilClassName: "text-muted",
+      metaClassName: "text-muted",
       badge: { appearance: "soft", tone: "neutral" },
     };
   }
@@ -120,9 +120,9 @@ export function statusVisual(status: VisitStatusType): StatusVisual | null {
       stripeClassName: "before:bg-faint before:opacity-40",
       rowBgClassName: "",
       nameClassName: "text-muted line-through decoration-faint",
-      timeClassName: "text-faint",
-      untilClassName: "text-faint",
-      metaClassName: "text-faint",
+      timeClassName: "text-muted",
+      untilClassName: "text-muted",
+      metaClassName: "text-muted",
       badge: { appearance: "dashed", tone: "danger" },
     };
   }
@@ -133,7 +133,7 @@ export function statusVisual(status: VisitStatusType): StatusVisual | null {
         "bg-[linear-gradient(90deg,color-mix(in_srgb,var(--color-danger-wash)_55%,transparent)_0%,transparent_40%)]",
       nameClassName: "text-danger",
       timeClassName: "",
-      untilClassName: "text-faint",
+      untilClassName: "text-muted",
       metaClassName: "text-muted",
       badge: { appearance: "solid", tone: "danger" },
     };

@@ -40,7 +40,7 @@ describe("statusVisual", () => {
     expect(visual.stripeClassName).toBe("before:bg-rule");
     expect(visual.nameClassName).toBe("text-muted");
     expect(visual.timeClassName).toBe("text-muted");
-    expect(visual.metaClassName).toBe("text-faint");
+    expect(visual.metaClassName).toBe("text-muted");
     expect(visual.badge).toEqual({ appearance: "soft", tone: "neutral" });
   });
 
@@ -49,7 +49,7 @@ describe("statusVisual", () => {
     expect(visual.stripeClassName).toBe("before:bg-faint before:opacity-40");
     expect(visual.rowBgClassName).toBe("");
     expect(visual.nameClassName).toBe("text-muted line-through decoration-faint");
-    expect(visual.metaClassName).toBe("text-faint");
+    expect(visual.metaClassName).toBe("text-muted");
     expect(visual.badge).toEqual({ appearance: "dashed", tone: "danger" });
   });
 

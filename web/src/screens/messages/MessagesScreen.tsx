@@ -347,7 +347,7 @@ function RecentMessages({ rows }: { rows: RecentRow[] }) {
         {T.recentHeading}
       </h2>
       {rows.length === 0 ? (
-        <p className="px-1 text-[12.5px] text-faint">{T.recentEmpty}</p>
+        <p className="px-1 text-[12.5px] text-muted">{T.recentEmpty}</p>
       ) : (
         <ul>
           {rows.map(({ message, patientName }) => {
@@ -407,7 +407,7 @@ function SuggestedMessages({ rows, onSend }: { rows: SuggestedMessage[]; onSend:
         </Badge>
       </div>
       {rows.length === 0 ? (
-        <p className="px-1 text-[12.5px] text-faint">{T.suggestedEmpty}</p>
+        <p className="px-1 text-[12.5px] text-muted">{T.suggestedEmpty}</p>
       ) : (
         <ul>
           {rows.map((row) => (
@@ -427,7 +427,7 @@ function SuggestedMessages({ rows, onSend }: { rows: SuggestedMessage[]; onSend:
                   {T.suggestedSendAction}
                 </Button>
               ) : (
-                <span className="text-[11px] font-semibold text-faint">{T.suggestedNoPhone}</span>
+                <span className="text-[11px] font-semibold text-muted">{T.suggestedNoPhone}</span>
               )}
             </li>
           ))}
