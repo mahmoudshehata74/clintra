@@ -539,14 +539,18 @@ export const dayScreenStrings = {
   serviceActiveLabel: "مفعّلة",
   // `.svc-name`'s muted tag on a stopped service.
   serviceInactiveTag: "موقوفة",
-  // A row's "تعديل" — opens that service's price overrides.
+  // A row's "تعديل" — opens that service's form (name, duration, base
+  // price, applied on save) and its price overrides.
   serviceEditAction: "تعديل",
   serviceNewAction: "＋ خدمة جديدة",
   // `.runrow .count`: "{a} نشطة · {i} موقوفة".
   serviceCountActiveUnit: "نشطة",
   serviceCountInactiveUnit: "موقوفة",
-  serviceNameLabel: "الاسم",
-  serviceDurationLabel: "المدة (دقيقة)",
+  // The service form, shared by "تعديل" and "خدمة جديدة".
+  serviceNameLabel: "اسم الخدمة",
+  serviceDurationLabel: "المدة بالدقايق",
+  serviceBasePriceLabel: "السعر الأساسي",
+  // A price override's own price.
   servicePriceLabel: "السعر (جنيه)",
   serviceOverridesLink: "أسعار خاصة",
   serviceOverrideAddAction: "أضف سعر خاص",
@@ -557,6 +561,8 @@ export const dayScreenStrings = {
   serviceOverrideDeleteAction: "حذف",
   servicePriceInvalidError: "السعر ده مش صحيح",
   serviceNameRequiredError: "لازم تكتب اسم الخدمة",
+  serviceNameTakenError: "فيه خدمة تانية بالاسم ده",
+  serviceDurationInvalidError: "المدة من 5 لـ 480 دقيقة، كل 5 دقايق",
 
   // Panel C — staff and permissions.
   staffNewAction: "＋ إضافة موظف",

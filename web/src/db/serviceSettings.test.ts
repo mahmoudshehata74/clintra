@@ -6,6 +6,7 @@ import {
   addServicePriceOverride,
   createService,
   deleteServicePriceOverride,
+  saveServiceDetails,
   updateService,
 } from "./serviceSettings";
 import { markVisitInRoom } from "./visitAttendance";
@@ -109,5 +110,94 @@ describe("service price overrides", () => {
 
     await deleteServicePriceOverride(db, created.override.id);
     expect(await db.service_price_overrides.count()).toBe(0);
+  });
+});
+
+describe("saveServiceDetails", () => {
+  async function orgAndServices() {
+    await seedDatabase(db);
+    const [org] = await db.organizations.toArray();
+    const services = await db.services.toArray();
+    return { orgId: org.id, services };
+  }
+
+  it("edits a service's name, duration and price, audited and queued; an unchanged save writes nothing", async () => {
+    const { orgId, services } = await orgAndServices();
+    const [service] = services;
+    const auditBefore = await db.audit_log.count();
+
+    const result = await saveServiceDetails(db, {
+      serviceId: service.id,
+      orgId,
+      details: { name: "  كشف مفصل ", durationMinutes: 45, defaultPrice: 400_00 as Piastres },
+    });
+    expect(result.ok).toBe(true);
+    expect(await db.services.get(service.id)).toMatchObject({
+      name: "كشف مفصل",
+      duration_minutes: 45,
+      default_price: 400_00,
+      is_active: service.is_active,
+    });
+    expect(await db.audit_log.count()).toBe(auditBefore + 1);
+    const ops = (await db.sync_ops.toArray()).filter((op) => op.entity === "services" && op.entity_id === service.id);
+    expect(ops.map((op) => op.action)).toEqual(["update"]);
+
+    await saveServiceDetails(db, {
+      serviceId: service.id,
+      orgId,
+      details: { name: "كشف مفصل", durationMinutes: 45, defaultPrice: 400_00 as Piastres },
+    });
+    expect(await db.audit_log.count()).toBe(auditBefore + 1);
+  });
+
+  it("keeps its own name on an edit, and refuses another service's name, case and spaces ignored", async () => {
+    const { orgId, services } = await orgAndServices();
+    const [first, second] = services;
+
+    expect(
+      (await saveServiceDetails(db, {
+        serviceId: first.id,
+        orgId,
+        details: { name: first.name, durationMinutes: 30, defaultPrice: first.default_price },
+      })).ok,
+    ).toBe(true);
+    expect(
+      await saveServiceDetails(db, {
+        serviceId: first.id,
+        orgId,
+        details: { name: ` ${second.name.replace(" ", "  ")} `, durationMinutes: 30, defaultPrice: first.default_price },
+      }),
+    ).toEqual({ ok: false, reason: "name_taken" });
+    expect((await db.services.get(first.id))?.name).toBe(first.name);
+  });
+
+  it("adds a new service, active, with the same checks", async () => {
+    const { orgId, services } = await orgAndServices();
+
+    expect(
+      await saveServiceDetails(db, {
+        serviceId: null,
+        orgId,
+        details: { name: services[0].name, durationMinutes: 30, defaultPrice: 100_00 as Piastres },
+      }),
+    ).toEqual({ ok: false, reason: "name_taken" });
+    expect(
+      await saveServiceDetails(db, {
+        serviceId: null,
+        orgId,
+        details: { name: "أشعة", durationMinutes: 7, defaultPrice: 100_00 as Piastres },
+      }),
+    ).toEqual({ ok: false, reason: "duration_invalid" });
+
+    const result = await saveServiceDetails(db, {
+      serviceId: null,
+      orgId,
+      details: { name: "أشعة", durationMinutes: 20, defaultPrice: 0 as Piastres },
+    });
+    expect(result.ok).toBe(true);
+    expect(await db.services.count()).toBe(services.length + 1);
+    if (result.ok) {
+      expect(await db.services.get(result.service.id)).toMatchObject({ name: "أشعة", duration_minutes: 20, default_price: 0, is_active: true });
+    }
   });
 });

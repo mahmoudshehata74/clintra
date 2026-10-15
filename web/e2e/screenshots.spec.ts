@@ -162,6 +162,25 @@ test("@screenshot settings-services", async ({ page }) => {
   await shoot(page, "settings-services", false);
 });
 
+// "كشف عام"'s form open with a new name, duration and price typed in, not
+// yet saved, above its price overrides.
+test("@screenshot settings-services-edit", async ({ page }) => {
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsServicesTab, exact: true }).click();
+  const row = dialog.getByRole("listitem").filter({ hasText: "كشف عام" });
+  await row.getByRole("button", { name: S.serviceEditAction, exact: true }).click();
+  await row.getByLabel(S.serviceNameLabel, { exact: true }).fill("كشف مفصل");
+  await row.getByLabel(S.serviceDurationLabel, { exact: true }).fill("45");
+  await row.getByLabel(S.serviceBasePriceLabel, { exact: true }).fill("375");
+  await expect(row.getByRole("button", { name: S.serviceOverrideAddAction, exact: true })).toBeVisible();
+  await row.scrollIntoViewIfNeeded();
+  await shoot(page, "settings-services-edit", false);
+});
+
 test("@screenshot settings-staff", async ({ page }) => {
   await page.goto("/?seedDay=1");
   await page.evaluate(() => localStorage.clear());

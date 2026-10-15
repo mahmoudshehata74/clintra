@@ -3,8 +3,10 @@ import {
   AUTH,
   emptySlotTiles,
   enterPin,
+  gotoRealDay,
   gotoSeededDay,
   lockOverlay,
+  openAuditLog,
   OWNER_NAME,
   OWNER_PIN,
   PATIENTS,
@@ -267,6 +269,66 @@ test("services show duration, price, an active switch and the footer counts", as
   await dialog.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
   await expect(dialog.getByText(S.serviceNameRequiredError)).toBeVisible();
   await expect(dialog.getByLabel(S.serviceNameLabel)).toHaveAttribute("aria-invalid", "true");
+});
+
+test("the owner edits a service on save only, with its checks, adds one, and the audit names it without a price", async ({ page }) => {
+  await gotoRealDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsServicesTab, exact: true }).click();
+
+  const row = dialog.getByRole("listitem").filter({ hasText: "كشف عام" });
+  await row.getByRole("button", { name: S.serviceEditAction, exact: true }).click();
+  const name = row.getByLabel(S.serviceNameLabel, { exact: true });
+  const duration = row.getByLabel(S.serviceDurationLabel, { exact: true });
+  const price = row.getByLabel(S.serviceBasePriceLabel, { exact: true });
+  await expect(name).toHaveValue("كشف عام");
+  // The price overrides still sit under the form.
+  await expect(row.getByRole("button", { name: S.serviceOverrideAddAction, exact: true })).toBeVisible();
+
+  // Another service's name, case and spaces aside, is refused.
+  await name.fill("  استشارة   متابعة ");
+  await row.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(row.getByText(S.serviceNameTakenError)).toBeVisible();
+
+  await name.fill("كشف مفصل");
+  await duration.fill("22");
+  await row.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(row.getByText(S.serviceDurationInvalidError)).toBeVisible();
+
+  await duration.fill("45");
+  await price.fill("375");
+  // Nothing applies before "حفظ".
+  await expect(dialog.getByRole("listitem").filter({ hasText: "كشف مفصل" })).toHaveCount(0);
+  await row.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+
+  const edited = dialog.getByRole("listitem").filter({ hasText: "كشف مفصل" });
+  await expect(edited).toContainText(`45 ${S.serviceDurationSuffix}`);
+  await expect(edited).toContainText("375");
+  await expect(edited.getByLabel(S.serviceNameLabel, { exact: true })).toHaveCount(0);
+
+  // "خدمة جديدة" opens the same form with the same checks.
+  await dialog.getByRole("button", { name: S.serviceNewAction, exact: true }).click();
+  await dialog.getByLabel(S.serviceNameLabel, { exact: true }).fill("كشف مفصل");
+  await dialog.getByLabel(S.serviceDurationLabel, { exact: true }).fill("20");
+  await dialog.getByLabel(S.serviceBasePriceLabel, { exact: true }).fill("150");
+  await dialog.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(dialog.getByText(S.serviceNameTakenError)).toBeVisible();
+  await dialog.getByLabel(S.serviceNameLabel, { exact: true }).fill("أشعة");
+  await dialog.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(dialog.getByRole("listitem").filter({ hasText: "أشعة" })).toContainText(`20 ${S.serviceDurationSuffix}`);
+  await expect(dialog.getByRole("button", { name: S.serviceNewAction, exact: true })).toBeVisible();
+
+  // The rail's "السجل" replaces the settings sheet.
+  await openAuditLog(page);
+  const audit = page.getByRole("dialog");
+  await audit.getByRole("button", { name: S.auditFilterSettings, exact: true }).click();
+  const editLine = audit.getByRole("listitem").filter({ hasText: "عدّل خدمة" });
+  const addLine = audit.getByRole("listitem").filter({ hasText: "أضاف خدمة" });
+  await expect(editLine).toContainText("كشف مفصل");
+  await expect(addLine).toContainText("أشعة");
+  await expect(editLine).not.toContainText("375");
+  await expect(addLine).not.toContainText("150");
 });
 
 test("staff rows show the PIN and active status, never a digit, and the last owner's switch is locked with the note", async ({ page }) => {

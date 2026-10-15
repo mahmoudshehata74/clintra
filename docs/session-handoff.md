@@ -293,6 +293,15 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
   transaction, refused while a visit on that weekday, today or later, still
   holds its slot. Both are ordinary audited `schedules` creates and deletes;
   no schema or server change.
+- **13 (services, edit and add)**: a row's "تعديل" opens the service form
+  above its price overrides (which work as before); "خدمة جديدة" opens the
+  same form; only one of the two is open at a time. Fields: "اسم الخدمة"
+  (required, unique among the organization's services with case and runs of
+  spaces ignored), "المدة بالدقايق" (5–480, steps of 5), "السعر الأساسي"
+  (pounds, ≥ 0). Nothing applies until "حفظ"; the same checks run in the
+  writer (`saveServiceDetails`, `web/src/domain/serviceDetails.ts`), and an
+  unchanged save writes nothing. Audited "عدّل خدمة" / "أضاف خدمة", naming
+  the service, never its price.
 - **13 (services)**: the list is sorted by name under Arabic collation, ties
   broken by id (`sortServicesByName`), so the order is always the same.
 

@@ -1,5 +1,6 @@
 import { id } from "../domain/id";
 import type { Piastres } from "../domain/money";
+import { checkServiceDetails, type ServiceDetails, type ServiceDetailsError } from "../domain/serviceDetails";
 import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
 import { mutate } from "./mutate";
@@ -162,4 +163,58 @@ export async function deleteServicePriceOverride(db: ClintraDatabase, overrideId
     actorMembershipId: actor.id,
     orgId: actor.org_id,
   });
+}
+
+export type SaveServiceDetailsResult = { ok: true; service: Service } | { ok: false; reason: ServiceDetailsError };
+
+/**
+ * The service form's save, for a new service (`serviceId` null) and for an
+ * edit: checks the details as the form does (checkServiceDetails — the name
+ * unique among the organization's other services, case and spaces ignored;
+ * 5–480 minutes in steps of 5; a price of zero or more), then creates the
+ * service ("أضاف خدمة") or updates its name, duration and price ("عدّل
+ * خدمة"). An edit that changes nothing writes nothing. The audit line names
+ * the service and never shows its price.
+ */
+export async function saveServiceDetails(
+  db: ClintraDatabase,
+  input: { serviceId: string | null; orgId: string; details: ServiceDetails },
+): Promise<SaveServiceDetailsResult> {
+  const services = (await db.services.toArray()).filter(
+    (service) => service.org_id === input.orgId && service.id !== input.serviceId,
+  );
+  const details = { ...input.details, name: input.details.name.trim() };
+  const refusal = checkServiceDetails(details, services);
+  if (refusal !== null) {
+    return { ok: false, reason: refusal };
+  }
+
+  if (input.serviceId === null) {
+    const { service } = await createService(db, {
+      orgId: input.orgId,
+      name: details.name,
+      durationMinutes: details.durationMinutes,
+      defaultPrice: details.defaultPrice,
+    });
+    return { ok: true, service };
+  }
+
+  const before = await db.services.get(input.serviceId);
+  if (!before) {
+    throw new Error("service_not_found");
+  }
+  if (
+    before.name === details.name &&
+    before.duration_minutes === details.durationMinutes &&
+    before.default_price === details.defaultPrice
+  ) {
+    return { ok: true, service: before };
+  }
+  await updateService(db, input.serviceId, {
+    name: details.name,
+    durationMinutes: details.durationMinutes,
+    defaultPrice: details.defaultPrice,
+  });
+  const after = await db.services.get(input.serviceId);
+  return { ok: true, service: after ?? before };
 }
