@@ -184,13 +184,143 @@
   --radius-panel: 14px;
   --radius-app: 16px;
 
-  --shadow-s: 0 1px 2px rgba(11, 33, 29, 0.05);
-  --shadow-m: 0 2px 4px rgba(11, 33, 29, 0.05), 0 12px 28px -18px rgba(11, 33, 29, 0.3);
-  --shadow-l: 0 24px 50px -30px rgba(11, 33, 29, 0.55);
+  /* Each shadow's colour is its own token: Tailwind inlines a theme
+     shadow's literal colour into the utility, so only a var() lets the dark
+     blocks below swap the prototype's dark shadows in. */
+  --color-shadow-soft: rgba(11, 33, 29, 0.05);
+  --color-shadow-mid: rgba(11, 33, 29, 0.3);
+  --color-shadow-deep: rgba(11, 33, 29, 0.55);
+  --shadow-s: 0 1px 2px var(--color-shadow-soft);
+  --shadow-m: 0 2px 4px var(--color-shadow-soft), 0 12px 28px -18px var(--color-shadow-mid);
+  --shadow-l: 0 24px 50px -30px var(--color-shadow-deep);
 
   /* Brand tokens for logo surfaces only (wordmark/icon). */
   --color-brand-teal: #1a957d;
   --color-brand-ink: #0e1814;
+}
+
+/* Dark mode — docs/reference/clintra-prototype.html's two dark blocks,
+   values verbatim and the same selectors: the system's dark preference
+   applies unless the device chose light (data-theme="light" on <html>),
+   and an explicit data-theme="dark" applies whatever the system says. No
+   data-theme at all is "auto". The tokens the prototype's dark blocks do
+   not list (print-note*, whatsapp, brand-*) keep their light values, as
+   the prototype's own literals do in dark; the three shadow colours carry
+   its dark --shadow-s/-m/-l. See docs/design-tokens.md's dark column. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+  --color-paper: #081311;
+  --color-paper-2: #0b1815;
+  --color-card: #0f1d1a;
+  --color-ink: #040e0c;
+  --color-ink-2: #0f2722;
+  --color-ink-3: #183930;
+  --color-green: #2e9c7c;
+  --color-green-2: #37b894;
+  --color-green-wash: #102520;
+  --color-green-line: #26463d;
+  --color-copper: #c79247;
+  --color-copper-2: #dba35a;
+  --color-copper-wash: #241c0f;
+  --color-copper-line: #4a3820;
+  --color-rule: #22332e;
+  --color-hair: #192824;
+  --color-text: #e7efec;
+  --color-muted: #9aada7;
+  --color-faint: #6c807a;
+  --color-danger: #de6055;
+  --color-danger-wash: #2e1614;
+  --color-danger-line: #552420;
+  --color-warning: #d7a13a;
+  --color-warning-wash: #2a2010;
+  --color-eligible: #47b187;
+  --color-on-dark: #eaf3f0;
+  --color-on-dark-dim: #7a948d;
+  --color-field: #132320;
+  --color-shadow-soft: rgba(0, 0, 0, 0.4);
+  --color-shadow-mid: rgba(0, 0, 0, 0.8);
+  --color-shadow-deep: rgba(0, 0, 0, 0.9);
+  color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-paper: #081311;
+  --color-paper-2: #0b1815;
+  --color-card: #0f1d1a;
+  --color-ink: #040e0c;
+  --color-ink-2: #0f2722;
+  --color-ink-3: #183930;
+  --color-green: #2e9c7c;
+  --color-green-2: #37b894;
+  --color-green-wash: #102520;
+  --color-green-line: #26463d;
+  --color-copper: #c79247;
+  --color-copper-2: #dba35a;
+  --color-copper-wash: #241c0f;
+  --color-copper-line: #4a3820;
+  --color-rule: #22332e;
+  --color-hair: #192824;
+  --color-text: #e7efec;
+  --color-muted: #9aada7;
+  --color-faint: #6c807a;
+  --color-danger: #de6055;
+  --color-danger-wash: #2e1614;
+  --color-danger-line: #552420;
+  --color-warning: #d7a13a;
+  --color-warning-wash: #2a2010;
+  --color-eligible: #47b187;
+  --color-on-dark: #eaf3f0;
+  --color-on-dark-dim: #7a948d;
+  --color-field: #132320;
+  --color-shadow-soft: rgba(0, 0, 0, 0.4);
+  --color-shadow-mid: rgba(0, 0, 0, 0.8);
+  --color-shadow-deep: rgba(0, 0, 0, 0.9);
+  color-scheme: dark;
+}
+
+/* Paper is always light: every printed page (the prescription, the
+   receipt, the invoice, tomorrow's sheet, the day-close summary) takes the
+   light tokens whatever the device's appearance. Restated from @theme
+   (index.css.test.ts keeps the two equal); its selectors match the dark
+   blocks' specificity and come after them, so they win on paper. */
+@media print {
+  :root,
+  :root:not([data-theme="light"]),
+  :root[data-theme] {
+  --color-paper: #eff3f1;
+  --color-paper-2: #f7faf8;
+  --color-card: #ffffff;
+  --color-ink: #0b211d;
+  --color-ink-2: #14332c;
+  --color-ink-3: #1a3e35;
+  --color-green: #1d5b4a;
+  --color-green-2: #2e7a63;
+  --color-green-wash: #e8f0ec;
+  --color-green-line: #bfdbd0;
+  --color-copper: #a8742a;
+  --color-copper-2: #c68a38;
+  --color-copper-wash: #f7efe2;
+  --color-copper-line: #e2cda6;
+  --color-rule: #d9e0dd;
+  --color-hair: #e7ecea;
+  --color-text: #0b211d;
+  --color-muted: #55665f;
+  --color-faint: #8a9b95;
+  --color-danger: #a32a21;
+  --color-danger-wash: #f7e3e0;
+  --color-danger-line: #e4b9b4;
+  --color-warning: #96620b;
+  --color-warning-wash: #f7eeda;
+  --color-eligible: #186b4b;
+  --color-on-dark: #f2f7f5;
+  --color-on-dark-dim: #87a29a;
+  --color-field: #f6f9f7;
+  --color-shadow-soft: rgba(11, 33, 29, 0.05);
+  --color-shadow-mid: rgba(11, 33, 29, 0.3);
+  --color-shadow-deep: rgba(11, 33, 29, 0.55);
+  color-scheme: light;
+  }
 }
 
 @layer utilities {
@@ -209,7 +339,7 @@ body,
 body {
   margin: 0;
   background-color: var(--color-paper);
-  color: var(--color-ink);
+  color: var(--color-text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
