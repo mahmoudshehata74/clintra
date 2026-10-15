@@ -1,6 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import { ClintraDatabase } from "../db/database";
 import { AuditAction, type SyncOp } from "../db/types";
+import { SYNCABLE_TABLES } from "./syncableTables";
 import type { PulledChange, PullSinceResult, PushOpResult, SyncTransport } from "./transport";
 
 /** The default name two tabs on the same device share, so they see one coherent server. */
@@ -55,6 +56,12 @@ export class FakeTransport implements SyncTransport {
   }
 
   private async pushOne(op: SyncOp): Promise<PushOpResult> {
+    // The real server's per-op rule (SyncOpApplier's unknown_entity): an
+    // entity it does not sync is refused for that op alone, even when a
+    // local store of that name exists (users).
+    if (!(SYNCABLE_TABLES as readonly string[]).includes(op.entity)) {
+      return { op_id: op.op_id, status: "rejected", reason: "unknown_entity" };
+    }
     const table = tableForEntity(this.db, op.entity);
 
     return this.db.transaction("rw", table, this.db.sync_ops, async (): Promise<PushOpResult> => {

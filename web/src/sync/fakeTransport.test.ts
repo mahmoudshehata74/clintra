@@ -206,6 +206,33 @@ describe("FakeTransport", () => {
     });
   });
 
+  it("rejects an op for an entity the server does not sync, alone, and applies the rest", async () => {
+    const transport = new FakeTransport(serverDbName);
+    const op = (entity: string) => ({
+      op_id: id(),
+      entity,
+      entity_id: id(),
+      action: AuditAction.Create,
+      payload: { id: id() },
+      device_id: "device-1",
+      created_at: "2026-09-07T06:00:00.000Z",
+      synced_at: null,
+      base_rev: null,
+      failure_count: 0,
+      next_retry_at: null,
+    });
+    const stray = op("users");
+    const valid = op("patients");
+
+    const results = await transport.pushOps([stray, valid]);
+
+    expect(results).toEqual([
+      { op_id: stray.op_id, status: "rejected", reason: "unknown_entity" },
+      { op_id: valid.op_id, status: "accepted", rev: 1 },
+    ]);
+    expect((await transport.pullSince(null)).changes.map((change) => change.entity)).toEqual(["patients"]);
+  });
+
   describe("pullBootstrap", () => {
     it("is always immediately done, with nothing to apply — Fake's own pullSince already returns everything unpaginated", async () => {
       const transport = new FakeTransport(serverDbName);

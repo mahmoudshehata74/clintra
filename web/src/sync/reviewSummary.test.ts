@@ -45,6 +45,15 @@ describe("describeSyncReview", () => {
     expect(describeSyncReview(makeReview({ entity: "prescriptions", reason }))).toBe(`وصفة — ${label}`);
   });
 
+  it("labels unknown_entity in Arabic, without the raw table name", () => {
+    expect(describeSyncReview(makeReview({ entity: "users", reason: "unknown_entity" }))).toBe(
+      "بيانات — السيرفر مبيستقبلش النوع ده من البيانات، فالتغيير ده مش هيوصل",
+    );
+    expect(describeSyncReview(makeReview({ entity: "memberships", reason: "unknown_entity" }))).toBe(
+      "موظف — السيرفر مبيستقبلش النوع ده من البيانات، فالتغيير ده مش هيوصل",
+    );
+  });
+
   it("never shows the raw reason code when unrecognised — a stable reference code instead", () => {
     const description = describeSyncReview(makeReview({ reason: "some_new_reason" }));
     expect(description).not.toContain("some_new_reason");

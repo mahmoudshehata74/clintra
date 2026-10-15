@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Support\Sync\SyncableTables;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -12,7 +11,9 @@ use Illuminate\Foundation\Http\FormRequest;
  * for update/delete — docs/sync-plan.md's Q5 edit-conflict mechanism —
  * and absent for create, since "an insert carries no base_rev").
  * Anything that fails here is a malformed batch (422), never mistaken for
- * a business conflict or a credential problem.
+ * a business conflict or a credential problem. Whether the entity is one
+ * the server syncs is not shape: SyncOpApplier refuses an unknown one for
+ * that op alone.
  */
 class PushSyncOpsRequest extends FormRequest
 {
@@ -27,7 +28,10 @@ class PushSyncOpsRequest extends FormRequest
         return [
             'ops' => ['required', 'array', 'min:1'],
             'ops.*.op_id' => ['required', 'uuid'],
-            'ops.*.entity' => ['required', 'string', 'in:'.implode(',', SyncableTables::NAMES)],
+            // Any table name: an entity the server does not sync is refused
+            // per op by SyncOpApplier (unknown_entity), so one stray op never
+            // fails the rest of its batch.
+            'ops.*.entity' => ['required', 'string', 'max:64'],
             'ops.*.entity_id' => ['required', 'uuid'],
             'ops.*.action' => ['required', 'string', 'in:create,update,delete'],
             'ops.*.payload' => ['required_unless:ops.*.action,delete', 'nullable', 'array'],

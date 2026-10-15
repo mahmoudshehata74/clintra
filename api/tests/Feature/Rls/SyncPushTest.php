@@ -443,3 +443,59 @@ test('no response body ever contains a SQLSTATE or query text for a genuine data
 
     expect($this->fx()->table('visits')->where('id', $visitId)->exists())->toBeFalse();
 });
+
+test('an op for an entity the server does not sync is rejected alone; the rest of the batch applies', function () {
+    $credential = makeAuthenticatedDevice();
+    $before = patientOp($credential['orgId']);
+    $after = patientOp($credential['orgId']);
+    $userId = (string) Str::uuid();
+    // A device from before staff were added on the server queued a users row.
+    $stray = [
+        'op_id' => (string) Str::uuid(),
+        'entity' => 'users',
+        'entity_id' => $userId,
+        'action' => 'create',
+        'payload' => ['id' => $userId, 'full_name' => 'موظف', 'phone' => '+201099999999', 'email' => null, 'is_active' => true],
+        'created_at' => now()->toIso8601String(),
+    ];
+    // A later op on the same entity_id is blocked, as after any rejection.
+    $strayUpdate = array_merge($stray, ['op_id' => (string) Str::uuid(), 'action' => 'update', 'base_rev' => 1]);
+
+    $response = pushOps($credential['token'], [$before, $stray, $after, $strayUpdate]);
+
+    $response->assertOk();
+    $response->assertExactJson(['results' => [
+        ['op_id' => $before['op_id'], 'status' => 'accepted', 'rev' => 1],
+        ['op_id' => $stray['op_id'], 'status' => 'rejected', 'reason' => 'unknown_entity'],
+        ['op_id' => $after['op_id'], 'status' => 'accepted', 'rev' => 1],
+        ['op_id' => $strayUpdate['op_id'], 'status' => 'blocked'],
+    ]]);
+
+    expect($this->fx()->table('users')->where('id', $userId)->exists())->toBeFalse();
+    expect($this->fx()->table('sync_ledger')->where('entity_id', $userId)->exists())->toBeFalse();
+    expect($this->fx()->table('audit_log')->where('entity_id', $userId)->exists())->toBeFalse();
+    expect($this->fx()->table('patients')->whereIn('id', [$before['entity_id'], $after['entity_id']])->count())->toBe(2);
+
+    foreach ([$before, $after] as $op) {
+        $this->fx()->table('audit_log')->where('entity_id', $op['entity_id'])->delete();
+        $this->fx()->table('sync_ledger')->where('op_id', $op['op_id'])->delete();
+        $this->fx()->table('patients')->where('id', $op['entity_id'])->delete();
+    }
+});
+
+test('an entity name that is not even a table is rejected per op, never queried', function () {
+    $credential = makeAuthenticatedDevice();
+    $op = [
+        'op_id' => (string) Str::uuid(),
+        'entity' => 'patients; drop table visits',
+        'entity_id' => (string) Str::uuid(),
+        'action' => 'delete',
+        'created_at' => now()->toIso8601String(),
+        'base_rev' => 1,
+    ];
+
+    $response = pushOps($credential['token'], [$op]);
+
+    $response->assertOk();
+    $response->assertExactJson(['results' => [['op_id' => $op['op_id'], 'status' => 'rejected', 'reason' => 'unknown_entity']]]);
+});
