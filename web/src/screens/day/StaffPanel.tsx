@@ -6,11 +6,13 @@ import Switch from "../../components/ui/Switch";
 import ToggleChip from "../../components/ui/ToggleChip";
 import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
-import { createStaffMembership, updateMembership } from "../../db/staffSettings";
+import { addStaffMember, updateMembership, type AddStaffResult } from "../../db/staffSettings";
 import type { Location, Membership, Practitioner, User } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { Role } from "../../domain/role";
 import { staffName } from "../../domain/staffName";
+import { resolveStaffServer } from "../../sync/staffServer";
+import { useOnlineStatus } from "../../sync/useOnlineStatus";
 import { LocationScope, PractitionerScope } from "../../domain/scope";
 import { ROLE_LABELS } from "./actorLabel";
 import { withDoctorPrefix } from "./doctorName";
@@ -293,8 +295,23 @@ function StaffRow({
   );
 }
 
-type NewStaffField = "name" | "phone" | "practitioners" | "pin";
+type NewStaffField = "name" | "phone" | "practitioners" | "pin" | "form";
 
+const ADD_ERROR: Record<Extract<AddStaffResult, { ok: false }>["reason"], { field: NewStaffField; message: string }> = {
+  name_required: { field: "name", message: dayScreenStrings.staffNameRequiredError },
+  name_too_long: { field: "name", message: dayScreenStrings.staffNameTooLongError },
+  invalid_phone: { field: "phone", message: dayScreenStrings.staffPhoneInvalidError },
+  phone_taken: { field: "phone", message: dayScreenStrings.staffPhoneTakenError },
+  practitioner_required: { field: "practitioners", message: dayScreenStrings.staffPractitionerRequiredError },
+  offline: { field: "form", message: dayScreenStrings.staffAddNeedsConnection },
+  not_allowed: { field: "form", message: dayScreenStrings.staffAddNotAllowedError },
+  failed: { field: "form", message: dayScreenStrings.staffAddFailedError },
+};
+
+/**
+ * Adding staff is online only (db/staffSettings.ts's addStaffMember): while
+ * the device is offline the form says so and its save writes nothing.
+ */
 function NewStaffForm({
   orgId,
   locations,
@@ -315,6 +332,8 @@ function NewStaffForm({
   const [listedPractitionerIds, setListedPractitionerIds] = useState<string[]>([]);
   const [pin, setPin] = useState("");
   const [error, setError] = useState<{ field: NewStaffField; message: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const isOnline = useOnlineStatus();
 
   function toggle(list: string[], id: string): string[] {
     return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
@@ -333,30 +352,44 @@ function NewStaffForm({
       setError({ field: "pin", message: dayScreenStrings.staffPinLengthError });
       return;
     }
-    const result = await createStaffMembership(db, {
-      orgId,
-      fullName: fullName.trim(),
-      phone,
-      role,
-      locationScope,
-      practitionerScope,
-      listedLocationIds,
-      listedPractitionerIds,
-      pin,
-    });
-    if (!result.ok) {
-      setError(
-        result.reason === "invalid_phone"
-          ? { field: "phone", message: dayScreenStrings.staffPhoneInvalidError }
-          : result.reason === "phone_taken"
-            ? { field: "phone", message: dayScreenStrings.staffPhoneTakenError }
-            : { field: "practitioners", message: dayScreenStrings.staffPractitionerRequiredError },
+    setIsSaving(true);
+    let result: AddStaffResult;
+    try {
+      result = await addStaffMember(
+        db,
+        await resolveStaffServer(db, orgId),
+        {
+          orgId,
+          fullName,
+          phone,
+          role,
+          locationScope,
+          practitionerScope,
+          listedLocationIds,
+          listedPractitionerIds,
+          pin,
+        },
+        isOnline,
       );
+    } finally {
+      setIsSaving(false);
+    }
+    if (!result.ok) {
+      setError(ADD_ERROR[result.reason]);
       return;
     }
     setError(null);
     onSaved();
   }
+
+  // The connection message follows the connection itself: shown while
+  // offline, gone once back online even if the last save was refused for it.
+  const formError = errorFor("form");
+  const formMessage = !isOnline
+    ? dayScreenStrings.staffAddNeedsConnection
+    : formError === dayScreenStrings.staffAddNeedsConnection
+      ? undefined
+      : formError;
 
   return (
     <div className="mt-3.5 flex flex-col gap-3 rounded-card border border-green-line bg-card p-3.5">
@@ -439,7 +472,12 @@ function NewStaffForm({
           onChange={(e) => setPin(e.target.value)}
         />
       </Field>
-      <Button variant="primary" onClick={save}>
+      {formMessage && (
+        <p role="alert" className="text-[12.5px] text-danger">
+          {formMessage}
+        </p>
+      )}
+      <Button variant="primary" disabled={isSaving} onClick={save}>
         {dayScreenStrings.settingsSaveAction}
       </Button>
     </div>

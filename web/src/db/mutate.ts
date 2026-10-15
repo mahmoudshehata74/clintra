@@ -43,25 +43,15 @@ function nextQueuedAt(): string {
 }
 
 /**
- * The actual write: applies the change to the entity table, writes an
- * audit_log row, and appends a sync_ops row. Does not open its own
- * transaction and does not notify the sync engine — see mutate() (one
- * entity, its own transaction) and runAtomicMutations() (several entities,
- * one shared transaction) for the two ways this gets called.
+ * Appends one local audit_log row; the caller's transaction must include
+ * audit_log. Shared by applyEntityWrite and recordServerCreatedRow.
  */
-async function applyEntityWrite<T>(db: ClintraDatabase, input: MutationInput<T>): Promise<string> {
-  const now = new Date().toISOString();
-  const auditLogId = id();
-
-  if (input.action === AuditAction.Delete) {
-    await input.table.delete(input.entityId);
-  } else {
-    if (input.after === null) {
-      throw new Error("mutate_requires_after_unless_deleting");
-    }
-    await input.table.put(input.after);
-  }
-
+async function appendAuditRow<T>(
+  db: ClintraDatabase,
+  auditLogId: string,
+  at: string,
+  input: Pick<MutationInput<T>, "entity" | "entityId" | "action" | "before" | "after" | "actorMembershipId" | "orgId">,
+): Promise<void> {
   // Reserved inside this same transaction by reading the current max — the
   // exact pattern invoices.number already uses (see db/visitCompletion.ts).
   // IndexedDB serializes overlapping readwrite transactions on the same
@@ -81,8 +71,54 @@ async function applyEntityWrite<T>(db: ClintraDatabase, input: MutationInput<T>)
     action: input.action,
     before: input.before,
     after: input.after,
-    at: now,
+    at,
   });
+}
+
+/**
+ * Stores a row the server has already created (db/staffSettings.ts's online
+ * staff add) with its local audit row, inside the caller's transaction
+ * (which must include the row's table and audit_log). Unlike every other
+ * write it queues no sync op: the server holds the row already, and an op
+ * would only push it back.
+ */
+export async function recordServerCreatedRow<T>(
+  db: ClintraDatabase,
+  input: { table: Table<T, string>; entity: string; entityId: string; row: T; actorMembershipId: string; orgId: string },
+): Promise<void> {
+  await input.table.put(input.row);
+  await appendAuditRow(db, id(), new Date().toISOString(), {
+    entity: input.entity,
+    entityId: input.entityId,
+    action: AuditAction.Create,
+    before: null,
+    after: input.row,
+    actorMembershipId: input.actorMembershipId,
+    orgId: input.orgId,
+  });
+}
+
+/**
+ * The actual write: applies the change to the entity table, writes an
+ * audit_log row, and appends a sync_ops row. Does not open its own
+ * transaction and does not notify the sync engine — see mutate() (one
+ * entity, its own transaction) and runAtomicMutations() (several entities,
+ * one shared transaction) for the two ways this gets called.
+ */
+async function applyEntityWrite<T>(db: ClintraDatabase, input: MutationInput<T>): Promise<string> {
+  const now = new Date().toISOString();
+  const auditLogId = id();
+
+  if (input.action === AuditAction.Delete) {
+    await input.table.delete(input.entityId);
+  } else {
+    if (input.after === null) {
+      throw new Error("mutate_requires_after_unless_deleting");
+    }
+    await input.table.put(input.after);
+  }
+
+  await appendAuditRow(db, auditLogId, now, input);
 
   await db.sync_ops.add({
     op_id: id(),

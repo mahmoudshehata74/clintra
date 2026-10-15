@@ -4,7 +4,14 @@ import { Role } from "../domain/role";
 import { LocationScope, PractitionerScope } from "../domain/scope";
 import { ClintraDatabase } from "./database";
 import { seedDatabase } from "./seed";
-import { createStaffMembership, updateMembership } from "./staffSettings";
+import {
+  StaffServerError,
+  type AddStaffRequest,
+  type AddStaffResponse,
+  type StaffServer,
+  type StaffServerFailure,
+} from "../sync/staffServer";
+import { addStaffMember, updateMembership } from "./staffSettings";
 import type { Membership } from "./types";
 
 let db: ClintraDatabase;
@@ -30,49 +37,160 @@ const baseInput = {
   pin: "4321",
 };
 
-describe("createStaffMembership", () => {
-  it("creates a user + membership with a hashed PIN and normalised phone", async () => {
+/** Answers like POST /api/staff (rev 1, the request's ids), or fails as told; records every request. */
+class RecordingStaffServer implements StaffServer {
+  readonly requests: AddStaffRequest[] = [];
+  private readonly failure: StaffServerFailure | null;
+  private readonly existingUserId: string | null;
+
+  constructor(options: { failure?: StaffServerFailure; existingUserId?: string } = {}) {
+    this.failure = options.failure ?? null;
+    this.existingUserId = options.existingUserId ?? null;
+  }
+
+  async addStaffMember(request: AddStaffRequest): Promise<AddStaffResponse> {
+    this.requests.push(request);
+    if (this.failure !== null) {
+      throw new StaffServerError(this.failure);
+    }
+    return {
+      membership: {
+        id: request.membership_id,
+        user_id: this.existingUserId ?? request.user_id,
+        org_id: (await db.organizations.toCollection().first())!.id,
+        role: request.role,
+        location_scope: request.location_scope,
+        practitioner_scope: request.practitioner_scope,
+        practitioner_id: request.practitioner_id,
+        pin_hash: request.pin_hash,
+        pin_salt: request.pin_salt,
+        is_active: true,
+        display_name: request.display_name,
+        rev: 1,
+      },
+      membership_locations: request.locations.map((link) => ({ ...link, membership_id: request.membership_id, rev: 1 })),
+      membership_practitioners: request.practitioners.map((link) => ({ ...link, membership_id: request.membership_id, rev: 1 })),
+    };
+  }
+}
+
+async function counts() {
+  return {
+    users: await db.users.count(),
+    memberships: await db.memberships.count(),
+    membershipLocations: await db.membership_locations.count(),
+    syncOps: await db.sync_ops.count(),
+    audit: await db.audit_log.count(),
+  };
+}
+
+describe("addStaffMember", () => {
+  it("adds on the server and stores the returned rows: display_name, hashed PIN, E.164 phone, no users row, no sync op", async () => {
     await seedDatabase(db);
     const [org] = await db.organizations.toArray();
+    const server = new RecordingStaffServer();
+    const before = await counts();
 
-    const result = await createStaffMembership(db, { orgId: org.id, ...baseInput });
-    expect(result.ok).toBe(true);
+    const result = await addStaffMember(db, server, { orgId: org.id, ...baseInput, fullName: "  منى فؤاد " }, true);
     if (!result.ok) throw new Error("expected success");
 
+    const [request] = server.requests;
+    expect(request.phone).toBe("+201098765432");
+    expect(request.display_name).toBe("منى فؤاد");
+    expect(request).not.toHaveProperty("pin");
+    expect(verifyPin("4321", request.pin_salt, request.pin_hash)).toBe(true);
+
     const membership = await db.memberships.get(result.membershipId);
+    expect(membership?.display_name).toBe("منى فؤاد");
     expect(membership?.role).toBe(Role.Assistant);
-    expect(membership?.pin_salt).toBeTruthy();
+    expect(membership?.rev).toBe(1);
     expect(verifyPin("4321", membership!.pin_salt!, membership!.pin_hash)).toBe(true);
 
-    const user = await db.users.get(membership!.user_id);
-    expect(user?.phone).toBe("+201098765432");
+    const after = await counts();
+    expect(after.users).toBe(before.users);
+    expect(after.memberships).toBe(before.memberships + 1);
+    expect(after.syncOps).toBe(before.syncOps);
+    const audit = (await db.audit_log.toArray()).filter((row) => row.entity_id === result.membershipId);
+    expect(audit.map((row) => [row.entity, row.action])).toEqual([["memberships", "create"]]);
   });
 
-  it("writes membership_locations links for a listed location scope", async () => {
+  it("stores the membership_locations links the server returns for a listed location scope", async () => {
     await seedDatabase(db);
     const [org] = await db.organizations.toArray();
     const [location] = await db.locations.toArray();
+    const server = new RecordingStaffServer();
 
-    const result = await createStaffMembership(db, {
-      orgId: org.id,
-      ...baseInput,
-      phone: "01098765433",
-      locationScope: LocationScope.Listed,
-      listedLocationIds: [location.id],
-    });
+    const result = await addStaffMember(
+      db,
+      server,
+      { orgId: org.id, ...baseInput, locationScope: LocationScope.Listed, listedLocationIds: [location.id] },
+      true,
+    );
     if (!result.ok) throw new Error("expected success");
 
+    expect(server.requests[0].locations.map((link) => link.location_id)).toEqual([location.id]);
     const links = (await db.membership_locations.toArray()).filter((l) => l.membership_id === result.membershipId);
     expect(links).toHaveLength(1);
     expect(links[0].location_id).toBe(location.id);
+    expect(links[0].id).toBe(server.requests[0].locations[0].id);
   });
 
-  it("refuses a phone already taken by another user", async () => {
+  it("keeps the user the server linked an existing phone to", async () => {
     await seedDatabase(db);
     const [org] = await db.organizations.toArray();
-    // The seeded assistant's phone, entered in local form.
-    const result = await createStaffMembership(db, { orgId: org.id, ...baseInput, phone: "01123456789" });
-    expect(result).toEqual({ ok: false, reason: "phone_taken" });
+
+    const result = await addStaffMember(db, new RecordingStaffServer({ existingUserId: "user-elsewhere" }), { orgId: org.id, ...baseInput }, true);
+    if (!result.ok) throw new Error("expected success");
+
+    expect((await db.memberships.get(result.membershipId))?.user_id).toBe("user-elsewhere");
+  });
+
+  it("refuses offline with nothing sent and nothing written", async () => {
+    await seedDatabase(db);
+    const [org] = await db.organizations.toArray();
+    const server = new RecordingStaffServer();
+    const before = await counts();
+
+    expect(await addStaffMember(db, server, { orgId: org.id, ...baseInput }, false)).toEqual({ ok: false, reason: "offline" });
+
+    expect(server.requests).toHaveLength(0);
+    expect(await counts()).toEqual(before);
+  });
+
+  it.each([
+    ["unreachable", "offline"],
+    ["already_member", "phone_taken"],
+    ["not_allowed", "not_allowed"],
+    ["failed", "failed"],
+  ] as const)("maps a server %s to %s and writes nothing", async (failure, reason) => {
+    await seedDatabase(db);
+    const [org] = await db.organizations.toArray();
+    const before = await counts();
+
+    expect(await addStaffMember(db, new RecordingStaffServer({ failure }), { orgId: org.id, ...baseInput }, true)).toEqual({
+      ok: false,
+      reason,
+    });
+    expect(await counts()).toEqual(before);
+  });
+
+  it("checks the form before asking the server", async () => {
+    await seedDatabase(db);
+    const [org] = await db.organizations.toArray();
+    const server = new RecordingStaffServer();
+
+    expect(await addStaffMember(db, server, { orgId: org.id, ...baseInput, phone: "123" }, true)).toEqual({
+      ok: false,
+      reason: "invalid_phone",
+    });
+    expect(await addStaffMember(db, server, { orgId: org.id, ...baseInput, fullName: " " }, true)).toEqual({
+      ok: false,
+      reason: "name_required",
+    });
+    expect(
+      await addStaffMember(db, server, { orgId: org.id, ...baseInput, practitionerScope: PractitionerScope.Self }, true),
+    ).toEqual({ ok: false, reason: "practitioner_required" });
+    expect(server.requests).toHaveLength(0);
   });
 });
 
@@ -94,12 +212,12 @@ describe("updateMembership last-owner guard", () => {
     await seedDatabase(db);
     const [org] = await db.organizations.toArray();
     const owner = await ownerMembership();
-    const second = await createStaffMembership(db, {
-      orgId: org.id,
-      ...baseInput,
-      phone: "01098765434",
-      role: Role.Owner,
-    });
+    const second = await addStaffMember(
+      db,
+      new RecordingStaffServer(),
+      { orgId: org.id, ...baseInput, phone: "01098765434", role: Role.Owner },
+      true,
+    );
     if (!second.ok) throw new Error("expected success");
 
     expect(await updateMembership(db, owner.id, { role: Role.Assistant })).toEqual({ ok: true });

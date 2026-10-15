@@ -5,6 +5,7 @@ import { VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "../db/database";
 import { AuditAction, type Visit } from "../db/types";
 import { FakeTransport } from "./fakeTransport";
+import type { AddStaffRequest } from "./staffServer";
 
 let serverDbName: string;
 
@@ -231,6 +232,33 @@ describe("FakeTransport", () => {
       { op_id: valid.op_id, status: "accepted", rev: 1 },
     ]);
     expect((await transport.pullSince(null)).changes.map((change) => change.entity)).toEqual(["patients"]);
+  });
+
+  it("adds a staff member as the server does, and its pull delivers the membership and links", async () => {
+    const transport = new FakeTransport(serverDbName);
+
+    const response = await transport.addStaffMember("org-1", {
+      membership_id: "membership-new",
+      user_id: "user-new",
+      display_name: "منى",
+      phone: "+201098765432",
+      role: "assistant",
+      location_scope: "listed",
+      practitioner_scope: "all",
+      practitioner_id: null,
+      pin_hash: "a".repeat(64),
+      pin_salt: "b".repeat(32),
+      locations: [{ id: "link-1", location_id: "location-1" }],
+      practitioners: [],
+    } as AddStaffRequest);
+
+    expect(response.membership).toMatchObject({ id: "membership-new", org_id: "org-1", display_name: "منى", rev: 1 });
+    expect(response.membership_locations).toEqual([{ id: "link-1", membership_id: "membership-new", location_id: "location-1", rev: 1 }]);
+    const pulled = (await transport.pullSince(null)).changes;
+    expect(pulled.map((change) => [change.entity, change.entity_id])).toEqual([
+      ["memberships", "membership-new"],
+      ["membership_locations", "link-1"],
+    ]);
   });
 
   describe("pullBootstrap", () => {

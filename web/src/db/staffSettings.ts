@@ -6,17 +6,13 @@ import { normalizeStaffName } from "../domain/staffName";
 import { LocationScope, PractitionerScope } from "../domain/scope";
 import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
-import { mutate, runAtomicMutations } from "./mutate";
-import {
-  AuditAction,
-  type Membership,
-  type MembershipLocation,
-  type MembershipPractitioner,
-  type User,
-} from "./types";
+import { StaffServerError, type AddStaffResponse, type StaffServer, type StaffServerFailure } from "../sync/staffServer";
+import { mutate, recordServerCreatedRow } from "./mutate";
+import { AuditAction, type Membership } from "./types";
 
 export interface NewStaffInput {
   orgId: string;
+  /** The name this organization uses for the member (memberships.display_name); trimmed here. */
   fullName: string;
   /** Raw entry; normalised to E.164 here. */
   phone: string;
@@ -31,18 +27,55 @@ export interface NewStaffInput {
   pin: string;
 }
 
-export type CreateStaffResult =
+export type AddStaffResult =
   | { ok: true; membershipId: string }
-  | { ok: false; reason: "invalid_phone" | "phone_taken" | "practitioner_required" };
+  | {
+      ok: false;
+      reason:
+        | "invalid_phone"
+        | "practitioner_required"
+        | "name_required"
+        | "name_too_long"
+        /** No connection: nothing was sent and nothing written. */
+        | "offline"
+        /** The phone already belongs to this organization's staff. */
+        | "phone_taken"
+        /** The server refused (not an active owner, or a location or practitioner not this organization's). */
+        | "not_allowed"
+        | "failed";
+    };
+
+const SERVER_FAILURE_REASON: Record<StaffServerFailure, Extract<AddStaffResult, { ok: false }>["reason"]> = {
+  already_member: "phone_taken",
+  not_allowed: "not_allowed",
+  unreachable: "offline",
+  failed: "failed",
+};
 
 /**
- * Creates a staff member: a users row, its membership (with a hashed PIN), and
- * any membership_locations / membership_practitioners link rows — all in one
- * transaction, so a membership never lands without the links its scope implies.
- * Every row is written through the audited pipeline (attributed to the acting
- * owner). Phone is normalised to E.164 and must be unique across users.
+ * Adds a staff member, online only and on the server in one step
+ * (POST /api/staff — the server finds the user by phone or creates it, then
+ * creates the membership, its links and the audit row). The device never
+ * writes a users row: users is not syncable, and a queued users op used to
+ * leave every upload stuck behind it. Offline, it refuses ("offline") before
+ * hashing anything and writes nothing.
+ *
+ * On success the rows the server returns — the membership (carrying the
+ * name as display_name) and its membership_locations /
+ * membership_practitioners links — are stored here at once, with a local
+ * audit row each and no sync op, so the new member can sign in on this
+ * device straight away; other devices pull them.
  */
-export async function createStaffMembership(db: ClintraDatabase, input: NewStaffInput): Promise<CreateStaffResult> {
+export async function addStaffMember(
+  db: ClintraDatabase,
+  server: StaffServer,
+  input: NewStaffInput,
+  isOnline: boolean,
+): Promise<AddStaffResult> {
+  const name = normalizeStaffName(input.fullName);
+  if (!name.ok) {
+    return { ok: false, reason: name.reason };
+  }
   const phone = normalizeEgyptianPhone(input.phone);
   if (!phone.ok) {
     return { ok: false, reason: "invalid_phone" };
@@ -50,101 +83,66 @@ export async function createStaffMembership(db: ClintraDatabase, input: NewStaff
   if (input.practitionerScope === PractitionerScope.Self && input.listedPractitionerIds.length !== 1) {
     return { ok: false, reason: "practitioner_required" };
   }
-  if ((await db.users.where("phone").equals(phone.value).count()) > 0) {
-    return { ok: false, reason: "phone_taken" };
+  if (!isOnline) {
+    return { ok: false, reason: "offline" };
   }
 
   const actor = await resolveActingMembership(db);
-  // Hash before opening the transaction so the ~250ms Argon2id work never runs
-  // inside it.
   const pinSalt = generatePinSalt();
   const pinHash = hashPin(input.pin, pinSalt);
-
-  const userId = id();
   const membershipId = id();
-  const practitionerId =
-    input.practitionerScope === PractitionerScope.Self ? input.listedPractitionerIds[0] : null;
 
-  await runAtomicMutations(
-    db,
-    [db.users, db.memberships, db.membership_locations, db.membership_practitioners],
-    async (write) => {
-      const user: User = { id: userId, full_name: input.fullName, phone: phone.value, email: null, is_active: true };
-      await write({
-        table: db.users,
-        entity: "users",
-        entityId: userId,
-        action: AuditAction.Create,
-        before: null,
-        after: user,
-        actorMembershipId: actor.id,
-        orgId: input.orgId,
+  let response: AddStaffResponse;
+  try {
+    response = await server.addStaffMember({
+      membership_id: membershipId,
+      user_id: id(),
+      display_name: name.value,
+      phone: phone.value,
+      role: input.role,
+      location_scope: input.locationScope,
+      practitioner_scope: input.practitionerScope,
+      practitioner_id: input.practitionerScope === PractitionerScope.Self ? input.listedPractitionerIds[0] : null,
+      pin_hash: pinHash,
+      pin_salt: pinSalt,
+      locations:
+        input.locationScope === LocationScope.Listed
+          ? input.listedLocationIds.map((locationId) => ({ id: id(), location_id: locationId }))
+          : [],
+      practitioners:
+        input.practitionerScope === PractitionerScope.Listed
+          ? input.listedPractitionerIds.map((practitionerId) => ({ id: id(), practitioner_id: practitionerId }))
+          : [],
+    });
+  } catch (error) {
+    return { ok: false, reason: error instanceof StaffServerError ? SERVER_FAILURE_REASON[error.reason] : "failed" };
+  }
+
+  await db.transaction("rw", [db.memberships, db.membership_locations, db.membership_practitioners, db.audit_log], async () => {
+    const write = { actorMembershipId: actor.id, orgId: input.orgId };
+    const membership = response.membership;
+    await recordServerCreatedRow(db, { table: db.memberships, entity: "memberships", entityId: membership.id, row: membership, ...write });
+    for (const link of response.membership_locations) {
+      await recordServerCreatedRow(db, {
+        table: db.membership_locations,
+        entity: "membership_locations",
+        entityId: link.id,
+        row: link,
+        ...write,
       });
-
-      const membership: Membership = {
-        id: membershipId,
-        user_id: userId,
-        org_id: input.orgId,
-        role: input.role,
-        location_scope: input.locationScope,
-        practitioner_scope: input.practitionerScope,
-        practitioner_id: practitionerId,
-        pin_salt: pinSalt,
-        pin_hash: pinHash,
-        is_active: true,
-        rev: 1,
-      };
-      await write({
-        table: db.memberships,
-        entity: "memberships",
-        entityId: membershipId,
-        action: AuditAction.Create,
-        before: null,
-        after: membership,
-        actorMembershipId: actor.id,
-        orgId: input.orgId,
+    }
+    for (const link of response.membership_practitioners) {
+      await recordServerCreatedRow(db, {
+        table: db.membership_practitioners,
+        entity: "membership_practitioners",
+        entityId: link.id,
+        row: link,
+        ...write,
       });
+    }
+  });
 
-      if (input.locationScope === LocationScope.Listed) {
-        for (const locationId of input.listedLocationIds) {
-          const link: MembershipLocation = { id: id(), membership_id: membershipId, location_id: locationId, rev: 1 };
-          await write({
-            table: db.membership_locations,
-            entity: "membership_locations",
-            entityId: link.id,
-            action: AuditAction.Create,
-            before: null,
-            after: link,
-            actorMembershipId: actor.id,
-            orgId: input.orgId,
-          });
-        }
-      }
-
-      if (input.practitionerScope === PractitionerScope.Listed) {
-        for (const linkedPractitionerId of input.listedPractitionerIds) {
-          const link: MembershipPractitioner = {
-            id: id(),
-            membership_id: membershipId,
-            practitioner_id: linkedPractitionerId,
-            rev: 1,
-          };
-          await write({
-            table: db.membership_practitioners,
-            entity: "membership_practitioners",
-            entityId: link.id,
-            action: AuditAction.Create,
-            before: null,
-            after: link,
-            actorMembershipId: actor.id,
-            orgId: input.orgId,
-          });
-        }
-      }
-    },
-  );
-
-  return { ok: true, membershipId };
+  return { ok: true, membershipId: response.membership.id };
 }
 
 export interface MembershipPatch {

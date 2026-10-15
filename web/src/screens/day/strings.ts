@@ -594,6 +594,10 @@ export const dayScreenStrings = {
   staffPinUnsetBadge: "غير مُعيّن",
   staffNameRequiredError: "لازم تكتب اسم الموظف",
   staffNameTooLongError: "الاسم 120 حرف بالكتير",
+  // Adding staff happens on the server (db/staffSettings.ts's addStaffMember).
+  staffAddNeedsConnection: "إضافة موظف محتاجة اتصال بالإنترنت",
+  staffAddNotAllowedError: "مش مسموح تضيف موظف من الجهاز ده",
+  staffAddFailedError: "الموظف ماتضافش، جرّب تاني",
   staffPinLengthError: "الرقم السري لازم يكون 4 أرقام",
   staffPhoneInvalidError: "الرقم ده مش صحيح",
   staffPhoneTakenError: "الرقم ده مستخدم قبل كده",

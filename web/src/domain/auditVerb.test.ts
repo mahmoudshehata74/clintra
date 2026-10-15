@@ -301,7 +301,7 @@ describe("describeAuditVerb: settings", () => {
     ["service_price_overrides", AuditAction.Delete, { id: "o" }, null, "شال سعر خاص"],
     ["schedules", AuditAction.Update, { start_time: "09:00" }, { start_time: "10:00" }, "عدّل مواعيد العمل"],
     ["users", AuditAction.Create, null, { id: "u", full_name: "منى" }, "أضاف موظف"],
-    ["memberships", AuditAction.Create, null, { id: "m" }, "حدّد صلاحية موظف"],
+    ["memberships", AuditAction.Create, null, { id: "m" }, "أضاف موظف"],
     ["memberships", AuditAction.Update, { is_active: true, pin_hash: "a" }, { is_active: false, pin_hash: "a" }, "وقّف موظف"],
     ["memberships", AuditAction.Update, { is_active: false, pin_hash: "a" }, { is_active: true, pin_hash: "a" }, "شغّل موظف"],
     ["memberships", AuditAction.Update, { is_active: true, pin_hash: "a" }, { is_active: true, pin_hash: "b" }, "غيّر الرقم السري"],
