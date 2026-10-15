@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { db } from "../db/database";
 import { useLiveQuery } from "../db/useLiveQuery";
 import type { Membership, User } from "../db/types";
+import AppearanceToggle from "../components/AppearanceToggle";
 import Badge from "../components/ui/Badge";
 import { formatActorLabel } from "../screens/day/actorLabel";
 import { authStrings } from "./authStrings";
@@ -161,7 +162,9 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
       aria-modal="true"
       aria-label={authStrings.lockOverlayAria}
     >
-      <div className="flex w-full max-w-page flex-col items-center rounded-panel bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-6 py-11 text-center text-on-dark">
+      <div className="relative flex w-full max-w-page flex-col items-center rounded-panel bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-6 py-11 text-center text-on-dark">
+        {/* The app bar sits under this overlay, so the lock card carries its own appearance toggle. */}
+        <AppearanceToggle className="absolute end-3 top-3" />
         <p className="text-[22px] font-bold tracking-[-0.02em] text-on-fill">
           Clin<span className="text-copper-2">tra</span>
         </p>

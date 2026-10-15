@@ -6,6 +6,7 @@ import { navItemsFor, type NavItem } from "../domain/navigation";
 import type { Role } from "../domain/role";
 import type { ClinicDay } from "../domain/time";
 import SyncStatusChip from "../screens/day/SyncStatusChip";
+import AppearanceToggle from "./AppearanceToggle";
 import { formatAppBarDate } from "./appBarDate";
 import Button from "./ui/Button";
 import { appBarStrings, sidebarStrings } from "./strings";
@@ -220,6 +221,8 @@ function AppBar({ title, today, whoName }: { title: ReactNode; today: ClinicDay;
           <span>{shownName}</span>
         </div>
       )}
+
+      <AppearanceToggle />
 
       <Button variant="onDark" size="sm" onClick={() => clearActiveSession()}>
         {authStrings.lockButtonLabel}

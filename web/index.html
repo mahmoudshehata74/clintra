@@ -7,6 +7,19 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Clintra</title>
+    <script>
+      // The device's appearance before the first paint
+      // (src/domain/appearance.ts): the localStorage mirror of
+      // db/preferences.ts's stored choice, read synchronously, so an explicit
+      // light or dark never flashes the other first. Auto sets nothing and
+      // leaves index.css to follow the system. Blocked storage reads as auto.
+      try {
+        var appearance = localStorage.getItem("clintra.appearance");
+        if (appearance === "light" || appearance === "dark") {
+          document.documentElement.setAttribute("data-theme", appearance);
+        }
+      } catch (error) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
