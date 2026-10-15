@@ -292,7 +292,10 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
   (`removeWorkingDay`), which deletes the weekday's rows in one
   transaction, refused while a visit on that weekday, today or later, still
   holds its slot. Both are ordinary audited `schedules` creates and deletes;
-  no schema or server change.
+  no schema or server change. The hours are the shared 24-hour TimeField
+  (`web/src/components/ui/TimeField.tsx`: hour 00–23 and minute in 5-minute
+  steps, Latin digits), labelled "من" and "لحد" — never the native time
+  input, which follows the device locale ("09:00 AM").
 - **13 (services, edit and add)**: a row's "تعديل" opens the service form
   above its price overrides (which work as before); "خدمة جديدة" opens the
   same form; only one of the two is open at a time. Fields: "اسم الخدمة"

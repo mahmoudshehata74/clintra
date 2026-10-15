@@ -3,6 +3,7 @@ import {
   AUTH,
   emptySlotTiles,
   enterPin,
+  expectTimeField,
   gotoRealDay,
   gotoSeededDay,
   lockOverlay,
@@ -14,6 +15,7 @@ import {
   rowFor,
   S,
   selectPractitioner,
+  setTimeField,
   SLOTS_DR,
 } from "./support";
 
@@ -98,10 +100,10 @@ test("the owner turns a working day off and back on, starting from the usual hou
   await expect(wednesday).toContainText("—");
 
   await wednesday.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
-  await expect(wednesday.getByLabel(S.hoursStartLabel, { exact: true })).toHaveValue(usualStart);
-  await expect(wednesday.getByLabel(S.hoursEndLabel, { exact: true })).toHaveValue(usualEnd);
+  await expectTimeField(wednesday, S.hoursStartLabel, usualStart);
+  await expectTimeField(wednesday, S.hoursEndLabel, usualEnd);
   await expect(wednesday.getByRole("spinbutton")).toHaveCount(0);
-  await wednesday.getByLabel(S.hoursEndLabel, { exact: true }).fill("13:00");
+  await setTimeField(wednesday, S.hoursEndLabel, "13:00");
   await wednesday.getByRole("button", { name: S.hoursAddWorkingDayAction, exact: true }).click();
 
   await expect(wednesday).toContainText(`${usualStart} — 13:00`);

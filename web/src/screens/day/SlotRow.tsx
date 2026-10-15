@@ -3,13 +3,13 @@ import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Ltr from "../../components/Ltr";
 import { formatEgyptianPhoneForDisplay } from "../../domain/phone";
-import { clockTimeInCairo, type ClinicDay } from "../../domain/time";
+import type { ClinicDay } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Service, Visit } from "../../db/types";
 import { computeActorRecency } from "./actorRecency";
-import { computeElapsedLabel } from "./elapsedLabel";
 import { dayScreenStrings } from "./strings";
-import { arrivedWord, statusVisual, visitStatusLabel } from "./statusStyle";
+import { slotUntilText } from "./slotUntil";
+import { statusVisual, visitStatusLabel } from "./statusStyle";
 import VisitMenu, { type VisitMenuActions } from "./VisitMenu";
 
 interface SlotRowProps {
@@ -39,33 +39,6 @@ interface SlotRowProps {
 }
 
 const REOPENED_STATUSES = new Set<string>([VisitStatus.Cancelled, VisitStatus.NoShow]);
-
-/**
- * The `.until` sub-line's own text per status — arrived/in_room/completed/
- * no_show only. arrived's is a fixed clock time, always shown. The other
- * three route through elapsedLabel.ts's computeElapsedLabel, which shows
- * nothing at all unless `today` is the real current Cairo day (in_room/
- * no_show are live "elapsed since" counts that would otherwise read a stale
- * ?seedDay=1 pin's timestamps against real now; completed's own duration is
- * gated the same way, for one consistent rule across the three).
- */
-function untilText(visit: Visit, patient: Patient | undefined, today: ClinicDay, now: Date): string | null {
-  if (visit.status === VisitStatus.Arrived && visit.arrived_at) {
-    return `${arrivedWord(patient?.gender)} ${clockTimeInCairo(visit.arrived_at)}`;
-  }
-  if (visit.status === VisitStatus.InRoom && visit.started_at) {
-    const elapsed = computeElapsedLabel(visit.started_at, now.toISOString(), today, now);
-    return elapsed ? `${dayScreenStrings.untilSincePrefix} ${elapsed}` : null;
-  }
-  if (visit.status === VisitStatus.Completed && visit.started_at && visit.ended_at) {
-    return computeElapsedLabel(visit.started_at, visit.ended_at, today, now);
-  }
-  if (visit.status === VisitStatus.NoShow && visit.scheduled_at) {
-    const elapsed = computeElapsedLabel(visit.scheduled_at, now.toISOString(), today, now);
-    return elapsed ? `${dayScreenStrings.untilSincePrefix} ${elapsed}` : null;
-  }
-  return null;
-}
 
 // in_room and no_show are the two statuses whose `.until` text is a live
 // "elapsed since" count, so only they need the minute tick below.
@@ -138,7 +111,7 @@ export default function SlotRow({
 
   const phoneDisplay = patient?.phone ? formatEgyptianPhoneForDisplay(patient.phone) : null;
   const recency = computeActorRecency(visit.created_at, today);
-  const until = untilText(visit, patient, today, new Date());
+  const until = slotUntilText(visit, patient, today, new Date());
 
   const timeBlock = (
     <span className={`text-sm font-bold leading-none tracking-[-0.02em] tabular-nums ${visual.timeClassName}`}>

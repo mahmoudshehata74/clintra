@@ -2,6 +2,7 @@ import { useState } from "react";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Field, { TextInput } from "../../components/ui/Field";
+import TimeField from "../../components/ui/TimeField";
 import { db } from "../../db/database";
 import { addWorkingDay, removeWorkingDay, updateWorkingHours, workingDayTemplate } from "../../db/scheduleSettings";
 import type { Schedule } from "../../db/types";
@@ -170,12 +171,12 @@ export default function WorkingHoursPanel({
               editor={
                 isEditing ? (
                   <div className="flex flex-col gap-3">
-                    <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-3">
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
                       <Field label={dayScreenStrings.hoursStartLabel} id={`${idPrefix}-start`} error={errorFor("start")}>
-                        <TextInput type="time" variant="centered" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                        <TimeField label={dayScreenStrings.hoursStartLabel} value={startTime} onChange={setStartTime} />
                       </Field>
                       <Field label={dayScreenStrings.hoursEndLabel} id={`${idPrefix}-end`} error={errorFor("end")}>
-                        <TextInput type="time" variant="centered" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                        <TimeField label={dayScreenStrings.hoursEndLabel} value={endTime} onChange={setEndTime} />
                       </Field>
                       {schedule && (
                         <Field

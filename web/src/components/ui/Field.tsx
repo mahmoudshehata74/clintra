@@ -5,6 +5,7 @@ import {
   type ChangeEvent,
   type InputHTMLAttributes,
   type ReactElement,
+  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
 
@@ -78,10 +79,11 @@ export default function Field({ label, id, hint, error, children }: FieldProps) 
 // combining a "default" utility with a conditionally-added "amount"/
 // "filled" one here would leave the winner up to that order instead of to
 // this component's own variant/state.
-const IN_BASE =
-  "w-full rounded-control border-[1.5px] px-[13px] py-2.5 font-[inherit] transition-colors duration-150 " +
+const IN_SHAPE =
+  "w-full rounded-control border-[1.5px] py-2.5 font-[inherit] transition-colors duration-150 " +
   "placeholder:font-normal placeholder:text-faint focus:outline-none " +
   "disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-50";
+const IN_BASE = `${IN_SHAPE} px-[13px]`;
 
 // `.field .in:focus`'s own green ring, kept apart from an invalid control's
 // focus look below — same split as COLOR_CLASSES, and for the same reason:
@@ -258,4 +260,27 @@ export function TextArea({
       {...rest}
     />
   );
+}
+
+export type SelectInputProps = SelectHTMLAttributes<HTMLSelectElement>;
+
+/**
+ * A compact `<select>` that always holds a short value (TimeField's hour
+ * and minute): the centered `.field .in` box in its filled state, or
+ * invalid — the same colour and focus classes TextInput resolves to, so it
+ * reads as one of the form's inputs. Two digits and the native arrow need
+ * less side padding than a text box.
+ */
+export function SelectInput({ className, "aria-invalid": ariaInvalid, ...rest }: SelectInputProps) {
+  const isInvalid = ariaInvalid === true || ariaInvalid === "true";
+  const classes = [
+    `${IN_SHAPE} px-1.5`,
+    VARIANT_CLASSES.centered,
+    controlStateClasses(isInvalid ? "invalid" : "filled", "centered"),
+    className ?? "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return <select aria-invalid={ariaInvalid} className={classes} {...rest} />;
 }

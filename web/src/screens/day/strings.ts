@@ -217,6 +217,8 @@ export const dayScreenStrings = {
   slotsCardSubtitleFreeSuffix: "فاضية",
   // `.slot .time .until` — shown under the time, state-dependent.
   untilSincePrefix: "من",
+  // The same line under a minute, the queue's and doctor's day's rule.
+  untilNow: "دلوقتي",
   // The empty slot's own free-text line and its dashed quick-book button —
   // distinct from emptySlot above, which stays the button's accessible name.
   emptySlotFreeLabel: "موعد فاضي",
@@ -515,7 +517,7 @@ export const dayScreenStrings = {
 
   // Panel A — working hours.
   hoursStartLabel: "من",
-  hoursEndLabel: "لـ",
+  hoursEndLabel: "لحد",
   hoursSlotMinutesLabel: "مدة الكشف (دقيقة)",
   hoursCapacityLabel: "السعة",
   hoursEditAction: "تعديل",

@@ -8,7 +8,7 @@ import { authStrings } from "../src/auth/authStrings";
 import { DEV_SEED_PINS } from "../src/auth/devPins";
 import { formatAppBarDate } from "../src/components/appBarDate";
 import { formatEgyptianPhoneForDisplay } from "../src/domain/phone";
-import { sidebarStrings } from "../src/components/strings";
+import { sidebarStrings, timeFieldStrings } from "../src/components/strings";
 // Not imported from src/db/seed.ts directly: that module's import chain
 // pulls in auth/pinHash.ts's JSON import, which this test runner cannot
 // load without a "type: json" attribute. seededVisitsDate() itself is just
@@ -251,6 +251,29 @@ export const invoiceTotals = (scope: Locator) => scope.locator("[data-invoice-to
 export const invoicePayments = (scope: Locator) => scope.locator("[data-invoice-payments]");
 
 /** A day-grid row (SlotRow <li> / QueueRow <li>) that contains the given patient name. */
+/** A shared TimeField's hour and minute selects, by the field's label. */
+function timeFieldParts(scope: Locator, label: string) {
+  const group = scope.getByRole("group", { name: label, exact: true });
+  return {
+    hour: group.getByRole("combobox", { name: timeFieldStrings.hourLabel, exact: true }),
+    minute: group.getByRole("combobox", { name: timeFieldStrings.minuteLabel, exact: true }),
+  };
+}
+
+export async function expectTimeField(scope: Locator, label: string, value: string): Promise<void> {
+  const [hour, minute] = value.split(":");
+  const parts = timeFieldParts(scope, label);
+  await expect(parts.hour).toHaveValue(hour);
+  await expect(parts.minute).toHaveValue(minute);
+}
+
+export async function setTimeField(scope: Locator, label: string, value: string): Promise<void> {
+  const [hour, minute] = value.split(":");
+  const parts = timeFieldParts(scope, label);
+  await parts.hour.selectOption(hour);
+  await parts.minute.selectOption(minute);
+}
+
 export function rowFor(page: Page, patientName: string) {
   return page.getByRole("listitem").filter({ hasText: patientName });
 }
