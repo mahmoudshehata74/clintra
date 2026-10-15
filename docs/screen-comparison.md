@@ -281,3 +281,86 @@ App capture: the whole page — the messages page with three recent messages, th
 | 18. Patient profile | 11 | 1 | 0 | 0 | matches |
 | 19. Messages | 6 | 1 | 0 | 0 | matches |
 | **Total** | **101** | **28** | **0** | **0** | |
+
+## Dark mode
+
+Every screen again in dark: the prototype with `data-theme="dark"` on its
+`<html>` (its explicit dark block), the app on a dark system with its
+appearance left on auto (`web/src/index.css`'s `prefers-color-scheme`
+block — the same values). `pnpm --dir web test:compare` writes them next to
+the light ones with a `-dark` suffix, and `web/e2e/compare/index.html` shows
+light and dark pairs for both viewports. The capture asserts the app's body
+is on the dark `paper` before it shoots.
+
+Only differences that show in dark are listed: everything in the light
+comparison above holds in dark too and is not repeated. The appearance
+toggle is new in the light captures as well; its [decided] lines below
+cover both themes. Same classes as above.
+
+### Global
+
+- [decided] Dark values are the prototype's two dark blocks verbatim under its own selectors; tokens they do not cover keep their light values, as the prototype's own literals do (`docs/session-handoff.md:239-250`).
+- [decided] Printed pages and their previews stay white paper in dark (`.print-page`, `.rx-print-page`, the `.print-header` note), as in the prototype; printing itself always uses the light tokens (`docs/session-handoff.md:264-267`).
+- [ask] White text on a saturated fill (`on-fill`, the prototype's literal `#fff`, which it keeps in dark) is under AA in dark: 3.41 on `green` (every primary button), 2.49 on `green-2`, 2.75 on `copper`, 2.23 on `copper-2`, 3.55 on `danger`, 2.32 on `warning`, 2.66 on `eligible`, 2.36 on `muted` (solid badges, slot state pills, avatars, numbered circles). Keep the prototype's white, or give the fills dark text in dark (the dark `paper`, `#081311`, reads 5.32–8.46 on every one of them; the brand marks on ink — the lock card's "Clin", the activation title — would then need a token of their own)?
+- [ask] `faint` text (hints, timestamps, empty states) is under AA in dark on `paper-2`, `card` and `field` (4.33, 4.13, 3.88), as it is in light on every surface (2.60–2.92). Keep the prototype's `faint`, or use it only where the text is not needed to act?
+- [ask] The tinted invoice-status badge on the dark invoice head (`.inv-status`) is under AA in dark for "مدفوعة" (`eligible`, 4.04) and "ملغاة" (`danger`, 3.42); in light all three tints are (1.80–2.22). Keep `.inv-status`'s 22% tint, or a solid badge on the invoice head?
+- [ask] The light theme's other pairs under AA, all prototype values (`docs/design-tokens.md`'s "Contrast"): `copper` on `card` (4.04) and on `copper-wash` (3.54), `warning` on `warning-wash` (4.49), `green-2` on `ink-2` (2.65, the slab's "arrived" count), the on-dark copper button (3.65), white on `copper` (4.04) and `copper-2` (2.96). Keep them?
+
+### 1. PIN lock (`#s1`)
+
+- [decided] The lock card carries the appearance toggle at its top corner ("تلقائي" with its icon; the icon alone on mobile): the overlay hides the app bar (`docs/session-handoff.md:251-263`).
+
+### 2. Day — slots (`#s2`)
+
+- [decided] The app bar's appearance toggle between the acting member and "قفل الشاشة" (`docs/session-handoff.md:251-263`).
+
+### 3. Day — queue (`#s3`)
+
+- [decided] The app bar's appearance toggle (`docs/session-handoff.md:251-263`).
+
+### 4–8, 10–14, 16, 17 (the sheets)
+
+No difference beyond the light comparison's: each capture is the sheet alone, without the app bar. The settings toggle's knob is white in dark as `.toggle::after` is (13); the prescription and tomorrow's-sheet previews are white paper as `.rx-print-page` and `.print-page` are (8, 16).
+
+### 9. Doctor's day (`#s9`)
+
+- [decided] The app bar's appearance toggle (`docs/session-handoff.md:251-263`).
+
+### 15. Device activation (`#s15`)
+
+- [decided] The activation card carries the appearance toggle at its top corner: there is no app bar before registration (`docs/session-handoff.md:251-263`).
+
+### 18. Patient profile (`#s18`)
+
+- [decided] The app bar's appearance toggle (`docs/session-handoff.md:251-263`).
+
+### 19. Messages (`#s19`)
+
+- [decided] The app bar's appearance toggle (`docs/session-handoff.md:251-263`).
+
+### Dark summary
+
+| Screen | decided | data | fix | ask | Verdict |
+|---|---|---|---|---|---|
+| Global | 2 | 0 | 0 | 4 | — |
+| 1. PIN lock | 1 | 0 | 0 | 0 | matches |
+| 2. Day — slots | 1 | 0 | 0 | 0 | matches |
+| 3. Day — queue | 1 | 0 | 0 | 0 | matches |
+| 4. New booking | 0 | 0 | 0 | 0 | matches |
+| 5. Invoice | 0 | 0 | 0 | 0 | matches |
+| 6. Payment and receipt | 0 | 0 | 0 | 0 | matches |
+| 7. Cash close | 0 | 0 | 0 | 0 | matches |
+| 8. Tomorrow's sheet | 0 | 0 | 0 | 0 | matches |
+| 9. Doctor's day | 1 | 0 | 0 | 0 | matches |
+| 10. Visit workspace | 0 | 0 | 0 | 0 | matches |
+| 11. Audit log | 0 | 0 | 0 | 0 | matches |
+| 12. Settings — working hours | 0 | 0 | 0 | 0 | matches |
+| 13. Settings — services | 0 | 0 | 0 | 0 | matches |
+| 14. Settings — staff | 0 | 0 | 0 | 0 | matches |
+| 15. Device activation | 1 | 0 | 0 | 0 | matches |
+| 16. Printed prescription | 0 | 0 | 0 | 0 | matches |
+| 17. Care plan | 0 | 0 | 0 | 0 | matches |
+| 18. Patient profile | 1 | 0 | 0 | 0 | matches |
+| 19. Messages | 1 | 0 | 0 | 0 | matches |
+| **Total** | **9** | **0** | **0** | **4** | |
+

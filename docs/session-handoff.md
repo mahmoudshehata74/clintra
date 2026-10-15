@@ -232,6 +232,55 @@ and ops for entities the server does not sync"):
 Local setup now needs the `clintra_staff` role — `api/README.md`'s "Fresh
 local setup".
 
+## Dark mode (feat/dark-mode)
+
+Owner decisions it implements (`docs/design-tokens.md`'s dark column and
+"Dark mode"; `docs/screen-comparison.md`'s "Dark mode"):
+1. Dark values come from the prototype verbatim: `web/src/index.css`
+   redefines the colour tokens under the prototype's own selectors —
+   `@media (prefers-color-scheme: dark)` on `:root:not([data-theme="light"])`,
+   and `:root[data-theme="dark"]` — each with `color-scheme: dark`. Default
+   is auto (no `data-theme`: the system decides). Tokens the prototype's
+   dark blocks do not cover are derived and listed in design-tokens.md:
+   `print-note*`, `print-paper`/`print-ink`, `whatsapp`, `brand-*`,
+   `on-fill`, `glass` keep their light values (the prototype's own literals
+   in both themes); the shadow colours `shadow-soft/-mid/-deep` carry the
+   prototype's dark `--shadow-s/-m/-l` (Tailwind inlines a theme shadow's
+   literal colour, so only a colour token lets dark reach `shadow-*`). The
+   body's colour is `text`, not `ink` (equal in light; `ink` is a surface).
+2. An icon button cycles تلقائي → فاتح → غامق ("المظهر: …"; the label shows
+   beside the icon from `sm` up) in the app bar, on the lock card and on the
+   activation card (`web/src/components/AppearanceToggle.tsx`). The choice
+   is per device, in a new local-only Dexie store `preferences` (database
+   version 22, `web/src/db/preferences.ts`) — not the device row, which
+   does not exist before registration and which registration replaces
+   whole; never synced (not in `SYNCABLE_TABLES`, no `mutate()`, no audit
+   row). No flash: the choice is mirrored into `localStorage`
+   (`clintra.appearance`), and an inline script in `web/index.html`'s head
+   sets `data-theme` from it before the stylesheet paints; at boot the
+   stored choice wins over the mirror. The `theme-color` meta follows the
+   active theme's `green`; the manifest's `theme_color`/`background_color`
+   stay light (a manifest has one value).
+3. Printing is always light: an `@media print` block restates the light
+   tokens over both dark selectors, with `color-scheme: light` — every
+   printed page (prescription, receipt, invoice, tomorrow's sheet, day-close
+   summary) and the prescription portal's paper.
+4. No literal colours in `web/src`: whites, blacks and `rgba()` moved to
+   tokens (`on-fill`, `glass`, `print-paper`, `print-ink`,
+   `shadow-logo`/`-lg`); the settings toggle's knob is `on-fill` (white in
+   dark too, as `.toggle::after`); focus rings take a `card` ring offset
+   instead of Tailwind's literal white. Left as they are: two hex values in
+   comments (LockScreen's contrast note, DaySlab's note on the prototype's
+   one-off `#0D2621`), the manifest's light colours, and `index.html`'s
+   initial `theme-color`.
+5. Contrast (WCAG, every text/background token pair in use, both themes)
+   is tabled in `docs/design-tokens.md`'s "Contrast". Every pair under AA is
+   a prototype value or one of its literals; none sits in a token derived
+   in point 1, so nothing was changed. The findings are listed there and as
+   [ask] lines in the comparison.
+
+Screen 10's decision h ("dark mode stays off") is superseded.
+
 ## Settled deviations / decisions — prototype alignment
 
 The owner's answers to `docs/screen-comparison.md`'s questions (applied on

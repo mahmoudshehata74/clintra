@@ -49,6 +49,11 @@ import {
 // own section (#sN, opened from disk) under proto/, and the app driven to
 // the state that best matches it under app/; index.html puts each pair side
 // by side.
+//
+// Every screen is captured twice: light, and dark — the prototype with
+// data-theme="dark" on its <html> (its own explicit dark block), the app on
+// a dark system with its appearance left on auto (index.css's
+// prefers-color-scheme block, the same values). Dark files end in -dark.
 
 const OUT_DIR = "e2e/compare";
 const PROTOTYPE_URL = pathToFileURL(path.resolve("../docs/reference/clintra-prototype.html")).href;
@@ -348,7 +353,11 @@ async function openSettings(page: Page): Promise<Locator> {
   return dialog;
 }
 
-const fileName = (n: number) => `s${String(n).padStart(2, "0")}-${test.info().project.name}.png`;
+const THEMES = ["light", "dark"] as const;
+type Theme = (typeof THEMES)[number];
+
+const fileName = (n: number, theme: Theme) =>
+  `s${String(n).padStart(2, "0")}-${test.info().project.name}${theme === "dark" ? "-dark" : ""}.png`;
 
 // The prototype loads IBM Plex Sans Arabic from Google Fonts; the capture
 // blocks every network request and gives it the app's own font files
@@ -404,36 +413,47 @@ test.afterEach(async ({ page }) => {
 });
 
 for (const screen of SCREENS) {
-  test(`@compare prototype s${screen.n}`, async ({ page }) => {
-    // Only the file itself loads: the fonts come inlined below.
-    await page.route(/^https?:/, (route) => route.abort());
-    await page.goto(PROTOTYPE_URL);
-    // The document's own sticky top bar would be painted over the section.
-    await page.addStyleTag({ content: `${inlinedFontFaces()}\n.topbar{position:static}` });
-    await page.evaluate(async () => {
-      await Promise.all(
-        [300, 400, 500, 600, 700].map((weight) => document.fonts.load(`${weight} 16px "IBM Plex Sans Arabic"`, "عA1")),
-      );
-      await document.fonts.ready;
-    });
-    const section = page.locator(`#s${screen.n}`);
-    await expect(section).toBeVisible();
-    await section.screenshot({ path: `${OUT_DIR}/proto/${fileName(screen.n)}`, animations: "disabled" });
-  });
-
-  test(`@compare app s${screen.n}`, async ({ page }) => {
-    const target = await screen.drive(page);
-    const out = `${OUT_DIR}/app/${fileName(screen.n)}`;
-    if (target === "page") {
-      await fitPage(page);
-      await page.screenshot({ path: out, fullPage: true, animations: "disabled" });
-    } else {
-      if ((await target.getAttribute("role")) === "dialog" && (await target.evaluate((element) => element.scrollHeight > element.clientHeight))) {
-        await fitSheet(page, target);
+  for (const theme of THEMES) {
+    const suffix = theme === "dark" ? " dark" : "";
+    test(`@compare prototype s${screen.n}${suffix}`, async ({ page }) => {
+      // Only the file itself loads: the fonts come inlined below.
+      await page.route(/^https?:/, (route) => route.abort());
+      await page.emulateMedia({ colorScheme: "light" });
+      await page.goto(PROTOTYPE_URL);
+      if (theme === "dark") {
+        await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
       }
-      await target.screenshot({ path: out, animations: "disabled" });
-    }
-  });
+      // The document's own sticky top bar would be painted over the section.
+      await page.addStyleTag({ content: `${inlinedFontFaces()}\n.topbar{position:static}` });
+      await page.evaluate(async () => {
+        await Promise.all(
+          [300, 400, 500, 600, 700].map((weight) => document.fonts.load(`${weight} 16px "IBM Plex Sans Arabic"`, "عA1")),
+        );
+        await document.fonts.ready;
+      });
+      const section = page.locator(`#s${screen.n}`);
+      await expect(section).toBeVisible();
+      await section.screenshot({ path: `${OUT_DIR}/proto/${fileName(screen.n, theme)}`, animations: "disabled" });
+    });
+
+    test(`@compare app s${screen.n}${suffix}`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: theme });
+      const target = await screen.drive(page);
+      if (theme === "dark") {
+        await expect(page.locator("body")).toHaveCSS("background-color", "rgb(8, 19, 17)");
+      }
+      const out = `${OUT_DIR}/app/${fileName(screen.n, theme)}`;
+      if (target === "page") {
+        await fitPage(page);
+        await page.screenshot({ path: out, fullPage: true, animations: "disabled" });
+      } else {
+        if ((await target.getAttribute("role")) === "dialog" && (await target.evaluate((element) => element.scrollHeight > element.clientHeight))) {
+          await fitSheet(page, target);
+        }
+        await target.screenshot({ path: out, animations: "disabled" });
+      }
+    });
+  }
 }
 
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -442,19 +462,22 @@ const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "
 test("@compare index", async () => {
   test.skip(test.info().project.name !== "desktop", "written once, by the desktop project");
   const id = (n: number) => `s${String(n).padStart(2, "0")}`;
-  const pair = (n: number, viewport: string) => `
+  const pair = (n: number, viewport: string, theme: Theme) => {
+    const file = `${id(n)}-${viewport}${theme === "dark" ? "-dark" : ""}.png`;
+    return `
       <div class="viewport">
-        <h3>${viewport}</h3>
-        <div class="pair ${viewport}">
-          <figure><figcaption>Prototype</figcaption><img loading="lazy" src="proto/${id(n)}-${viewport}.png" alt="Prototype ${id(n)} ${viewport}"></figure>
-          <figure><figcaption>App</figcaption><img loading="lazy" src="app/${id(n)}-${viewport}.png" alt="App ${id(n)} ${viewport}"></figure>
+        <h3>${viewport} · ${theme}</h3>
+        <div class="pair ${viewport} ${theme}">
+          <figure><figcaption>Prototype</figcaption><img loading="lazy" src="proto/${file}" alt="Prototype ${id(n)} ${viewport} ${theme}"></figure>
+          <figure><figcaption>App</figcaption><img loading="lazy" src="app/${file}" alt="App ${id(n)} ${viewport} ${theme}"></figure>
         </div>
       </div>`;
+  };
   const rows = SCREENS.map(
     (screen) => `
     <section id="${id(screen.n)}">
       <h2><a href="#${id(screen.n)}">${screen.n}. ${escapeHtml(screen.title)}</a></h2>
-      <p class="note">App capture: ${escapeHtml(screen.captured)}</p>${pair(screen.n, "desktop")}${pair(screen.n, "mobile")}
+      <p class="note">App capture: ${escapeHtml(screen.captured)}</p>${pair(screen.n, "desktop", "light")}${pair(screen.n, "desktop", "dark")}${pair(screen.n, "mobile", "light")}${pair(screen.n, "mobile", "dark")}
     </section>`,
   ).join("\n");
   const nav = SCREENS.map((screen) => `<a href="#${id(screen.n)}">${screen.n}. ${escapeHtml(screen.title)}</a>`).join("\n      ");
@@ -463,7 +486,7 @@ test("@compare index", async () => {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Clintra — app vs prototype</title>
+<title>Clintra — app vs prototype, light and dark</title>
 <style>
   body { margin: 0; font-family: system-ui, sans-serif; background: #eff3f1; color: #0b211d; }
   header { position: sticky; top: 0; background: #0b211d; color: #f2f7f5; padding: 10px 16px; z-index: 1; }
@@ -478,6 +501,8 @@ test("@compare index", async () => {
   .note { margin: 0; font-size: 13px; color: #55665f; }
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
   .pair.mobile { grid-template-columns: repeat(2, minmax(0, 390px)); }
+  .pair.dark { background: #081311; padding: 8px; border-radius: 8px; }
+  .pair.dark figcaption { color: #dba35a; }
   figure { margin: 0; }
   figcaption { font-size: 12px; font-weight: 600; color: #a8742a; margin-bottom: 4px; }
   img { display: block; max-width: 100%; height: auto; border: 1px solid #d9e0dd; }
@@ -485,7 +510,7 @@ test("@compare index", async () => {
 </head>
 <body>
 <header>
-  <h1>Clintra — the app against docs/reference/clintra-prototype.html, screen by screen</h1>
+  <h1>Clintra — the app against docs/reference/clintra-prototype.html, screen by screen, light and dark</h1>
   <nav>
       ${nav}
   </nav>
