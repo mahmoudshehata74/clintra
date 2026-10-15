@@ -14,9 +14,9 @@ import type { PrintClinicLines } from "./printClinic";
  * a position:fixed, overflow-clipped element does not print reliably).
  *
  * Structural chrome (radius, border, shadow) stays on this app's own design
- * tokens — only the page's own background/ink colours are the plain
- * black/white/grey keywords design-rule.md's print exception allows, since
- * these are the colours that actually go on paper.
+ * tokens — only the page's own background and ink are the print-paper and
+ * print-ink tokens (white and black, with opacity for the greys), the same
+ * in the dark theme, since these are the colours that actually go on paper.
  */
 //
 // Width: `.print-page`'s own max-width (600px) as a definite
@@ -24,7 +24,7 @@ import type { PrintClinicLines } from "./printClinic";
 // (SheetPanelBody) an auto-margined item shrinks to its content instead of
 // stretching, which left the preview only as wide as its table.
 export function PrintPage({ children }: { children: ReactNode }) {
-  return <div className="mx-auto w-[min(600px,100%)] rounded-panel border border-rule bg-white p-8 text-black shadow-l">{children}</div>;
+  return <div className="mx-auto w-[min(600px,100%)] rounded-panel border border-rule bg-print-paper p-8 text-print-ink shadow-l">{children}</div>;
 }
 
 /**
@@ -53,9 +53,9 @@ export function PrintClinicBlock({ title, details, phone }: PrintClinicLines) {
   }
   return (
     <div className="mb-[22px] text-center">
-      {title && <p className="text-[19px] font-bold tracking-[-0.01em] text-black">{title}</p>}
+      {title && <p className="text-[19px] font-bold tracking-[-0.01em] text-print-ink">{title}</p>}
       {details.length > 0 && (
-        <p className="mt-0.5 text-xs text-black/60">
+        <p className="mt-0.5 text-xs text-print-ink/60">
           {details.map((part, index) => (
             <Fragment key={index}>
               {index > 0 && " · "}
@@ -70,7 +70,7 @@ export function PrintClinicBlock({ title, details, phone }: PrintClinicLines) {
 
 /** `.print-day` */
 export function PrintDayLine({ children }: { children: ReactNode }) {
-  return <p className="mb-3.5 border-y-[1.5px] border-black py-3 text-center text-[14.5px] font-semibold text-black">{children}</p>;
+  return <p className="mb-3.5 border-y-[1.5px] border-print-ink py-3 text-center text-[14.5px] font-semibold text-print-ink">{children}</p>;
 }
 
 /** `.print-tbl` */
@@ -81,7 +81,7 @@ export function PrintTable({ children }: { children: ReactNode }) {
 /** `.print-tbl th` */
 export function PrintTh({ children }: { children: ReactNode }) {
   return (
-    <th className="border-b border-black/15 bg-black/5 px-2.5 py-[9px] text-start text-[11.5px] font-bold uppercase tracking-[0.05em] text-black/60">
+    <th className="border-b border-print-ink/15 bg-print-ink/5 px-2.5 py-[9px] text-start text-[11.5px] font-bold uppercase tracking-[0.05em] text-print-ink/60">
       {children}
     </th>
   );
@@ -89,9 +89,9 @@ export function PrintTh({ children }: { children: ReactNode }) {
 
 /** `.print-tbl td` — pass `mono` for `.print-tbl td .mono` (the phone column), `colSpan` for a full-width row (e.g. an empty-list message). */
 export function PrintTd({ children, mono, colSpan }: { children: ReactNode; mono?: boolean; colSpan?: number }) {
-  const monoClass = mono ? "font-mono text-[11.5px] text-black/70" : "text-[13px] text-black";
+  const monoClass = mono ? "font-mono text-[11.5px] text-print-ink/70" : "text-[13px] text-print-ink";
   return (
-    <td colSpan={colSpan} className={`border-b border-black/15 px-2.5 py-[9px] ${monoClass}`}>
+    <td colSpan={colSpan} className={`border-b border-print-ink/15 px-2.5 py-[9px] ${monoClass}`}>
       {children}
     </td>
   );
@@ -100,7 +100,7 @@ export function PrintTd({ children, mono, colSpan }: { children: ReactNode; mono
 /** `.print-foot`: the print time, then "Clintra v{version}" (domain/appVersion.ts). */
 export function PrintFoot({ printedAt }: { printedAt: string }) {
   return (
-    <div className="mt-5 flex justify-between border-t border-dashed border-black/20 pt-3 text-[11px] text-black/60">
+    <div className="mt-5 flex justify-between border-t border-dashed border-print-ink/20 pt-3 text-[11px] text-print-ink/60">
       <span>{printedAt}</span>
       <Ltr>{printedBrand()}</Ltr>
     </div>

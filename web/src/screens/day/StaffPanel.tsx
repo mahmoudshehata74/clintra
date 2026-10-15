@@ -99,7 +99,7 @@ export default function StaffPanel({ orgId }: { orgId: string }) {
         {hasLockedOwner && (
           <div
             id={LAST_OWNER_NOTE_ID}
-            className="mt-3.5 flex items-start gap-2 rounded-card border border-dashed border-copper-line bg-copper-wash px-3.5 py-3 text-xs text-copper"
+            className="mt-3.5 flex items-start gap-2 rounded-card border border-dashed border-copper-line bg-copper-wash px-3.5 py-3 text-xs text-copper-ink"
           >
             <span className="font-bold">{dayScreenStrings.staffNoteLabel}</span>
             <span>{dayScreenStrings.staffLastOwnerNote}</span>

@@ -228,9 +228,9 @@ export default function WorkingHoursPanel({
               <span className="text-[13.5px] font-semibold text-text tabular-nums">{row.hours}</span>
               <div className="flex items-center gap-1.5">
                 {/* `.set-row .mode`; the prototype tints the day-off label
-                    faint, which Badge's neutral tone (muted) only
-                    approximates — a closer tone would be a new Badge
-                    variant for this one label. */}
+                    faint, which is for placeholders and disabled controls
+                    only here (docs/design-tokens.md): Badge's neutral tone
+                    (muted). */}
                 <Badge appearance="soft" tone="neutral">
                   {formatWorkingHoursMode(row.mode, MODE_STRINGS)}
                 </Badge>

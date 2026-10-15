@@ -46,7 +46,7 @@ export function SheetPanelCloseButton({ onClose, closeLabel }: SheetPanelCloseBu
       onClick={onClose}
       aria-label={closeLabel}
       className={
-        "relative flex h-7 w-7 shrink-0 items-center justify-center rounded-control border border-white/[0.14] bg-white/[0.08] p-0 font-[inherit] text-base leading-none text-on-dark " +
+        "relative flex h-7 w-7 shrink-0 items-center justify-center rounded-control border border-glass/[0.14] bg-glass/[0.08] p-0 font-[inherit] text-base leading-none text-on-dark " +
         // A square icon button, unlike Button.tsx's MD_TOUCH_TARGET —
         // extend the invisible hit area in both axes, not just height.
         "after:absolute after:left-1/2 after:top-1/2 after:h-10 after:w-10 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] " +

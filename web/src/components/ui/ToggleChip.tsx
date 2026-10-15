@@ -11,7 +11,7 @@ export interface ToggleChipProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
 
 const BASE =
   "appearance-none cursor-pointer whitespace-nowrap font-[inherit] transition-colors duration-150 " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-card " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
@@ -44,7 +44,7 @@ const VARIANT_LOOK: Record<ToggleChipVariant, { base: string; unpressed: string;
   patientTab: {
     base: "rounded-chip border-0 px-[14px] py-[7px] text-xs font-semibold",
     unpressed: "bg-transparent text-muted",
-    pressed: "bg-copper-wash text-copper",
+    pressed: "bg-copper-wash text-copper-ink",
   },
   channel: {
     base: "rounded-chip border-0 px-3 py-[6px] text-[11.5px] font-semibold",
@@ -56,7 +56,7 @@ const VARIANT_LOOK: Record<ToggleChipVariant, { base: string; unpressed: string;
 const COUNTER_BASE = "ms-1 rounded-chip border px-[6px] py-px text-[10px] font-bold tabular-nums";
 const COUNTER_LOOK = {
   unpressed: "border-rule bg-card text-muted",
-  pressed: "border-copper-line bg-card text-copper",
+  pressed: "border-copper-line bg-card text-copper-ink",
 };
 
 export default function ToggleChip({ variant, pressed, counter, className, children, ...rest }: ToggleChipProps) {

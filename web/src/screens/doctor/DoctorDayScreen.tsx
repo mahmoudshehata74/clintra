@@ -295,7 +295,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
       <Card>
         <CardHead badge={T.dayListBadge} title={T.dayListTitle} subtitle={T.dayListSubtitle} />
         {dayList.length === 0 ? (
-          <p className="p-5 text-center text-xs text-faint">{T.dayListEmpty}</p>
+          <p className="p-5 text-center text-xs text-muted">{T.dayListEmpty}</p>
         ) : (
           <ul aria-label={T.dayListTitle}>
             {dayList.map((visit, index) => (
@@ -505,11 +505,11 @@ function CurrentPatientHero({
       className="flex flex-col gap-4 rounded-panel border border-copper-line bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-copper)_14%,var(--color-card))_0%,var(--color-card)_60%)] px-6 py-5"
     >
       <div className="flex flex-wrap items-center gap-4">
-        <div className="flex h-[52px] w-[52px] flex-none items-center justify-center rounded-card bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-xl font-bold text-white">
+        <div className="flex h-[52px] w-[52px] flex-none items-center justify-center rounded-card bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-xl font-bold text-on-copper">
           {name.charAt(0)}
         </div>
         <div className="min-w-[200px] flex-1">
-          <div className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-copper">{T.heroLabel}</div>
+          <div className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-copper-ink">{T.heroLabel}</div>
           <div className="mt-[3px] text-[22px] font-bold tracking-[-0.01em] text-text">
             {name}
             {age && <span className="ms-2 text-sm font-medium text-muted">{age}</span>}
@@ -534,7 +534,7 @@ function CurrentPatientHero({
 
       {lastVisit && (
         <div className="rounded-control border border-copper-line bg-[color-mix(in_srgb,var(--color-copper-wash)_60%,transparent)] px-3.5 py-2.5 text-xs text-text">
-          <div className="mb-[3px] text-[10px] font-bold uppercase tracking-[0.05em] text-copper">
+          <div className="mb-[3px] text-[10px] font-bold uppercase tracking-[0.05em] text-copper-ink">
             {T.lastVisitHeading} · {lastVisit.relativeTime}
           </div>
           <LastVisitParts summary={lastVisit} diagnosisLabel={T.lastVisitDiagnosisHero} />
@@ -561,7 +561,7 @@ function LastVisitParts({ summary, diagnosisLabel }: { summary: LastVisitSummary
       {summary.complaint && summary.diagnosis && " · "}
       {summary.diagnosis && (
         <>
-          {diagnosisLabel} <span className="font-semibold text-copper">{summary.diagnosis}</span>
+          {diagnosisLabel} <span className="font-semibold text-copper-ink">{summary.diagnosis}</span>
         </>
       )}
     </div>
@@ -610,7 +610,7 @@ function NextPatientBrief({
         <div className={BRIEF_HEAD}>
           <span className={BRIEF_HEAD_TITLE}>{T.briefNextHeading}</span>
         </div>
-        <p className="p-5 text-center text-xs text-faint">{T.briefNoNext}</p>
+        <p className="p-5 text-center text-xs text-muted">{T.briefNoNext}</p>
       </section>
     );
   }
@@ -734,7 +734,7 @@ function WaitingRoomCard({ waitingRoom, isQueueMode, patientOf, serviceNameOf }:
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="p-5 text-center text-xs text-faint">{T.waitingEmpty}</p>
+        <p className="p-5 text-center text-xs text-muted">{T.waitingEmpty}</p>
       ) : (
         <>
           <ul aria-label={T.waitingHeading}>
@@ -879,8 +879,8 @@ function AttentionCard({ items, patientOf, onCompleteNow }: AttentionCardProps) 
 // resting border/background/text colour outright.
 const NUM_LOOK = {
   current:
-    "border-transparent bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-white shadow-[0_3px_10px_color-mix(in_srgb,var(--color-copper)_30%,transparent)]",
-  done: "border-transparent bg-eligible text-white",
+    "border-transparent bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-on-copper shadow-[0_3px_10px_color-mix(in_srgb,var(--color-copper)_30%,transparent)]",
+  done: "border-transparent bg-eligible text-on-fill",
   rest: "border-rule bg-field text-muted",
 } as const;
 

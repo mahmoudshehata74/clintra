@@ -172,7 +172,7 @@ export default function PatientProfile({ patientId, initialTab = "all" }: Patien
       {/* `.pt-timeline` */}
       <section aria-label={T.timelineLabel} className="px-[18px] py-4">
         {days.length === 0 ? (
-          <p className="py-6 text-center text-xs text-faint">{empty}</p>
+          <p className="py-6 text-center text-xs text-muted">{empty}</p>
         ) : (
           days.map((day) => (
             // `.pt-day`
@@ -235,7 +235,7 @@ function Hero({ hero, onOpenPlan }: { hero: ProfileHero; onOpenPlan: (planId: st
       {/* `.avatar` */}
       <div
         aria-hidden="true"
-        className="flex h-16 w-16 flex-none items-center justify-center rounded-app bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[26px] font-bold text-white"
+        className="flex h-16 w-16 flex-none items-center justify-center rounded-app bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[26px] font-bold text-on-copper"
       >
         {hero.initial}
       </div>
@@ -269,7 +269,7 @@ function Hero({ hero, onOpenPlan }: { hero: ProfileHero; onOpenPlan: (planId: st
             className={`${STAT_FRAME} cursor-pointer font-[inherit] transition-colors duration-150 hover:border-copper-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-copper`}
           >
             <span className={STAT_KEY}>{T.statPlan}</span>
-            <span className={`${STAT_VALUE} text-copper`}>{hero.plan.label}</span>
+            <span className={`${STAT_VALUE} text-copper-ink`}>{hero.plan.label}</span>
           </button>
         )}
         {/* `.pt-stat.balance` */}
@@ -296,11 +296,11 @@ const ICON: Record<ProfileEventKind, string> = {
 // keeps the plain `.icn`, as does a muted (cancelled, missed) visit.
 const ICON_LOOK: Record<ProfileEventKind | "muted", string> = {
   visit: "border-green-line bg-green-wash text-green",
-  rx: "border-copper-line bg-copper-wash text-copper",
+  rx: "border-copper-line bg-copper-wash text-copper-ink",
   msg: "border-rule bg-field text-text",
   pay: "border-[color-mix(in_srgb,var(--color-eligible)_40%,transparent)] bg-[color-mix(in_srgb,var(--color-eligible)_15%,transparent)] text-eligible",
   note: "border-rule bg-field text-muted",
-  muted: "border-rule bg-field text-faint",
+  muted: "border-rule bg-field text-muted",
 };
 
 const ROW_BASE = "grid w-full grid-cols-[auto_1fr_auto] items-start gap-3 rounded-control border border-rule px-3 py-2.5 text-start";
@@ -321,7 +321,7 @@ function DetailGroup({ parts }: { parts: DetailPart[] }) {
         }
         if (part.tone === "dx") {
           return (
-            <span key={index} className="font-semibold text-copper">
+            <span key={index} className="font-semibold text-copper-ink">
               {text}
             </span>
           );
@@ -357,7 +357,7 @@ function EventRow({ event, onOpen }: { event: ProfileEvent; onOpen?: () => void 
         )}
       </span>
       {/* `.time` */}
-      <span className="whitespace-nowrap text-[10.5px] text-faint tabular-nums">{event.time && <Ltr>{event.time}</Ltr>}</span>
+      <span className="whitespace-nowrap text-[10.5px] text-muted tabular-nums">{event.time && <Ltr>{event.time}</Ltr>}</span>
     </>
   );
   const surface = event.muted ? "bg-field" : "bg-card";

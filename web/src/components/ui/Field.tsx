@@ -58,7 +58,7 @@ export default function Field({ label, id, hint, error, children }: FieldProps) 
           {error}
         </span>
       ) : hint ? (
-        <span id={hintId} className="mt-0.5 text-[10.5px] text-faint">
+        <span id={hintId} className="mt-0.5 text-[10.5px] text-muted">
           {hint}
         </span>
       ) : null}

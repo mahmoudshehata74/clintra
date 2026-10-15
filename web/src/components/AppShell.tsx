@@ -6,6 +6,7 @@ import { navItemsFor, type NavItem } from "../domain/navigation";
 import type { Role } from "../domain/role";
 import type { ClinicDay } from "../domain/time";
 import SyncStatusChip from "../screens/day/SyncStatusChip";
+import AppearanceToggle from "./AppearanceToggle";
 import { formatAppBarDate } from "./appBarDate";
 import Button from "./ui/Button";
 import { appBarStrings, sidebarStrings } from "./strings";
@@ -127,14 +128,14 @@ const ICON_PATHS: Record<NavItem["key"], ReactNode> = {
 // leave the winner up to that order instead of to isActive.
 const ITEM_BASE =
   "flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-chip border-b-2 px-2 py-1.5 text-center text-[11px] font-medium transition-colors duration-150 " +
-  "hover:bg-white/[0.10] hover:text-on-dark " +
+  "hover:bg-glass/[0.10] hover:text-on-dark " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink " +
   "sm:w-full sm:flex-none sm:flex-row sm:justify-start sm:gap-2 sm:border-b-0 sm:border-s-2 sm:px-3 sm:py-2 sm:text-sm";
 
 // At rest: transparent border (reserved so taking the active state never
 // shifts the row's size), no background fill, dim on-dark text.
 const ITEM_INACTIVE = "border-transparent bg-transparent text-on-dark-dim";
-const ITEM_ACTIVE = "border-copper bg-white/[0.14] text-on-dark";
+const ITEM_ACTIVE = "border-copper bg-glass/[0.14] text-on-dark";
 
 /**
  * The app-wide navigation rail, in the prototype's own dark-chrome language:
@@ -166,7 +167,7 @@ const ITEM_ACTIVE = "border-copper bg-white/[0.14] text-on-dark";
 // for it) — `.brand .logo` reproduced once rather than duplicated inline.
 function BrandLogo() {
   return (
-    <div className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-[linear-gradient(135deg,var(--color-green-2)_0%,var(--color-green)_100%)] text-sm font-bold text-white shadow-[0_2px_8px_rgba(0,0,0,.35)]">
+    <div className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-[linear-gradient(135deg,var(--color-green-2)_0%,var(--color-green)_100%)] text-sm font-bold text-on-ink shadow-logo">
       C
     </div>
   );
@@ -213,19 +214,21 @@ function AppBar({ title, today, whoName }: { title: ReactNode; today: ClinicDay;
       <SyncStatusChip />
 
       {shownName && (
-        <div className="flex items-center gap-2 rounded-control border border-white/[0.14] bg-white/[0.06] px-3 py-[5px] text-xs text-on-dark">
-          <span className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[11px] font-bold text-white">
+        <div className="flex items-center gap-2 rounded-control border border-glass/[0.14] bg-glass/[0.06] px-3 py-[5px] text-xs text-on-dark">
+          <span className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[11px] font-bold text-on-copper">
             {shownName.charAt(0)}
           </span>
           <span>{shownName}</span>
         </div>
       )}
 
+      <AppearanceToggle />
+
       <Button variant="onDark" size="sm" onClick={() => clearActiveSession()}>
         {authStrings.lockButtonLabel}
       </Button>
 
-      <div className="flex flex-col gap-px border-s border-white/[0.13] ps-3 text-end">
+      <div className="flex flex-col gap-px border-s border-glass/[0.13] ps-3 text-end">
         <span className="text-[12.5px] font-semibold tracking-[-0.01em] text-on-dark tabular-nums">{dateLine}</span>
         <span className="text-[10px] tracking-[0.04em] text-on-dark-dim">{weekdayLine}</span>
       </div>

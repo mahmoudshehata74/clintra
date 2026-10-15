@@ -6,6 +6,7 @@ import type {
   CarePlanItem,
   CashClose,
   DayState,
+  DevicePreference,
   DeviceRegistration,
   FormDefinition,
   Invoice,
@@ -69,6 +70,7 @@ export class ClintraDatabase extends Dexie {
   sync_ops!: EntityTable<SyncOp, "op_id">;
   sync_review!: EntityTable<SyncReview, "id">;
   device!: EntityTable<DeviceRegistration, "id">;
+  preferences!: EntityTable<DevicePreference, "key">;
 
   constructor(name = "clintra") {
     super(name);
@@ -518,6 +520,16 @@ export class ClintraDatabase extends Dexie {
       .upgrade(async (tx) => {
         await dropStrandedStaffOps(tx.table("sync_ops"));
       });
+
+    // This device's own settings (db/preferences.ts): the appearance
+    // (auto/light/dark) today. A store of its own rather than a field on the
+    // device row: it is needed whether or not the device is registered, and
+    // registration replaces that row whole (db/registration.ts). Local-only
+    // — not in SYNCABLE_TABLES, written without mutate(), so no sync op and
+    // no audit row.
+    this.version(22).stores({
+      preferences: "key",
+    });
   }
 }
 

@@ -36,7 +36,7 @@ export default function FieldSection() {
           <Field label={fieldGalleryStrings.searchLabel} id="gallery-field-search-focused">
             <TextInput />
           </Field>
-          <p className="mt-1 text-[10.5px] text-faint">{fieldGalleryStrings.focusedCaption}</p>
+          <p className="mt-1 text-[10.5px] text-muted">{fieldGalleryStrings.focusedCaption}</p>
         </Row>
 
         <Row heading={fieldGalleryStrings.filledHeading}>

@@ -10,6 +10,7 @@ import {
 import { useActingMembership, useGuardedActingMembership } from "./auth/useActingMembership";
 import { useIdleLock } from "./auth/useIdleLock";
 import AppShell from "./components/AppShell";
+import { restoreAppearance } from "./components/appearance";
 import InstallBanner from "./components/InstallBanner";
 import { db } from "./db/database";
 import { deviceReadiness } from "./db/deviceRegistration";
@@ -52,6 +53,13 @@ export default function App() {
   // either way: it never runs once real org data already exists).
   const [bootStatus, setBootStatus] = useState<BootStatus>(() => (isDemoModeRequested() ? "ready" : "checking"));
   const [authErrorDetected, setAuthErrorDetected] = useState(false);
+
+  // The device's stored appearance (db/preferences.ts) over index.html's
+  // pre-paint mirror of it — the two differ only if site storage was
+  // partly cleared, and then the stored choice wins.
+  useEffect(() => {
+    void restoreAppearance();
+  }, []);
 
   useEffect(() => {
     if (bootStatus !== "checking") {

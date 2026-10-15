@@ -507,6 +507,16 @@ export interface SyncReview {
  * one-file change. Added in database version 8; the device id moved here from
  * localStorage, which no longer holds device identity.
  */
+/**
+ * One of this device's own settings (db/preferences.ts), keyed by name —
+ * today only "appearance". Added in database version 22; local-only: never
+ * synced, never audited, so it stays with this browser.
+ */
+export interface DevicePreference {
+  key: string;
+  value: string;
+}
+
 export interface DeviceRegistration {
   id: string;
   org_id: string;

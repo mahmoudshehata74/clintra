@@ -57,7 +57,7 @@ export default function QuickNote({ visit }: QuickNoteProps) {
         }
       }}
     >
-      <label htmlFor={inputId} className="flex-none text-[11px] font-bold uppercase tracking-[0.05em] text-copper">
+      <label htmlFor={inputId} className="flex-none text-[11px] font-bold uppercase tracking-[0.05em] text-copper-ink">
         {T.quickNoteLabel}
       </label>
       <input
@@ -78,7 +78,7 @@ export default function QuickNote({ visit }: QuickNoteProps) {
       <button
         type="submit"
         disabled={matchesStored || isSaving}
-        className="flex-none cursor-pointer appearance-none rounded-chip border border-copper-line bg-transparent px-3 py-1.5 text-[11px] font-semibold text-copper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-copper disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex-none cursor-pointer appearance-none rounded-chip border border-copper-line bg-transparent px-3 py-1.5 text-[11px] font-semibold text-copper-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-copper disabled:cursor-not-allowed disabled:opacity-50"
       >
         {T.quickNoteSave}
       </button>

@@ -158,7 +158,7 @@ function PractitionerRow({ practitioner }: { practitioner: Practitioner }) {
             {T.practitionerSyndicatePrefix} <Ltr className="font-mono">{shownSyndicateNumber}</Ltr>
           </p>
         ) : (
-          <p className="mt-0.5 text-[11.5px] text-faint">{T.practitionerNoSyndicate}</p>
+          <p className="mt-0.5 text-[11.5px] text-muted">{T.practitionerNoSyndicate}</p>
         )}
       </div>
       {!editing && (

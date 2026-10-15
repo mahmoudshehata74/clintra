@@ -232,6 +232,101 @@ and ops for entities the server does not sync"):
 Local setup now needs the `clintra_staff` role — `api/README.md`'s "Fresh
 local setup".
 
+## Dark mode (feat/dark-mode)
+
+Owner decisions it implements (`docs/design-tokens.md`'s dark column and
+"Dark mode"; `docs/screen-comparison.md`'s "Dark mode"):
+1. Dark values come from the prototype verbatim: `web/src/index.css`
+   redefines the colour tokens under the prototype's own selectors —
+   `@media (prefers-color-scheme: dark)` on `:root:not([data-theme="light"])`,
+   and `:root[data-theme="dark"]` — each with `color-scheme: dark`. Default
+   is auto (no `data-theme`: the system decides). Tokens the prototype's
+   dark blocks do not cover are derived and listed in design-tokens.md:
+   `print-note*`, `print-paper`/`print-ink`, `whatsapp`, `brand-*`,
+   `glass` keep their light values (the prototype's own literals in both
+   themes); the text tokens of decisions 6 and 9 carry the owner's values; the shadow colours `shadow-soft/-mid/-deep` carry the
+   prototype's dark `--shadow-s/-m/-l` (Tailwind inlines a theme shadow's
+   literal colour, so only a colour token lets dark reach `shadow-*`). The
+   body's colour is `text`, not `ink` (equal in light; `ink` is a surface).
+2. An icon button cycles تلقائي → فاتح → غامق ("المظهر: …"; the label shows
+   beside the icon from `sm` up) in the app bar, on the lock card and on the
+   activation card (`web/src/components/AppearanceToggle.tsx`). The choice
+   is per device, in a new local-only Dexie store `preferences` (database
+   version 22, `web/src/db/preferences.ts`) — not the device row, which
+   does not exist before registration and which registration replaces
+   whole; never synced (not in `SYNCABLE_TABLES`, no `mutate()`, no audit
+   row). No flash: the choice is mirrored into `localStorage`
+   (`clintra.appearance`), and an inline script in `web/index.html`'s head
+   sets `data-theme` from it before the stylesheet paints; at boot the
+   stored choice wins over the mirror. The `theme-color` meta follows the
+   active theme's `green`; the manifest's `theme_color`/`background_color`
+   stay light (a manifest has one value).
+3. Printing is always light: an `@media print` block restates the light
+   tokens over both dark selectors, with `color-scheme: light` — every
+   printed page (prescription, receipt, invoice, tomorrow's sheet, day-close
+   summary) and the prescription portal's paper.
+4. No literal colours in `web/src`: whites, blacks and `rgba()` moved to
+   tokens (`on-fill`, `glass`, `print-paper`, `print-ink`,
+   `shadow-logo`/`-lg`); the settings toggle's knob is `on-ink` (white in
+   dark too, as `.toggle::after`; decision 6); focus rings take a `card` ring offset
+   instead of Tailwind's literal white. Left as they are: two hex values in
+   comments (LockScreen's contrast note, DaySlab's note on the prototype's
+   one-off `#0D2621`), the manifest's light colours, and `index.html`'s
+   initial `theme-color`.
+5. Contrast (WCAG, every text/background token pair in use, both themes)
+   is tabled in `docs/design-tokens.md`'s "Contrast" and guarded by
+   `web/src/designTokens.test.ts`: a declared list of every pair, computed
+   from index.css's own values, each at least 4.5:1 in light and dark. The
+   owner's answers to the pairs that were under AA are decisions 6–12.
+
+Owner decisions on contrast (the comparison's four dark [ask] lines, and
+the pairs the guard found after them):
+6. Text on fills, split by what sits under it. `on-fill`: text and icons on
+   a saturated green, green-2, danger, warning, eligible or muted fill —
+   `#ffffff` in light, `#081311` (the dark paper) in dark. `on-copper`
+   (new): text and icons on copper or copper-2 fills — `#081311` in both
+   (light 4.67/6.38). `on-ink` (new): `#ffffff` in both — anything on the
+   ink chrome (the lock card's brand, the activation card's title, the
+   logo tiles' letter) and the marks that stay white (the switch knob, the
+   care-plan hero's top highlight and its progress fill). Every former
+   `on-fill` use moved to exactly one of the three. The logo tiles' "C" on
+   the green tile is a logotype, outside the guard.
+7. `faint` is only for placeholder text inside empty fields and for
+   disabled controls; every other faint text (status words, hints,
+   timestamps, empty states, counts, units — 40 uses) is `muted`. Faint as
+   a non-text mark (separator dots, the cancelled row's stripe and
+   strike-through) stays. Placeholders read under AA (light 2.75 on field,
+   2.92 on card; dark 3.88, 4.13) and are named outside the guard with
+   those numbers; the guard also fails if faint is text anywhere but a
+   placeholder.
+8. The invoice head's status (`.inv-status`, a 22% tint over ink-2) is a
+   solid badge: its status fill with `on-fill` text, in both themes.
+9. Light-theme pairs under AA. `copper-ink` (new): copper as text —
+   `#8E6222` in light (5.36 on card, 4.69 on copper-wash), `#C79247` (the
+   dark copper) in dark; copper stays for fills, borders and icons, and
+   every copper text (copper-2 as text on a light surface included) moved
+   to it. `green-on-ink` (new): `#37B894` in both — the slab's "arrived"
+   count (light 5.49, dark 6.33 on ink-2). `copper-on-ink` (new):
+   `#DBA35A` in both — the on-dark copper button's text (light 4.83, dark
+   4.95). `copper-2` stays as text on the ink chrome (the lock card's
+   "tra", the slab's copper figures: 4.61 light, 7.05 dark on ink-2).
+   `warning` on `warning-wash` in light, 4.49, is accepted as it is — the
+   guard's one exception.
+10. The care-plan hero's text is `on-copper` at full opacity (no 85%/70%
+    lines) on a copper → copper-2 fill (the avatars' gradient) in place of
+    copper → copper mixed 20% with ink, whose dark end read 3.50 in light.
+11. The slab's no-show count (`.cell.miss`, danger on ink: 1.89 light, 4.43
+    dark on ink-2) is `danger-on-ink` (new): `#F08C82` in both (light
+    5.70, dark 6.58 on ink-2).
+12. The card head's badge (`.c-head .badge`, on-dark-dim on 8% glass: 3.90
+    light, 3.82 dark) drops its glass fill and keeps its border: on-dark-dim
+    on the ink head (4.98 / 4.84).
+
+Every new token is in `@theme`, both dark blocks and the `@media print`
+restatement; no prototype value changed.
+
+Screen 10's decision h ("dark mode stays off") is superseded.
+
 ## Settled deviations / decisions — prototype alignment
 
 The owner's answers to `docs/screen-comparison.md`'s questions (applied on

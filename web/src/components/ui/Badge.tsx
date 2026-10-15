@@ -12,9 +12,9 @@ type SoftBadgeVariant = { appearance: "soft"; tone: Exclude<BadgeTone, "eligible
 type SolidBadgeVariant = { appearance: "solid"; tone: BadgeTone; shape?: BadgeShape };
 type DashedBadgeVariant = { appearance: "dashed"; tone: "green" | "copper" | "warning" | "danger"; shape?: BadgeShape };
 type OnDarkBadgeVariant = { appearance: "onDark" };
-type TintedBadgeVariant = { appearance: "tinted"; tone: "warning" | "eligible" | "danger" };
+type HeadStatusBadgeVariant = { appearance: "headStatus"; tone: "warning" | "eligible" | "danger" };
 
-type BadgeVariant = SoftBadgeVariant | SolidBadgeVariant | DashedBadgeVariant | OnDarkBadgeVariant | TintedBadgeVariant;
+type BadgeVariant = SoftBadgeVariant | SolidBadgeVariant | DashedBadgeVariant | OnDarkBadgeVariant | HeadStatusBadgeVariant;
 
 export type BadgeProps = Omit<HTMLAttributes<HTMLSpanElement>, "color"> & BadgeVariant;
 
@@ -23,18 +23,22 @@ const SHAPE_RADIUS: Record<BadgeShape, string> = {
   pill: "rounded-full",
 };
 
-// `.c-head .badge` reproduced exactly — the only onDark source.
+// `.c-head .badge` without its 8% glass fill — the only onDark source. On
+// that fill on-dark-dim read under AA in both themes; on the bare ink head
+// it does not (docs/design-tokens.md's "Contrast").
 const ONDARK_CLASSES =
-  "rounded-chip border border-white/[0.14] bg-white/[0.08] px-[9px] py-[3px] text-[10.5px] font-semibold tracking-[0.05em] text-on-dark-dim";
+  "rounded-chip border border-glass/[0.14] px-[9px] py-[3px] text-[10.5px] font-semibold tracking-[0.05em] text-on-dark-dim";
 
-// `.inv-status` / `.inv-status.paid` reproduced exactly: a 22% tint of the
-// tone with the full tone as text and border, on the dark invoice head. Void
-// has no reference class; it takes the same look in danger.
-const TINTED_CLASSES = "rounded-chip border px-2.5 py-[3px] text-[11px] font-bold tracking-[0.05em]";
-const TINTED_LOOK: Record<"warning" | "eligible" | "danger", string> = {
-  warning: "border-warning bg-[color-mix(in_srgb,var(--color-warning)_22%,transparent)] text-warning",
-  eligible: "border-eligible bg-[color-mix(in_srgb,var(--color-eligible)_22%,transparent)] text-eligible",
-  danger: "border-danger bg-[color-mix(in_srgb,var(--color-danger)_22%,transparent)] text-danger",
+// `.inv-status` / `.inv-status.paid`'s metrics on the dark invoice head, as
+// a solid badge: the tone's full fill and border under on-fill text, in place
+// of the prototype's 22% tint, under AA there in both themes (docs/session-
+// handoff.md's "Dark mode", decision 8). Void has no reference class; it
+// takes the same look in danger.
+const HEAD_STATUS_CLASSES = "rounded-chip border px-2.5 py-[3px] text-[11px] font-bold tracking-[0.05em] text-on-fill";
+const HEAD_STATUS_LOOK: Record<"warning" | "eligible" | "danger", string> = {
+  warning: "border-warning bg-warning",
+  eligible: "border-eligible bg-eligible",
+  danger: "border-danger bg-danger",
 };
 
 // Soft chip sizing is shared across its four sources (`.brief-h .tag` /
@@ -65,7 +69,7 @@ function sizeClasses(appearance: "soft" | "solid" | "dashed", shape: BadgeShape)
 const SOFT_LOOK: Record<Exclude<BadgeTone, "eligible">, string> = {
   neutral: "border border-rule bg-field text-muted",
   green: "border border-green-line bg-green-wash text-green",
-  copper: "border border-copper-line bg-copper-wash text-copper",
+  copper: "border border-copper-line bg-copper-wash text-copper-ink",
   warning: "border border-[color-mix(in_srgb,var(--color-warning)_40%,transparent)] bg-warning-wash text-warning",
   danger: "border border-danger-line bg-danger-wash text-danger",
 };
@@ -73,19 +77,20 @@ const SOFT_LOOK: Record<Exclude<BadgeTone, "eligible">, string> = {
 // `.slot.arrived .state` and `.slot.in-room .state` are gradients
 // (eligible→green-2, copper→copper-2); every other solid tone/shape is a
 // flat fill, matching `.msg-tpl .badge`/`.badge.auto`/`.badge.manual` and
-// `.slot.no-show .state`, none of which use a gradient.
+// `.slot.no-show .state`, none of which use a gradient. Text is on-fill,
+// except on-copper on the copper tone (docs/design-tokens.md's "Contrast").
 const SOLID_LOOK: Record<BadgeTone, { chip: string; pill: string }> = {
-  neutral: { chip: "bg-muted text-white", pill: "bg-muted text-white" },
-  green: { chip: "bg-green text-white", pill: "bg-green text-white" },
+  neutral: { chip: "bg-muted text-on-fill", pill: "bg-muted text-on-fill" },
+  green: { chip: "bg-green text-on-fill", pill: "bg-green text-on-fill" },
   copper: {
-    chip: "bg-copper text-white",
-    pill: "bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-white",
+    chip: "bg-copper text-on-copper",
+    pill: "bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-on-copper",
   },
-  warning: { chip: "bg-warning text-white", pill: "bg-warning text-white" },
-  danger: { chip: "bg-danger text-white", pill: "bg-danger text-white" },
+  warning: { chip: "bg-warning text-on-fill", pill: "bg-warning text-on-fill" },
+  danger: { chip: "bg-danger text-on-fill", pill: "bg-danger text-on-fill" },
   eligible: {
-    chip: "bg-eligible text-white",
-    pill: "bg-[linear-gradient(135deg,var(--color-eligible)_0%,var(--color-green-2)_100%)] text-white",
+    chip: "bg-eligible text-on-fill",
+    pill: "bg-[linear-gradient(135deg,var(--color-eligible)_0%,var(--color-green-2)_100%)] text-on-fill",
   },
 };
 
@@ -94,7 +99,7 @@ const SOLID_LOOK: Record<BadgeTone, { chip: string; pill: string }> = {
 // prototype but follow the same pattern for a consistent, typed set.
 const DASHED_LOOK: Record<"green" | "copper" | "warning" | "danger", string> = {
   green: "border border-dashed border-green-line bg-transparent text-green",
-  copper: "border border-dashed border-copper-line bg-transparent text-copper",
+  copper: "border border-dashed border-copper-line bg-transparent text-copper-ink",
   warning: "border border-dashed border-[color-mix(in_srgb,var(--color-warning)_40%,transparent)] bg-transparent text-warning",
   danger: "border border-dashed border-danger-line bg-transparent text-danger",
 };
@@ -124,9 +129,9 @@ export default function Badge(props: BadgeProps) {
     );
   }
 
-  if (props.appearance === "tinted") {
+  if (props.appearance === "headStatus") {
     const { tone, className, children, ...rest } = props;
-    const classes = [TINTED_CLASSES, TINTED_LOOK[tone], className ?? ""].filter(Boolean).join(" ");
+    const classes = [HEAD_STATUS_CLASSES, HEAD_STATUS_LOOK[tone], className ?? ""].filter(Boolean).join(" ");
     return (
       <span className={classes} {...omitVariantProps(rest)}>
         {children}

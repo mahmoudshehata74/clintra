@@ -29,9 +29,9 @@ interface QueueRowProps {
 
 const QNUM_LOOK: Record<QueueRowKind, string> = {
   current:
-    "border-transparent bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-white shadow-[0_3px_10px_color-mix(in_srgb,var(--color-copper)_40%,transparent)]",
+    "border-transparent bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-on-copper shadow-[0_3px_10px_color-mix(in_srgb,var(--color-copper)_40%,transparent)]",
   next: "border-green-line bg-green-wash text-green",
-  done: "border-rule bg-field text-faint",
+  done: "border-rule bg-field text-muted",
   waiting: "border-rule bg-field text-muted",
 };
 
@@ -77,10 +77,10 @@ export default function QueueRow({
             {metaPhrase}
           </span>
         )}
-        {actorLabel && <span className="mt-0.5 text-[10px] text-faint">{dayScreenStrings.recordedByPrefix} {actorLabel}</span>}
+        {actorLabel && <span className="mt-0.5 text-[10px] text-muted">{dayScreenStrings.recordedByPrefix} {actorLabel}</span>}
         {showEmptyFormHint && <span className="text-[10px] text-muted">{dayScreenStrings.visitFormEmptyHint}</span>}
       </span>
-      <span className={`flex flex-none flex-col items-end gap-0.5 text-end text-[11px] tabular-nums text-muted [&>b]:text-[13.5px] [&>b]:font-bold [&>b]:tracking-[-0.01em] [&>b]:text-text ${kind === "current" ? "[&>b]:text-copper" : ""}`}>
+      <span className={`flex flex-none flex-col items-end gap-0.5 text-end text-[11px] tabular-nums text-muted [&>b]:text-[13.5px] [&>b]:font-bold [&>b]:tracking-[-0.01em] [&>b]:text-text ${kind === "current" ? "[&>b]:text-copper-ink" : ""}`}>
         {waitNode}
       </span>
     </>

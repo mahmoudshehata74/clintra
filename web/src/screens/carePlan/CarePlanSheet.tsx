@@ -249,32 +249,32 @@ function PlanHero({ model }: { model: CarePlanSheetModel }) {
   return (
     <section
       aria-label={T.sheetTitle}
-      className="relative overflow-hidden rounded-panel bg-[linear-gradient(135deg,var(--color-copper)_0%,color-mix(in_srgb,var(--color-copper)_80%,var(--color-ink)_20%)_100%)] px-6 py-5 text-white shadow-l before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-[linear-gradient(to_left,white_0%,transparent_60%)] before:opacity-40 before:content-[''] max-[600px]:px-[18px]"
+      className="relative overflow-hidden rounded-panel bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] px-6 py-5 text-on-copper shadow-l before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-[linear-gradient(to_left,var(--color-on-ink)_0%,transparent_60%)] before:opacity-40 before:content-[''] max-[600px]:px-[18px]"
     >
       <div className="mb-4 flex items-start gap-3.5">
         <div
           aria-hidden="true"
-          className="flex h-12 w-12 flex-none items-center justify-center rounded-card border border-white/25 bg-white/[0.16] text-xl font-bold text-white"
+          className="flex h-12 w-12 flex-none items-center justify-center rounded-card border border-glass/25 bg-glass/[0.16] text-xl font-bold text-on-copper"
         >
           {model.initial}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-xl font-bold tracking-[-0.01em] text-white">{model.patientName}</div>
-          <div className="mt-[3px] text-[12.5px] text-white/85">
-            <b className="font-semibold text-white">{T.goalLabel}</b> {model.goal}
+          <div className="text-xl font-bold tracking-[-0.01em] text-on-copper">{model.patientName}</div>
+          <div className="mt-[3px] text-[12.5px] text-on-copper">
+            <b className="font-semibold text-on-copper">{T.goalLabel}</b> {model.goal}
             {" · "}
-            <b className="font-semibold text-white">{T.diagnosisLabel}</b> {model.diagnosis}
+            <b className="font-semibold text-on-copper">{T.diagnosisLabel}</b> {model.diagnosis}
           </div>
         </div>
-        <div className="ms-auto whitespace-nowrap rounded-chip border border-white/20 bg-white/[0.12] px-2.5 py-1 text-[11px] text-white/70">
+        <div className="ms-auto whitespace-nowrap rounded-chip border border-glass/20 bg-glass/[0.12] px-2.5 py-1 text-[11px] text-on-copper">
           {model.countLabel}
         </div>
       </div>
 
       <div className="mt-2">
-        <div className="mb-1.5 flex items-baseline justify-between text-[11px] text-white/85">
+        <div className="mb-1.5 flex items-baseline justify-between text-[11px] text-on-copper">
           <span>{T.progressLabel}</span>
-          <b className="text-[15px] font-bold tracking-[-0.01em] text-white tabular-nums">{model.progressLabel}</b>
+          <b className="text-[15px] font-bold tracking-[-0.01em] text-on-copper tabular-nums">{model.progressLabel}</b>
         </div>
         <div
           role="progressbar"
@@ -282,13 +282,13 @@ function PlanHero({ model }: { model: CarePlanSheetModel }) {
           aria-valuemin={0}
           aria-valuemax={model.count}
           aria-valuenow={model.done}
-          className="h-2 overflow-hidden rounded-full bg-white/15"
+          className="h-2 overflow-hidden rounded-full bg-glass/15"
         >
-          <span className="block h-full rounded-full bg-white" style={{ width: `${model.progressPercent}%` }} />
+          <span className="block h-full rounded-full bg-on-ink" style={{ width: `${model.progressPercent}%` }} />
         </div>
       </div>
 
-      <div className="mt-2.5 flex flex-wrap gap-4 text-[11px] text-white/85">
+      <div className="mt-2.5 flex flex-wrap gap-4 text-[11px] text-on-copper">
         <Leg label={T.startedLabel} value={model.startedOn} />
         <Leg label={T.expectedEndLabel} value={model.expectedEnd} />
         <Leg label={T.totalLabel} value={model.total} />
@@ -315,7 +315,7 @@ function Leg({ label, value }: { label: string; value: string }) {
   return (
     <div>
       {label}{" "}
-      <b className="font-bold text-white tabular-nums">
+      <b className="font-bold text-on-copper tabular-nums">
         <NumberText text={value} />
       </b>
     </div>
@@ -324,11 +324,11 @@ function Leg({ label, value }: { label: string; value: string }) {
 
 // `.plan-session .n` per tone: plain, `.done .n`, `.next .n`.
 const NUMBER_LOOK: Record<SessionTone, string> = {
-  done: "border-transparent bg-eligible text-white",
-  next: "border-copper-line bg-copper-wash text-copper",
+  done: "border-transparent bg-eligible text-on-fill",
+  next: "border-copper-line bg-copper-wash text-copper-ink",
   booked: "border-rule bg-field text-muted",
   suggested: "border-rule bg-field text-muted",
-  skipped: "border-rule bg-field text-faint",
+  skipped: "border-rule bg-field text-muted",
 };
 
 // `.plan-session .name`: muted once done (`.done .name`), and for a skipped session.
@@ -337,17 +337,17 @@ const NAME_LOOK: Record<SessionTone, string> = {
   next: "text-text",
   booked: "text-text",
   suggested: "text-text",
-  skipped: "text-faint",
+  skipped: "text-muted",
 };
 
 // `.plan-session .st` per tone: `.done .st`, `.next .st`, `.st.plan`; a later
 // booked session's plain `.st`, and the skipped session's muted one.
 const STATUS_LOOK: Record<SessionTone, string> = {
   done: "border-transparent bg-[color-mix(in_srgb,var(--color-eligible)_18%,transparent)] text-eligible",
-  next: "border-copper-line bg-copper-wash text-copper",
+  next: "border-copper-line bg-copper-wash text-copper-ink",
   booked: "border-rule bg-card text-text",
   suggested: "border-rule bg-field text-muted",
-  skipped: "border-transparent bg-transparent text-faint",
+  skipped: "border-transparent bg-transparent text-muted",
 };
 
 function Meta({ parts }: { parts: readonly MetaPart[] }) {
@@ -522,7 +522,7 @@ function CreatePlanFields({
 
 // The dashed "add" control the visit workspace's `.rx-add` uses, in copper.
 const ADD_BUTTON_CLASS =
-  "flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-control border-[1.5px] border-dashed border-copper-line bg-transparent px-3 py-[9px] font-[inherit] text-xs font-semibold text-copper hover:border-solid hover:bg-copper-wash focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-copper";
+  "flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-control border-[1.5px] border-dashed border-copper-line bg-transparent px-3 py-[9px] font-[inherit] text-xs font-semibold text-copper-ink hover:border-solid hover:bg-copper-wash focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-copper";
 
 function serviceOptionLabel(service: Service, price: ReturnType<typeof resolveServicePrice>): ReactNode {
   return `${service.name} · ${formatPlanMoney(price)}`;

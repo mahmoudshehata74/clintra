@@ -54,9 +54,9 @@ export default function PatientsScreen() {
           </Field>
         </div>
         {!hasQuery ? (
-          <p className="border-t border-hair px-[18px] py-6 text-center text-xs text-faint">{T.searchPrompt}</p>
+          <p className="border-t border-hair px-[18px] py-6 text-center text-xs text-muted">{T.searchPrompt}</p>
         ) : results && results.length === 0 ? (
-          <p className="border-t border-hair px-[18px] py-6 text-center text-xs text-faint">{T.searchNoMatch}</p>
+          <p className="border-t border-hair px-[18px] py-6 text-center text-xs text-muted">{T.searchNoMatch}</p>
         ) : (
           results && (
             <ul aria-label={T.resultsLabel} className="border-t border-hair">
@@ -75,7 +75,7 @@ export default function PatientsScreen() {
                           <Ltr>{formatEgyptianPhoneForDisplay(patient.phone)}</Ltr>
                         </span>
                       )}
-                      <span className="ms-auto text-[11.5px] text-faint tabular-nums">
+                      <span className="ms-auto text-[11.5px] text-muted tabular-nums">
                         {lastVisit.label}
                         {lastVisit.date && (
                           <>

@@ -29,7 +29,7 @@ function chipClassName(state: ChipState): string {
   if (state === "online") {
     return `${CHIP_BASE} border-green-line bg-[color-mix(in_srgb,var(--color-green)_20%,transparent)]`;
   }
-  return `${CHIP_BASE} border-white/[0.14] bg-white/[0.08]`;
+  return `${CHIP_BASE} border-glass/[0.14] bg-glass/[0.08]`;
 }
 
 interface ReviewRow {
