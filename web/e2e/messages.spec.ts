@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { MessageChannel } from "../src/db/types";
 import { buildMessageLink } from "../src/domain/messageLink";
 import { findMessageTemplate, renderTemplate } from "../src/domain/messageTemplates";
-import { todayInCairo } from "../src/domain/time";
+import { cairoInstant, todayInCairo } from "../src/domain/time";
 import {
   addDrug,
   AUTH,
@@ -34,6 +34,10 @@ import {
   sidebar,
   SIDEBAR,
   SLOTS_DR,
+  SUGGESTED_DAY,
+  SUGGESTED_PHONES,
+  suggestedMessagesFixture,
+  suggestedSection,
   todayAt,
 } from "./support";
 
@@ -245,4 +249,51 @@ test("a prescription offers WhatsApp and SMS only once printed, with its text in
   await expect(sheet.getByRole("group", { name: MSG.sendTemplateLabel }).getByRole("button", { pressed: true })).toHaveText("رسالة مخصصة");
   const body = sheet.getByLabel(MSG.sendBodyLabel, { exact: true });
   await expect(body).toHaveValue(/^الوصفة RX-\d{4}-\d{4}\nالمريض: كريم فتحي\n1\. Amoxicillin 500mg — Capsule: كبسولة كل 8 ساعات · لمدة 5 أيام\nد\. أحمد المصري$/);
+});
+
+test("مقترح النهارده lists one row of each kind, and a row leaves once its message is opened", async ({ page }) => {
+  await suggestedMessagesFixture(page);
+  const section = suggestedSection(page);
+  const rows = section.getByRole("listitem");
+
+  await expect(section.getByRole("heading", { name: MSG.suggestedHeading, exact: true })).toBeVisible();
+  await expect(section.getByText("4", { exact: true })).toBeVisible();
+  await expect(rows).toHaveText([
+    new RegExp(`${PATIENTS.karim}.*جلسة خطة بكرة 9:30.*${MSG.suggestedSendAction}`),
+    new RegExp(`${PATIENTS.mona}.*موعد بكرة 10:30.*${MSG.suggestedSendAction}`),
+    new RegExp(`${PATIENTS.yasmin}.*زيارة من يومين.*${MSG.suggestedSendAction}`),
+    new RegExp(`${PATIENTS.omar}.*عليه 150 ج.م من أسبوع.*${MSG.suggestedNoPhone}`),
+  ]);
+  await expect(rows.filter({ hasText: PATIENTS.omar }).getByRole("button")).toHaveCount(0);
+
+  // "ابعت" opens the send sheet on that visit, the row's template preselected.
+  await rows.filter({ hasText: PATIENTS.mona }).getByRole("button", { name: MSG.suggestedSendAction, exact: true }).click();
+  let sheet = sendSheet(page);
+  const templates = sheet.getByRole("group", { name: MSG.sendTemplateLabel });
+  await expect(templates.getByRole("button", { name: "تذكير بالموعد", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(sheet.getByLabel(MSG.sendBodyLabel)).toHaveValue(new RegExp(PATIENTS.mona));
+  await sheet.getByRole("button", { name: MSG.openWhatsApp, exact: true }).click();
+  await expect(sheet).toBeHidden();
+  await expect(rows).toHaveCount(3);
+  await expect(rows.filter({ hasText: PATIENTS.mona })).toHaveCount(0);
+  await expect(section.getByText("3", { exact: true })).toBeVisible();
+  expect((await openedUrls(page)).at(-1)).toContain(SUGGESTED_PHONES.mona.slice(1));
+
+  await rows.filter({ hasText: PATIENTS.karim }).getByRole("button", { name: MSG.suggestedSendAction, exact: true }).click();
+  sheet = sendSheet(page);
+  await expect(
+    sheet.getByRole("group", { name: MSG.sendTemplateLabel }).getByRole("button", { name: "تذكير جلسة خطة", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await closeSheet(sheet);
+  await expect(rows).toHaveCount(3);
+});
+
+test("مقترح النهارده says so when nothing is due", async ({ page }) => {
+  // The fixture's fixed Thursday: the seeded Monday is three days back, due for nothing.
+  await page.clock.install({ time: new Date(cairoInstant(SUGGESTED_DAY, "08:30")) });
+  await gotoRealDay(page);
+  await openMessagesPage(page);
+  const section = suggestedSection(page);
+  await expect(section.getByText(MSG.suggestedEmpty, { exact: true })).toBeVisible();
+  await expect(section.getByText("0", { exact: true })).toBeVisible();
 });

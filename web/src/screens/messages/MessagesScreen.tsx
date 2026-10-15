@@ -23,7 +23,9 @@ import {
   templateChipLabel,
   templateIcon,
 } from "./messagesModel";
+import SendMessageSheet from "./SendMessageSheet";
 import { messagesStrings as T } from "./strings";
+import { suggestedMessages, type SuggestedMessage } from "./suggestedMessages";
 
 interface MessagesScreenProps {
   /** The membership whose page this is: its role decides who edits, its organization and locations which messages show. */
@@ -38,6 +40,7 @@ interface RecentRow {
 interface MessagesData {
   overrides: Map<string, MessageTemplate>;
   recent: RecentRow[];
+  suggested: SuggestedMessage[];
 }
 
 /**
@@ -45,7 +48,8 @@ interface MessagesData {
  * the six templates in their defined order (`.msg-tpl`, `.icn`, `.n`, `.d`,
  * `.badge` / `.badge.auto` / `.badge.manual`); `.msg-main` shows the selected
  * one in `.msg-preview` (`.h`, `.t`, `.ch`, `.msg-body` with `.var` chips),
- * then `.msg-sent`'s recent messages (`.msg-item`, `.icn.wa` / `.icn.sms`,
+ * then "مقترح النهارده" (SuggestedMessages, below — no prototype
+ * counterpart), then `.msg-sent`'s recent messages (`.msg-item`, `.icn.wa` / `.icn.sms`,
  * `.to`, `.snip`, `.st` / `.st.pending`).
  *
  * Owner decisions over the prototype: the channel toggle is not on this page
@@ -56,22 +60,37 @@ interface MessagesData {
  */
 export default function MessagesScreen({ membership }: MessagesScreenProps) {
   const [selectedKey, setSelectedKey] = useState<string>(MESSAGE_TEMPLATES[0].key);
+  const [sending, setSending] = useState<SuggestedMessage | null>(null);
   const isOwner = membership.role === Role.Owner;
 
   const data = useLiveQuery<MessagesData>(async () => {
-    const [overrides, messages, links] = await Promise.all([
+    const [overrides, messages, links, visits, allPatients, invoices, carePlanItems] = await Promise.all([
       db.message_templates.toArray(),
       db.messages.toArray(),
       db.membership_locations.toArray(),
+      db.visits.toArray(),
+      db.patients.toArray(),
+      db.invoices.toArray(),
+      db.care_plan_items.toArray(),
     ]);
     const listedLocationIds = new Set(
       links.filter((link) => link.membership_id === membership.id).map((link) => link.location_id),
     );
-    const recent = recentMessages(messages, { membership, listedLocationIds });
-    const patients = await db.patients.bulkGet(recent.map((message) => message.patient_id));
+    const access = { membership, listedLocationIds };
+    const recent = recentMessages(messages, access);
+    const patientsById = new Map(allPatients.map((patient) => [patient.id, patient]));
     return {
       overrides: new Map(overrides.map((override) => [override.key, override])),
-      recent: recent.map((message, index) => ({ message, patientName: patients[index]?.full_name })),
+      recent: recent.map((message) => ({ message, patientName: patientsById.get(message.patient_id)?.full_name })),
+      suggested: suggestedMessages({
+        visits,
+        patients: allPatients,
+        invoices,
+        carePlanItems,
+        messages,
+        access,
+        now: new Date(),
+      }),
     };
   }, [membership.id, membership.org_id, membership.location_scope]);
 
@@ -94,10 +113,19 @@ export default function MessagesScreen({ membership }: MessagesScreenProps) {
                 override={data.overrides.get(selected.key)}
                 isOwner={isOwner}
               />
+              <SuggestedMessages rows={data.suggested} onSend={setSending} />
               <RecentMessages rows={data.recent} />
             </div>
           </div>
         </Card>
+      )}
+      {sending && (
+        <SendMessageSheet
+          key={sending.key}
+          visitId={sending.visitId}
+          start={{ templateKey: sending.templateKey }}
+          onDismiss={() => setSending(null)}
+        />
       )}
     </PageMain>
   );
@@ -352,6 +380,57 @@ function RecentMessages({ rows }: { rows: RecentRow[] }) {
               </li>
             );
           })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * "مقترح النهارده", above `.msg-sent`: the patients who should get a
+ * message today (suggestedMessages), with a count badge. Each row reads the
+ * patient's name, the reason, and "ابعت", which opens SendMessageSheet on
+ * that visit with the row's template preselected; a patient with no usable
+ * number reads a muted "مفيش رقم" instead of the button. No prototype
+ * counterpart: it wears `.msg-item`'s row look, tokens and shared components
+ * only.
+ */
+function SuggestedMessages({ rows, onSend }: { rows: SuggestedMessage[]; onSend: (row: SuggestedMessage) => void }) {
+  return (
+    <section aria-labelledby="suggested-messages-heading" className="mt-4">
+      <div className="mb-2 flex items-center gap-2 px-1">
+        <h2 id="suggested-messages-heading" className="text-[11px] font-bold tracking-[0.05em] text-muted">
+          {T.suggestedHeading}
+        </h2>
+        <Badge appearance="soft" tone="copper" className="tabular-nums">
+          {rows.length}
+        </Badge>
+      </div>
+      {rows.length === 0 ? (
+        <p className="px-1 text-[12.5px] text-faint">{T.suggestedEmpty}</p>
+      ) : (
+        <ul>
+          {rows.map((row) => (
+            <li
+              key={row.key}
+              className="mb-1.5 grid grid-cols-[auto_1fr_auto] items-center gap-2.5 rounded-control border border-rule bg-card px-3 py-2.5"
+            >
+              <span aria-hidden="true" className={`${CHANNEL_ICON_BASE} bg-copper-wash text-copper`}>
+                {templateIcon(row.templateKey)}
+              </span>
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-text">{row.patientName}</div>
+                <div className="mt-px truncate text-[10.5px] text-muted">{row.reason}</div>
+              </div>
+              {row.hasPhone ? (
+                <Button variant="secondary" size="sm" onClick={() => onSend(row)}>
+                  {T.suggestedSendAction}
+                </Button>
+              ) : (
+                <span className="text-[11px] font-semibold text-faint">{T.suggestedNoPhone}</span>
+              )}
+            </li>
+          ))}
         </ul>
       )}
     </section>

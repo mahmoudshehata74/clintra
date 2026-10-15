@@ -44,6 +44,8 @@ import {
   doctorDayFixture,
   auditDayFixture,
   messagesPageFixture,
+  suggestedMessagesFixture,
+  suggestedSection,
   carePlanSheetFixture,
 } from "./support";
 import { registrationStrings } from "../src/auth/registrationStrings";
@@ -616,6 +618,19 @@ test("@screenshot prescription-print-a5-12-drugs", async ({ page }) => {
 test("@screenshot messages-page", async ({ page }) => {
   await messagesPageFixture(page);
   await shoot(page, "messages-page", true);
+});
+
+// "مقترح النهارده" with one row of each kind (عمر without a phone).
+test("@screenshot messages-suggested", async ({ page }) => {
+  await suggestedMessagesFixture(page);
+  await expect(suggestedSection(page).getByRole("listitem")).toHaveCount(4);
+  // The section itself, with the rail hidden for the capture: on mobile the
+  // fixed bottom bar would otherwise sit over its rows.
+  await suggestedSection(page).screenshot({
+    path: `${OUT_DIR}/messages-suggested-${test.info().project.name}.png`,
+    animations: "disabled",
+    style: `nav[aria-label="${SIDEBAR.navAriaLabel}"] { visibility: hidden; }`,
+  });
 });
 
 test("@screenshot messages-send-sheet", async ({ page }) => {
