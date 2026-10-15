@@ -62,6 +62,19 @@ GRANT CREATE ON SCHEMA public TO clintra_mint;
 GRANT CREATE ON SCHEMA public TO clintra_register;
 ```
 
+One more, same pattern: `clintra_staff` owns `add_staff_member(jsonb)`,
+which `clintra_app` calls from the authenticated `POST /api/staff` (an
+owner adding a staff member — `docs/rls.md`'s "Adding staff"). Like
+`clintra_register`, it holds only the column-exact privileges that
+function's body uses. Needed in every environment including production.
+
+```sql
+CREATE ROLE clintra_staff NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
+GRANT clintra_staff TO clintra_owner;
+\c clintra
+GRANT CREATE ON SCHEMA public TO clintra_staff;
+```
+
 A fourth role, **local and CI only**: the RLS isolation suite
 (`tests/Feature/Rls`) needs to insert fixture data (an organization, a
 membership, ...) without a membership already in place to grant RLS scope —
@@ -109,6 +122,7 @@ GRANT CREATE ON SCHEMA public TO clintra_rls;
 GRANT CREATE ON SCHEMA public TO clintra_provision;
 GRANT CREATE ON SCHEMA public TO clintra_mint;
 GRANT CREATE ON SCHEMA public TO clintra_register;
+GRANT CREATE ON SCHEMA public TO clintra_staff;
 GRANT CONNECT ON DATABASE clintra_test TO clintra_app;
 GRANT CONNECT ON DATABASE clintra_test TO clintra_fixtures;
 GRANT USAGE ON SCHEMA public TO clintra_fixtures;

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DeviceRegistrationController;
+use App\Http\Controllers\StaffController;
 use App\Http\Controllers\SyncBootstrapController;
 use App\Http\Controllers\SyncPullController;
 use App\Http\Controllers\SyncPushController;
@@ -31,6 +32,10 @@ Route::middleware(['membership', 'throttle:sync'])->get('/sync/pull', [SyncPullC
 // App\Support\Sync\SyncBootstrapPuller's own doc comment. Additive only:
 // GET /sync/pull above is completely unchanged by this route's existence.
 Route::middleware(['membership', 'throttle:sync'])->get('/sync/bootstrap', [SyncBootstrapController::class, 'bootstrap']);
+
+// Adding a staff member happens on the server, online only — see
+// App\Http\Controllers\StaffController. Same middleware as sync.
+Route::middleware(['membership', 'throttle:sync'])->post('/staff', [StaffController::class, 'store']);
 
 Route::get('/health', function () {
     $composer = json_decode(file_get_contents(base_path('composer.json')), true);

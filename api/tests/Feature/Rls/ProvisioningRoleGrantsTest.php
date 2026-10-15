@@ -199,3 +199,90 @@ test('each of the three roles owns exactly its own function, and only that role 
     expect($ownerByName['mint_activation_code'])->toBe('clintra_mint');
     expect($ownerByName['register_device'])->toBe('clintra_register');
 });
+
+test('clintra_staff holds exactly add_staff_member\'s column-exact footprint and nothing on clinical data', function () {
+    // Whole-table privileges: only the audit_log INSERT every provisioning
+    // role holds. Everything else is column-restricted, so it surfaces only
+    // in role_column_grants.
+    expect(tableGrants('clintra_staff')->all())->toBe(['audit_log' => ['INSERT']]);
+
+    expect(columnGrants('clintra_staff', 'memberships', 'SELECT'))->toBe(['id', 'is_active', 'org_id', 'role', 'user_id']);
+    expect(columnGrants('clintra_staff', 'memberships', 'INSERT'))->toBe([
+        'display_name', 'id', 'is_active', 'location_scope', 'org_id', 'pin_hash', 'pin_salt',
+        'practitioner_id', 'practitioner_scope', 'role', 'user_id',
+    ]);
+    expect(columnGrants('clintra_staff', 'users', 'SELECT'))->toBe(['id', 'phone']);
+    expect(columnGrants('clintra_staff', 'users', 'INSERT'))->toBe(['email', 'full_name', 'id', 'is_active', 'phone']);
+    expect(columnGrants('clintra_staff', 'locations', 'SELECT'))->toBe(['id', 'org_id']);
+    expect(columnGrants('clintra_staff', 'practitioners', 'SELECT'))->toBe(['id', 'org_id']);
+    expect(columnGrants('clintra_staff', 'membership_locations', 'INSERT'))->toBe(['id', 'location_id', 'membership_id']);
+    expect(columnGrants('clintra_staff', 'membership_practitioners', 'INSERT'))->toBe(['id', 'membership_id', 'practitioner_id']);
+
+    // The complete list of (table, privilege) pairs at column level — any
+    // grant not named above is a hole by definition.
+    $rows = $this->asOwner()->select(<<<'SQL'
+        SELECT DISTINCT table_name, privilege_type
+        FROM information_schema.role_column_grants
+        WHERE grantee = 'clintra_staff' AND table_name <> 'audit_log'
+        ORDER BY table_name, privilege_type
+    SQL);
+    expect(collect($rows)->map(fn ($row) => "{$row->table_name}:{$row->privilege_type}")->all())->toBe([
+        'locations:SELECT',
+        'membership_locations:INSERT',
+        'membership_practitioners:INSERT',
+        'memberships:INSERT',
+        'memberships:SELECT',
+        'practitioners:SELECT',
+        'users:INSERT',
+        'users:SELECT',
+    ]);
+
+    // Never an UPDATE or DELETE anywhere: the function only ever creates.
+    $writes = $this->asOwner()->select(<<<'SQL'
+        SELECT table_name FROM information_schema.role_column_grants
+        WHERE grantee = 'clintra_staff' AND privilege_type IN ('UPDATE', 'DELETE')
+        UNION
+        SELECT table_name FROM information_schema.role_table_grants
+        WHERE grantee = 'clintra_staff' AND privilege_type IN ('UPDATE', 'DELETE', 'TRUNCATE')
+    SQL);
+    expect($writes)->toBe([]);
+
+    $mustNeverAppear = [
+        'patients', 'visits', 'invoices', 'payments', 'organizations', 'device',
+        'activation_codes', 'sync_ledger', 'practitioner_locations', 'specialty_templates', 'form_definitions',
+    ];
+    foreach ($mustNeverAppear as $table) {
+        $any = $this->asOwner()->select(<<<'SQL'
+            SELECT 1 FROM information_schema.role_column_grants WHERE grantee = 'clintra_staff' AND table_name = ?
+            UNION ALL
+            SELECT 1 FROM information_schema.role_table_grants WHERE grantee = 'clintra_staff' AND table_name = ?
+        SQL, [$table, $table]);
+        expect($any)->toBe([], "clintra_staff must hold no privileges on {$table}");
+    }
+});
+
+test('clintra_staff owns add_staff_member, and only clintra_app can call it', function () {
+    $rows = $this->asOwner()->select(<<<'SQL'
+        SELECT grantee FROM information_schema.role_routine_grants
+        WHERE routine_name = 'add_staff_member' AND privilege_type = 'EXECUTE'
+        ORDER BY grantee
+    SQL);
+    expect(collect($rows)->pluck('grantee')->all())->toBe(['clintra_app', 'clintra_staff']);
+
+    $function = $this->asOwner()->selectOne(<<<'SQL'
+        SELECT r.rolname AS owner, p.prosecdef AS security_definer, p.proconfig AS config
+        FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
+        WHERE p.proname = 'add_staff_member'
+    SQL);
+    expect($function->owner)->toBe('clintra_staff');
+    expect($function->security_definer)->toBeTrue();
+    expect($function->config)->toBe('{"search_path=public, pg_temp"}');
+
+    $role = $this->asOwner()->selectOne(<<<'SQL'
+        SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls
+        FROM pg_roles WHERE rolname = 'clintra_staff'
+    SQL);
+    expect((array) $role)->toBe([
+        'rolcanlogin' => false, 'rolsuper' => false, 'rolcreatedb' => false, 'rolcreaterole' => false, 'rolbypassrls' => true,
+    ]);
+});

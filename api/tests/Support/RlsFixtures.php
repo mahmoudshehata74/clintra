@@ -104,6 +104,42 @@ trait RlsFixtures
     }
 
     /**
+     * Every row a POST /api/staff call (add_staff_member(jsonb)) wrote for
+     * one membership — its links, its audit and ledger rows, and the user
+     * when the call created it — tracked so afterEach removes them before
+     * the fixtures they point at. Only ids that exist are tracked, so a
+     * refused call adopts nothing.
+     */
+    protected function adoptAddedStaff(string $membershipId, ?string $createdUserId = null): void
+    {
+        foreach ($this->fx()->table('audit_log')->where('entity_id', $membershipId)->pluck('id') as $id) {
+            $this->track('audit_log', $id);
+        }
+
+        foreach (['membership_locations', 'membership_practitioners'] as $table) {
+            $linkIds = $this->fx()->table($table)->where('membership_id', $membershipId)->pluck('id')->all();
+            foreach ($linkIds as $id) {
+                $this->track($table, $id);
+            }
+            foreach ($this->fx()->table('sync_ledger')->whereIn('entity_id', $linkIds)->pluck('op_id') as $opId) {
+                $this->track('sync_ledger', $opId);
+            }
+        }
+
+        foreach ($this->fx()->table('sync_ledger')->where('entity_id', $membershipId)->pluck('op_id') as $opId) {
+            $this->track('sync_ledger', $opId);
+        }
+
+        if ($this->fx()->table('memberships')->where('id', $membershipId)->exists()) {
+            $this->track('memberships', $membershipId);
+        }
+
+        if ($createdUserId !== null && $this->fx()->table('users')->where('id', $createdUserId)->exists()) {
+            $this->track('users', $createdUserId);
+        }
+    }
+
+    /**
      * A bare DateTimeInterface passed to insert()/update() gets formatted
      * by Laravel's query grammar as a naive "Y-m-d H:i:s" string with no
      * offset — fine when the app's timezone (config('app.timezone'),
