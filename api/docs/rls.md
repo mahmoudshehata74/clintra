@@ -267,7 +267,12 @@ every user a returned membership's `user_id` points at (`web/src/auth/LockScreen
 joins memberships to users by id to label its PIN picker; the first
 version of this payload omitted `users` and `rev` both, caught while
 wiring up the real registration screen —
-`2026_09_12_000019_add_rev_to_register_device_response.php`).
+`2026_09_12_000019_add_rev_to_register_device_response.php`). Each membership also carries `display_name`
+(`2026_09_12_000033_add_display_name_to_register_device.php`, the 000028
+body otherwise byte-for-byte; `clintra_register`'s `SELECT` on
+`memberships` is table-level, so no grant changed), so a freshly
+registered device names every staff member as the organization does from
+its first screen.
 
 Every credential failure — wrong code, expired, already used, wrong phone,
 right phone but the wrong org's code — raises the exact same generic
@@ -434,6 +439,7 @@ function's grants.
 | `clintra_provision` | `provision_organization` | `clintra_owner` (CLI only) | `INSERT` on `organizations`, `locations`, `practitioners`, `practitioner_locations`, `memberships`, `activation_codes`, `audit_log`; `INSERT`+`SELECT` on `users`; `SELECT` on `specialty_templates` |
 | `clintra_mint` | `mint_activation_code` | `clintra_owner` (CLI only) | `SELECT` on `locations`, `memberships`; `INSERT` on `activation_codes`, `audit_log` |
 | `clintra_register` | `register_device` | `clintra_app` (the unauthenticated HTTP endpoint) | `SELECT` on `organizations`, `locations`, `practitioners`, `memberships`, `users`, `activation_codes`; `UPDATE` on `activation_codes` restricted to exactly two columns (`used_at`, `used_by_device_id`); `SELECT` on `device` restricted to exactly two columns (`location_id`, `series`); `INSERT` on `device`, `audit_log` |
+| `clintra_staff` | `add_staff_member` | `clintra_app` (the authenticated `POST /api/staff`) | column-exact only: `SELECT (id, user_id, org_id, role, is_active)` and `INSERT (id, user_id, org_id, role, location_scope, practitioner_scope, practitioner_id, pin_hash, pin_salt, is_active, display_name)` on `memberships`; `SELECT (id, phone)` and `INSERT (id, full_name, phone, email, is_active)` on `users`; `SELECT (id, org_id)` on `locations` and `practitioners`; `INSERT (id, membership_id, location_id)` on `membership_locations`; `INSERT (id, membership_id, practitioner_id)` on `membership_practitioners`; whole-table `INSERT` on `audit_log` |
 
 *(Table above reflects the state after "Sequence-backed audit ordering"
 below — none of the three hold `SELECT` on `audit_log` any more — and
@@ -493,6 +499,74 @@ against any of those three others). All four were dropped. If a later
 change needs the registration response to include specialty/form/location
 data, that's a new migration granting exactly the new column or table
 access it needs — not a standing grant kept around in case.
+
+## Adding staff: add_staff_member, the fourth provisioning role
+
+`add_staff_member(jsonb)` (`2026_09_12_000032_add_staff_member_function.php`)
+adds a staff member in one step for `POST /api/staff`
+(`App\Http\Controllers\StaffController`, behind the same `membership`
+middleware as sync): it finds the user by E.164 phone or creates it, then
+creates the membership (role, scopes, `display_name`, the PIN salt and hash
+computed on the device), its `membership_locations` /
+`membership_practitioners` rows and one audit row. Before it, the device
+wrote and pushed a `users` row, which is not syncable — and the push
+endpoint used to refuse the whole batch for it (see "The sync push
+endpoint": unknown entities are now refused per op).
+
+**Why it needs to see past RLS.** A new member's existing `users` row (a
+phone already on another organization's staff) has no membership in the
+caller's organization yet, so `users`' own policy hides it from
+`clintra_app`; a new `users` row has no owning organization to check at
+all. Finding the phone and inserting the user are the reads and writes
+this function does past RLS — it returns nothing about an existing user
+beyond its id (the returned membership's `user_id`), and never a `users`
+row.
+
+**Built exactly like `register_device`**, on purpose — the same structure,
+compared clause by clause:
+
+| | `register_device` | `add_staff_member` |
+|---|---|---|
+| Owner | `clintra_register`, its own `NOLOGIN BYPASSRLS` role | `clintra_staff`, its own `NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS` role, created outside migrations like the others (`api/README.md`, `ci.yml`) |
+| `SECURITY DEFINER`, `search_path` | `SET search_path = public, pg_temp` | the same |
+| `EXECUTE` | revoked from `PUBLIC`, granted to `clintra_app` | the same |
+| Migration idiom | `DROP FUNCTION IF EXISTS` as `clintra_owner`, then `SET ROLE` / `CREATE` / `RESET ROLE` | the same |
+| Payload keys | allowlist; unknown keys rejected; every key present and non-null | the same allowlist pattern; only `practitioner_id` may be null; the link arrays' elements are themselves exactly `{id, location_id}` / `{id, practitioner_id}` |
+| Shape checks | uuid, E.164, 64-hex code hash, each `RAISE ... USING ERRCODE = '22023'` before any table read | uuids, E.164, trimmed `display_name` of at most 120 characters, role and scope values, 64-hex `pin_hash` / 32-hex `pin_salt` (`contract/pin-hash.json`), links only for a listed scope, `practitioner_id` exactly for `self`, no target linked twice — each `22023` before any table read |
+| Generic failure | `'register_device: registration failed'` (P0001) for every credential failure | `'add_staff_member: not allowed'` (P0001) for every refusal about who asks or what they name |
+| Audit | two rows, attributed to the owner membership | one row, attributed to the caller; the membership as created plus its location and practitioner ids, never the PIN |
+
+**Who may add staff — enforced here, on the server.** The caller is the
+request's own membership (`app.membership_id`, set by `ApplyMembership`
+from the device token). It must be an `owner` with `is_active`; every
+location and practitioner the payload names (links and `practitioner_id`)
+must belong to the caller's organization. Anything else raises the generic
+failure, which the endpoint renders exactly like a route that does not
+exist — 404 with the same body, never 403. An inactive owner's token stops
+authenticating in `ApplyMembership` first (401, unchanged); the function
+refuses that caller on its own as well. A phone already on this
+organization's staff raises `23505` (`already_member`, 409); a shape the
+function refuses is 422. The same organization is never asked twice for
+one user: at most one membership per user per organization.
+
+**The created rows reach other devices like any pushed write.** The
+controller writes one `sync_ledger` row per created row on the ordinary
+RLS-bound connection (the ledger's own `org_id = current_org()` policy),
+inside the request's transaction, attributed to the token's membership and
+device — `clintra_staff` holds nothing on `sync_ledger`. The response
+carries the same rows, so the calling device stores them at once and the
+new member can sign in there immediately.
+
+**Grants**, exactly what the body reads or writes, column-exact wherever
+Postgres allows it (the roles table above; pinned by
+`ProvisioningRoleGrantsTest.php`): no `UPDATE` or `DELETE` anywhere, and no
+privilege at all on `organizations`, `device`, `activation_codes`,
+`sync_ledger`, clinical tables, `practitioner_locations`,
+`specialty_templates` or `form_definitions`.
+
+**Renaming is not here.** A rename edits `memberships.display_name` through
+the ordinary memberships sync; who renames is enforced on the device only —
+the same known gap as every other settings write.
 
 ## Per-device number series
 
@@ -1030,6 +1104,16 @@ with its profile (see "Practitioners" above) —
 derived from what `web/src/db/mutate.ts` callers actually pass as
 `entity:`, not the full v1 table list. `users` stays excluded here too,
 for the same reason: no single owning org.
+
+**An unknown entity is refused per op, not per batch.** `PushSyncOpsRequest`
+checks only that `entity` is a string; `SyncOpApplier::apply` refuses an
+entity outside `SyncableTables::NAMES` as `rejected` / `unknown_entity`,
+before any query, so the name never reaches `DB::table()`. The rest of the
+batch applies normally, and later ops on the same `entity_id` are
+`blocked` as after any rejection. Before this, the request's `in:` rule
+failed the whole batch with 422 — and a device that had queued a `users` op
+(a staff member added locally, before "Adding staff" below) could never
+upload anything again.
 
 **Four result statuses, one meaning each** (`App\Support\Sync\SyncOpApplier`):
 

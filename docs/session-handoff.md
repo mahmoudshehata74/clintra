@@ -101,9 +101,9 @@ tab "الأطباء" (`web/src/screens/day/PractitionersPanel.tsx`,
    50 characters. One shared helper decides "empty" for every screen.
 3. Owner only, enforced on the device like every other settings write — the
    server does not check who edits (a known gap, `api/docs/rls.md`).
-4. Renaming an assistant or other staff member stays in the backlog: a staff
-   name lives on `users`, which is not syncable (no single owning org —
-   `docs/schema.md`'s v12 additions), so it needs its own decision.
+4. Renaming an assistant or other staff member was left for its own
+   decision, since a staff name lived on `users`, which is not syncable —
+   since decided: see "Staff identity" below.
 
 `messages` + `message_templates` (step 6, data only): done — migration, RLS,
 sync (push, pull, bootstrap), local store (database version 18), audited
@@ -196,6 +196,36 @@ migration runs — every organization provisioned later would have none.
 - e. `.pt-timeline` grouped by Cairo day, newest first; `.pt-day-h` "النهارده · d {month} yyyy" for today, else "d {month} · {the doctor's day's relative helper}", plus " · بداية خطة الرعاية" on a day a plan started. Events, time "H:mm": visit (`.visit`, "ز") — completed: "زيارة — {diagnosis}" (else "زيارة"), or "جلسة {service} · {n} من {count}" when a plan session links to it; `.d` "د. {doctor}" · `.dx` diagnosis · "شكوى: …" · "وصف N أدوية"; cancelled / no-show muted (field surface) as "زيارة اتلغت" / "ما حضرش"; nothing still to come (or in the room) shows; time = started_at, else scheduled_at. rx (`.rx`, "Rx") "وصفة طبية · N أدوية", bold drug names joined by "، " · "اتطبعت" / "لسه ما اتطبعتش" (a prescription with no drug left is not shown); time = created_at. msg (`.msg`, "✉") "{template} · واتساب/SMS", the body's first line · "اتفتحت" / "اتبعتت"; time = attempted_at. pay (`.pay`, "₤") "دفعة · {amount} ج.م {method}", "فاتورة {INV number} · <b>{staff}</b>"; time = created_at. note ("✎", no prototype class: the plain `.icn`) "ملاحظة الطبيب" with the visit's note, at the visit's time, only under "الكل" and "ملاحظات". The newest 100 events, "اعرض أقدم" for 100 more. Tapping a visit opens VisitFormSheet, a prescription the print sheet, a payment its InvoiceSheet (recording a payment there returns to the invoice); a message nothing.
 - f. Empty tab states: "لسه مفيش حاجة في ملف المريض", "لسه مفيش زيارات", "لسه مفيش وصفات", "لسه مفيش رسائل", "لسه مفيش مدفوعات", "لسه مفيش ملاحظات".
 - The method label is the app's own ("كاش", "فيزا", …), not the prototype's "نقدي".
+
+## Staff identity (fix/staff-identity)
+
+Owner decisions it implements (`docs/schema.md`'s v21 additions,
+`api/docs/rls.md`'s "Adding staff", `docs/sync-plan.md`'s "Adding staff,
+and ops for entities the server does not sync"):
+1. Each membership carries the name the organization uses:
+   `memberships.display_name`. Every staff name shown (staff list, lock
+   screen, app bar, audit actor, cash close, printed pages, profile) goes
+   through `web/src/domain/staffName.ts`, falling back to `users.full_name`
+   only when `display_name` is null. Renaming (the staff row's edit form)
+   edits `display_name` through the memberships sync — owner-only on the
+   device, the same server gap as other settings writes.
+2. Adding staff needs a connection and happens on the server in one step:
+   `POST /api/staff` → `add_staff_member(jsonb)`, owned by the new
+   `clintra_staff` role, which checks that the caller is an active owner
+   and that every location and practitioner is the organization's (404
+   otherwise). Offline the form says "إضافة موظف محتاجة اتصال بالإنترنت"
+   and writes nothing. The device stores the returned rows at once.
+3. A push op for an entity the server does not sync is rejected alone
+   (`unknown_entity`); the rest of the batch applies.
+4. The device no longer creates `users` rows; database version 21 removes
+   a stuck device's queued `users` ops and the ops of the memberships and
+   links created with them.
+5. `register_device`'s bootstrap carries each membership's `display_name`.
+   An inactive owner's token is refused by `ApplyMembership` (401, kept as
+   it is); the function refuses that caller too.
+
+Local setup now needs the `clintra_staff` role — `api/README.md`'s "Fresh
+local setup".
 
 ## Settled deviations / decisions — prototype alignment
 

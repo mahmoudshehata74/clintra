@@ -884,6 +884,44 @@ the sheet tells the assistant what to re-enter.
 
 ---
 
+## Adding staff, and ops for entities the server does not sync
+
+**Adding staff is not a sync write.** `users` is not syncable (no single
+owning organization — `docs/schema.md`'s v12 additions), so a staff member
+added on the device could never reach the server: its queued `users` op
+used to fail the device's whole push with 422, and every later upload
+stayed stuck behind it. Adding staff now needs a connection and happens on
+the server in one step (`POST /api/staff`, `add_staff_member(jsonb)` —
+`api/docs/rls.md`'s "Adding staff"): the device sends the ids it minted,
+the name, the E.164 phone, role, scopes and the PIN salt and hash; the
+server finds or creates the user, creates the membership and its links and
+returns them. The device stores the returned rows directly — with local
+audit rows and no sync op (`db/mutate.ts`'s `recordServerCreatedRow`) —
+so the new member can sign in at once; other devices pull them from the
+ledger rows the endpoint writes. Offline, the form says
+"إضافة موظف محتاجة اتصال بالإنترنت" and nothing is sent or written; a
+lost connection mid-request reads the same. Demo mode's `FakeTransport`
+stands in for the endpoint (`sync/staffServer.ts`'s `resolveStaffServer`).
+
+**Staff names live on the membership.** A rename edits
+`memberships.display_name` through the ordinary memberships sync — never
+`users.full_name` — and every name shown falls back to `full_name` only
+when `display_name` is null.
+
+**An op for an unknown entity is rejected alone.** The push endpoint
+returns `rejected` / `unknown_entity` for an op whose entity it does not
+sync, and applies the rest of the batch (later ops on the same `entity_id`
+are `blocked`, per Q2). `FakeTransport` mirrors it. The review sheet reads
+"السيرفر مبيستقبلش النوع ده من البيانات، فالتغيير ده مش هيوصل", with
+"بيانات" for a table that has no Arabic label of its own.
+
+**A device already stuck recovers on upgrade.** Database version 21
+removes every unsent `users` op and every unsent op of the memberships
+(and their link rows) created with those users; sent ops and local rows
+stay (`db/staffOpsRecovery.ts`).
+
+---
+
 ## Sources
 
 - `docs/reference/clintra-cli-brief.md` — the CLI working brief itself,
