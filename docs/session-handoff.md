@@ -211,9 +211,14 @@ and ops for entities the server does not sync"):
    device, the same server gap as other settings writes.
 2. Adding staff needs a connection and happens on the server in one step:
    `POST /api/staff` → `add_staff_member(jsonb)`, owned by the new
-   `clintra_staff` role, which checks that the caller is an active owner
-   and that every location and practitioner is the organization's (404
-   otherwise). Offline the form says "إضافة موظف محتاجة اتصال بالإنترنت"
+   `clintra_staff` role, which checks that the device token's membership is
+   an active owner and that every location and practitioner is the
+   organization's (404 otherwise). That proves "a device registered by an
+   active owner" (`register_device` always issues the token to the owner),
+   not "the person signed in by PIN is an owner" — PIN sessions are
+   device-local and the server never sees them; a non-owner calling the
+   endpoint from an owner-registered device is not stopped, the same limit
+   as every other settings write. Offline the form says "إضافة موظف محتاجة اتصال بالإنترنت"
    and writes nothing. The device stores the returned rows at once.
 3. A push op for an entity the server does not sync is rejected alone
    (`unknown_entity`); the rest of the batch applies.
@@ -346,6 +351,8 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
 ## Backlog
 - Invoice item editing (screen 5's "تعديل بنود") — owner decision of the prototype alignment: recorded, not built.
 - Queue reordering (screen 3's "إعادة ترتيب") — owner decision of the prototype alignment: recorded, not built.
+- Server-side per-person identity: the acting membership sent and verified per request (e.g. a PIN-derived proof). Today the server knows only the membership the device token was issued to (the owner who registered the device), so it cannot tell who is signed in; this would close the staff owner check's gap and the other settings-write gaps.
+- Members added locally on a device that was stuck before the staff-identity fix stay local-only — none exist today. If one appears, re-add the person online and deactivate the local row.
 
 ## Data decisions for the rebuild
 - `visits.note text NULL` — the doctor's quick note.

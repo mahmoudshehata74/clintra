@@ -20,10 +20,18 @@ use Symfony\Component\HttpFoundation\Response;
  * "Adding staff"). Runs behind the `membership` middleware, so the whole
  * request — the function and the ledger rows below — is one transaction.
  *
- * The function decides who may add staff (an active owner of the caller's
- * organization) and refuses everything else with one generic error, which
- * this endpoint renders exactly like a route that does not exist: 404, never
- * 403, so a refusal says nothing about what exists.
+ * The function decides who may add staff (the device token's membership must
+ * be an active owner of its organization) and refuses everything else with
+ * one generic error, which this endpoint renders exactly like a route that
+ * does not exist: 404, never 403, so a refusal says nothing about what
+ * exists.
+ *
+ * That check proves the device was registered by an active owner
+ * (register_device always issues the token to the owner), not that the
+ * person signed in by PIN is one: PIN sessions are device-local and never
+ * reach the server. A non-owner calling this endpoint from an
+ * owner-registered device is not stopped here — the same limit as every
+ * other settings write.
  *
  * The created rows are written to sync_ledger here, on the ordinary
  * RLS-bound connection, so the organization's other devices pull them like

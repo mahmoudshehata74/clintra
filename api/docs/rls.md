@@ -549,6 +549,17 @@ organization's staff raises `23505` (`already_member`, 409); a shape the
 function refuses is 422. The same organization is never asked twice for
 one user: at most one membership per user per organization.
 
+**What the owner check proves — the device's owner, not the person at
+it.** The membership checked is the one the device token was issued to,
+and `register_device` always issues it to the owner it resolves by phone.
+So the check proves "a device registered by an active owner of this
+organization", not "the person signed in by PIN is an owner": PIN sessions
+are device-local and the server never sees them. A non-owner holding an
+owner-registered device who calls the endpoint directly is not stopped by
+the server — the same limit as every other settings write. Closing it
+needs server-side per-person identity (`docs/session-handoff.md`'s
+backlog).
+
 **The created rows reach other devices like any pushed write.** The
 controller writes one `sync_ledger` row per created row on the ordinary
 RLS-bound connection (the ledger's own `org_id = current_org()` policy),

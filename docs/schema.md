@@ -1044,8 +1044,12 @@ Owner decisions:
    create it, then create the membership (role, scopes, `display_name`, PIN
    salt and hash computed on the device), its `membership_locations` /
    `membership_practitioners` rows and the audit row. The server itself
-   checks that the caller is an active owner of the organization and that
-   every location and practitioner named is the organization's. Offline the
+   checks that the device token's membership — the owner who registered
+   the device, not the person signed in by PIN, which the server never
+   sees — is an active owner of the organization, and that every location
+   and practitioner named is the organization's; a non-owner calling the
+   endpoint from an owner-registered device is not stopped, the same limit
+   as every other settings write. Offline the
    form says "إضافة موظف محتاجة اتصال بالإنترنت" and writes nothing; on
    success the device stores the returned rows at once (no sync op), so the
    new member can sign in immediately, and other devices pull them. The
