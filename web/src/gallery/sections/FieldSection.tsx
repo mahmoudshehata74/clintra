@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Field, { TextArea, TextInput } from "../../components/ui/Field";
+import TimeField from "../../components/ui/TimeField";
 import { fieldGalleryStrings, galleryStrings } from "../strings";
 
 function Row({ heading, children }: { heading: string; children: ReactNode }) {
@@ -17,6 +18,9 @@ function Row({ heading, children }: { heading: string; children: ReactNode }) {
  * fit) — see strings.ts's fieldGalleryStrings doc comment for sourcing.
  */
 export default function FieldSection() {
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("14:00");
+
   return (
     <section data-gallery-section="field" className="flex flex-col gap-6">
       <h2 className="text-lg font-semibold text-text">{galleryStrings.fieldsSectionTitle}</h2>
@@ -69,6 +73,17 @@ export default function FieldSection() {
           <Field label={fieldGalleryStrings.amountLabel} id="gallery-field-amount" hint={fieldGalleryStrings.amountHint}>
             <TextInput variant="amount" defaultValue={fieldGalleryStrings.amountValue} />
           </Field>
+        </Row>
+
+        <Row heading={fieldGalleryStrings.timeHeading}>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={fieldGalleryStrings.timeStartLabel} id="gallery-field-time-start">
+              <TimeField label={fieldGalleryStrings.timeStartLabel} value={startTime} onChange={setStartTime} />
+            </Field>
+            <Field label={fieldGalleryStrings.timeEndLabel} id="gallery-field-time-end" error={fieldGalleryStrings.timeError}>
+              <TimeField label={fieldGalleryStrings.timeEndLabel} value={endTime} onChange={setEndTime} />
+            </Field>
+          </div>
         </Row>
       </div>
     </section>

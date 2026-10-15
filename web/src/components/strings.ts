@@ -19,6 +19,13 @@ export const sidebarStrings = {
   navSettings: "الإعدادات",
 } as const;
 
+// TimeField's two selects (components/ui/TimeField.tsx), each named for
+// screen readers inside the field's own labelled group.
+export const timeFieldStrings = {
+  hourLabel: "الساعة",
+  minuteLabel: "الدقيقة",
+} as const;
+
 // The app bar AppShell.tsx renders above every screen (prototype's
 // `.appbar`). The screen itself only ever supplies the title text.
 export const appBarStrings = {

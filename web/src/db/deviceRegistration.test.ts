@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ClintraDatabase } from "./database";
 import {
   DEVICE_SERIES_UNKNOWN,
+  deviceReadiness,
   ensureDeviceRegistration,
   getDeviceBinding,
   getDeviceId,
@@ -40,6 +41,40 @@ beforeEach(() => {
 
 afterEach(() => {
   delete (globalThis as unknown as { localStorage?: unknown }).localStorage;
+});
+
+describe("deviceReadiness", () => {
+  it("is not ready before registration and tells its listeners once, when the persisted id is primed", async () => {
+    await seedDatabase(db);
+    const heard: boolean[] = [];
+    const unsubscribe = deviceReadiness.subscribe(() => heard.push(deviceReadiness.isReady()));
+
+    // A memory-only id (a write before registration) is not readiness.
+    getDeviceId();
+    expect(deviceReadiness.isReady()).toBe(false);
+
+    const registration = await ensureDeviceRegistration(db);
+    expect(heard).toEqual([true]);
+    expect(getDeviceId()).toBe(registration.id);
+
+    await ensureDeviceRegistration(db);
+    expect(heard).toEqual([true]);
+    unsubscribe();
+  });
+
+  it("becomes ready from an existing device row too, as on every load after the first", async () => {
+    await seedDatabase(db);
+    await ensureDeviceRegistration(db);
+    resetDeviceIdCacheForTests();
+    expect(deviceReadiness.isReady()).toBe(false);
+
+    let heard = 0;
+    const unsubscribe = deviceReadiness.subscribe(() => heard++);
+    await ensureDeviceRegistration(db);
+    expect(heard).toBe(1);
+    expect(deviceReadiness.isReady()).toBe(true);
+    unsubscribe();
+  });
 });
 
 describe("ensureDeviceRegistration", () => {

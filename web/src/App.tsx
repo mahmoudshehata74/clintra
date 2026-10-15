@@ -12,6 +12,7 @@ import { useIdleLock } from "./auth/useIdleLock";
 import AppShell from "./components/AppShell";
 import InstallBanner from "./components/InstallBanner";
 import { db } from "./db/database";
+import { deviceReadiness } from "./db/deviceRegistration";
 import { isDeviceRegistered } from "./db/registration";
 import { isDemoModeRequested } from "./domain/appMode";
 import { Role } from "./domain/role";
@@ -75,6 +76,10 @@ export default function App() {
   // sync/httpTransport.ts) — present only after real registration; demo
   // mode's device row never has one, so it always resolves to Fake.
   //
+  // No cycle runs until the day screen's load has primed the device id
+  // (deviceReadiness); the first one runs the moment it has, so the first
+  // pull after a load never waits for the timer.
+  //
   // A 401 from the real transport is never silently swallowed: engine.ts
   // dispatches SYNC_AUTH_ERROR_EVENT_NAME instead of throwing into a bare
   // console.error, and this listens for it app-wide for as long as the
@@ -98,7 +103,7 @@ export default function App() {
         return;
       }
       const token = rows.find((row) => row.token !== null)?.token ?? null;
-      handle = startSyncEngine(db, selectSyncTransport(token, new FakeTransport()));
+      handle = startSyncEngine(db, selectSyncTransport(token, new FakeTransport()), undefined, deviceReadiness);
     });
 
     return () => {

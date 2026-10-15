@@ -320,6 +320,56 @@ describe("startSyncEngine", () => {
     expect(maxConcurrent).toBeLessThanOrEqual(1);
     handle.stop();
   });
+
+  it("runs no cycle before the device is ready, then pulls the moment it is, without waiting for the timer", async () => {
+    await db.device.add({
+      id: getDeviceId(),
+      org_id: "org-1",
+      location_id: "location-1",
+      registered_at: new Date().toISOString(),
+      pull_cursor: "0",
+      membership_id: null,
+      token: null,
+      series: 1,
+    });
+    await writeVisit(makeVisit());
+
+    let isReady = false;
+    const listeners = new Set<() => void>();
+    const readiness = {
+      isReady: () => isReady,
+      subscribe(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "accepted", rev: 1 }));
+    let resolvePulled: () => void = () => {};
+    const pulled = new Promise<void>((resolve) => {
+      resolvePulled = resolve;
+    });
+    transport.pullOutcomeFor = () => {
+      resolvePulled();
+      return { cursor: "1", hasMore: false, changes: [] };
+    };
+
+    // An hour-long interval: only readiness can start the cycle this test waits for.
+    const handle = startSyncEngine(db, transport, 60 * 60 * 1000, readiness);
+    handle.triggerSync();
+    expect(transport.calls).toHaveLength(0);
+    expect(transport.pullCalls).toHaveLength(0);
+
+    isReady = true;
+    for (const listener of listeners) {
+      listener();
+    }
+    await pulled;
+
+    expect(transport.calls).toHaveLength(1);
+    expect(transport.pullCalls).toEqual(["0"]);
+    handle.stop();
+    expect(listeners.size).toBe(0);
+  });
 });
 
 describe("runSyncCycle: accepted writes the server's rev back to the local row", () => {

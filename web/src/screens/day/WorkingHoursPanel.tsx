@@ -2,8 +2,9 @@ import { useState } from "react";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Field, { TextInput } from "../../components/ui/Field";
+import TimeField from "../../components/ui/TimeField";
 import { db } from "../../db/database";
-import { updateWorkingHours } from "../../db/scheduleSettings";
+import { addWorkingDay, removeWorkingDay, updateWorkingHours, workingDayTemplate } from "../../db/scheduleSettings";
 import type { Schedule } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { ScheduleMode } from "../../domain/scheduleMode";
@@ -14,6 +15,7 @@ import {
   formatWorkingHoursMode,
   workingHoursErrorField,
   type WorkingHoursField,
+  type WorkingHoursRow,
 } from "./workingHoursRows";
 
 const MODE_STRINGS = {
@@ -33,16 +35,21 @@ const REFUSAL_MESSAGE = {
 } as const;
 
 interface FieldError {
-  field: WorkingHoursField;
+  /** Null for a refusal about the whole day, shown under the editor's buttons. */
+  field: WorkingHoursField | null;
   message: string;
 }
 
 /**
  * Panel A, prototype #s12 (`.set-list`, `.set-row`, `.day`, `.hours`,
  * `.mode`, `.edit`): the current practitioner's week, one row per weekday.
- * "تعديل" opens that schedule's inline editor — the same three fields,
- * checks and save as before, on the shared Field/TextInput/Button. Saving
- * is per row, so there is no `.runrow` "save all" footer here.
+ * Every row carries "تعديل", as in the prototype, opening its inline editor
+ * on the shared Field/TextInput/Button. A working day's editor holds the
+ * same three fields, checks and save as before, plus "خليه إجازة"
+ * (removeWorkingDay). A day off's holds the hours only, starting from the
+ * practitioner's most common hours (workingDayTemplate), and "خليه يوم شغل"
+ * saves it as a working day (addWorkingDay). Saving is per row, so there is
+ * no `.runrow` "save all" footer here.
  */
 export default function WorkingHoursPanel({
   practitionerId,
@@ -57,7 +64,8 @@ export default function WorkingHoursPanel({
       return all.filter((schedule) => schedule.practitioner_id === practitionerId && schedule.location_id === locationId);
     }, [practitionerId, locationId]) ?? [];
 
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // The row being edited, by its WorkingHoursRow key (a schedule id, or `off-{weekday}`).
+  const [editingKey, setEditingKey] = useState<string | null>(null);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [slotMinutes, setSlotMinutes] = useState("");
@@ -65,12 +73,18 @@ export default function WorkingHoursPanel({
   const [error, setError] = useState<FieldError | null>(null);
   const [saving, setSaving] = useState(false);
 
-  function beginEdit(schedule: Schedule) {
-    setEditingId(schedule.id);
-    setStartTime(schedule.start_time);
-    setEndTime(schedule.end_time);
-    setSlotMinutes(schedule.slot_minutes != null ? String(schedule.slot_minutes) : "");
-    setMaxCapacity(schedule.max_capacity != null ? String(schedule.max_capacity) : "");
+  function beginEdit(row: WorkingHoursRow) {
+    setEditingKey(row.key);
+    if (row.schedule) {
+      setStartTime(row.schedule.start_time);
+      setEndTime(row.schedule.end_time);
+      setSlotMinutes(row.schedule.slot_minutes != null ? String(row.schedule.slot_minutes) : "");
+      setMaxCapacity(row.schedule.max_capacity != null ? String(row.schedule.max_capacity) : "");
+    } else {
+      const template = workingDayTemplate(schedules);
+      setStartTime(template.startTime);
+      setEndTime(template.endTime);
+    }
     setError(null);
   }
 
@@ -96,7 +110,41 @@ export default function WorkingHoursPanel({
         setError({ field: workingHoursErrorField(result.reason), message: REFUSAL_MESSAGE[result.reason] });
         return;
       }
-      setEditingId(null);
+      setEditingKey(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addDay(weekday: number) {
+    if (endTime <= startTime) {
+      setError({ field: "end", message: dayScreenStrings.hoursEndBeforeStartError });
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await addWorkingDay(db, { practitionerId, locationId, weekday, startTime, endTime });
+      // The other refusals (already a working day, no practitioner) mean the
+      // list on screen is out of date; the live query redraws it.
+      if (!result.ok && result.reason === "end_before_start") {
+        setError({ field: "end", message: dayScreenStrings.hoursEndBeforeStartError });
+        return;
+      }
+      setEditingKey(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function makeDayOff(weekday: number) {
+    setSaving(true);
+    try {
+      const result = await removeWorkingDay(db, { practitionerId, locationId, weekday });
+      if (!result.ok && result.reason === "upcoming_visits_on_day") {
+        setError({ field: null, message: dayScreenStrings.hoursUpcomingVisitsError });
+        return;
+      }
+      setEditingKey(null);
     } finally {
       setSaving(false);
     }
@@ -106,13 +154,16 @@ export default function WorkingHoursPanel({
     return error?.field === field ? error.message : undefined;
   }
 
+  const dayError = error !== null && error.field === null ? error.message : null;
+
   return (
     <SetBody>
       <SetList>
         {buildWorkingHoursRows(schedules).map((row) => {
           const schedule = row.schedule;
           const isSlots = schedule?.mode === ScheduleMode.Slots;
-          const isEditing = schedule !== undefined && editingId === schedule.id;
+          const isEditing = editingKey === row.key;
+          const idPrefix = `hours-${row.key}`;
           return (
             <SetRow
               key={row.key}
@@ -120,35 +171,53 @@ export default function WorkingHoursPanel({
               editor={
                 isEditing ? (
                   <div className="flex flex-col gap-3">
-                    <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-3">
-                      <Field label={dayScreenStrings.hoursStartLabel} id={`hours-${schedule.id}-start`} error={errorFor("start")}>
-                        <TextInput type="time" variant="centered" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
+                      <Field label={dayScreenStrings.hoursStartLabel} id={`${idPrefix}-start`} error={errorFor("start")}>
+                        <TimeField label={dayScreenStrings.hoursStartLabel} value={startTime} onChange={setStartTime} />
                       </Field>
-                      <Field label={dayScreenStrings.hoursEndLabel} id={`hours-${schedule.id}-end`} error={errorFor("end")}>
-                        <TextInput type="time" variant="centered" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                      <Field label={dayScreenStrings.hoursEndLabel} id={`${idPrefix}-end`} error={errorFor("end")}>
+                        <TimeField label={dayScreenStrings.hoursEndLabel} value={endTime} onChange={setEndTime} />
                       </Field>
-                      <Field
-                        label={isSlots ? dayScreenStrings.hoursSlotMinutesLabel : dayScreenStrings.hoursCapacityLabel}
-                        id={`hours-${schedule.id}-${isSlots ? "slot" : "capacity"}`}
-                        error={errorFor(isSlots ? "slotMinutes" : "capacity")}
-                      >
-                        <TextInput
-                          type="number"
-                          inputMode="numeric"
-                          variant="centered"
-                          value={isSlots ? slotMinutes : maxCapacity}
-                          onChange={(e) => (isSlots ? setSlotMinutes(e.target.value) : setMaxCapacity(e.target.value))}
-                        />
-                      </Field>
+                      {schedule && (
+                        <Field
+                          label={isSlots ? dayScreenStrings.hoursSlotMinutesLabel : dayScreenStrings.hoursCapacityLabel}
+                          id={`${idPrefix}-${isSlots ? "slot" : "capacity"}`}
+                          error={errorFor(isSlots ? "slotMinutes" : "capacity")}
+                        >
+                          <TextInput
+                            type="number"
+                            inputMode="numeric"
+                            variant="centered"
+                            value={isSlots ? slotMinutes : maxCapacity}
+                            onChange={(e) => (isSlots ? setSlotMinutes(e.target.value) : setMaxCapacity(e.target.value))}
+                          />
+                        </Field>
+                      )}
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="primary" size="sm" className="flex-1" disabled={saving} onClick={() => save(schedule)}>
-                        {dayScreenStrings.settingsSaveAction}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="flex-1"
+                        disabled={saving}
+                        onClick={() => (schedule ? save(schedule) : addDay(row.weekday))}
+                      >
+                        {schedule ? dayScreenStrings.settingsSaveAction : dayScreenStrings.hoursAddWorkingDayAction}
                       </Button>
-                      <Button variant="secondary" size="sm" onClick={() => setEditingId(null)}>
+                      {schedule && (
+                        <Button variant="danger" size="sm" disabled={saving} onClick={() => makeDayOff(row.weekday)}>
+                          {dayScreenStrings.hoursMakeDayOffAction}
+                        </Button>
+                      )}
+                      <Button variant="secondary" size="sm" onClick={() => setEditingKey(null)}>
                         {dayScreenStrings.settingsCancelAction}
                       </Button>
                     </div>
+                    {dayError && (
+                      <p role="alert" className="text-[12.5px] text-danger">
+                        {dayError}
+                      </p>
+                    )}
                   </div>
                 ) : undefined
               }
@@ -165,10 +234,8 @@ export default function WorkingHoursPanel({
                 <Badge appearance="soft" tone="neutral">
                   {formatWorkingHoursMode(row.mode, MODE_STRINGS)}
                 </Badge>
-                {/* A day off has no schedule row to edit — adding a working
-                    day is not something settings offers today. */}
-                {schedule && !isEditing && (
-                  <Button variant="outline" onClick={() => beginEdit(schedule)}>
+                {!isEditing && (
+                  <Button variant="outline" onClick={() => beginEdit(row)}>
                     {dayScreenStrings.hoursEditAction}
                   </Button>
                 )}

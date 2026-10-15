@@ -9,8 +9,8 @@ import { clockTimeInCairo, type ClinicDay, type ClockTime } from "../../domain/t
 import { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Schedule, Service, Visit } from "../../db/types";
 import { computeGridRows } from "./dayGrid";
-import { computeElapsedLabel } from "./elapsedLabel";
 import { computeEmptySlots } from "./emptySlots";
+import { queueInRoomMeta } from "./queueInRoomMeta";
 import { computeExpectedCallTime, computeQueueSummary } from "./queueSummary";
 import QueueRow, { type QueueRowKind } from "./QueueRow";
 import { resolveDayScheduleState } from "./scheduleState";
@@ -383,8 +383,7 @@ function QueueColumn({
               patient?.gender === "female" ? dayScreenStrings.queueFinishedMetaFemale : dayScreenStrings.queueFinishedMeta;
             metaPhrase = `${finished} ${clockTimeInCairo(visit.ended_at)}`;
           } else if (visit.status === VisitStatus.InRoom && visit.started_at) {
-            const elapsed = computeElapsedLabel(visit.started_at, now.toISOString(), today, now);
-            metaPhrase = elapsed ? `${dayScreenStrings.queueInRoomMetaPrefix} ${elapsed}` : dayScreenStrings.statusInRoom;
+            metaPhrase = queueInRoomMeta(visit.started_at, today, now);
           } else if (visit.status === VisitStatus.Arrived && visit.arrived_at) {
             metaPhrase = `${arrivedWord(patient?.gender)} ${clockTimeInCairo(visit.arrived_at)}`;
           } else if (visit.status === VisitStatus.Booked || visit.status === VisitStatus.Confirmed) {

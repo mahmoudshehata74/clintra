@@ -131,6 +131,23 @@ test("@screenshot settings-hours", async ({ page }) => {
   await shoot(page, "settings-hours", false);
 });
 
+// Friday turned into a day off, then its editor open on the usual hours,
+// ready to become a working day again.
+test("@screenshot settings-hours-working-day", async ({ page }) => {
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await selectPractitioner(page, SLOTS_DR);
+  await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
+  const friday = page.getByRole("dialog").getByRole("listitem").filter({ hasText: S.weekdayNames[5] });
+  await friday.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  await friday.getByRole("button", { name: S.hoursMakeDayOffAction, exact: true }).click();
+  await expect(friday).toContainText(S.hoursModeDayOff);
+  await friday.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  await expect(friday.getByRole("button", { name: S.hoursAddWorkingDayAction, exact: true })).toBeVisible();
+  await shoot(page, "settings-hours-working-day", false);
+});
+
 test("@screenshot settings-services", async ({ page }) => {
   await page.goto("/?seedDay=1");
   await page.evaluate(() => localStorage.clear());
@@ -143,6 +160,25 @@ test("@screenshot settings-services", async ({ page }) => {
   await stopped.click();
   await expect(stopped).toHaveAttribute("aria-checked", "false");
   await shoot(page, "settings-services", false);
+});
+
+// "كشف عام"'s form open with a new name, duration and price typed in, not
+// yet saved, above its price overrides.
+test("@screenshot settings-services-edit", async ({ page }) => {
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsServicesTab, exact: true }).click();
+  const row = dialog.getByRole("listitem").filter({ hasText: "كشف عام" });
+  await row.getByRole("button", { name: S.serviceEditAction, exact: true }).click();
+  await row.getByLabel(S.serviceNameLabel, { exact: true }).fill("كشف مفصل");
+  await row.getByLabel(S.serviceDurationLabel, { exact: true }).fill("45");
+  await row.getByLabel(S.serviceBasePriceLabel, { exact: true }).fill("375");
+  await expect(row.getByRole("button", { name: S.serviceOverrideAddAction, exact: true })).toBeVisible();
+  await row.scrollIntoViewIfNeeded();
+  await shoot(page, "settings-services-edit", false);
 });
 
 test("@screenshot settings-staff", async ({ page }) => {

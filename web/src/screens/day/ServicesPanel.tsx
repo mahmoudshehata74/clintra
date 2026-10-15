@@ -8,10 +8,20 @@ import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import { parsePoundsToPiastres, type Piastres } from "../../domain/money";
 import {
+  formatPriceForInput,
+  parseServiceForm,
+  SERVICE_DETAILS_ERROR_FIELD,
+  SERVICE_DURATION_MINUTES,
+  type ServiceDetails,
+  type ServiceDetailsError,
+  type ServiceDetailsField,
+} from "../../domain/serviceDetails";
+import {
   addServicePriceOverride,
-  createService,
   deleteServicePriceOverride,
+  saveServiceDetails,
   updateService,
+  type SaveServiceDetailsResult,
 } from "../../db/serviceSettings";
 import type { Location, Practitioner, Service, ServicePriceOverride } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
@@ -48,14 +58,20 @@ function Price({ amount }: { amount: Piastres }) {
   );
 }
 
-type NewServiceField = "name" | "price";
+const DETAILS_ERROR_MESSAGE: Record<ServiceDetailsError, string> = {
+  name_required: dayScreenStrings.serviceNameRequiredError,
+  name_taken: dayScreenStrings.serviceNameTakenError,
+  duration_invalid: dayScreenStrings.serviceDurationInvalidError,
+  price_invalid: dayScreenStrings.servicePriceInvalidError,
+};
 
 /**
  * Panel B, prototype #s13 (`.set-row.svc`, `.svc-name`, `.svc-dur`,
  * `.svc-price`, `.toggle`, `.edit`, `.runrow`): the org's services, each
- * with its active switch, and a per-row "تعديل" that opens its price
- * overrides — the one per-service edit settings has. The footer adds a
- * service and counts active against stopped ones.
+ * with its active switch, and a per-row "تعديل" that opens the service form
+ * (name, duration, base price — applied on save only) above its price
+ * overrides. The footer's "خدمة جديدة" opens the same form for a new
+ * service, and counts active against stopped ones.
  */
 export default function ServicesPanel({ orgId }: { orgId: string }) {
   const data =
@@ -76,33 +92,10 @@ export default function ServicesPanel({ orgId }: { orgId: string }) {
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newDuration, setNewDuration] = useState("");
-  const [newPrice, setNewPrice] = useState("");
-  const [newError, setNewError] = useState<{ field: NewServiceField; message: string } | null>(null);
 
-  async function saveNewService() {
-    if (newName.trim() === "") {
-      setNewError({ field: "name", message: dayScreenStrings.serviceNameRequiredError });
-      return;
-    }
-    const price = parsePoundsToPiastres(newPrice);
-    if (!price.ok) {
-      setNewError({ field: "price", message: dayScreenStrings.servicePriceInvalidError });
-      return;
-    }
-    await createService(db, {
-      orgId,
-      name: newName.trim(),
-      durationMinutes: Number(newDuration) || 0,
-      defaultPrice: price.value,
-    });
-    setNewOpen(false);
-    setNewName("");
-    setNewDuration("");
-    setNewPrice("");
-    setNewError(null);
-  }
+  // The organization's other services, the one being edited left out — what a name must not repeat.
+  const othersThan = (serviceId: string | null) =>
+    data.services.filter((service) => service.org_id === orgId && service.id !== serviceId);
 
   const counts = countServicesByState(data.services);
 
@@ -117,12 +110,21 @@ export default function ServicesPanel({ orgId }: { orgId: string }) {
               muted={!service.is_active}
               editor={
                 expandedId === service.id ? (
-                  <OverridesEditor
-                    service={service}
-                    overrides={data.overrides.filter((o) => o.service_id === service.id)}
-                    practitioners={data.practitioners}
-                    locations={data.locations}
-                  />
+                  <div className="flex flex-col gap-4">
+                    <ServiceDetailsForm
+                      idPrefix={`service-${service.id}`}
+                      initial={service}
+                      others={othersThan(service.id)}
+                      onSave={(details) => saveServiceDetails(db, { serviceId: service.id, orgId, details })}
+                      onDone={() => setExpandedId(null)}
+                    />
+                    <OverridesEditor
+                      service={service}
+                      overrides={data.overrides.filter((o) => o.service_id === service.id)}
+                      practitioners={data.practitioners}
+                      locations={data.locations}
+                    />
+                  </div>
                 ) : undefined
               }
             >
@@ -149,7 +151,11 @@ export default function ServicesPanel({ orgId }: { orgId: string }) {
               <Button
                 variant="outline"
                 aria-expanded={expandedId === service.id}
-                onClick={() => setExpandedId(expandedId === service.id ? null : service.id)}
+                onClick={() => {
+                  // One service form open at a time: a row's edit closes "خدمة جديدة", and the reverse.
+                  setExpandedId(expandedId === service.id ? null : service.id);
+                  setNewOpen(false);
+                }}
               >
                 {dayScreenStrings.serviceEditAction}
               </Button>
@@ -158,21 +164,14 @@ export default function ServicesPanel({ orgId }: { orgId: string }) {
         </SetList>
 
         {newOpen && (
-          <div className="mt-2 flex flex-col gap-3 rounded-card border border-green-line bg-card p-3.5">
-            <Field label={dayScreenStrings.serviceNameLabel} id="service-new-name" error={newError?.field === "name" ? newError.message : undefined}>
-              <TextInput type="text" value={newName} onChange={(e) => setNewName(e.target.value)} />
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={dayScreenStrings.serviceDurationLabel} id="service-new-duration">
-                <TextInput type="number" inputMode="numeric" variant="centered" value={newDuration} onChange={(e) => setNewDuration(e.target.value)} />
-              </Field>
-              <Field label={dayScreenStrings.servicePriceLabel} id="service-new-price" error={newError?.field === "price" ? newError.message : undefined}>
-                <TextInput type="text" inputMode="decimal" variant="centered" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} />
-              </Field>
-            </div>
-            <Button variant="primary" onClick={saveNewService}>
-              {dayScreenStrings.settingsSaveAction}
-            </Button>
+          <div className="mt-2 rounded-card border border-green-line bg-card p-3.5">
+            <ServiceDetailsForm
+              idPrefix="service-new"
+              initial={null}
+              others={othersThan(null)}
+              onSave={(details) => saveServiceDetails(db, { serviceId: null, orgId, details })}
+              onDone={() => setNewOpen(false)}
+            />
           </div>
         )}
       </SetBody>
@@ -187,12 +186,100 @@ export default function ServicesPanel({ orgId }: { orgId: string }) {
       >
         {/* Hidden while the new-service form is open, as before — that form's own save is the one action then. */}
         {!newOpen && (
-          <Button variant="primary" onClick={() => setNewOpen(true)}>
+          <Button
+            variant="primary"
+            onClick={() => {
+              setNewOpen(true);
+              setExpandedId(null);
+            }}
+          >
             {dayScreenStrings.serviceNewAction}
           </Button>
         )}
       </SettingsFooter>
     </>
+  );
+}
+
+/**
+ * The service form, for an edit ("تعديل", prefilled) and a new service
+ * ("خدمة جديدة", empty): "اسم الخدمة", "المدة بالدقايق" and "السعر الأساسي",
+ * held here and written only by "حفظ" — checked by parseServiceForm, then by
+ * the writer itself (saveServiceDetails), each refusal shown under its own
+ * field. "إلغاء" drops whatever was typed.
+ */
+function ServiceDetailsForm({
+  idPrefix,
+  initial,
+  others,
+  onSave,
+  onDone,
+}: {
+  idPrefix: string;
+  initial: Service | null;
+  others: readonly Service[];
+  onSave: (details: ServiceDetails) => Promise<SaveServiceDetailsResult>;
+  onDone: () => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [duration, setDuration] = useState(initial ? String(initial.duration_minutes) : "");
+  const [price, setPrice] = useState(initial ? formatPriceForInput(initial.default_price) : "");
+  const [error, setError] = useState<ServiceDetailsError | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const parsed = parseServiceForm({ name, duration, price }, others);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await onSave(parsed.details);
+      if (!result.ok) {
+        setError(result.reason);
+        return;
+      }
+      onDone();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const errorFor = (field: ServiceDetailsField) =>
+    error !== null && SERVICE_DETAILS_ERROR_FIELD[error] === field ? DETAILS_ERROR_MESSAGE[error] : undefined;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Field label={dayScreenStrings.serviceNameLabel} id={`${idPrefix}-name`} error={errorFor("name")}>
+        <TextInput type="text" value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label={dayScreenStrings.serviceDurationLabel} id={`${idPrefix}-duration`} error={errorFor("duration")}>
+          <TextInput
+            type="number"
+            inputMode="numeric"
+            variant="centered"
+            min={SERVICE_DURATION_MINUTES.min}
+            max={SERVICE_DURATION_MINUTES.max}
+            step={SERVICE_DURATION_MINUTES.step}
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+          />
+        </Field>
+        <Field label={dayScreenStrings.serviceBasePriceLabel} id={`${idPrefix}-price`} error={errorFor("price")}>
+          <TextInput type="text" inputMode="decimal" variant="centered" value={price} onChange={(e) => setPrice(e.target.value)} />
+        </Field>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="primary" size="sm" className="flex-1" disabled={saving} onClick={save}>
+          {dayScreenStrings.settingsSaveAction}
+        </Button>
+        <Button variant="secondary" size="sm" onClick={onDone}>
+          {dayScreenStrings.settingsCancelAction}
+        </Button>
+      </div>
+    </div>
   );
 }
 

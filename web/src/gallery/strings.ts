@@ -172,6 +172,12 @@ export const fieldGalleryStrings = {
   amountValue: "200",
   amountHint: "اكتب رقم أقل عشان دفعة جزئية تانية",
   amountHeading: "مبلغ",
+  // TimeField, as the working-hours editor (#s12) uses it; the error is
+  // that editor's own end-before-start message.
+  timeHeading: "وقت (24 ساعة)",
+  timeStartLabel: "من",
+  timeEndLabel: "لحد",
+  timeError: "وقت النهاية لازم يكون بعد البداية",
 } as const;
 
 export interface SmCapableButtonDemo {

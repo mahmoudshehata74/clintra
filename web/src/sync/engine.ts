@@ -413,6 +413,21 @@ export interface SyncEngineHandle {
 }
 
 /**
+ * Whether this device can run a cycle yet, and a way to hear the moment it
+ * can (db/deviceRegistration.ts's deviceReadiness): a pull needs the device
+ * row, which the day screen's load writes after the engine has started.
+ */
+export interface DeviceReadiness {
+  isReady: () => boolean;
+  subscribe: (listener: () => void) => () => void;
+}
+
+const ALWAYS_READY: DeviceReadiness = {
+  isReady: () => true,
+  subscribe: () => () => {},
+};
+
+/**
  * Drives runSyncCycle then runPullCycle, in that order, every cycle: on a
  * timer while the tab is visible, immediately on visibilitychange to
  * visible, and immediately after any mutate() commit (via the
@@ -421,17 +436,22 @@ export interface SyncEngineHandle {
  * re-entered; a trigger that arrives mid-cycle is simply dropped; the next
  * cycle picks up whatever remains unsent or unpulled. Runs in the
  * background — no caller ever awaits a cycle to render a screen.
+ *
+ * No cycle runs before deviceReadiness says the device is ready; the first
+ * one runs the moment it does, so a fresh load's first pull never waits for
+ * the timer.
  */
 export function startSyncEngine(
   db: ClintraDatabase,
   transport: SyncTransport,
   intervalMs: number = DEFAULT_INTERVAL_MS,
+  deviceReadiness: DeviceReadiness = ALWAYS_READY,
 ): SyncEngineHandle {
   let isRunning = false;
   let timerId: ReturnType<typeof setInterval> | null = null;
 
   function runGuarded() {
-    if (isRunning) {
+    if (isRunning || !deviceReadiness.isReady()) {
       return;
     }
     isRunning = true;
@@ -472,6 +492,7 @@ export function startSyncEngine(
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener(MUTATION_EVENT_NAME, runGuarded);
   }
+  const unsubscribeDeviceReady = deviceReadiness.subscribe(runGuarded);
 
   if (!hasDom || document.visibilityState === "visible") {
     runGuarded();
@@ -485,6 +506,7 @@ export function startSyncEngine(
         document.removeEventListener("visibilitychange", handleVisibilityChange);
         window.removeEventListener(MUTATION_EVENT_NAME, runGuarded);
       }
+      unsubscribeDeviceReady();
       stopTimer();
     },
   };

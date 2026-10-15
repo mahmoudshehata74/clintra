@@ -12,6 +12,39 @@ const LEGACY_DEVICE_ID_STORAGE_KEY = "clintra:device_id";
 // afford an async read; ensureDeviceRegistration primes this during app start.
 let cachedDeviceId: string | null = null;
 
+// True once cachedDeviceId holds the persisted row's id (not a memory-only
+// one). The sync engine waits for it: a pull before then looks up a device
+// row that does not exist and fails (pull_requires_registered_device).
+let isDeviceIdPersisted = false;
+const deviceReadyListeners = new Set<() => void>();
+
+function primeDeviceId(deviceId: string): void {
+  cachedDeviceId = deviceId;
+  if (isDeviceIdPersisted) {
+    return;
+  }
+  isDeviceIdPersisted = true;
+  for (const listener of [...deviceReadyListeners]) {
+    listener();
+  }
+}
+
+/**
+ * Whether this tab's device id comes from the persisted device row, and a way
+ * to hear the moment it does — what startSyncEngine (sync/engine.ts) waits on
+ * before its first cycle, so the first pull runs as soon as the device is
+ * ready instead of on the next timer tick.
+ */
+export const deviceReadiness = {
+  isReady: (): boolean => isDeviceIdPersisted,
+  subscribe(listener: () => void): () => void {
+    deviceReadyListeners.add(listener);
+    return () => {
+      deviceReadyListeners.delete(listener);
+    };
+  },
+};
+
 function readLegacyLocalStorageDeviceId(): string | null {
   if (typeof localStorage === "undefined") {
     return null;
@@ -44,6 +77,7 @@ export function getDeviceId(): string {
 /** Test-only: drops the in-memory device id so a fresh registration can be exercised. */
 export function resetDeviceIdCacheForTests(): void {
   cachedDeviceId = null;
+  isDeviceIdPersisted = false;
 }
 
 /**
@@ -76,7 +110,7 @@ export async function ensureDeviceRegistration(db: ClintraDatabase): Promise<Dev
     if (legacyId !== null) {
       clearLegacyLocalStorageDeviceId();
     }
-    cachedDeviceId = registration.id;
+    primeDeviceId(registration.id);
     return registration;
   }
 
@@ -105,7 +139,7 @@ export async function ensureDeviceRegistration(db: ClintraDatabase): Promise<Dev
   };
   await db.device.add(registration);
   clearLegacyLocalStorageDeviceId();
-  cachedDeviceId = deviceId;
+  primeDeviceId(deviceId);
   return registration;
 }
 

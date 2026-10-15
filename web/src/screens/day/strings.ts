@@ -89,6 +89,8 @@ export const dayScreenStrings = {
   // `.qwho .meta`'s in_room phrase ("دخل من 7د") — gender-neutral, unlike
   // the prototype's own per-row sample text.
   queueInRoomMetaPrefix: "دخل من",
+  // The same phrase under a minute, as the doctor's day says it ("دخل دلوقتي").
+  queueInRoomMetaNow: "دخل دلوقتي",
   // `.qwho .meta`'s completed phrase ("خلصت 12:04"), following the patient's gender.
   queueFinishedMeta: "خلص",
   queueFinishedMetaFemale: "خلصت",
@@ -215,6 +217,8 @@ export const dayScreenStrings = {
   slotsCardSubtitleFreeSuffix: "فاضية",
   // `.slot .time .until` — shown under the time, state-dependent.
   untilSincePrefix: "من",
+  // The same line under a minute, the queue's and doctor's day's rule.
+  untilNow: "دلوقتي",
   // The empty slot's own free-text line and its dashed quick-book button —
   // distinct from emptySlot above, which stays the button's accessible name.
   emptySlotFreeLabel: "موعد فاضي",
@@ -513,7 +517,7 @@ export const dayScreenStrings = {
 
   // Panel A — working hours.
   hoursStartLabel: "من",
-  hoursEndLabel: "لـ",
+  hoursEndLabel: "لحد",
   hoursSlotMinutesLabel: "مدة الكشف (دقيقة)",
   hoursCapacityLabel: "السعة",
   hoursEditAction: "تعديل",
@@ -526,20 +530,29 @@ export const dayScreenStrings = {
   hoursInvalidSlotError: "مدة الكشف لازم تكون أكبر من صفر",
   hoursInvalidCapacityError: "السعة لازم تكون أكبر من صفر",
   hoursVisitsOnOldGridError: "فيه مواعيد محجوزة على المدة القديمة، امسحها أو انقلها الأول",
+  // A day off's editor turns it into a working day; a working day's editor
+  // can turn it into a day off.
+  hoursAddWorkingDayAction: "خليه يوم شغل",
+  hoursMakeDayOffAction: "خليه إجازة",
+  hoursUpcomingVisitsError: "فيه حجوزات جاية في اليوم ده، انقلها أو الغيها الأول",
 
   // Panel B — services.
   serviceDurationSuffix: "دقيقة",
   serviceActiveLabel: "مفعّلة",
   // `.svc-name`'s muted tag on a stopped service.
   serviceInactiveTag: "موقوفة",
-  // A row's "تعديل" — opens that service's price overrides.
+  // A row's "تعديل" — opens that service's form (name, duration, base
+  // price, applied on save) and its price overrides.
   serviceEditAction: "تعديل",
   serviceNewAction: "＋ خدمة جديدة",
   // `.runrow .count`: "{a} نشطة · {i} موقوفة".
   serviceCountActiveUnit: "نشطة",
   serviceCountInactiveUnit: "موقوفة",
-  serviceNameLabel: "الاسم",
-  serviceDurationLabel: "المدة (دقيقة)",
+  // The service form, shared by "تعديل" and "خدمة جديدة".
+  serviceNameLabel: "اسم الخدمة",
+  serviceDurationLabel: "المدة بالدقايق",
+  serviceBasePriceLabel: "السعر الأساسي",
+  // A price override's own price.
   servicePriceLabel: "السعر (جنيه)",
   serviceOverridesLink: "أسعار خاصة",
   serviceOverrideAddAction: "أضف سعر خاص",
@@ -550,6 +563,8 @@ export const dayScreenStrings = {
   serviceOverrideDeleteAction: "حذف",
   servicePriceInvalidError: "السعر ده مش صحيح",
   serviceNameRequiredError: "لازم تكتب اسم الخدمة",
+  serviceNameTakenError: "فيه خدمة تانية بالاسم ده",
+  serviceDurationInvalidError: "المدة من 5 لـ 480 دقيقة، كل 5 دقايق",
 
   // Panel C — staff and permissions.
   staffNewAction: "＋ إضافة موظف",
