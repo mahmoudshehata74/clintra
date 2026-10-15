@@ -235,7 +235,7 @@ function Hero({ hero, onOpenPlan }: { hero: ProfileHero; onOpenPlan: (planId: st
       {/* `.avatar` */}
       <div
         aria-hidden="true"
-        className="flex h-16 w-16 flex-none items-center justify-center rounded-app bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[26px] font-bold text-on-fill"
+        className="flex h-16 w-16 flex-none items-center justify-center rounded-app bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[26px] font-bold text-on-copper"
       >
         {hero.initial}
       </div>
@@ -269,7 +269,7 @@ function Hero({ hero, onOpenPlan }: { hero: ProfileHero; onOpenPlan: (planId: st
             className={`${STAT_FRAME} cursor-pointer font-[inherit] transition-colors duration-150 hover:border-copper-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-copper`}
           >
             <span className={STAT_KEY}>{T.statPlan}</span>
-            <span className={`${STAT_VALUE} text-copper`}>{hero.plan.label}</span>
+            <span className={`${STAT_VALUE} text-copper-ink`}>{hero.plan.label}</span>
           </button>
         )}
         {/* `.pt-stat.balance` */}
@@ -296,7 +296,7 @@ const ICON: Record<ProfileEventKind, string> = {
 // keeps the plain `.icn`, as does a muted (cancelled, missed) visit.
 const ICON_LOOK: Record<ProfileEventKind | "muted", string> = {
   visit: "border-green-line bg-green-wash text-green",
-  rx: "border-copper-line bg-copper-wash text-copper",
+  rx: "border-copper-line bg-copper-wash text-copper-ink",
   msg: "border-rule bg-field text-text",
   pay: "border-[color-mix(in_srgb,var(--color-eligible)_40%,transparent)] bg-[color-mix(in_srgb,var(--color-eligible)_15%,transparent)] text-eligible",
   note: "border-rule bg-field text-muted",
@@ -321,7 +321,7 @@ function DetailGroup({ parts }: { parts: DetailPart[] }) {
         }
         if (part.tone === "dx") {
           return (
-            <span key={index} className="font-semibold text-copper">
+            <span key={index} className="font-semibold text-copper-ink">
               {text}
             </span>
           );

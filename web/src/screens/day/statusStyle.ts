@@ -49,7 +49,7 @@ export interface StatusVisual {
   nameClassName: string;
   /** Classes for the time column's own text (not `.until`). */
   timeClassName: string;
-  /** Classes for the `.until` sub-line under the time — copper for in_room, faint otherwise. */
+  /** Classes for the `.until` sub-line under the time — copper-ink for in_room, faint otherwise. */
   untilClassName: string;
   /** Classes for everything else on the row: service line, reopened-slot note, the "recorded by" byline. */
   metaClassName: string;
@@ -97,9 +97,9 @@ export function statusVisual(status: VisitStatusType): StatusVisual | null {
       stripeClassName: "before:bg-copper",
       rowBgClassName:
         "bg-[linear-gradient(90deg,color-mix(in_srgb,var(--color-copper-wash)_65%,transparent)_0%,transparent_40%)]",
-      nameClassName: "text-copper",
+      nameClassName: "text-copper-ink",
       timeClassName: "",
-      untilClassName: "font-semibold text-copper-2",
+      untilClassName: "font-semibold text-copper-ink",
       metaClassName: "text-muted",
       badge: { appearance: "solid", tone: "copper" },
     };

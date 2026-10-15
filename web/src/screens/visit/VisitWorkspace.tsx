@@ -241,7 +241,7 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
       <div className="flex flex-wrap items-center gap-3.5 border-b border-copper-line bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-copper)_10%,var(--color-card))_0%,var(--color-card)_100%)] px-5 py-4">
         <div
           aria-hidden="true"
-          className="flex h-11 w-11 flex-none items-center justify-center rounded-card bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[17px] font-bold text-on-fill"
+          className="flex h-11 w-11 flex-none items-center justify-center rounded-card bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[17px] font-bold text-on-copper"
         >
           {summary.initial}
         </div>
@@ -542,7 +542,7 @@ function RxSection({ visitId, items, canEdit, readOnlyLine, print }: RxSectionPr
           <button
             type="button"
             onClick={() => setEditor({ kind: "add" })}
-            className="mt-2 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-control border-[1.5px] border-dashed border-copper-line bg-transparent px-3 py-[9px] font-[inherit] text-xs font-semibold text-copper hover:border-solid hover:bg-copper-wash focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-copper"
+            className="mt-2 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-control border-[1.5px] border-dashed border-copper-line bg-transparent px-3 py-[9px] font-[inherit] text-xs font-semibold text-copper-ink hover:border-solid hover:bg-copper-wash focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-copper"
           >
             {T.rxAdd}
           </button>

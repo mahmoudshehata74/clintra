@@ -58,14 +58,14 @@ export default function CarePlanEntry({ visit }: { visit: Visit }) {
         >
           <span
             aria-hidden="true"
-            className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-chip bg-copper text-[11px] font-bold text-on-fill"
+            className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-chip bg-copper text-[11px] font-bold text-on-copper"
           >
             {T.badgeIcon}
           </span>
           <span className="font-semibold">
             {T.badgePrefix} {ongoing.plan.goal}
           </span>
-          <span className="ms-auto text-[11px] font-bold text-copper tabular-nums">{carePlanBadgeProgress(ongoing.sessions, visit.id)}</span>
+          <span className="ms-auto text-[11px] font-bold text-copper-ink tabular-nums">{carePlanBadgeProgress(ongoing.sessions, visit.id)}</span>
         </button>
       ) : (
         canStart && (

@@ -51,9 +51,9 @@ const SELECT_CLASSES =
 /** `.set-row .svc-price` — the amount in copper with its smaller `i` unit. */
 function Price({ amount }: { amount: Piastres }) {
   return (
-    <span className="text-sm font-bold tracking-[-0.01em] text-copper tabular-nums">
+    <span className="text-sm font-bold tracking-[-0.01em] text-copper-ink tabular-nums">
       <Ltr>{formatMoneyAmount(amount)}</Ltr>
-      <i className="ms-[3px] text-[11px] font-semibold not-italic text-copper-2">{CURRENCY_UNIT}</i>
+      <i className="ms-[3px] text-[11px] font-semibold not-italic text-copper-ink">{CURRENCY_UNIT}</i>
     </span>
   );
 }

@@ -174,13 +174,27 @@
   --color-print-note-ink: #856d00;
   /* WhatsApp's own green — the prototype's `.msg-item .icn.wa` and `.msg-ch-toggle .wa` only. */
   --color-whatsapp: #25d366;
-  /* The prototype's literal whites, which it keeps in dark too: on-fill is
-     text and marks on a saturated fill (green, copper, danger, the ink
-     chrome — `.run`, `.badge`, `.brand .logo`, `.toggle::after`), glass the
-     translucent white of controls on those surfaces, always with an
-     opacity (`.app-btn`, `.tb-nav`, `.pad button`: rgba(255,255,255,.06–.25)). */
+  /* Text and marks on fills and chrome (docs/design-tokens.md's
+     "Contrast"; docs/session-handoff.md's "Dark mode", decisions 6 and 9).
+     on-fill: text on a saturated green, green-2, danger, warning, eligible
+     or muted fill — white in light, the dark paper in dark. on-copper: text
+     on a copper or copper-2 fill — the dark paper in both. on-ink: white in
+     both — anything on the ink chrome, and the marks that stay white (the
+     switch knob, the care-plan hero's highlight and progress fill, the
+     logo tile's letter). glass is the translucent white of controls on ink
+     and copper, always with an opacity (`.app-btn`, `.tb-nav`, `.pad
+     button`: rgba(255,255,255,.06–.25)). */
   --color-on-fill: #ffffff;
+  --color-on-copper: #081311;
+  --color-on-ink: #ffffff;
   --color-glass: #ffffff;
+  /* Tone text where the prototype's own pair is under AA: copper as text
+     (copper itself stays for fills, borders and icons), and green, copper
+     and danger as text on the ink chrome. */
+  --color-copper-ink: #8e6222;
+  --color-green-on-ink: #37b894;
+  --color-copper-on-ink: #dba35a;
+  --color-danger-on-ink: #f08c82;
   /* Paper and its ink: the printed pages and their on-screen previews
      (`.print-page`, `.rx-print-page`), white in both themes like the
      prototype's own #fff/#111. */
@@ -222,7 +236,8 @@
    data-theme at all is "auto". The tokens the prototype's dark blocks do
    not list (print-note*, whatsapp, brand-*) keep their light values, as
    the prototype's own literals do in dark; the three shadow colours carry
-   its dark --shadow-s/-m/-l. See docs/design-tokens.md's dark column. */
+   its dark --shadow-s/-m/-l. Each block also sets the derived text
+   tokens (on-fill … danger-on-ink) to the owner's dark values. See docs/design-tokens.md's dark column. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
   --color-paper: #081311;
@@ -253,6 +268,13 @@
   --color-on-dark: #eaf3f0;
   --color-on-dark-dim: #7a948d;
   --color-field: #132320;
+  --color-on-fill: #081311;
+  --color-on-copper: #081311;
+  --color-on-ink: #ffffff;
+  --color-copper-ink: #c79247;
+  --color-green-on-ink: #37b894;
+  --color-copper-on-ink: #dba35a;
+  --color-danger-on-ink: #f08c82;
   --color-shadow-soft: rgba(0, 0, 0, 0.4);
   --color-shadow-mid: rgba(0, 0, 0, 0.8);
   --color-shadow-deep: rgba(0, 0, 0, 0.9);
@@ -289,6 +311,13 @@
   --color-on-dark: #eaf3f0;
   --color-on-dark-dim: #7a948d;
   --color-field: #132320;
+  --color-on-fill: #081311;
+  --color-on-copper: #081311;
+  --color-on-ink: #ffffff;
+  --color-copper-ink: #c79247;
+  --color-green-on-ink: #37b894;
+  --color-copper-on-ink: #dba35a;
+  --color-danger-on-ink: #f08c82;
   --color-shadow-soft: rgba(0, 0, 0, 0.4);
   --color-shadow-mid: rgba(0, 0, 0, 0.8);
   --color-shadow-deep: rgba(0, 0, 0, 0.9);
@@ -332,6 +361,13 @@
   --color-on-dark: #f2f7f5;
   --color-on-dark-dim: #87a29a;
   --color-field: #f6f9f7;
+  --color-on-fill: #ffffff;
+  --color-on-copper: #081311;
+  --color-on-ink: #ffffff;
+  --color-copper-ink: #8e6222;
+  --color-green-on-ink: #37b894;
+  --color-copper-on-ink: #dba35a;
+  --color-danger-on-ink: #f08c82;
   --color-shadow-soft: rgba(11, 33, 29, 0.05);
   --color-shadow-mid: rgba(11, 33, 29, 0.3);
   --color-shadow-deep: rgba(11, 33, 29, 0.55);

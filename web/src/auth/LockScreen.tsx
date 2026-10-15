@@ -165,7 +165,7 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
       <div className="relative flex w-full max-w-page flex-col items-center rounded-panel bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-6 py-11 text-center text-on-dark">
         {/* The app bar sits under this overlay, so the lock card carries its own appearance toggle. */}
         <AppearanceToggle className="absolute end-3 top-3" />
-        <p className="text-[22px] font-bold tracking-[-0.02em] text-on-fill">
+        <p className="text-[22px] font-bold tracking-[-0.02em] text-on-ink">
           Clin<span className="text-copper-2">tra</span>
         </p>
 

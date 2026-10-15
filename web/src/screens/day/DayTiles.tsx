@@ -21,7 +21,7 @@ const STRIPE_TONE: Record<TileTone | "default", string> = {
 const VALUE_TONE: Record<TileTone | "default", string> = {
   default: "",
   ok: "text-eligible",
-  copper: "text-copper",
+  copper: "text-copper-ink",
   warn: "text-warning",
 };
 

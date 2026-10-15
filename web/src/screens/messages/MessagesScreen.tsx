@@ -164,7 +164,7 @@ function TemplateList({ selectedKey, onSelect }: { selectedKey: string; onSelect
               {/* `.icn` */}
               <span
                 aria-hidden="true"
-                className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-control border border-copper-line bg-copper-wash text-[13px] font-bold text-copper"
+                className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-control border border-copper-line bg-copper-wash text-[13px] font-bold text-copper-ink"
               >
                 {templateIcon(template.key)}
               </span>
@@ -192,7 +192,7 @@ function TemplateBody({ body }: { body: string }) {
         segment.kind === "text" ? (
           <span key={index}>{segment.text}</span>
         ) : (
-          <span key={index} className="rounded-chip bg-copper-wash px-1.5 py-px text-[11.5px] font-semibold text-copper">
+          <span key={index} className="rounded-chip bg-copper-wash px-1.5 py-px text-[11.5px] font-semibold text-copper-ink">
             {segment.label}
           </span>
         ),
@@ -415,7 +415,7 @@ function SuggestedMessages({ rows, onSend }: { rows: SuggestedMessage[]; onSend:
               key={row.key}
               className="mb-1.5 grid grid-cols-[auto_1fr_auto] items-center gap-2.5 rounded-control border border-rule bg-card px-3 py-2.5"
             >
-              <span aria-hidden="true" className={`${CHANNEL_ICON_BASE} bg-copper-wash text-copper`}>
+              <span aria-hidden="true" className={`${CHANNEL_ICON_BASE} bg-copper-wash text-copper-ink`}>
                 {templateIcon(row.templateKey)}
               </span>
               <div className="min-w-0">

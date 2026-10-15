@@ -26,8 +26,8 @@ export interface DaySlabProps {
 
 const CELL_VALUE_TONE: Record<SlabCellTone | "default", string> = {
   default: "",
-  arrived: "text-green-2",
-  miss: "text-danger",
+  arrived: "text-green-on-ink",
+  miss: "text-danger-on-ink",
   copper: "text-copper-2",
 };
 

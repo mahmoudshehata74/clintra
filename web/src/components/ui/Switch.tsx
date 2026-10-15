@@ -24,11 +24,11 @@ const BASE =
 // `.toggle` (on: eligible) / `.toggle.off` (rule) — one background class per render.
 const TRACK = { on: "bg-eligible", off: "bg-rule" } as const;
 
-// `.toggle::after` — the 16px white knob (on-fill: the prototype's #fff,
+// `.toggle::after` — the 16px white knob (on-ink: the prototype's #fff,
 // white in dark too), 2px in from the inline-end edge when on and from the
 // inline-start edge when off (`.toggle.off::after`). Each state sets only
 // its own inset side, so no two classes ever compete for one property.
-const KNOB_BASE = "pointer-events-none absolute top-0.5 h-4 w-4 rounded-full bg-on-fill";
+const KNOB_BASE = "pointer-events-none absolute top-0.5 h-4 w-4 rounded-full bg-on-ink";
 const KNOB_POSITION = { on: "end-0.5", off: "start-0.5" } as const;
 
 /**

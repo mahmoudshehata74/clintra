@@ -105,7 +105,7 @@ const VARIANT_SIZE_CLASSES: Record<ButtonVariant, SizeClasses> = {
     sm: "border border-glass/[0.14] bg-glass/[0.08] px-[11px] py-[5px] text-[11.5px] font-medium text-on-dark hover:bg-glass/[0.16]",
   },
   onDarkCopper: {
-    md: "gap-[7px] border border-copper-line bg-[color-mix(in_srgb,var(--color-copper)_22%,transparent)] px-[13px] py-1.5 text-xs font-semibold text-copper-2",
+    md: "gap-[7px] border border-copper-line bg-[color-mix(in_srgb,var(--color-copper)_22%,transparent)] px-[13px] py-1.5 text-xs font-semibold text-copper-on-ink",
   },
   outline: {
     md: "border-[1.5px] border-green-line bg-transparent px-2.5 py-[5px] text-[11.5px] font-semibold text-green",

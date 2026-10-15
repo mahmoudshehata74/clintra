@@ -26,12 +26,12 @@ describe("statusVisual", () => {
     expect(visual.badge).toEqual({ appearance: "solid", tone: "eligible" });
   });
 
-  it("in_room: copper stripe and wash, copper name, bold copper-2 until, a solid copper pill — the loudest treatment", () => {
+  it("in_room: copper stripe and wash, copper-ink name, bold copper-ink until, a solid copper pill — the loudest treatment", () => {
     const visual = statusVisual(VisitStatus.InRoom)!;
     expect(visual.stripeClassName).toBe("before:bg-copper");
     expect(visual.rowBgClassName).not.toBe("");
-    expect(visual.nameClassName).toBe("text-copper");
-    expect(visual.untilClassName).toBe("font-semibold text-copper-2");
+    expect(visual.nameClassName).toBe("text-copper-ink");
+    expect(visual.untilClassName).toBe("font-semibold text-copper-ink");
     expect(visual.badge).toEqual({ appearance: "solid", tone: "copper" });
   });
 

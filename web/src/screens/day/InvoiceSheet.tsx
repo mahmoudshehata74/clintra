@@ -264,7 +264,7 @@ export default function InvoiceSheet({
                 {hasRemaining ? (
                   <span className="text-xl font-bold tabular-nums tracking-[-0.01em] text-warning">
                     <Ltr>{formatMoneyAmount(remaining)}</Ltr>
-                    <i className="ms-1 text-xs font-normal not-italic text-copper-2">{CURRENCY_UNIT}</i>
+                    <i className="ms-1 text-xs font-normal not-italic text-copper-ink">{CURRENCY_UNIT}</i>
                   </span>
                 ) : (
                   <span className="font-bold tabular-nums tracking-[-0.01em] text-text">

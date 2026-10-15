@@ -39,10 +39,10 @@ function InstallCard({ children }: { children: ReactNode }) {
         <div className="relative overflow-hidden bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-7 pb-[22px] pt-9 text-center text-on-dark before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-[linear-gradient(to_left,var(--color-copper)_0%,var(--color-green-2)_45%,transparent_85%)] before:content-['']">
           {/* No app bar before activation: the card carries the appearance toggle. */}
           <AppearanceToggle className="absolute end-3 top-3" />
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-panel bg-[linear-gradient(135deg,var(--color-green-2)_0%,var(--color-green)_100%)] text-[26px] font-bold text-on-fill shadow-logo-lg">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-panel bg-[linear-gradient(135deg,var(--color-green-2)_0%,var(--color-green)_100%)] text-[26px] font-bold text-on-ink shadow-logo-lg">
             C
           </div>
-          <p className="text-[22px] font-bold tracking-[-0.01em] text-on-fill">{S.brandName}</p>
+          <p className="text-[22px] font-bold tracking-[-0.01em] text-on-ink">{S.brandName}</p>
           <h1 className="mt-[5px] text-xs font-normal text-on-dark-dim">{S.title}</h1>
         </div>
         {children}

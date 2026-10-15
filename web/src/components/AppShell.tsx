@@ -167,7 +167,7 @@ const ITEM_ACTIVE = "border-copper bg-glass/[0.14] text-on-dark";
 // for it) — `.brand .logo` reproduced once rather than duplicated inline.
 function BrandLogo() {
   return (
-    <div className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-[linear-gradient(135deg,var(--color-green-2)_0%,var(--color-green)_100%)] text-sm font-bold text-on-fill shadow-logo">
+    <div className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-[linear-gradient(135deg,var(--color-green-2)_0%,var(--color-green)_100%)] text-sm font-bold text-on-ink shadow-logo">
       C
     </div>
   );
@@ -215,7 +215,7 @@ function AppBar({ title, today, whoName }: { title: ReactNode; today: ClinicDay;
 
       {shownName && (
         <div className="flex items-center gap-2 rounded-control border border-glass/[0.14] bg-glass/[0.06] px-3 py-[5px] text-xs text-on-dark">
-          <span className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[11px] font-bold text-on-fill">
+          <span className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[11px] font-bold text-on-copper">
             {shownName.charAt(0)}
           </span>
           <span>{shownName}</span>
