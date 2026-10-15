@@ -89,6 +89,8 @@ export const dayScreenStrings = {
   // `.qwho .meta`'s in_room phrase ("دخل من 7د") — gender-neutral, unlike
   // the prototype's own per-row sample text.
   queueInRoomMetaPrefix: "دخل من",
+  // The same phrase under a minute, as the doctor's day says it ("دخل دلوقتي").
+  queueInRoomMetaNow: "دخل دلوقتي",
   // `.qwho .meta`'s completed phrase ("خلصت 12:04"), following the patient's gender.
   queueFinishedMeta: "خلص",
   queueFinishedMetaFemale: "خلصت",
