@@ -10,6 +10,7 @@ import { buildDayCloseSummary, type DayCloseSummarySource } from "./dayCloseSumm
 import { PrintClinicBlock, PrintDayLine, PrintFoot, PrintPage, PrintTable, PrintTd } from "./PrintPage";
 import { dayScreenStrings } from "./strings";
 import { usePrintClinic } from "./usePrintClinic";
+import { staffName } from "../../domain/staffName";
 
 interface DayCloseSummaryPrintProps {
   orgId: string;
@@ -67,7 +68,7 @@ export default function DayCloseSummaryPrint({ orgId, locationId, date, onDone }
       invoiceIds.length > 0 ? db.payments.where("invoice_id").anyOf(invoiceIds).toArray() : Promise.resolve([]),
       membership ? db.users.get(membership.user_id) : Promise.resolve(undefined),
     ]);
-    return { date, visits, invoices, payments, cashClose, closedByName: user?.full_name ?? null };
+    return { date, visits, invoices, payments, cashClose, closedByName: membership ? staffName(membership, user) : null };
   }, [orgId, locationId, date]);
 
   const isReady = Boolean(source);

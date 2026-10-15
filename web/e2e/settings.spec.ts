@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
+  ASSISTANT_NAME,
   AUTH,
   emptySlotTiles,
   enterPin,
@@ -412,6 +413,56 @@ test("the staff active switch applies on save, not on tap, and reactivates the s
   await expectEditorClosed();
   await expect(assistantRow.getByText(S.staffActiveLabel, { exact: true })).toBeVisible();
   expect(await readAssistantActive()).toBe(true);
+});
+
+test("renaming staff shows the new name on the staff list, the lock screen and the audit actor", async ({ page }) => {
+  await gotoRealDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
+
+  // The assistant first, then the owner — so the assistant's rename row is
+  // read back with its actor already renamed.
+  const assistantRow = dialog.getByRole("listitem").filter({ hasText: S.roleAssistant });
+  await assistantRow.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  const assistantName = assistantRow.getByLabel(S.staffNameLabel, { exact: true });
+  await expect(assistantName).toHaveValue(ASSISTANT_NAME);
+  await assistantName.fill("   ");
+  await assistantRow.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(assistantRow.getByText(S.staffNameRequiredError)).toBeVisible();
+  await assistantName.fill("مدام سارة");
+  await assistantRow.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(assistantRow.getByLabel(S.staffNameLabel, { exact: true })).toHaveCount(0);
+  await expect(assistantRow).toContainText("مدام سارة");
+  await expect(assistantRow).not.toContainText(ASSISTANT_NAME);
+
+  const ownerRow = dialog.getByRole("listitem").filter({ hasText: S.roleOwner });
+  await ownerRow.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  await ownerRow.getByLabel(S.staffNameLabel, { exact: true }).fill("أحمد عبد الله");
+  await ownerRow.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(ownerRow.getByLabel(S.staffNameLabel, { exact: true })).toHaveCount(0);
+  await expect(ownerRow).toContainText("أحمد عبد الله");
+
+  // The organization's name for them lives on the membership; users rows are untouched.
+  const users = await readStore<{ full_name: string }>(page, "users");
+  expect(users.map((user) => user.full_name).sort()).toEqual([ASSISTANT_NAME, OWNER_NAME].sort());
+
+  // The audit log: each rename reads "غيّر اسم موظف" naming the new name,
+  // and its actor (the owner) reads by the owner's new name too.
+  await openAuditLog(page);
+  const audit = page.getByRole("dialog");
+  await audit.getByRole("button", { name: S.auditFilterSettings, exact: true }).click();
+  const assistantRename = audit.getByRole("listitem").filter({ hasText: "غيّر اسم موظف" }).filter({ hasText: "مدام سارة" });
+  await expect(assistantRename).toContainText("أحمد عبد الله");
+  await expect(assistantRename).not.toContainText(OWNER_NAME);
+
+  // The lock screen's picker lists both by their new names.
+  await page.getByRole("button", { name: AUTH.lockButtonLabel, exact: true }).click();
+  const overlay = lockOverlay(page);
+  await overlay.getByRole("button", { name: AUTH.lockSwitchUser, exact: true }).click();
+  await expect(overlay.getByRole("button", { name: `مدام سارة (${S.roleAssistant})`, exact: true })).toBeVisible();
+  await expect(overlay.getByRole("button", { name: `أحمد عبد الله (${S.roleOwner})`, exact: true })).toBeVisible();
+  await expect(overlay.getByText(ASSISTANT_NAME)).toHaveCount(0);
 });
 
 test("the new-staff form keeps its PIN masked and its validation", async ({ page }) => {

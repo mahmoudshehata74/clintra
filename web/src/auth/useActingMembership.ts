@@ -2,6 +2,7 @@ import { useState, useSyncExternalStore } from "react";
 import { db } from "../db/database";
 import { useLiveQuery } from "../db/useLiveQuery";
 import type { Membership, User } from "../db/types";
+import { staffName } from "../domain/staffName";
 import { getActiveMembershipId, subscribeSession } from "./session";
 
 /**
@@ -65,15 +66,17 @@ export function userForMembership(user: User | undefined, membership: Membership
 }
 
 /**
- * The acting membership's user (for the name the chrome shows), held to the
- * same rule as useActingMembership: never a previous member's user while the
- * live query for the new one is still running.
+ * The acting member's name (domain/staffName.ts: the membership's
+ * display_name, else its user's full_name), for the name the chrome and the
+ * cash close show. Held to the same rule as useActingMembership: never a
+ * previous member's user while the live query for the new one is still
+ * running. Undefined while nobody is acting or no name is known yet.
  */
-export function useActingUser(): User | undefined {
+export function useActingStaffName(): string | undefined {
   const membership = useActingMembership();
   const user = useLiveQuery<User | undefined>(
     async () => (membership ? db.users.get(membership.user_id) : undefined),
     [membership?.user_id],
   );
-  return userForMembership(user, membership);
+  return (membership ? staffName(membership, userForMembership(user, membership)) : null) ?? undefined;
 }

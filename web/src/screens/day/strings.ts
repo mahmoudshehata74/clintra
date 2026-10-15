@@ -593,6 +593,7 @@ export const dayScreenStrings = {
   staffPinSetBadge: "مُعيّن ✓",
   staffPinUnsetBadge: "غير مُعيّن",
   staffNameRequiredError: "لازم تكتب اسم الموظف",
+  staffNameTooLongError: "الاسم 120 حرف بالكتير",
   staffPinLengthError: "الرقم السري لازم يكون 4 أرقام",
   staffPhoneInvalidError: "الرقم ده مش صحيح",
   staffPhoneTakenError: "الرقم ده مستخدم قبل كده",

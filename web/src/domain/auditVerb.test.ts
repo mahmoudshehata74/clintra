@@ -306,6 +306,9 @@ describe("describeAuditVerb: settings", () => {
     ["memberships", AuditAction.Update, { is_active: false, pin_hash: "a" }, { is_active: true, pin_hash: "a" }, "شغّل موظف"],
     ["memberships", AuditAction.Update, { is_active: true, pin_hash: "a" }, { is_active: true, pin_hash: "b" }, "غيّر الرقم السري"],
     ["memberships", AuditAction.Update, { is_active: true, pin_hash: "a", role: "assistant" }, { is_active: true, pin_hash: "a", role: "manager" }, "عدّل صلاحية موظف"],
+    ["memberships", AuditAction.Update, { is_active: true, pin_hash: "a" }, { is_active: true, pin_hash: "a", display_name: "أ. سارة" }, "غيّر اسم موظف"],
+    ["memberships", AuditAction.Update, { is_active: true, pin_hash: "a", display_name: "سارة" }, { is_active: true, pin_hash: "a", display_name: "أ. سارة" }, "غيّر اسم موظف"],
+    ["memberships", AuditAction.Update, { is_active: true, pin_hash: "a" }, { is_active: true, pin_hash: "a", display_name: null }, "عدّل صلاحية موظف"],
     ["membership_locations", AuditAction.Create, null, { id: "l" }, "حدّد فروع الموظف"],
     ["membership_practitioners", AuditAction.Delete, { id: "p" }, null, "شال طبيب من نطاق الموظف"],
   ])("reads a %s %s", (entity, action, before, after, expected) => {

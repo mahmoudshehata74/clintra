@@ -18,6 +18,7 @@ import { PrintClinicBlock, PrintHeaderNote, PrintPage, PrintTable, PrintTd } fro
 import Sheet from "./Sheet";
 import { usePrintClinic } from "./usePrintClinic";
 import { dayScreenStrings } from "./strings";
+import { staffName } from "../../domain/staffName";
 
 interface InvoiceSheetProps {
   invoiceId: string;
@@ -108,7 +109,7 @@ export default function InvoiceSheet({
       payments: payments.sort((a, b) => a.created_at.localeCompare(b.created_at)),
       patient,
       practitioner,
-      createdByName: creatorUser?.full_name ?? null,
+      createdByName: creator ? staffName(creator, creatorUser) : null,
     };
   }, [invoiceId]);
   // Called before the loading return below so the hook order never changes;

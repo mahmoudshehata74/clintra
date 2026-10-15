@@ -207,6 +207,11 @@ function describeSettingsUpdate(row: AuditVerbRow): string | undefined {
     if (fieldOf(row.before, "pin_hash") !== fieldOf(row.after, "pin_hash")) {
       return "غيّر الرقم السري";
     }
+    // A rename (memberships.display_name, docs/schema.md's v21 additions);
+    // a row stored before the column existed has none, the same as null.
+    if ((fieldOf(row.before, "display_name") ?? null) !== (fieldOf(row.after, "display_name") ?? null)) {
+      return "غيّر اسم موظف";
+    }
   }
   return undefined;
 }

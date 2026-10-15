@@ -18,6 +18,7 @@ import { formatBareReceiptNumber, formatInvoiceNumber } from "./invoiceNumber";
 import Sheet from "./Sheet";
 import SheetCardHead from "./SheetCardHead";
 import { dayScreenStrings } from "./strings";
+import { staffName } from "../../domain/staffName";
 
 interface AuditSheetProps {
   practitionerId: string;
@@ -320,7 +321,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         }
         if (row.entity === "memberships") {
           const membership = membershipsById.get(row.entity_id);
-          return membership ? (usersById.get(membership.user_id)?.full_name ?? "") : "";
+          return membership ? (staffName(membership, usersById.get(membership.user_id)) ?? "") : "";
         }
         if (row.entity === "schedules") {
           const weekday = payload.weekday;

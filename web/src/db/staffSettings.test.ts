@@ -121,3 +121,34 @@ describe("updateMembership PIN change", () => {
     expect(verifyPin("0000", updated!.pin_salt!, updated!.pin_hash)).toBe(true);
   });
 });
+
+describe("updateMembership rename", () => {
+  it("stores the trimmed name as display_name, leaves users.full_name alone, and queues a memberships op", async () => {
+    await seedDatabase(db);
+    const owner = await ownerMembership();
+    const userBefore = await db.users.get(owner.user_id);
+    const opsBefore = await db.sync_ops.count();
+
+    expect(await updateMembership(db, owner.id, { displayName: "  د. أحمد  " })).toEqual({ ok: true });
+
+    expect((await db.memberships.get(owner.id))?.display_name).toBe("د. أحمد");
+    expect(await db.users.get(owner.user_id)).toEqual(userBefore);
+    const ops = (await db.sync_ops.toArray()).slice(opsBefore);
+    expect(ops.map((op) => op.entity)).toEqual(["memberships"]);
+    expect((ops[0].payload as Membership).display_name).toBe("د. أحمد");
+  });
+
+  it("refuses an empty or over-long name and writes nothing", async () => {
+    await seedDatabase(db);
+    const owner = await ownerMembership();
+    const opsBefore = await db.sync_ops.count();
+
+    expect(await updateMembership(db, owner.id, { displayName: "   " })).toEqual({ ok: false, reason: "name_required" });
+    expect(await updateMembership(db, owner.id, { displayName: "م".repeat(121) })).toEqual({
+      ok: false,
+      reason: "name_too_long",
+    });
+    expect((await db.memberships.get(owner.id))?.display_name ?? null).toBeNull();
+    expect(await db.sync_ops.count()).toBe(opsBefore);
+  });
+});

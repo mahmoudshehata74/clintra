@@ -2,6 +2,7 @@ import { generatePinSalt, hashPin } from "../auth/pinHash";
 import { id } from "../domain/id";
 import { normalizeEgyptianPhone } from "../domain/phone";
 import { Role } from "../domain/role";
+import { normalizeStaffName } from "../domain/staffName";
 import { LocationScope, PractitionerScope } from "../domain/scope";
 import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
@@ -149,14 +150,25 @@ export async function createStaffMembership(db: ClintraDatabase, input: NewStaff
 export interface MembershipPatch {
   role?: Role;
   isActive?: boolean;
+  /**
+   * The name this organization uses for the member (memberships.display_name),
+   * trimmed here; required and at most 120 characters. Renaming never touches
+   * users.full_name, which other organizations may share.
+   */
+  displayName?: string;
   /** When set, re-hashes the PIN. Does NOT touch any active session for the edited membership. */
   newPin?: string;
 }
 
-export type UpdateMembershipResult = { ok: true } | { ok: false; reason: "membership_not_found" | "last_owner" };
+export type UpdateMembershipResult =
+  | { ok: true }
+  | { ok: false; reason: "membership_not_found" | "last_owner" | "name_required" | "name_too_long" };
 
 /**
- * Edits a membership's role, active flag, and/or PIN. Refuses ("last_owner")
+ * Edits a membership's role, active flag, name and/or PIN. Owner-only, on
+ * the device (the settings panel is the owner's) — the server does not check
+ * who edits a membership, the same known gap as every other settings write
+ * (api/docs/rls.md). Refuses ("last_owner")
  * any edit that would leave the org with no active owner — you cannot demote or
  * deactivate the last one. A new PIN is only stored (pin_hash + pin_salt); it
  * never unlocks or changes any active session, so the affected person must use
@@ -171,6 +183,10 @@ export async function updateMembership(
   const before = await db.memberships.get(membershipId);
   if (!before) {
     return { ok: false, reason: "membership_not_found" };
+  }
+  const displayName = patch.displayName !== undefined ? normalizeStaffName(patch.displayName) : null;
+  if (displayName !== null && !displayName.ok) {
+    return { ok: false, reason: displayName.reason };
   }
 
   const nextRole = patch.role ?? before.role;
@@ -193,7 +209,8 @@ export async function updateMembership(
         })()
       : {};
 
-  const after: Membership = { ...before, role: nextRole, is_active: nextActive, ...pinFields };
+  const nameFields = displayName?.ok ? { display_name: displayName.value } : {};
+  const after: Membership = { ...before, role: nextRole, is_active: nextActive, ...pinFields, ...nameFields };
   await mutate(db, {
     table: db.memberships,
     entity: "memberships",
