@@ -79,6 +79,19 @@ test("completing a visit produces an invoice with number, status, items and tota
   await expect(dialog.getByText(new RegExp(`^${S.invoiceCreatedPrefix} \\d{2}:\\d{2} · ${ASSISTANT_NAME}$`))).toBeVisible();
 });
 
+test("the head's status is a solid badge: its status fill under on-fill text, light and dark", async ({ page }) => {
+  const dialog = await completeAndOpenInvoice(page);
+  const status = invoiceHead(dialog).getByText(S.invoiceStatusUnpaid, { exact: true });
+
+  // index.css's warning and on-fill in each theme, as computed colours.
+  await expect(status).toHaveCSS("background-color", "rgb(150, 98, 11)");
+  await expect(status).toHaveCSS("color", "rgb(255, 255, 255)");
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(status).toHaveCSS("background-color", "rgb(215, 161, 58)");
+  await expect(status).toHaveCSS("color", "rgb(8, 19, 17)");
+});
+
 test("a partial payment flips status to partial and turns the remaining row amber", async ({ page }) => {
   const dialog = await completeAndOpenInvoice(page);
   const total = parsePounds(await labeledRowValue(invoiceTotals(dialog), S.invoiceTotalLabel));

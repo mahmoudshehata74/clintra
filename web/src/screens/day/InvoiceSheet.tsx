@@ -48,7 +48,7 @@ interface InvoiceData {
 }
 
 // `.inv-status` (unpaid/partial) / `.inv-status.paid` (paid) through the
-// shared Badge's tinted look. Void has no reference class; danger (this
+// shared Badge's solid head-status look. Void has no reference class; danger (this
 // app's own tone for a cancelled record) plus a line-through.
 const STATUS_TONE: Record<string, "warning" | "eligible" | "danger"> = {
   [InvoiceStatus.Unpaid]: "warning",
@@ -180,7 +180,7 @@ export default function InvoiceSheet({
               <Ltr>{formatInvoiceNumber(invoice)}</Ltr>
             </span>
             <Badge
-              appearance="tinted"
+              appearance="headStatus"
               tone={STATUS_TONE[invoice.status]}
               className={invoice.status === InvoiceStatus.Void ? "line-through" : undefined}
             >

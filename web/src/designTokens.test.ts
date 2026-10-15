@@ -204,12 +204,6 @@ const PAIRS: readonly Pair[] = [
     ].map(({ text, use }) => ({ group: "Chrome (ink)", text, background, use })),
   ),
   { group: "Chrome (ink)", text: "on-dark", background: "glass 25% over ink-2", use: "on-dark buttons, the PIN pad, the active nav item" },
-  ...["warning", "eligible", "danger"].map((text) => ({
-    group: "Chrome (ink)",
-    text,
-    background: `${text} 22% over ink-2`,
-    use: "the invoice head's tinted status",
-  })),
   { group: "Chrome (ink)", text: "copper-on-ink", background: "copper 22% over ink-2", use: "the on-dark copper button" },
   ...["green", "green-2", "danger", "warning", "eligible", "muted"].map((background) => ({
     group: "Text on fills",
@@ -249,12 +243,6 @@ const PLACEHOLDERS: Readonly<Record<string, number>> = {
 const ACCEPTED_UNDER_AA: Readonly<Record<string, number>> = {
   // Decision 9: warning on warning-wash is accepted in light as it is.
   "light: warning on warning-wash": 4.49,
-  // Until decision 8 makes the invoice head's status a solid badge.
-  "light: warning on warning 22% over ink-2": 2.21,
-  "light: eligible on eligible 22% over ink-2": 1.8,
-  "light: danger on danger 22% over ink-2": 1.8,
-  "dark: eligible on eligible 22% over ink-2": 4.02,
-  "dark: danger on danger 22% over ink-2": 3.44,
 };
 
 describe("contrast", () => {
