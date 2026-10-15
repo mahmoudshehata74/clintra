@@ -76,11 +76,11 @@ export default function DaySlab({
           </span>
           <div className="mt-2 text-[11.5px] text-on-dark-dim">{heroCaption}</div>
         </div>
-        <div className="flex flex-1 flex-wrap border-s border-white/[0.10] max-[600px]:border-s-0 max-[600px]:border-t">
+        <div className="flex flex-1 flex-wrap border-s border-glass/[0.10] max-[600px]:border-s-0 max-[600px]:border-t">
           {cells.map((cell) => (
             <div
               key={cell.label}
-              className="flex min-w-[110px] flex-1 flex-col justify-center gap-1 border-s border-white/[0.07] px-5 py-[22px] first:border-s-0 max-[900px]:min-w-[90px] max-[900px]:px-4 max-[900px]:py-[18px]"
+              className="flex min-w-[110px] flex-1 flex-col justify-center gap-1 border-s border-glass/[0.07] px-5 py-[22px] first:border-s-0 max-[900px]:min-w-[90px] max-[900px]:px-4 max-[900px]:py-[18px]"
             >
               <span className="text-[10.5px] font-semibold tracking-[0.05em] text-on-dark-dim">{cell.label}</span>
               <span className={`text-2xl font-semibold leading-none tabular-nums max-[900px]:text-xl ${CELL_VALUE_TONE[cell.tone ?? "default"]}`}>
@@ -92,7 +92,7 @@ export default function DaySlab({
       </div>
 
       <div className="relative px-6 pb-5 max-[600px]:px-[18px]">
-        <div className="flex h-1.5 overflow-hidden rounded-full bg-white/[0.10]">
+        <div className="flex h-1.5 overflow-hidden rounded-full bg-glass/[0.10]">
           <span
             className="block bg-[linear-gradient(90deg,var(--color-green)_0%,var(--color-green-2)_100%)]"
             style={{ width: `${splitSharePercent}%` }}
@@ -104,7 +104,7 @@ export default function DaySlab({
             {splitCompletedText}
           </span>
           <span className="flex items-center gap-1.5">
-            <i className="block h-2 w-2 flex-none rounded-[2.5px] bg-white/[0.24]" />
+            <i className="block h-2 w-2 flex-none rounded-[2.5px] bg-glass/[0.24]" />
             {splitRemainingText}
           </span>
         </div>

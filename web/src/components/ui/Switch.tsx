@@ -18,17 +18,17 @@ export interface SwitchProps
 const BASE =
   "relative inline-flex h-5 w-9 flex-none cursor-pointer appearance-none rounded-full border-0 p-0 transition-colors duration-150 " +
   "after:absolute after:left-1/2 after:top-1/2 after:h-10 after:w-10 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-card " +
   "disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-50";
 
 // `.toggle` (on: eligible) / `.toggle.off` (rule) — one background class per render.
 const TRACK = { on: "bg-eligible", off: "bg-rule" } as const;
 
-// `.toggle::after` — the 16px white knob, 2px in from the inline-end edge
-// when on and from the inline-start edge when off (`.toggle.off::after`).
-// Each state sets only its own inset side, so no two classes ever compete
-// for one property.
-const KNOB_BASE = "pointer-events-none absolute top-0.5 h-4 w-4 rounded-full bg-card";
+// `.toggle::after` — the 16px white knob (on-fill: the prototype's #fff,
+// white in dark too), 2px in from the inline-end edge when on and from the
+// inline-start edge when off (`.toggle.off::after`). Each state sets only
+// its own inset side, so no two classes ever compete for one property.
+const KNOB_BASE = "pointer-events-none absolute top-0.5 h-4 w-4 rounded-full bg-on-fill";
 const KNOB_POSITION = { on: "end-0.5", off: "start-0.5" } as const;
 
 /**

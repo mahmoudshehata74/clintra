@@ -174,6 +174,18 @@
   --color-print-note-ink: #856d00;
   /* WhatsApp's own green — the prototype's `.msg-item .icn.wa` and `.msg-ch-toggle .wa` only. */
   --color-whatsapp: #25d366;
+  /* The prototype's literal whites, which it keeps in dark too: on-fill is
+     text and marks on a saturated fill (green, copper, danger, the ink
+     chrome — `.run`, `.badge`, `.brand .logo`, `.toggle::after`), glass the
+     translucent white of controls on those surfaces, always with an
+     opacity (`.app-btn`, `.tb-nav`, `.pad button`: rgba(255,255,255,.06–.25)). */
+  --color-on-fill: #ffffff;
+  --color-glass: #ffffff;
+  /* Paper and its ink: the printed pages and their on-screen previews
+     (`.print-page`, `.rx-print-page`), white in both themes like the
+     prototype's own #fff/#111. */
+  --color-print-paper: #ffffff;
+  --color-print-ink: #000000;
 
   /* The shared content width of every rail page (components/PageMain.tsx): the prototype's `.app` frame. */
   --container-page: 1116px;
@@ -193,6 +205,10 @@
   --shadow-s: 0 1px 2px var(--color-shadow-soft);
   --shadow-m: 0 2px 4px var(--color-shadow-soft), 0 12px 28px -18px var(--color-shadow-mid);
   --shadow-l: 0 24px 50px -30px var(--color-shadow-deep);
+  /* The brand tile's own drop shadow on ink (`.brand .logo`,
+     `.install-hero .logo`), the same in both themes. */
+  --shadow-logo: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-logo-lg: 0 8px 20px rgba(0, 0, 0, 0.35);
 
   /* Brand tokens for logo surfaces only (wordmark/icon). */
   --color-brand-teal: #1a957d;
@@ -387,7 +403,7 @@ body {
 
 @media print {
   body:has(> .rx-print-target) {
-    background-color: white;
+    background-color: var(--color-print-paper);
   }
 
   body:has(> .rx-print-target) > #root {

@@ -241,7 +241,7 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
       <div className="flex flex-wrap items-center gap-3.5 border-b border-copper-line bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-copper)_10%,var(--color-card))_0%,var(--color-card)_100%)] px-5 py-4">
         <div
           aria-hidden="true"
-          className="flex h-11 w-11 flex-none items-center justify-center rounded-card bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[17px] font-bold text-white"
+          className="flex h-11 w-11 flex-none items-center justify-center rounded-card bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[17px] font-bold text-on-fill"
         >
           {summary.initial}
         </div>

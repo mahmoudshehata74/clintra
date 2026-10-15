@@ -505,7 +505,7 @@ function CurrentPatientHero({
       className="flex flex-col gap-4 rounded-panel border border-copper-line bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-copper)_14%,var(--color-card))_0%,var(--color-card)_60%)] px-6 py-5"
     >
       <div className="flex flex-wrap items-center gap-4">
-        <div className="flex h-[52px] w-[52px] flex-none items-center justify-center rounded-card bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-xl font-bold text-white">
+        <div className="flex h-[52px] w-[52px] flex-none items-center justify-center rounded-card bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-xl font-bold text-on-fill">
           {name.charAt(0)}
         </div>
         <div className="min-w-[200px] flex-1">
@@ -879,8 +879,8 @@ function AttentionCard({ items, patientOf, onCompleteNow }: AttentionCardProps) 
 // resting border/background/text colour outright.
 const NUM_LOOK = {
   current:
-    "border-transparent bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-white shadow-[0_3px_10px_color-mix(in_srgb,var(--color-copper)_30%,transparent)]",
-  done: "border-transparent bg-eligible text-white",
+    "border-transparent bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-on-fill shadow-[0_3px_10px_color-mix(in_srgb,var(--color-copper)_30%,transparent)]",
+  done: "border-transparent bg-eligible text-on-fill",
   rest: "border-rule bg-field text-muted",
 } as const;
 

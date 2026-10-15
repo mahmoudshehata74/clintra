@@ -42,9 +42,12 @@ const BASE =
 // controls), not a touch target in its own right.
 const MD_TOUCH_TARGET = "relative after:absolute after:inset-x-0 after:top-1/2 after:h-10 after:-translate-y-1/2 after:content-['']";
 
-// The focus ring's default white offset reads fine on paper/card/wash
-// surfaces; onDark and onDarkCopper sit on the ink slab, so their ring
-// needs an ink-colored offset instead to stay visible against it.
+// The focus ring's offset takes the surface's own colour: card for the
+// paper/card/wash surfaces (Tailwind's default is a literal white, wrong in
+// the dark theme); onDark and onDarkCopper sit on the ink slab, so their
+// ring needs an ink-colored offset instead to stay visible against it. One
+// of the two per render, never both.
+const LIGHT_SURFACE_FOCUS = "focus-visible:ring-offset-card";
 const DARK_SURFACE_FOCUS = "focus-visible:ring-offset-ink";
 
 interface SizeClasses {
@@ -80,8 +83,8 @@ interface SizeClasses {
  */
 const VARIANT_SIZE_CLASSES: Record<ButtonVariant, SizeClasses> = {
   primary: {
-    md: "gap-2 px-[22px] py-2.5 text-[13.5px] font-semibold text-white bg-[linear-gradient(135deg,var(--color-green)_0%,var(--color-green-2)_130%)] shadow-[0_2px_6px_color-mix(in_srgb,var(--color-green)_30%,transparent)]",
-    sm: "gap-2 px-3.5 py-2 text-[12.5px] font-semibold text-white bg-[linear-gradient(135deg,var(--color-green)_0%,var(--color-green-2)_130%)] shadow-[0_2px_6px_color-mix(in_srgb,var(--color-green)_30%,transparent)]",
+    md: "gap-2 px-[22px] py-2.5 text-[13.5px] font-semibold text-on-fill bg-[linear-gradient(135deg,var(--color-green)_0%,var(--color-green-2)_130%)] shadow-[0_2px_6px_color-mix(in_srgb,var(--color-green)_30%,transparent)]",
+    sm: "gap-2 px-3.5 py-2 text-[12.5px] font-semibold text-on-fill bg-[linear-gradient(135deg,var(--color-green)_0%,var(--color-green-2)_130%)] shadow-[0_2px_6px_color-mix(in_srgb,var(--color-green)_30%,transparent)]",
   },
   secondary: {
     md: "border-[1.5px] border-green-line bg-green-wash px-3.5 py-2 text-[12.5px] font-semibold text-green",
@@ -98,8 +101,8 @@ const VARIANT_SIZE_CLASSES: Record<ButtonVariant, SizeClasses> = {
     sm: "border-[1.5px] border-rule bg-field px-3 py-2 text-[11.5px] font-semibold text-muted",
   },
   onDark: {
-    md: "gap-[7px] border border-white/[0.16] bg-white/[0.09] px-[13px] py-1.5 text-xs font-semibold text-on-dark",
-    sm: "border border-white/[0.14] bg-white/[0.08] px-[11px] py-[5px] text-[11.5px] font-medium text-on-dark hover:bg-white/[0.16]",
+    md: "gap-[7px] border border-glass/[0.16] bg-glass/[0.09] px-[13px] py-1.5 text-xs font-semibold text-on-dark",
+    sm: "border border-glass/[0.14] bg-glass/[0.08] px-[11px] py-[5px] text-[11.5px] font-medium text-on-dark hover:bg-glass/[0.16]",
   },
   onDarkCopper: {
     md: "gap-[7px] border border-copper-line bg-[color-mix(in_srgb,var(--color-copper)_22%,transparent)] px-[13px] py-1.5 text-xs font-semibold text-copper-2",
@@ -126,7 +129,7 @@ export default function Button({ variant, size = "md", type = "button", classNam
   const classes = [
     BASE,
     size === "md" ? MD_TOUCH_TARGET : "",
-    DARK_SURFACE_VARIANTS.has(variant) ? DARK_SURFACE_FOCUS : "",
+    DARK_SURFACE_VARIANTS.has(variant) ? DARK_SURFACE_FOCUS : LIGHT_SURFACE_FOCUS,
     sizeClassesFor(variant, size),
     className ?? "",
   ]

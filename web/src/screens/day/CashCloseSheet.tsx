@@ -403,7 +403,7 @@ export default function CashCloseSheet({
           {difference !== null &&
             (difference === 0 ? (
               <div className="flex items-center gap-2.5 rounded-control border border-green-line bg-[color-mix(in_srgb,var(--color-eligible)_8%,transparent)] px-3.5 py-3">
-                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-eligible text-sm font-bold text-white">✓</span>
+                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-eligible text-sm font-bold text-on-fill">✓</span>
                 <div>
                   <p className="text-[13.5px] font-bold text-eligible">{dayScreenStrings.cashCloseMatchedTitle}</p>
                   <p className="text-[11.5px] text-muted">{dayScreenStrings.cashCloseMatchedSubtitle}</p>
@@ -411,7 +411,7 @@ export default function CashCloseSheet({
               </div>
             ) : (
               <div className="flex items-center gap-2.5 rounded-control border border-[color-mix(in_srgb,var(--color-warning)_40%,transparent)] bg-warning-wash px-3.5 py-3">
-                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-warning text-sm font-bold text-white">!</span>
+                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-warning text-sm font-bold text-on-fill">!</span>
                 <p className="text-[13.5px] font-bold text-warning">
                   {dayScreenStrings.cashCloseDifferenceLabel} <Ltr>{formatMoneyAmount(difference)}</Ltr> {CURRENCY_UNIT}
                 </p>

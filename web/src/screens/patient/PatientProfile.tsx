@@ -235,7 +235,7 @@ function Hero({ hero, onOpenPlan }: { hero: ProfileHero; onOpenPlan: (planId: st
       {/* `.avatar` */}
       <div
         aria-hidden="true"
-        className="flex h-16 w-16 flex-none items-center justify-center rounded-app bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[26px] font-bold text-white"
+        className="flex h-16 w-16 flex-none items-center justify-center rounded-app bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[26px] font-bold text-on-fill"
       >
         {hero.initial}
       </div>

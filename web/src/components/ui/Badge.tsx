@@ -25,7 +25,7 @@ const SHAPE_RADIUS: Record<BadgeShape, string> = {
 
 // `.c-head .badge` reproduced exactly — the only onDark source.
 const ONDARK_CLASSES =
-  "rounded-chip border border-white/[0.14] bg-white/[0.08] px-[9px] py-[3px] text-[10.5px] font-semibold tracking-[0.05em] text-on-dark-dim";
+  "rounded-chip border border-glass/[0.14] bg-glass/[0.08] px-[9px] py-[3px] text-[10.5px] font-semibold tracking-[0.05em] text-on-dark-dim";
 
 // `.inv-status` / `.inv-status.paid` reproduced exactly: a 22% tint of the
 // tone with the full tone as text and border, on the dark invoice head. Void
@@ -75,17 +75,17 @@ const SOFT_LOOK: Record<Exclude<BadgeTone, "eligible">, string> = {
 // flat fill, matching `.msg-tpl .badge`/`.badge.auto`/`.badge.manual` and
 // `.slot.no-show .state`, none of which use a gradient.
 const SOLID_LOOK: Record<BadgeTone, { chip: string; pill: string }> = {
-  neutral: { chip: "bg-muted text-white", pill: "bg-muted text-white" },
-  green: { chip: "bg-green text-white", pill: "bg-green text-white" },
+  neutral: { chip: "bg-muted text-on-fill", pill: "bg-muted text-on-fill" },
+  green: { chip: "bg-green text-on-fill", pill: "bg-green text-on-fill" },
   copper: {
-    chip: "bg-copper text-white",
-    pill: "bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-white",
+    chip: "bg-copper text-on-fill",
+    pill: "bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-on-fill",
   },
-  warning: { chip: "bg-warning text-white", pill: "bg-warning text-white" },
-  danger: { chip: "bg-danger text-white", pill: "bg-danger text-white" },
+  warning: { chip: "bg-warning text-on-fill", pill: "bg-warning text-on-fill" },
+  danger: { chip: "bg-danger text-on-fill", pill: "bg-danger text-on-fill" },
   eligible: {
-    chip: "bg-eligible text-white",
-    pill: "bg-[linear-gradient(135deg,var(--color-eligible)_0%,var(--color-green-2)_100%)] text-white",
+    chip: "bg-eligible text-on-fill",
+    pill: "bg-[linear-gradient(135deg,var(--color-eligible)_0%,var(--color-green-2)_100%)] text-on-fill",
   },
 };
 

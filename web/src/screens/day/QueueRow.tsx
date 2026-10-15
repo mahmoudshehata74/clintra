@@ -29,7 +29,7 @@ interface QueueRowProps {
 
 const QNUM_LOOK: Record<QueueRowKind, string> = {
   current:
-    "border-transparent bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-white shadow-[0_3px_10px_color-mix(in_srgb,var(--color-copper)_40%,transparent)]",
+    "border-transparent bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-on-fill shadow-[0_3px_10px_color-mix(in_srgb,var(--color-copper)_40%,transparent)]",
   next: "border-green-line bg-green-wash text-green",
   done: "border-rule bg-field text-faint",
   waiting: "border-rule bg-field text-muted",

@@ -126,7 +126,7 @@ export default function PaymentSheet({ invoiceId, onDismiss, onRecorded }: Payme
             inline override on this screen (`margin:-18px -20px 0`) — the
             body's own px-5/py-[18px] match that 20px/18px exactly. */}
         <div className="-mx-5 -mt-[18px] flex flex-wrap items-center gap-[14px] border-b border-copper-line bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-copper)_10%,var(--color-card))_0%,var(--color-card)_100%)] px-5 py-4">
-          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-card bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[17px] font-bold text-white">
+          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-card bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[17px] font-bold text-on-fill">
             {patient?.full_name.charAt(0) ?? ""}
           </span>
           <div className="min-w-[180px] flex-1">

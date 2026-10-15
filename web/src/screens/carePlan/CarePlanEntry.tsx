@@ -58,7 +58,7 @@ export default function CarePlanEntry({ visit }: { visit: Visit }) {
         >
           <span
             aria-hidden="true"
-            className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-chip bg-copper text-[11px] font-bold text-white"
+            className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-chip bg-copper text-[11px] font-bold text-on-fill"
           >
             {T.badgeIcon}
           </span>

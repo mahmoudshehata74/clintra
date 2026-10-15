@@ -63,7 +63,7 @@ const NEW_PATIENT_ROW_CLASS =
 const TIME_CHIP_CLASS =
   "rounded-control border-[1.5px] border-rule bg-field px-[14px] py-[7px] text-[12.5px] font-semibold text-muted " +
   "transition-colors duration-150 hover:border-green hover:bg-green-wash hover:text-green " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-card";
 
 const BACK_BUTTON_CLASS = "self-start text-[12.5px] font-semibold text-muted hover:text-green";
 

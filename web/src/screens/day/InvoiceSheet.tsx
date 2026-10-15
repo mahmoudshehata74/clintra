@@ -186,7 +186,7 @@ export default function InvoiceSheet({
             >
               {STATUS_LABEL[invoice.status]}
             </Badge>
-            <div className="me-auto border-s border-white/[0.14] ps-[14px]">
+            <div className="me-auto border-s border-glass/[0.14] ps-[14px]">
               <p className="text-[13px] font-semibold text-on-dark">{patient?.full_name ?? ""}</p>
               <p className="-mt-px text-[11px] text-on-dark-dim">
                 {showPractitionerName && practitioner ? `${withDoctorPrefix(practitioner.full_name)} · ` : ""}
@@ -346,17 +346,17 @@ export default function InvoiceSheet({
           <PrintPage>
             <PrintHeaderNote>{dayScreenStrings.printHeaderWarning}</PrintHeaderNote>
             <PrintClinicBlock {...clinic} />
-            <h2 className="mb-4 text-center text-lg font-semibold text-black">{dayScreenStrings.printInvoiceTitle}</h2>
-            <p className="text-black">
+            <h2 className="mb-4 text-center text-lg font-semibold text-print-ink">{dayScreenStrings.printInvoiceTitle}</h2>
+            <p className="text-print-ink">
               {dayScreenStrings.invoiceNumberLabel}: {formatBareInvoiceNumber(invoice)}
             </p>
-            <p className="text-black">
+            <p className="text-print-ink">
               {dayScreenStrings.invoicePatientLabel}: {patient?.full_name ?? ""}
             </p>
-            <p className="text-black">
+            <p className="text-print-ink">
               {dayScreenStrings.invoicePractitionerLabel}: {practitioner?.full_name ?? ""}
             </p>
-            <p className="text-black">
+            <p className="text-print-ink">
               {dayScreenStrings.invoiceDateLabel}: {formatCairoDisplayDate(todayInCairo(new Date(invoice.issued_at)))}
             </p>
             <div className="mt-4">
@@ -373,13 +373,13 @@ export default function InvoiceSheet({
                 </tbody>
               </PrintTable>
             </div>
-            <p className="mt-4 text-black">
+            <p className="mt-4 text-print-ink">
               {dayScreenStrings.invoiceTotalLabel}: {formatMoneyAmount(invoice.total)}
             </p>
-            <p className="text-black">
+            <p className="text-print-ink">
               {dayScreenStrings.invoicePaidLabel}: {formatMoneyAmount(invoice.paid)}
             </p>
-            <p className="text-black">
+            <p className="text-print-ink">
               {dayScreenStrings.invoiceRemainingLabel}: {formatMoneyAmount(remaining)}
             </p>
           </PrintPage>
@@ -391,31 +391,31 @@ export default function InvoiceSheet({
           <PrintPage>
             <PrintHeaderNote>{dayScreenStrings.printHeaderWarning}</PrintHeaderNote>
             <PrintClinicBlock {...clinic} />
-            <p className="mt-4 text-center text-sm text-black/60">{dayScreenStrings.paymentReceiptNumberPrefix}</p>
-            <h2 className="text-center text-2xl font-semibold text-black">{formatBareReceiptNumber(activeTarget.payment)}</h2>
-            <p className="mt-6 text-center text-4xl font-semibold text-black">
+            <p className="mt-4 text-center text-sm text-print-ink/60">{dayScreenStrings.paymentReceiptNumberPrefix}</p>
+            <h2 className="text-center text-2xl font-semibold text-print-ink">{formatBareReceiptNumber(activeTarget.payment)}</h2>
+            <p className="mt-6 text-center text-4xl font-semibold text-print-ink">
               {formatMoneyAmount(activeTarget.payment.amount)}
             </p>
             <div className="mt-6 flex flex-col gap-1 text-sm">
-              <p className="flex justify-between text-black">
-                <span className="text-black/60">{dayScreenStrings.invoiceNumberLabel}</span>
+              <p className="flex justify-between text-print-ink">
+                <span className="text-print-ink/60">{dayScreenStrings.invoiceNumberLabel}</span>
                 <span>{formatBareInvoiceNumber(invoice)}</span>
               </p>
-              <p className="flex justify-between text-black">
-                <span className="text-black/60">{dayScreenStrings.invoicePatientLabel}</span>
+              <p className="flex justify-between text-print-ink">
+                <span className="text-print-ink/60">{dayScreenStrings.invoicePatientLabel}</span>
                 <span>{patient?.full_name ?? ""}</span>
               </p>
-              <p className="flex justify-between text-black">
-                <span className="text-black/60">{dayScreenStrings.paymentMethodLabel}</span>
+              <p className="flex justify-between text-print-ink">
+                <span className="text-print-ink/60">{dayScreenStrings.paymentMethodLabel}</span>
                 <span>{METHOD_LABEL[activeTarget.payment.method]}</span>
               </p>
-              <p className="flex justify-between text-black">
-                <span className="text-black/60">{dayScreenStrings.invoiceDateLabel}</span>
+              <p className="flex justify-between text-print-ink">
+                <span className="text-print-ink/60">{dayScreenStrings.invoiceDateLabel}</span>
                 <span>{formatCairoDisplayDate(todayInCairo(new Date(activeTarget.payment.created_at)))}</span>
               </p>
               {activeTarget.payment.note && (
-                <p className="flex justify-between text-black">
-                  <span className="text-black/60">{dayScreenStrings.paymentNotePlaceholder}</span>
+                <p className="flex justify-between text-print-ink">
+                  <span className="text-print-ink/60">{dayScreenStrings.paymentNotePlaceholder}</span>
                   <span>{activeTarget.payment.note}</span>
                 </p>
               )}

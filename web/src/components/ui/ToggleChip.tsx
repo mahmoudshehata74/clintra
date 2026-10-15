@@ -11,7 +11,7 @@ export interface ToggleChipProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
 
 const BASE =
   "appearance-none cursor-pointer whitespace-nowrap font-[inherit] transition-colors duration-150 " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-card " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 /**

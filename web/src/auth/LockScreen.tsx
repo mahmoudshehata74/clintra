@@ -147,8 +147,8 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
 
   // `.pad button`: 14px of padding around 20px text — 60px tall.
   const padKeyClassName =
-    "flex min-h-[60px] items-center justify-center rounded-card border border-white/[0.13] bg-white/[0.06] font-semibold text-on-dark " +
-    "transition-colors duration-150 hover:bg-white/[0.14] " +
+    "flex min-h-[60px] items-center justify-center rounded-card border border-glass/[0.13] bg-glass/[0.06] font-semibold text-on-dark " +
+    "transition-colors duration-150 hover:bg-glass/[0.14] " +
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink " +
     "disabled:cursor-not-allowed disabled:opacity-40";
 
@@ -162,7 +162,7 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
       aria-label={authStrings.lockOverlayAria}
     >
       <div className="flex w-full max-w-page flex-col items-center rounded-panel bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-6 py-11 text-center text-on-dark">
-        <p className="text-[22px] font-bold tracking-[-0.02em] text-white">
+        <p className="text-[22px] font-bold tracking-[-0.02em] text-on-fill">
           Clin<span className="text-copper-2">tra</span>
         </p>
 
@@ -178,7 +178,7 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
                 key={membership.id}
                 type="button"
                 onClick={() => choose(membership.id)}
-                className="min-h-12 w-full rounded-card border border-white/[0.16] bg-white/[0.09] px-4 py-3 text-start text-sm font-semibold text-on-dark transition-colors duration-150 hover:bg-white/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
+                className="min-h-12 w-full rounded-card border border-glass/[0.16] bg-glass/[0.09] px-4 py-3 text-start text-sm font-semibold text-on-dark transition-colors duration-150 hover:bg-glass/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
               >
                 {formatActorLabel(membership, user)}
               </button>
@@ -202,7 +202,7 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
                     className={
                       filled
                         ? "h-3 w-3 rounded-full bg-copper shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-copper)_25%,transparent)]"
-                        : "h-3 w-3 rounded-full bg-white/[0.15]"
+                        : "h-3 w-3 rounded-full bg-glass/[0.15]"
                     }
                   />
                 );
