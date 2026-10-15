@@ -68,3 +68,17 @@ describe("formatActorName", () => {
     expect(formatActorName(membership({}), undefined)).toBe(dayScreenStrings.auditUnknownActor);
   });
 });
+
+describe("the membership's display_name", () => {
+  it("is the name both labels show, over the user's full_name", () => {
+    const renamed = membership({ display_name: "أ. سارة", role: Role.Assistant });
+    expect(formatActorName(renamed, user({}))).toBe("أ. سارة");
+    expect(formatActorLabel(renamed, user({}))).toBe(`أ. سارة (${dayScreenStrings.roleAssistant})`);
+  });
+
+  it("names a member whose users row this device never received", () => {
+    const added = membership({ display_name: "منى الجديدة" });
+    expect(formatActorName(added, undefined)).toBe("منى الجديدة");
+    expect(formatActorLabel(added, undefined)).toBe(`منى الجديدة (${dayScreenStrings.roleAssistant})`);
+  });
+});

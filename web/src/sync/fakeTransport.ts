@@ -1,6 +1,9 @@
 import Dexie, { type Table } from "dexie";
 import { ClintraDatabase } from "../db/database";
 import { AuditAction, type SyncOp } from "../db/types";
+import { id } from "../domain/id";
+import type { AddStaffRequest, AddStaffResponse } from "./staffServer";
+import { SYNCABLE_TABLES } from "./syncableTables";
 import type { PulledChange, PullSinceResult, PushOpResult, SyncTransport } from "./transport";
 
 /** The default name two tabs on the same device share, so they see one coherent server. */
@@ -55,6 +58,12 @@ export class FakeTransport implements SyncTransport {
   }
 
   private async pushOne(op: SyncOp): Promise<PushOpResult> {
+    // The real server's per-op rule (SyncOpApplier's unknown_entity): an
+    // entity it does not sync is refused for that op alone, even when a
+    // local store of that name exists (users).
+    if (!(SYNCABLE_TABLES as readonly string[]).includes(op.entity)) {
+      return { op_id: op.op_id, status: "rejected", reason: "unknown_entity" };
+    }
     const table = tableForEntity(this.db, op.entity);
 
     return this.db.transaction("rw", table, this.db.sync_ops, async (): Promise<PushOpResult> => {
@@ -96,6 +105,79 @@ export class FakeTransport implements SyncTransport {
       const rev = (op.payload as { rev?: number } | null)?.rev ?? 1;
       return { op_id: op.op_id, status: "accepted", rev };
     });
+  }
+
+  /**
+   * The demo stand-in for POST /api/staff: creates the membership and its
+   * links exactly as add_staff_member(jsonb) returns them (rev 1, the
+   * request's user_id), and records each as an applied op so every tab's
+   * pull delivers it, as the server's ledger rows do. No users row and no
+   * phone lookup — this fake holds no users — so it never answers
+   * already_member, and it does not check who is asking. It holds no
+   * organizations either, so the caller names the device's own
+   * (sync/staffServer.ts's resolveStaffServer).
+   */
+  async addStaffMember(orgId: string, request: AddStaffRequest): Promise<AddStaffResponse> {
+    const response: AddStaffResponse = {
+      membership: {
+        id: request.membership_id,
+        user_id: request.user_id,
+        org_id: orgId,
+        role: request.role,
+        location_scope: request.location_scope,
+        practitioner_scope: request.practitioner_scope,
+        practitioner_id: request.practitioner_id,
+        pin_hash: request.pin_hash,
+        pin_salt: request.pin_salt,
+        is_active: true,
+        display_name: request.display_name,
+        rev: 1,
+      },
+      membership_locations: request.locations.map((link) => ({
+        id: link.id,
+        membership_id: request.membership_id,
+        location_id: link.location_id,
+        rev: 1,
+      })),
+      membership_practitioners: request.practitioners.map((link) => ({
+        id: link.id,
+        membership_id: request.membership_id,
+        practitioner_id: link.practitioner_id,
+        rev: 1,
+      })),
+    };
+    const created: { entity: string; row: { id: string } }[] = [
+      { entity: "memberships", row: response.membership },
+      ...response.membership_locations.map((row) => ({ entity: "membership_locations", row })),
+      ...response.membership_practitioners.map((row) => ({ entity: "membership_practitioners", row })),
+    ];
+    // One millisecond apart, in creation order: pullSince orders by
+    // created_at, as the server's ledger orders by seq.
+    const startMs = Date.now();
+    await this.db.transaction(
+      "rw",
+      [this.db.memberships, this.db.membership_locations, this.db.membership_practitioners, this.db.sync_ops],
+      async () => {
+        for (const [index, { entity, row }] of created.entries()) {
+          const at = new Date(startMs + index).toISOString();
+          await tableForEntity(this.db, entity).put(row);
+          await this.db.sync_ops.add({
+            op_id: id(),
+            entity,
+            entity_id: row.id,
+            action: AuditAction.Create,
+            payload: row,
+            device_id: "fake-server",
+            created_at: at,
+            synced_at: at,
+            base_rev: null,
+            failure_count: 0,
+            next_retry_at: null,
+          });
+        }
+      },
+    );
+    return response;
   }
 
   /**

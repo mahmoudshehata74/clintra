@@ -34,7 +34,7 @@ id, full_name, phone, email?, is_active
 ### memberships
 id, user_id, org_id, role, location_scope, practitioner_scope,
 practitioner_id? (required only when practitioner_scope is self), pin_hash,
-is_active
+is_active, display_name? (see v21 additions)
 
 ### membership_locations
 membership_id, location_id
@@ -474,7 +474,9 @@ Giving it `rev` today would make it the first table where two *different
 organizations'* devices could race on the same counter — a materially
 different kind of conflict than anything else in this schema, and a
 product decision this version does not make. Revisit when `users` actually
-needs edit-conflict detection.
+needs edit-conflict detection. (v21: still not syncable — a staff member's name moved to
+`memberships.display_name` instead, and staff are added on the server, so
+the device never writes a `users` row; see the v21 additions.)
 
 `rev` is enforced by a single shared trigger (`enforce_row_rev()`), not by
 restricting `clintra_app`'s column grants — see
@@ -1016,6 +1018,58 @@ either table beyond the id, so a pulled row can never collide with a local
 one. Both stores existed (empty) since version 1; versions 1-19 are
 unchanged.
 
+## v21 additions
+
+### memberships.display_name; staff added on the server
+
+Owner decisions:
+
+1. Each membership carries the name the organization uses for the member:
+   `display_name` (varchar(120), nullable, stored trimmed). Every place a
+   staff name is shown — the staff list, the lock screen, the app bar, the
+   audit actor, the cash close, printed pages, the patient profile — reads
+   it through `web/src/domain/staffName.ts`'s `staffName`: `display_name`,
+   or `users.full_name` only when `display_name` is null (or absent on a
+   local row stored before it existed). No backfill: every existing
+   membership keeps the name it showed.
+2. Renaming a staff member edits `display_name` through the ordinary
+   memberships sync (`updateMembership` with `displayName`, owner only on
+   the device; required, at most 120 characters; audited "غيّر اسم موظف").
+   It never touches `users.full_name`, which other organizations may share.
+   Who renames is enforced on the device only — the same known gap as every
+   other settings write (`api/docs/rls.md`).
+3. Adding a staff member needs a connection and happens on the server in one
+   step (`POST /api/staff`, `add_staff_member(jsonb)` —
+   `api/docs/rls.md`'s "Adding staff"): find the user by E.164 phone or
+   create it, then create the membership (role, scopes, `display_name`, PIN
+   salt and hash computed on the device), its `membership_locations` /
+   `membership_practitioners` rows and the audit row. The server itself
+   checks that the device token's membership — the owner who registered
+   the device, not the person signed in by PIN, which the server never
+   sees — is an active owner of the organization, and that every location
+   and practitioner named is the organization's; a non-owner calling the
+   endpoint from an owner-registered device is not stopped, the same limit
+   as every other settings write. Offline the
+   form says "إضافة موظف محتاجة اتصال بالإنترنت" and writes nothing; on
+   success the device stores the returned rows at once (no sync op), so the
+   new member can sign in immediately, and other devices pull them. The
+   device no longer creates `users` rows.
+4. A pushed op for an entity the server does not sync is rejected alone
+   (`unknown_entity`); the rest of its batch applies.
+
+Server: `2026_09_12_000031_add_display_name_to_memberships.php` (the
+column; the policy is unchanged),
+`2026_09_12_000032_add_staff_member_function.php` (`clintra_staff`'s
+grants and the function), `2026_09_12_000033_add_display_name_to_register_device.php`
+(the registration payload carries each membership's `display_name`).
+
+Local: database version 21. No store changes (`display_name` is not
+indexed). Its upgrade unsticks a device whose queue still holds a staff
+member added locally (`web/src/db/staffOpsRecovery.ts`): it removes every
+unsent `users` op, and every unsent op of a membership created with one of
+those users and of that membership's link rows; sent ops and the local rows
+stay. Versions 1-20 are unchanged.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.
@@ -1046,6 +1100,8 @@ unchanged.
 - `no_show` is a status in its own right and is never merged with `cancelled`.
 - An invoice can never be voided once any payment exists against it.
 - Every payment carries its own receipt number.
+- An organization has at most one membership per user (checked by
+  `add_staff_member`, v21 additions).
 - A user's `phone` is unique (see v4 additions); a patient's `phone` is
   deliberately not (see the patients table note) — these are different
   entities with different rules, not an inconsistency.

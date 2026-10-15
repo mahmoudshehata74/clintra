@@ -60,7 +60,13 @@ const REASON_LABELS: Record<string, string> = {
   care_plan_immutable: "خطط الرعاية وجلساتها مينفعش تتمسح، والجلسة مينفعش تتنقل لخطة أو خدمة أو ترتيب تاني",
   care_plan_invalid: "بيانات خطة الرعاية دي مش صالحة: الحالة غلط أو الزيارة مش لنفس المريض والطبيب",
   conflict: "فيه تعارض في البيانات",
+  unknown_entity: "السيرفر مبيستقبلش النوع ده من البيانات، فالتغيير ده مش هيوصل",
 };
+
+// An unknown_entity row names a table the server does not sync (a users op
+// queued before staff were added on the server, say), which has no label of
+// its own; it reads as plain "بيانات", never the raw table name.
+const UNKNOWN_ENTITY_LABEL = "بيانات";
 
 /**
  * A short, stable, quotable reference the assistant can read out over the
@@ -115,7 +121,8 @@ function describePayment(payment: Payment): string {
  * says how to put them back, since none of them will reach the server.
  */
 export function describeSyncReview(review: SyncReview): string {
-  const entityLabel = ENTITY_LABELS[review.entity] ?? review.entity;
+  const entityLabel =
+    ENTITY_LABELS[review.entity] ?? (review.reason === "unknown_entity" ? UNKNOWN_ENTITY_LABEL : review.entity);
   const payments = displacedPayments(review);
   if (payments.length > 0) {
     return (

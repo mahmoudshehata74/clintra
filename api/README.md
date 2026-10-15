@@ -62,6 +62,19 @@ GRANT CREATE ON SCHEMA public TO clintra_mint;
 GRANT CREATE ON SCHEMA public TO clintra_register;
 ```
 
+One more, same pattern: `clintra_staff` owns `add_staff_member(jsonb)`,
+which `clintra_app` calls from the authenticated `POST /api/staff` (an
+owner adding a staff member — `docs/rls.md`'s "Adding staff"). Like
+`clintra_register`, it holds only the column-exact privileges that
+function's body uses. Needed in every environment including production.
+
+```sql
+CREATE ROLE clintra_staff NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
+GRANT clintra_staff TO clintra_owner;
+\c clintra
+GRANT CREATE ON SCHEMA public TO clintra_staff;
+```
+
 A fourth role, **local and CI only**: the RLS isolation suite
 (`tests/Feature/Rls`) needs to insert fixture data (an organization, a
 membership, ...) without a membership already in place to grant RLS scope —
@@ -109,6 +122,7 @@ GRANT CREATE ON SCHEMA public TO clintra_rls;
 GRANT CREATE ON SCHEMA public TO clintra_provision;
 GRANT CREATE ON SCHEMA public TO clintra_mint;
 GRANT CREATE ON SCHEMA public TO clintra_register;
+GRANT CREATE ON SCHEMA public TO clintra_staff;
 GRANT CONNECT ON DATABASE clintra_test TO clintra_app;
 GRANT CONNECT ON DATABASE clintra_test TO clintra_fixtures;
 GRANT USAGE ON SCHEMA public TO clintra_fixtures;
@@ -119,6 +133,51 @@ ALTER DEFAULT PRIVILEGES FOR ROLE clintra_owner IN SCHEMA public
 ```
 DB_DATABASE=clintra_test php artisan migrate --database=pgsql_owner
 ```
+
+### Fresh local setup
+
+On an empty PostgreSQL 16 server (a fresh install, say), the quickest way to
+reach exactly the state CI builds is one SQL file run once as the
+`postgres` superuser. `.github/workflows/ci.yml`'s "Provision Postgres roles
+and databases" step is the source of truth for its contents; this file
+second.
+
+1. Write the file **outside the repository** (it holds passwords), e.g.
+   `%TEMP%\clintra-local-setup.sql`, with, in order:
+   - `CREATE ROLE` for every role CI creates, with the same attributes:
+     `clintra_owner` and `clintra_app` (`LOGIN`), `clintra_rls`,
+     `clintra_provision`, `clintra_mint`, `clintra_register`,
+     `clintra_staff` (`NOLOGIN BYPASSRLS`), and the local-only
+     `clintra_fixtures` (`LOGIN BYPASSRLS`) — all `NOSUPERUSER NOCREATEDB
+     NOCREATEROLE`. The `LOGIN` roles take the passwords already in `.env`
+     (`DB_OWNER_PASSWORD`, `DB_APP_PASSWORD`, `DB_FIXTURES_PASSWORD`).
+   - `GRANT` each of the five `NOLOGIN` roles `TO clintra_owner`.
+   - For `clintra` and then `clintra_test`: `CREATE DATABASE … OWNER
+     clintra_owner`, `\connect` to it, then the same per-database lines as
+     CI — schema owner, `USAGE` for `clintra_app`, `CREATE ON SCHEMA public`
+     for each of the five `NOLOGIN` roles, `CONNECT` for `clintra_app` and
+     `clintra_fixtures`, `USAGE` for `clintra_fixtures`, and the default
+     privileges for `clintra_fixtures`.
+   No `BEGIN`/`COMMIT` around it: `CREATE DATABASE` cannot run in a
+   transaction.
+2. Run it, entering the `postgres` password when asked:
+   `psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -f <file>`
+3. Delete the file.
+4. Check, as `clintra_owner` (no superuser needed): every role exists with
+   its attributes, `clintra_owner` is a member of the five `NOLOGIN` roles,
+   both databases exist.
+5. Migrate and test:
+
+```
+php artisan migrate --database=pgsql_owner
+DB_DATABASE=clintra_test php artisan migrate:fresh --database=pgsql_owner
+DB_DATABASE=clintra_test php artisan migrate:fresh --database=pgsql_owner
+php artisan test
+```
+
+`migrate:fresh` runs twice on purpose, as in CI ("migrate:fresh is
+idempotent" in `docs/rls.md`), and only ever against `clintra_test` — never
+against the dev database.
 
 ## Setup
 

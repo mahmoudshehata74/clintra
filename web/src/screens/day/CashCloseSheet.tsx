@@ -4,7 +4,8 @@ import Ltr from "../../components/Ltr";
 import Button from "../../components/ui/Button";
 import Field, { TextInput } from "../../components/ui/Field";
 import { SheetPanelBody, SheetPanelFoot } from "../../components/ui/SheetPanel";
-import { useActingUser } from "../../auth/useActingMembership";
+import { useActingStaffName } from "../../auth/useActingMembership";
+import { staffName } from "../../domain/staffName";
 import { closeCashForDay, computeExpectedCashTotal } from "../../db/cashClose";
 import { db } from "../../db/database";
 import { InvoiceStatus, type CashClose, type InvoiceItem, type Patient, type Schedule, type Service, type Visit } from "../../db/types";
@@ -108,7 +109,7 @@ export default function CashCloseSheet({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
 
-  const actingUser = useActingUser();
+  const actingName = useActingStaffName();
 
   const invoicesAtLocation =
     useLiveQuery(() => db.invoices.where("location_id").equals(locationId).toArray(), [locationId]) ?? [];
@@ -177,7 +178,7 @@ export default function CashCloseSheet({
       if (existingClose) {
         const closedByMembership = await db.memberships.get(existingClose.closed_by);
         const closedByUser = closedByMembership ? await db.users.get(closedByMembership.user_id) : undefined;
-        closedByName = closedByUser?.full_name ?? null;
+        closedByName = closedByMembership ? staffName(closedByMembership, closedByUser) : null;
       }
 
       return {
@@ -438,9 +439,9 @@ export default function CashCloseSheet({
           <Button key="export-csv" variant="secondary" onClick={handleExportCsv}>
             {dayScreenStrings.cashCloseExportCsvAction}
           </Button>
-          {actingUser && (
+          {actingName && (
             <span className="ms-auto self-center text-[11.5px] text-muted">
-              {dayScreenStrings.cashCloseClosesCountPrefix} <b className="font-bold text-text">{actingUser.full_name}</b>
+              {dayScreenStrings.cashCloseClosesCountPrefix} <b className="font-bold text-text">{actingName}</b>
             </span>
           )}
         </SheetPanelFoot>

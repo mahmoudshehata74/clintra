@@ -147,10 +147,12 @@ jobs:
       # is split across three more NOLOGIN BYPASSRLS roles, one per
       # function, sized by exposure ("One role per provisioning function"):
       # clintra_provision (provision_organization, CLI-only),
-      # clintra_mint (mint_activation_code, CLI-only), and clintra_register
+      # clintra_mint (mint_activation_code, CLI-only), clintra_register
       # (register_device — the one clintra_app itself can call, from a live
-      # unauthenticated HTTP request). All three are needed in every
-      # environment including production, unlike clintra_fixtures below.
+      # unauthenticated HTTP request), and clintra_staff (add_staff_member —
+      # clintra_app calls it from the authenticated POST /api/staff). All
+      # four are needed in every environment including production, unlike
+      # clintra_fixtures below.
       # (Device revocation needs no fourth role at all — clintra:revoke-device
       # runs as clintra_owner, using SET ROLE clintra_rls narrowly for one
       # lookup, exactly as api/docs/rls.md's "Revoking a device" explains.)
@@ -169,11 +171,13 @@ jobs:
           psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_provision NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
           psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_mint NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
           psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_register NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
+          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_staff NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
           psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_fixtures LOGIN PASSWORD 'ci_fixtures_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
           psql -h 127.0.0.1 -U postgres -c "GRANT clintra_rls TO clintra_owner;"
           psql -h 127.0.0.1 -U postgres -c "GRANT clintra_provision TO clintra_owner;"
           psql -h 127.0.0.1 -U postgres -c "GRANT clintra_mint TO clintra_owner;"
           psql -h 127.0.0.1 -U postgres -c "GRANT clintra_register TO clintra_owner;"
+          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_staff TO clintra_owner;"
 
           for db in clintra clintra_test; do
             psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE $db OWNER clintra_owner;"
@@ -183,6 +187,7 @@ jobs:
             psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_provision;"
             psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_mint;"
             psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_register;"
+            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_staff;"
             psql -h 127.0.0.1 -U postgres -c "GRANT CONNECT ON DATABASE $db TO clintra_app;"
             psql -h 127.0.0.1 -U postgres -c "GRANT CONNECT ON DATABASE $db TO clintra_fixtures;"
             psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT USAGE ON SCHEMA public TO clintra_fixtures;"

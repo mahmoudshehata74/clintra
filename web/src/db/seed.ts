@@ -104,7 +104,7 @@ export interface SeedOptions {
    * real Argon2id implementation instead of a fixed placeholder. Off by
    * default: nothing in the vitest suite ever verifies a PIN against these
    * two memberships' own hash (each test that checks a hash — staffSettings
-   * .test.ts — checks one freshly produced by createStaffMembership or
+   * .test.ts — checks one freshly produced by addStaffMember or
    * updateMembership, which always hash for real regardless of this flag).
    * Paying Argon2id's cost (~250ms each, by design — see pinHashParams.ts)
    * twice per call for a value nothing reads was previously stacking with

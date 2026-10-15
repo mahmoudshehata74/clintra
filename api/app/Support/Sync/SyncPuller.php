@@ -88,10 +88,11 @@ class SyncPuller
      */
     private function currentPayload(string $entity, string $entityId): ?array
     {
-        // Every value ever written to sync_ledger.entity came from
-        // PushSyncOpsRequest's own `in:` validation against this same
-        // list — this check is defense against querying an unexpected
-        // table name some other way, not a case expected to ever trigger.
+        // Every value ever written to sync_ledger.entity is in this same
+        // list — SyncOpApplier refuses any other entity before writing
+        // anything, and StaffController writes only membership rows — so
+        // this check is defense against querying an unexpected table name
+        // some other way, not a case expected to ever trigger.
         if (! in_array($entity, SyncableTables::NAMES, true)) {
             return null;
         }

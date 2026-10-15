@@ -30,6 +30,15 @@ class SyncOpApplier
      */
     public function apply(array $op, string $membershipId, string $deviceId): array
     {
+        // An entity the server does not sync (a stuck device's `users` op,
+        // say) is refused here, for this op alone — never by the request's
+        // validation, which would fail the whole batch and leave the device's
+        // other uploads stuck behind it. Checked before any query: the name
+        // never reaches DB::table().
+        if (! in_array($op['entity'], SyncableTables::NAMES, true)) {
+            return $this->rejected($op, 'unknown_entity');
+        }
+
         try {
             return DB::transaction(fn () => $this->applyInTransaction($op, $membershipId, $deviceId));
         } catch (Throwable $e) {

@@ -58,6 +58,13 @@ export interface Membership {
    */
   pin_salt: string | null;
   is_active: boolean;
+  /**
+   * The name this organization uses for the member, trimmed, at most 120
+   * characters (docs/schema.md's v21 additions). Null — or absent, on a row
+   * stored before the column existed — reads as the user's full_name:
+   * domain/staffName.ts's staffName is the one place that decides.
+   */
+  display_name?: string | null;
   /** Server-assigned; see rev's own doc comment on Visit. */
   rev: number;
 }

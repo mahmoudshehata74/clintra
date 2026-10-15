@@ -6,7 +6,7 @@ import { VisitSource } from "../domain/visitSource";
 import type { Piastres } from "../domain/money";
 import { SYNCABLE_TABLES } from "../sync/syncableTables";
 import { ClintraDatabase } from "./database";
-import { InvoiceStatus, type Invoice, type Visit } from "./types";
+import { AuditAction, InvoiceStatus, type Invoice, type SyncOp, type Visit } from "./types";
 
 let db: ClintraDatabase;
 
@@ -296,7 +296,7 @@ describe("version 14: visits.note backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const visits = await upgraded.visits.toArray();
 
-    expect(upgraded.verno).toBe(20);
+    expect(upgraded.verno).toBe(21);
     expect(visits.find((visit) => visit.id === withoutNote.id)).toHaveProperty("note", null);
     expect(visits.find((visit) => visit.id === pulledWithNote.id)?.note).toBe("حساسية بنسلين");
     upgraded.close();
@@ -380,7 +380,7 @@ describe("version 15: number series backfill", () => {
 
     const upgraded = new ClintraDatabase(name);
 
-    expect(upgraded.verno).toBe(20);
+    expect(upgraded.verno).toBe(21);
     expect((await upgraded.invoices.toArray()).map((invoice) => invoice.series)).toEqual([1, 1]);
     expect((await upgraded.payments.toArray()).map((payment) => payment.series)).toEqual([1, 1]);
     expect((await upgraded.device.get("seed-device"))?.series).toBe(1);
@@ -430,7 +430,7 @@ describe("version 17: practitioners' syndicate_number and rev backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const practitioners = await upgraded.practitioners.toArray();
 
-    expect(upgraded.verno).toBe(20);
+    expect(upgraded.verno).toBe(21);
     expect(practitioners.find((p) => p.id === local.id)).toEqual({ ...local, syndicate_number: null, rev: 1 });
     expect(practitioners.find((p) => p.id === pulled.id)).toEqual(pulled);
     upgraded.close();
@@ -440,7 +440,7 @@ describe("version 17: practitioners' syndicate_number and rev backfill", () => {
 describe("version 18: messages and message_templates", () => {
   it("adds both stores with their indexes, one template override per key", async () => {
     const local = new ClintraDatabase(`clintra-db-messages-test-${crypto.randomUUID()}`);
-    expect(local.verno).toBe(20);
+    expect(local.verno).toBe(21);
     expect(local.messages.schema.indexes.map((index) => index.src).sort()).toEqual([
       "attempted_at",
       "location_id",
@@ -496,7 +496,7 @@ describe("version 19: number high-water marks", () => {
     legacy.close();
 
     const upgraded = new ClintraDatabase(name);
-    expect(upgraded.verno).toBe(20);
+    expect(upgraded.verno).toBe(21);
     expect((await upgraded.device.get("device-1"))?.number_marks).toEqual({
       [`invoice:${LOCATION_ID}:2:2025`]: 9,
       [`invoice:${LOCATION_ID}:2:2026`]: 5,
@@ -510,7 +510,7 @@ describe("version 19: number high-water marks", () => {
 describe("version 20: care plans", () => {
   it("indexes care_plans by patient and practitioner and care_plan_items by plan and visit, none of them unique", async () => {
     const local = new ClintraDatabase(`clintra-db-care-plans-test-${crypto.randomUUID()}`);
-    expect(local.verno).toBe(20);
+    expect(local.verno).toBe(21);
     expect(local.care_plans.schema.indexes.map((index) => [index.src, index.unique])).toEqual([
       ["patient_id", false],
       ["practitioner_id", false],
@@ -549,7 +549,7 @@ describe("version 20: care plans", () => {
     legacy.close();
 
     const upgraded = new ClintraDatabase(name);
-    expect(upgraded.verno).toBe(20);
+    expect(upgraded.verno).toBe(21);
     expect((await upgraded.patients.get(PATIENT_ID))?.full_name).toBe("كريم");
     expect(await upgraded.care_plans.count()).toBe(0);
     expect(await upgraded.care_plan_items.where("visit_id").equals("visit-1").count()).toBe(0);
@@ -564,5 +564,57 @@ describe("syncable tables", () => {
     for (const table of SYNCABLE_TABLES) {
       expect(storeNames).toContain(table);
     }
+  });
+});
+
+describe("version 21: a device stuck on a locally added staff member", () => {
+  function op(overrides: Partial<SyncOp> & Pick<SyncOp, "op_id" | "entity" | "entity_id">): SyncOp {
+    return {
+      action: AuditAction.Create,
+      payload: { id: overrides.entity_id },
+      device_id: "device-1",
+      created_at: "2026-10-14T09:00:00.000Z",
+      synced_at: null,
+      base_rev: null,
+      failure_count: 0,
+      next_retry_at: null,
+      ...overrides,
+    };
+  }
+
+  it("drops the queued users op and the queued ops of the membership and links written with it, and keeps every other op", async () => {
+    const name = `clintra-db-upgrade-test-${crypto.randomUUID()}`;
+    const stores = Object.fromEntries(
+      new ClintraDatabase(name).tables.map((table) => [
+        table.name,
+        [table.schema.primKey.src, ...table.schema.indexes.map((index) => index.src)].join(", "),
+      ]),
+    );
+    const legacy = new Dexie(name);
+    legacy.version(20).stores(stores);
+    await legacy.table("sync_ops").bulkAdd([
+      // The stuck local add: user, membership, its two links, then a PIN change on it.
+      op({ op_id: "op-user", entity: "users", entity_id: "user-new", payload: { id: "user-new", full_name: "منى" } }),
+      op({ op_id: "op-membership", entity: "memberships", entity_id: "membership-new", payload: { id: "membership-new", user_id: "user-new" } }),
+      op({ op_id: "op-location-link", entity: "membership_locations", entity_id: "ml-new", payload: { id: "ml-new", membership_id: "membership-new" } }),
+      op({ op_id: "op-practitioner-link", entity: "membership_practitioners", entity_id: "mp-new", payload: { id: "mp-new", membership_id: "membership-new" } }),
+      op({ op_id: "op-membership-pin", entity: "memberships", entity_id: "membership-new", action: AuditAction.Update, base_rev: 1, payload: { id: "membership-new", user_id: "user-new" } }),
+      // Everything else stays: the day's own work, an existing member's edit and its link, and sent history.
+      op({ op_id: "op-visit", entity: "visits", entity_id: "visit-1" }),
+      op({ op_id: "op-existing-membership", entity: "memberships", entity_id: "membership-old", action: AuditAction.Update, base_rev: 2, payload: { id: "membership-old", user_id: "user-old" } }),
+      op({ op_id: "op-existing-link", entity: "membership_locations", entity_id: "ml-old", payload: { id: "ml-old", membership_id: "membership-old" } }),
+      op({ op_id: "op-sent-user", entity: "users", entity_id: "user-sent", synced_at: "2026-10-01T09:00:00.000Z" }),
+    ]);
+    await legacy.table("memberships").add({ id: "membership-new", user_id: "user-new", org_id: "org-1", role: "assistant", location_scope: "all", practitioner_scope: "all", practitioner_id: null, pin_hash: "h", pin_salt: "s", is_active: true, rev: 1 });
+    legacy.close();
+
+    const upgraded = new ClintraDatabase(name);
+    const remaining = (await upgraded.sync_ops.toArray()).map((row) => row.op_id).sort();
+
+    expect(upgraded.verno).toBe(21);
+    expect(remaining).toEqual(["op-existing-link", "op-existing-membership", "op-sent-user", "op-visit"]);
+    // Only the queue is touched: the member can still sign in on this device.
+    expect(await upgraded.memberships.get("membership-new")).toBeDefined();
+    upgraded.close();
   });
 });

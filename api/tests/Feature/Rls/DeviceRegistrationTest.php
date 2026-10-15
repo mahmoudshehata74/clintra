@@ -309,3 +309,26 @@ test('a successful registration writes none of its secret material to the log', 
         }
     }
 });
+
+test('the bootstrap payload carries each membership\'s display_name, null when unset', function () {
+    $fixture = makeRegistrationFixture();
+    $this->fx()->table('memberships')->where('id', $fixture['membershipId'])->update(['display_name' => 'د. أحمد']);
+    $assistantId = $this->makeMembership($this->makeUser('assistant'), $fixture['orgId']);
+    $deviceId = (string) Str::uuid();
+
+    $response = $this->postJson('/api/devices/register', [
+        'phone' => $fixture['phone'],
+        'activation_code' => $fixture['plainCode'],
+        'device_id' => $deviceId,
+    ]);
+
+    $response->assertOk();
+    $names = collect($response->json('memberships'))->pluck('display_name', 'id');
+    expect($names[$fixture['membershipId']])->toBe('د. أحمد');
+    expect($names->has($assistantId))->toBeTrue();
+    expect($names[$assistantId])->toBeNull();
+
+    $this->fx()->table('activation_codes')->where('id', $fixture['codeId'])->update(['used_by_device_id' => null]);
+    $this->fx()->table('device')->where('id', $deviceId)->delete();
+    $this->fx()->table('audit_log')->where('org_id', $fixture['orgId'])->delete();
+});

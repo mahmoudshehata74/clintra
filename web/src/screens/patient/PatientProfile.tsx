@@ -34,6 +34,7 @@ import {
   type ProfileTab,
 } from "./profileModel";
 import { patientProfileStrings as T } from "./strings";
+import { staffName } from "../../domain/staffName";
 
 export interface PatientProfileProps {
   patientId: string;
@@ -77,10 +78,10 @@ async function loadProfile(patientId: string): Promise<PatientProfileSource | nu
       formValuesByVisitId.set(row.visit_id, readVisitFormValues(row));
     }
   }
-  const userNames = new Map(users.map((user) => [user.id, user.full_name]));
+  const usersById = new Map(users.map((user) => [user.id, user]));
   const staffNames = new Map<string, string>();
   for (const membership of memberships) {
-    const name = userNames.get(membership.user_id);
+    const name = staffName(membership, usersById.get(membership.user_id));
     if (name) {
       staffNames.set(membership.id, name);
     }

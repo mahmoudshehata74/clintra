@@ -34,6 +34,7 @@ import type {
   Visit,
   VisitFormData,
 } from "./types";
+import { dropStrandedStaffOps } from "./staffOpsRecovery";
 
 export class ClintraDatabase extends Dexie {
   organizations!: EntityTable<Organization, "id">;
@@ -505,6 +506,18 @@ export class ClintraDatabase extends Dexie {
       care_plans: "id, patient_id, practitioner_id",
       care_plan_items: "id, care_plan_id, visit_id",
     });
+
+    // Staff identity (docs/schema.md's v21 additions): memberships gain
+    // display_name, not indexed, so no store changes — a row stored before
+    // it reads as the user's full_name (domain/staffName.ts), with no
+    // backfill. Adding staff now happens on the server, and the device no
+    // longer writes users rows; this upgrade unsticks a device whose queue
+    // still holds such a write (db/staffOpsRecovery.ts).
+    this.version(21)
+      .stores({})
+      .upgrade(async (tx) => {
+        await dropStrandedStaffOps(tx.table("sync_ops"));
+      });
   }
 }
 

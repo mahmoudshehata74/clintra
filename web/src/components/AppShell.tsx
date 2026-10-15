@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { authStrings } from "../auth/authStrings";
 import { clearActiveSession } from "../auth/session";
-import { useActingUser } from "../auth/useActingMembership";
+import { useActingStaffName } from "../auth/useActingMembership";
 import { navItemsFor, type NavItem } from "../domain/navigation";
 import type { Role } from "../domain/role";
 import type { ClinicDay } from "../domain/time";
@@ -191,9 +191,9 @@ function BrandLogo() {
  * that away from the real current day).
  */
 function AppBar({ title, today, whoName }: { title: ReactNode; today: ClinicDay; whoName?: string }) {
-  const actingUser = useActingUser();
+  const actingName = useActingStaffName();
   const { dateLine, weekdayLine } = formatAppBarDate(today);
-  const shownName = whoName ?? actingUser?.full_name;
+  const shownName = whoName ?? actingName;
 
   return (
     <header className="sticky top-0 z-40 flex flex-wrap items-center gap-3.5 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[11px] text-on-dark shadow-m print:hidden">

@@ -192,6 +192,41 @@ test("@screenshot settings-staff", async ({ page }) => {
   await shoot(page, "settings-staff", false);
 });
 
+// The assistant's row in edit mode, its name field first (the rename).
+test("@screenshot settings-staff-edit", async ({ page }) => {
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
+  const assistantRow = dialog.getByRole("listitem").filter({ hasText: S.roleAssistant });
+  await assistantRow.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  await assistantRow.getByLabel(S.staffNameLabel, { exact: true }).fill("مدام سارة");
+  await expect(assistantRow.getByRole("button", { name: S.settingsSaveAction, exact: true })).toBeVisible();
+  await shoot(page, "settings-staff-edit", false);
+});
+
+// The new-staff form while the device is offline: the connection message
+// above its save.
+test("@screenshot settings-staff-add-offline", async ({ page }) => {
+  await page.goto("/?seedDay=1");
+  await page.evaluate(() => localStorage.clear());
+  await login(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await page.getByRole("button", { name: S.settingsButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
+  await dialog.getByRole("button", { name: S.staffNewAction, exact: true }).click();
+  await dialog.getByLabel(S.staffNameLabel, { exact: true }).fill("منى الجديدة");
+  await dialog.getByLabel(S.staffPhoneLabel, { exact: true }).fill("01099999999");
+  await page.context().setOffline(true);
+  const message = dialog.getByRole("alert").filter({ hasText: S.staffAddNeedsConnection });
+  await expect(message).toBeVisible();
+  await message.scrollIntoViewIfNeeded();
+  await shoot(page, "settings-staff-add-offline", false);
+  await page.context().setOffline(false);
+});
+
 // The "الأطباء" tab with one row in edit mode: سلمى إبراهيم given a
 // syndicate number first, so both row states show; then أحمد المصري's
 // editor open with a new title and number typed in, not yet saved.

@@ -207,6 +207,11 @@ function describeSettingsUpdate(row: AuditVerbRow): string | undefined {
     if (fieldOf(row.before, "pin_hash") !== fieldOf(row.after, "pin_hash")) {
       return "غيّر الرقم السري";
     }
+    // A rename (memberships.display_name, docs/schema.md's v21 additions);
+    // a row stored before the column existed has none, the same as null.
+    if ((fieldOf(row.before, "display_name") ?? null) !== (fieldOf(row.after, "display_name") ?? null)) {
+      return "غيّر اسم موظف";
+    }
   }
   return undefined;
 }
@@ -224,8 +229,11 @@ const CREATE_VERBS: Partial<Record<string, string>> = {
   services: "أضاف خدمة",
   service_price_overrides: "أضاف سعر خاص",
   schedules: "أضاف مواعيد العمل",
+  // A staff member added before the server took over adding staff wrote a
+  // users row and its membership; one added since writes the membership
+  // alone (db/staffSettings.ts's addStaffMember) — either reads as the add.
   users: "أضاف موظف",
-  memberships: "حدّد صلاحية موظف",
+  memberships: "أضاف موظف",
   membership_locations: "حدّد فروع الموظف",
   membership_practitioners: "حدّد أطباء الموظف",
 };
