@@ -289,7 +289,6 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
 - Invoice item editing (screen 5's "تعديل بنود") — owner decision of the prototype alignment: recorded, not built.
 - Queue reordering (screen 3's "إعادة ترتيب") — owner decision of the prototype alignment: recorded, not built.
 - Messages: a "suggested today" list on the messages page (tomorrow's appointment reminders, follow-ups due, balances a week old), so the suggested templates are offered for the right patients instead of being opened one visit at a time.
-- Sync: the first pull after a load waits for the 10-second timer, because the first cycle runs before the device is registered; start a cycle as soon as registration completes.
 
 ## Data decisions for the rebuild
 - `visits.note text NULL` — the doctor's quick note.

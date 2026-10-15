@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { DeviceRegistration, Invoice, Patient, Payment, Prescription, PrescriptionItem, SyncOp, SyncReview, Visit } from "../src/db/types";
-import { emptySlotTiles, gotoSeededDay, login, PATIENTS, pickSearchResult, S, selectPractitioner, SLOTS_DR } from "./support";
+import { emptySlotTiles, gotoSeededDay, login, PATIENTS, pickSearchResult, rowFor, S, selectPractitioner, SLOTS_DR } from "./support";
 
 /** The database the app's FakeTransport keeps as its stand-in server (sync/fakeTransport.ts's FAKE_SERVER_DB_NAME). */
 const FAKE_SERVER_DB = "clintra-fake-server";
@@ -500,4 +500,37 @@ test("a visit another device got onto the server first takes this device's invoi
   expect((await readIndexedDbStore<Payment>(page, "payments")).find((row) => row.id === payment.id)).toBeUndefined();
   expect((await readIndexedDbStore<Invoice>(page, "invoices")).find((row) => row.id === invoice.id)).toBeUndefined();
   expect((await readIndexedDbStore<Visit>(page, "visits")).find((row) => row.id === theirs.id)).toEqual(theirs);
+});
+
+test("a change another device put on the server before a load shows right after the load: the first cycle waits for the device, then pulls", async ({
+  page,
+}) => {
+  await gotoSeededDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await expect(rowFor(page, PATIENTS.mona)).toBeVisible();
+
+  // The engine has completed a pull, so the fake server's database exists to plant into.
+  await expect
+    .poll(async () => {
+      await requestSyncCycle(page);
+      return (await readDevice(page))?.pull_cursor ?? null;
+    })
+    .not.toBeNull();
+
+  const mona = (await readIndexedDbStore<Patient>(page, "patients")).find((patient) => patient.full_name === PATIENTS.mona);
+  if (!mona) throw new Error("no seeded patient named منى");
+  const renamed = `${PATIENTS.mona} سالم`;
+  await plantServerRow<Patient>(page, "patients", { ...mona, full_name: renamed, rev: mona.rev + 1 }, new Date().toISOString());
+
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  await page.reload();
+  await login(page);
+  await selectPractitioner(page, SLOTS_DR);
+
+  await expect(rowFor(page, renamed)).toBeVisible();
+  // The first cycle after the load never ran ahead of the device row.
+  expect(consoleErrors.filter((text) => text.includes("pull_requires_registered_device"))).toEqual([]);
 });
