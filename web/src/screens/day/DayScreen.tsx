@@ -176,7 +176,26 @@ export default function DayScreen({
   onTitleChange,
   onTodayChange,
 }: DayScreenProps) {
-  const [staticData, setStaticData] = useState<StaticData | null>(null);
+  // What the boot load read once (after the seed and the device binding).
+  // Locations, practitioners and schedules then follow the store live
+  // (staticData below): a working day added in settings, a renamed doctor
+  // or another device's synced schedule shows without a reload.
+  const [bootData, setStaticData] = useState<StaticData | null>(null);
+  const liveLocations = useLiveQuery(() => db.locations.toArray(), []);
+  const livePractitioners = useLiveQuery(() => db.practitioners.toArray(), []);
+  const liveSchedules = useLiveQuery(() => db.schedules.toArray(), []);
+  const staticData = useMemo<StaticData | null>(
+    () =>
+      bootData && {
+        ...bootData,
+        locations: liveLocations ? liveLocations.filter((location) => location.is_active) : bootData.locations,
+        practitioners: livePractitioners
+          ? livePractitioners.filter((practitioner) => practitioner.is_active)
+          : bootData.practitioners,
+        schedules: liveSchedules ?? bootData.schedules,
+      },
+    [bootData, liveLocations, livePractitioners, liveSchedules],
+  );
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [selectedPractitionerId, setSelectedPractitionerIdState] = useState<string | null>(readStoredPractitionerId);
   const [toastState, setToastState] = useState<ToastState | null>(null);
