@@ -1,4 +1,4 @@
-# Audit sync (design)
+# Audit sync
 
 Backlog A-04 (`docs/bug-hunt.md`, `docs/session-handoff.md`). Owner
 decision: every device's audit rows reach the server and every other device
@@ -6,9 +6,11 @@ of the same organization, so the owner sees who did what on any device, and
 the invoice's "إنشاء" line names its creator everywhere. Audit rows are
 append-only: never edited or deleted, anywhere.
 
-This is a design only. No migration or code ships with it; every schema,
-RLS and grant statement the implementation will run is listed under
-"Statements", and every question for the owner under "Open questions".
+**Status: built** (`feat/audit-sync`). The owner approved the design with
+every open question answered as recommended (1-12, "Decisions" at the
+end), plus one amendment: the pull-cursor gap ("Seq order is commit
+order"), fixed for `sync_ledger` in its own commit first. Where the build
+differs from the design as first written, "As built" says so.
 
 ## What exists today
 
@@ -299,10 +301,9 @@ other organizations never wait on each other; no grant is needed. The
   pulled from other devices: `id`, `org_id`, `location_id`,
   `practitioner_id`, `actor_membership_id`, `device_id`, `entity`,
   `entity_id`, `action`, `before`, `after`, `at`. No `seq`.
-- `device` gains `audit_pushed_seq: number` and `audit_pull_cursor:
-  string | null` (no index). The upgrade sets them to `0` and `null` on an
-  existing device row; registration writes the same values on the row it
-  creates.
+- `device` gains `audit_pushed_seq` and `audit_pull_cursor` (no index),
+  both optional: absent, they read as `0` and `null`, so neither the
+  upgrade nor registration writes them (see "As built").
 - `audit_log` is unchanged: same fields, same `&seq` index, same writers.
 
 **Telling a pulled row from this device's own**: by store. Own rows live in
@@ -322,16 +323,21 @@ undo pushes.
 first, 200 per request. Rows a server refuses (an organization or actor it
 does not know) are refused once and left on the device.
 
-**Shared reading**: a new `web/src/db/auditEntries.ts` returns one shape
-for both stores (the local row minus `seq`, plus `device_id`, null for
-own rows), used by the audit sheet and the invoice; the scope derivation
-the sheet does inline moves to a pure helper the push reuses, so the tags
-pushed are exactly the scope the sheet applies.
+**Shared reading**: `web/src/db/auditEntries.ts` returns one shape for
+both stores (`AuditEntry`: the local row minus `seq`), used by the audit
+sheet (`auditEntriesOfDay`) and the invoice (`findAuditEntry`); the scope
+rule the sheet applied inline is the pure helper
+`web/src/domain/auditScope.ts`, which the push reuses, so the tags pushed
+are exactly the scope the sheet applies.
 
-**Transport**: `SyncTransport` gains `pushAuditRows(rows)` and
-`pullAuditSince(cursor)`; `HttpTransport` calls the two endpoints;
-`FakeTransport` keeps an in-memory server-side table with the same
-statuses, so the e2e suite exercises it.
+**Transport**: a separate `AuditTransport` interface
+(`pushAuditRows(rows)`, `pullAuditSince(cursor)`, `web/src/sync/transport.ts`)
+that `HttpTransport` and `FakeTransport` implement beside `SyncTransport`;
+the engine runs the audit pass only for a transport that has it
+(`hasAuditEndpoints`). `FakeTransport` keeps the server-side rows in its own
+database's `remote_audit_log`, with the pushing device and an arrival seq,
+and answers with the server's statuses, so the e2e suite exercises it.
+The pass itself is `web/src/sync/auditSync.ts`.
 
 ## What changes in the UI, and what does not
 
@@ -556,3 +562,43 @@ device rows by A-04), `docs/session-handoff.md`.
     state?** Recommended: no; the chip stays about the clinic's data.
 12. **A 64 KB per-row limit** on the JSON a row carries — acceptable? The
     largest record today (a visit with its form) is a few KB.
+
+## Decisions
+
+The owner answered every open question as recommended: (1) a separate
+`device_audit_log`; (2) the claimed actor accepted until server-side
+per-person identity; (3) an audit row travels even when its entity's op was
+rejected; (4) the first pull's window is 14 Cairo days; (5) pulled rows
+older than 60 days are deleted on the device; (6) a rejected audit row stays
+on the device, unshown and not retried; (7) the server's own per-op
+`audit_log` rows stay unchanged; (8) `pin_hash`/`pin_salt` never travel;
+(9) the overwritten actor columns are their own PR, the next one
+(`docs/session-handoff.md`'s backlog); (10) no all-role trigger; (11) the
+sync chip does not count audit rows; (12) a 64 KB per-row limit.
+
+## As built
+
+- **Device row fields** are optional and read as `0` / `null` while absent,
+  rather than being written by the version 23 upgrade and by registration:
+  the effect is the same (every local row is pushed from seq 0; the first
+  pull has no cursor), with no upgrade callback and no change to
+  registration.
+- **Retention** runs once per sync engine start (`startSyncEngine`, before
+  its first pull), and a pulled row already older than 60 Cairo days is not
+  stored in the first place (`storePulledAuditRows`).
+- **A failed row** (`internal_error`) stops the watermark at the last row
+  before it; it and the rows after it go up again on the next cycle, where
+  any already stored come back as `duplicate`.
+- **Input middleware**: Laravel's global `TrimStrings` and
+  `ConvertEmptyStringsToNull` skip `POST /api/audit/push`, so a record is
+  stored exactly as the device wrote it and a resend matches it.
+- **The lock** is taken once per request by the sync push, the staff add
+  and the audit push, before any write, rather than right before the first
+  ledger insert: every writer of an organization then takes it first, so it
+  can never wait on it while holding a row lock another writer needs.
+- **The e2e checks** plant "another device" in the fake server's database:
+  a row in today's audit sheet under its filter and actor, an invoice
+  naming its creator, and this device's rows reaching the server once
+  (`web/e2e/audit-sync.spec.ts`). The offline round is covered by the live
+  run (scenario 9) and vitest, since the fake server is in the browser and
+  a context going offline does not cut it off.

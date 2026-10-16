@@ -31,9 +31,9 @@ UTF-8 shell: a Windows console garbles the Arabic clinic and doctor names
 A-07).
 
 ## Verify
-Web: `pnpm --dir web test` (vitest, 1314 passed) · `pnpm --dir web
+Web: `pnpm --dir web test` (vitest, 1535 passed) · `pnpm --dir web
 exec tsc -b --noEmit` · `pnpm --dir web build` · `pnpm --dir web test:e2e`.
-API: `cd api && php artisan test` (Pest, 325 passed).
+API: `cd api && php artisan test` (Pest, 397 passed).
 
 ## Rebuild order (approved)
 1. `docs/design-rule.md` points at the prototype — done (PR #1).
@@ -202,6 +202,27 @@ migration runs — every organization provisioned later would have none.
 - e. `.pt-timeline` grouped by Cairo day, newest first; `.pt-day-h` "النهارده · d {month} yyyy" for today, else "d {month} · {the doctor's day's relative helper}", plus " · بداية خطة الرعاية" on a day a plan started. Events, time "H:mm": visit (`.visit`, "ز") — completed: "زيارة — {diagnosis}" (else "زيارة"), or "جلسة {service} · {n} من {count}" when a plan session links to it; `.d` "د. {doctor}" · `.dx` diagnosis · "شكوى: …" · "وصف N أدوية"; cancelled / no-show muted (field surface) as "زيارة اتلغت" / "ما حضرش"; nothing still to come (or in the room) shows; time = started_at, else scheduled_at. rx (`.rx`, "Rx") "وصفة طبية · N أدوية", bold drug names joined by "، " · "اتطبعت" / "لسه ما اتطبعتش" (a prescription with no drug left is not shown); time = created_at. msg (`.msg`, "✉") "{template} · واتساب/SMS", the body's first line · "اتفتحت" / "اتبعتت"; time = attempted_at. pay (`.pay`, "₤") "دفعة · {amount} ج.م {method}", "فاتورة {INV number} · <b>{staff}</b>"; time = created_at. note ("✎", no prototype class: the plain `.icn`) "ملاحظة الطبيب" with the visit's note, at the visit's time, only under "الكل" and "ملاحظات". The newest 100 events, "اعرض أقدم" for 100 more. Tapping a visit opens VisitFormSheet, a prescription the print sheet, a payment its InvoiceSheet (recording a payment there returns to the invoice); a message nothing.
 - f. Empty tab states: "لسه مفيش حاجة في ملف المريض", "لسه مفيش زيارات", "لسه مفيش وصفات", "لسه مفيش رسائل", "لسه مفيش مدفوعات", "لسه مفيش ملاحظات".
 - The method label is the app's own ("كاش", "فيزا", …), not the prototype's "نقدي".
+
+## Audit sync (feat/audit-sync)
+
+Backlog A-04, done (`docs/audit-sync.md`, with the owner's decisions 1-12
+and what the build changed; `api/docs/rls.md`'s "Device audit rows" and
+"One organization's sync writes commit in seq order"; `docs/schema.md`'s v22
+additions):
+1. Every device's local audit rows go up to `device_audit_log` (append-only:
+   `clintra_app` holds SELECT and INSERT only; no UPDATE/DELETE policy)
+   through `POST /api/audit/push`, and every other device of the
+   organization pulls them through `GET /api/audit/pull` (the first pull 14
+   Cairo days back; pulled rows kept 60 days). The actor is the device's
+   claim; the pusher and the device are the token's.
+2. The audit sheet lists every device's rows of the day, with the same
+   filters and scope; the invoice's "إنشاء" line names its creator on every
+   device. Undo and the other local mechanisms read this device's rows only.
+3. Every writer of `sync_ledger` or `device_audit_log` takes its
+   organization's advisory lock before its first write, so within an
+   organization seq order is commit order and no pull cursor skips a row.
+
+Local store: database version 23 (`remote_audit_log`).
 
 ## Staff identity (fix/staff-identity)
 
@@ -450,8 +471,8 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
   broken by id (`sortServicesByName`), so the order is always the same.
 
 ## Backlog
-- **Next PR** — audit_log syncs across devices (append-only on the server, pushed by every device, pulled by every device of the org; the owner sees every device's actions; the invoice's "إنشاء" line names its creator on every device). Needs a server table + RLS — owner-authorised schema change, its own PR. (`docs/bug-hunt.md`, A-04.)
-- **After the audit-sync PR** — A-03, its own schema PR: schedules gain next_mode (slots|queue) and next_mode_from (date); a date's mode is next_mode once it reaches next_mode_from, else mode; the working-hours editor's switch writes them for tomorrow; today's visits untouched; migration + sync payload + Pest; owner-authorised schema change. Hardening scenario 24 waits on it. (`docs/bug-hunt.md`, A-03.)
+- **Next PR** — the actor columns the sync push overwrites with the token's membership (`visits.created_by`, `payments.created_by`, `prescriptions.created_by`, `messages.created_by`, `message_templates.updated_by`, `cash_close.closed_by`; `SyncOpApplier::buildAttributes`): since every device token is the registering owner's, after a pull every device's "سجّله …" byline names the owner instead of the person who booked. Owner-confirmed as its own PR, the very next one after audit sync. (`docs/audit-sync.md`, question 9.)
+- **After the actor-columns PR** — A-03, its own schema PR: schedules gain next_mode (slots|queue) and next_mode_from (date); a date's mode is next_mode once it reaches next_mode_from, else mode; the working-hours editor's switch writes them for tomorrow; today's visits untouched; migration + sync payload + Pest; owner-authorised schema change. Hardening scenario 24 waits on it. (`docs/bug-hunt.md`, A-03.)
 - Invoice item editing (screen 5's "تعديل بنود") — owner decision of the prototype alignment: recorded, not built.
 - Queue reordering (screen 3's "إعادة ترتيب") — owner decision of the prototype alignment: recorded, not built.
 - Server-side per-person identity: the acting membership sent and verified per request (e.g. a PIN-derived proof). Today the server knows only the membership the device token was issued to (the owner who registered the device), so it cannot tell who is signed in; this would close the staff owner check's gap and the other settings-write gaps.

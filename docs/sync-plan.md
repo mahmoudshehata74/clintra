@@ -170,6 +170,16 @@ this file's own local schema/engine changes):
   effect of every accepted op — see `api/docs/rls.md`'s "The sync push
   endpoint."
 
+- **Addendum (A-04, `docs/audit-sync.md`):** superseded for the device's
+  own rows. Every device now pushes its local audit rows — to their own
+  table, `device_audit_log`, through their own endpoints — and pulls the
+  other devices', so the owner sees who did what on any device. The
+  decision above still holds for the server's `audit_log`: devices never
+  write it, and its rows remain the server's evidence, attributed to the
+  token's membership. A device audit row's actor is the device's claim (the
+  PIN-signed-in member, which the server cannot see), stored beside the
+  token's membership and device, which the server sets.
+
 ### 2. Do sync_ops push in strict per-device order, and what happens when op N fails but N+1 would succeed?
 
 - **Decision:** Chronological order per device is a brief mandate, not a
@@ -742,6 +752,14 @@ them as one rule would be wrong:
   `api/database/migrations/2026_09_12_000011_enforce_audit_attribution.php`
   (the fix).
 - **Status:** decided, and shipped.
+
+- **Addendum (A-04, `docs/audit-sync.md`):** a device now submits an actor
+  for its own audit rows, to `device_audit_log`, not `audit_log`. There
+  the actor is accepted as a claim limited to the organization's members
+  (`actor_not_in_org` otherwise), while the pusher must be
+  `current_membership()` (WITH CHECK) and the device is the token's — the
+  owner's decision, until server-side per-person identity can prove who is
+  signed in. `audit_log_insert` and its actor check are unchanged.
 
 ---
 
