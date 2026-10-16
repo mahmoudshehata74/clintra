@@ -13,7 +13,7 @@ import { formatMoneyAmount } from "../money";
 import { formatActorName } from "./actorLabel";
 import { auditDotTone, type AuditDotTone } from "./auditDotTone";
 import { type AuditFilter, filterAuditRows, isAuditRowInScope } from "./auditLogFilters";
-import { computeElapsedLabel } from "./elapsedLabel";
+import { computeSinceLabel } from "../doctor/doctorDay";
 import { formatBareReceiptNumber, formatInvoiceNumber } from "./invoiceNumber";
 import Sheet from "./Sheet";
 import SheetCardHead from "./SheetCardHead";
@@ -381,7 +381,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
       ) : (
         <ul className="flex flex-col">
           {filteredRows.map(({ row, verb, subject, actorName, context, tone }) => {
-            const elapsed = computeElapsedLabel(row.at, now.toISOString(), today, now);
+            const since = computeSinceLabel(row.at, today, now);
             return (
               <li
                 key={row.id}
@@ -410,10 +410,17 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
                 </div>
                 <span className="whitespace-nowrap text-end text-[11px] text-muted tabular-nums">
                   <Ltr>{clockTimeInCairo(row.at)}</Ltr>
-                  {elapsed && (
+                  {since && (
                     <>
                       {" · "}
-                      {dayScreenStrings.auditElapsedPrefix} <Ltr>{elapsed}</Ltr>
+                      {/* Under a minute it reads "دلوقتي", never "من 0د" — the day grid's rule. */}
+                      {since.kind === "just_now" ? (
+                        dayScreenStrings.untilNow
+                      ) : (
+                        <>
+                          {dayScreenStrings.auditElapsedPrefix} <Ltr>{since.label}</Ltr>
+                        </>
+                      )}
                     </>
                   )}
                 </span>
