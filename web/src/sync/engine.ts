@@ -4,6 +4,7 @@ import type { ClintraDatabase } from "../db/database";
 import { getDeviceId } from "../db/deviceRegistration";
 import { MUTATION_EVENT_NAME } from "../db/mutate";
 import { AuditAction, type SyncOp } from "../db/types";
+import { chainBaseRevs, rebaseUnsent } from "./baseRevChain";
 import { applyPulledRow, familyTables, foldChildOpsOfRejectedCreate } from "./pullCollisions";
 import { SyncAuthError, type SyncTransport } from "./transport";
 
@@ -168,7 +169,7 @@ export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport
 
   let results;
   try {
-    results = await transport.pushOps(toSend);
+    results = await transport.pushOps(chainBaseRevs(toSend));
     recordTransportSuccess();
   } catch (error) {
     if (error instanceof SyncAuthError) {
@@ -229,6 +230,12 @@ export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport
         base_rev: op.base_rev,
       });
     });
+  }
+
+  // This device's own later writes of a row an accepted update just moved on.
+  const stillUnsent = (await db.sync_ops.toArray()).filter((op) => op.synced_at === null);
+  for (const { opId, baseRev } of rebaseUnsent(toSend, results, stillUnsent)) {
+    await db.sync_ops.update(opId, { base_rev: baseRev });
   }
 }
 
