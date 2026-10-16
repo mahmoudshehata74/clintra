@@ -39,6 +39,8 @@ import {
   suggestedMessagesFixture,
   suggestedSection,
   todayAt,
+  SAVE_FAILED,
+  setStorageWritesFailing,
 } from "./support";
 
 // The messages screen (reference screen 19) and the send sheet. window.open
@@ -296,4 +298,23 @@ test("مقترح النهارده says so when nothing is due", async ({ page })
   const section = suggestedSection(page);
   await expect(section.getByText(MSG.suggestedEmpty, { exact: true })).toBeVisible();
   await expect(section.getByText("0", { exact: true })).toBeVisible();
+});
+
+test("marking a message that fails to save says so and keeps اتفتحت, then marks on the next try", async ({ page }) => {
+  await lailaBooked(page);
+  const sheet = await openSendSheetFromRow(page, LAILA);
+  await sheet.getByRole("button", { name: MSG.openWhatsApp, exact: true }).click();
+  await expect(sheet).toBeHidden();
+
+  await openMessagesPage(page);
+  const item = recentItems(page);
+  await setStorageWritesFailing(page, true);
+  await item.getByRole("button", { name: MSG.statusOpened, exact: true }).click();
+  await expect(item.getByRole("alert")).toHaveText(SAVE_FAILED);
+  await expect(item.getByRole("button", { name: MSG.statusOpened, exact: true })).toBeVisible();
+
+  await setStorageWritesFailing(page, false);
+  await item.getByRole("button", { name: MSG.statusOpened, exact: true }).click();
+  await expect(item.getByRole("button", { name: MSG.statusSent, exact: true })).toBeVisible();
+  await expect(item.getByRole("alert")).toHaveCount(0);
 });

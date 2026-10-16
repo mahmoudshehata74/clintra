@@ -18,6 +18,8 @@ import {
   selectPractitioner,
   setTimeField,
   SLOTS_DR,
+  SAVE_FAILED,
+  setStorageWritesFailing,
 } from "./support";
 
 const NEW_ASSISTANT_NAME = "منى الجديدة";
@@ -534,4 +536,30 @@ test("the new-staff form cancels without adding anyone and opens empty again", a
   await dialog.getByRole("button", { name: S.staffNewAction, exact: true }).click();
   await expect(dialog.getByLabel(S.staffNameLabel, { exact: true })).toHaveValue("");
   await expect(dialog.getByLabel(S.staffPinLabel, { exact: true })).toHaveValue("");
+});
+
+test("deleting a price override that fails to save says so and keeps it, then deletes on the next try", async ({ page }) => {
+  await gotoRealDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsServicesTab, exact: true }).click();
+  const row = dialog.getByRole("listitem").filter({ hasText: "كشف عام" });
+  await row.getByRole("button", { name: S.serviceEditAction, exact: true }).click();
+  await row.getByRole("button", { name: S.serviceOverrideAddAction, exact: true }).click();
+  await row.getByLabel(S.serviceOverrideTargetPractitioner, { exact: true }).selectOption({ index: 1 });
+  await row.getByLabel(S.servicePriceLabel, { exact: true }).fill("250");
+  // The override form sits under the service's own form, so its "حفظ" is the last.
+  await row.getByRole("button", { name: S.settingsSaveAction, exact: true }).last().click();
+  const remove = row.getByRole("button", { name: S.serviceOverrideDeleteAction, exact: true });
+  await expect(remove).toHaveCount(1);
+
+  await setStorageWritesFailing(page, true);
+  await remove.click();
+  await expect(row.getByRole("alert")).toHaveText(SAVE_FAILED);
+  await expect(remove).toHaveCount(1);
+
+  await setStorageWritesFailing(page, false);
+  await remove.click();
+  await expect(remove).toHaveCount(0);
+  await expect(row.getByRole("alert")).toHaveCount(0);
 });

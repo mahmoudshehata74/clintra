@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { db } from "../../db/database";
+import { attemptSave } from "../../components/ui/attemptSave";
+import SaveFailedLine from "../../components/ui/SaveFailedLine";
+import { db, type ClintraDatabase } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type DisplacedPayload } from "../../sync/pullCollisions";
 import { acknowledgeReview, discardMine, getReviewComparison, keepMine, type ReviewComparison } from "../../sync/reviewActions";
@@ -114,12 +116,12 @@ export default function SyncStatusChip() {
   // than leaving an empty sheet open.
   const showList = isListOpen && reviewRows.length > 0;
 
-  async function handleKeep(reviewId: string) {
-    await keepMine(db, reviewId);
-  }
+  // The review row whose last action failed: it stays open, with the shared line under it.
+  const [failedReviewId, setFailedReviewId] = useState<string | null>(null);
 
-  async function handleDiscard(reviewId: string) {
-    await discardMine(db, reviewId);
+  async function resolve(reviewId: string, action: (db: ClintraDatabase, reviewId: string) => Promise<void>) {
+    const saved = await attemptSave(() => action(db, reviewId));
+    setFailedReviewId(saved ? null : reviewId);
   }
 
   return (
@@ -154,7 +156,7 @@ export default function SyncStatusChip() {
                     <div className="flex shrink-0 gap-2">
                       <button
                         type="button"
-                        onClick={() => acknowledgeReview(db, review.id)}
+                        onClick={() => void resolve(review.id, acknowledgeReview)}
                         className="rounded-control border border-rule px-2 py-1 text-sm"
                       >
                         {dayScreenStrings.syncReviewAcknowledgeAction}
@@ -167,7 +169,7 @@ export default function SyncStatusChip() {
                     <div className="flex shrink-0 gap-2">
                       <button
                         type="button"
-                        onClick={() => acknowledgeReview(db, review.id)}
+                        onClick={() => void resolve(review.id, acknowledgeReview)}
                         className="rounded-control border border-rule px-2 py-1 text-sm"
                       >
                         {dayScreenStrings.syncReviewAcknowledgeAction}
@@ -180,14 +182,14 @@ export default function SyncStatusChip() {
                     <div className="flex shrink-0 gap-2">
                       <button
                         type="button"
-                        onClick={() => handleKeep(review.id)}
+                        onClick={() => void resolve(review.id, keepMine)}
                         className="rounded-control border border-rule px-2 py-1 text-sm"
                       >
                         {dayScreenStrings.syncReviewKeepAction}
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDiscard(review.id)}
+                        onClick={() => void resolve(review.id, discardMine)}
                         className="rounded-control border border-rule px-2 py-1 text-sm"
                       >
                         {dayScreenStrings.syncReviewRemoveAction}
@@ -197,6 +199,7 @@ export default function SyncStatusChip() {
                 ) : (
                   <p className="text-xs text-muted">{dayScreenStrings.syncReviewWaitingForServer}</p>
                 )}
+                {failedReviewId === review.id && <SaveFailedLine />}
               </div>
             ))}
           </div>

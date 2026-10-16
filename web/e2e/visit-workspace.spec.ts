@@ -25,6 +25,8 @@ import {
   SIDEBAR,
   SLOTS_DR,
   VISIT,
+  SAVE_FAILED,
+  setStorageWritesFailing,
 } from "./support";
 
 // The visit workspace (screen 10) in the visit-form sheet and on the
@@ -382,4 +384,28 @@ test.describe("unchanged entry points", () => {
     await expect(rxSection(sheet)).toBeVisible();
     await expect(sheet.getByRole("button", { name: VISIT.closeVisit, exact: true })).toBeVisible();
   });
+});
+
+test("a visit field whose save fails says so under it and keeps the text and the sheet, then saves on the next try", async ({
+  page,
+}) => {
+  await karimInRoom(page);
+  const sheet = await openVisitSheet(page, PATIENTS.karim);
+  const complaint = sheet.getByPlaceholder(S.visitFormComplaintPlaceholder);
+
+  await setStorageWritesFailing(page, true);
+  await complaint.fill("صداع من امبارح");
+  await sheet.getByRole("button", { name: VISIT.saveAndContinueLater, exact: true }).click();
+  await expect(sheet.getByText(SAVE_FAILED, { exact: true })).toBeVisible();
+  await expect(complaint).toHaveAttribute("aria-invalid", "true");
+  await expect(complaint).toHaveValue("صداع من امبارح");
+
+  await setStorageWritesFailing(page, false);
+  await complaint.focus();
+  await sheet.getByRole("button", { name: VISIT.saveAndContinueLater, exact: true }).click();
+  await expect(sheet).toBeHidden();
+
+  const reopened = await openVisitSheet(page, PATIENTS.karim);
+  await expect(reopened.getByPlaceholder(S.visitFormComplaintPlaceholder)).toHaveValue("صداع من امبارح");
+  await expect(reopened.getByText(SAVE_FAILED, { exact: true })).toHaveCount(0);
 });

@@ -1,8 +1,10 @@
 import { useState } from "react";
 import Ltr from "../../components/Ltr";
 import Badge from "../../components/ui/Badge";
+import { attemptSave } from "../../components/ui/attemptSave";
 import Button from "../../components/ui/Button";
 import Field, { TextInput } from "../../components/ui/Field";
+import SaveFailedLine from "../../components/ui/SaveFailedLine";
 import Switch from "../../components/ui/Switch";
 import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
@@ -306,6 +308,12 @@ function OverridesEditor({
   const [targetId, setTargetId] = useState("");
   const [priceInput, setPriceInput] = useState("");
   const [error, setError] = useState<{ field: "target" | "price"; message: string } | null>(null);
+  const [failedDeleteId, setFailedDeleteId] = useState<string | null>(null);
+
+  async function deleteOverride(overrideId: string) {
+    const saved = await attemptSave(() => deleteServicePriceOverride(db, overrideId));
+    setFailedDeleteId(saved ? null : overrideId);
+  }
 
   const practitionerName = (id: string) => practitioners.find((p) => p.id === id)?.full_name ?? id;
   const locationName = (id: string) => locations.find((l) => l.id === id)?.name ?? id;
@@ -351,12 +359,13 @@ function OverridesEditor({
           </span>
           <span className="flex items-center gap-2">
             <Price amount={override.price} />
-            <Button variant="danger" size="sm" onClick={() => deleteServicePriceOverride(db, override.id)}>
+            <Button variant="danger" size="sm" onClick={() => void deleteOverride(override.id)}>
               {dayScreenStrings.serviceOverrideDeleteAction}
             </Button>
           </span>
         </div>
       ))}
+      {failedDeleteId !== null && overrides.some((override) => override.id === failedDeleteId) && <SaveFailedLine />}
 
       {adding ? (
         <div className="flex flex-col gap-3">

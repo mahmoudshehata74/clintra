@@ -8,7 +8,7 @@ import { authStrings } from "../src/auth/authStrings";
 import { DEV_SEED_PINS } from "../src/auth/devPins";
 import { formatAppBarDate } from "../src/components/appBarDate";
 import { formatEgyptianPhoneForDisplay } from "../src/domain/phone";
-import { sidebarStrings, timeFieldStrings } from "../src/components/strings";
+import { saveFailedStrings, sidebarStrings, timeFieldStrings } from "../src/components/strings";
 // Not imported from src/db/seed.ts directly: that module's import chain
 // pulls in auth/pinHash.ts's JSON import, which this test runner cannot
 // load without a "type: json" attribute. seededVisitsDate() itself is just
@@ -32,6 +32,7 @@ export const PLAN = carePlanStrings;
 export const PROFILE = patientProfileStrings;
 export const AUTH = authStrings;
 export const SIDEBAR = sidebarStrings;
+export const SAVE_FAILED = saveFailedStrings.line;
 export { DEV_SEED_PINS };
 
 // What ?seedDay=1 pins the day screen to (the most recent Monday as of
@@ -1421,3 +1422,40 @@ export async function suggestedMessagesFixture(page: Page): Promise<void> {
 
 /** The "مقترح النهارده" section and its rows. */
 export const suggestedSection = (page: Page) => page.getByRole("region", { name: MSG.suggestedHeading });
+
+/**
+ * Makes every IndexedDB write on the page throw, as a failing disk would
+ * (reads keep working), or puts the writes back: a control's failed save
+ * and its shared "ماتحفظش، جرّب تاني" line, then the same control again once
+ * storage works.
+ */
+export async function setStorageWritesFailing(page: Page, failing: boolean): Promise<void> {
+  await page.evaluate((on) => {
+    type Writes = { add: IDBObjectStore["add"]; put: IDBObjectStore["put"]; delete: IDBObjectStore["delete"] };
+    type CursorWrites = { update: IDBCursor["update"]; delete: IDBCursor["delete"] };
+    const store = IDBObjectStore.prototype;
+    const cursor = IDBCursor.prototype;
+    const saved = window as unknown as { __e2eStoreWrites?: Writes; __e2eCursorWrites?: CursorWrites };
+    if (on) {
+      saved.__e2eStoreWrites ??= { add: store.add, put: store.put, delete: store.delete };
+      saved.__e2eCursorWrites ??= { update: cursor.update, delete: cursor.delete };
+      const fail = (): never => {
+        throw new DOMException("storage writes fail (e2e)", "QuotaExceededError");
+      };
+      store.add = fail;
+      store.put = fail;
+      store.delete = fail;
+      cursor.update = fail;
+      cursor.delete = fail;
+    } else {
+      if (saved.__e2eStoreWrites) {
+        Object.assign(store, saved.__e2eStoreWrites);
+        delete saved.__e2eStoreWrites;
+      }
+      if (saved.__e2eCursorWrites) {
+        Object.assign(cursor, saved.__e2eCursorWrites);
+        delete saved.__e2eCursorWrites;
+      }
+    }
+  }, failing);
+}
