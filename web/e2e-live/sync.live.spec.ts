@@ -1,5 +1,20 @@
 import { expect, test, type Browser } from "@playwright/test";
-import { advanceRowTo, invoiceHead, invoiceTotals, labeledRowValue, login, parsePounds, readStore, rowFor, S, sidebar, SIDEBAR } from "../e2e/support";
+import {
+  advanceRowTo,
+  AUTH,
+  invoiceHead,
+  invoiceTotals,
+  labeledRowValue,
+  lockOverlay,
+  login,
+  openAuditLog,
+  parsePounds,
+  readStore,
+  rowFor,
+  S,
+  sidebar,
+  SIDEBAR,
+} from "../e2e/support";
 import { bookNew, eventually, firstEmptySlotTime, nudge, openDevice, pushed, rowCount, rowStatus, seriesLetter, setUpClinic, type Device } from "./liveSupport";
 import { provisionOrg, removeLiveOrgs, startApi, stopApi, type LiveOrg } from "./liveServer";
 
@@ -231,5 +246,54 @@ test("adding staff online creates them on the server, and the other device gets 
     true,
     "B gets the new staff member",
   );
+  await closeAll(a, b);
+});
+
+/** The audit sheet's rows on `device` that carry every one of `texts`. */
+function auditRows(device: Device, ...texts: string[]) {
+  let rows = device.page.getByRole("dialog").getByRole("listitem");
+  for (const text of texts) {
+    rows = rows.filter({ hasText: text });
+  }
+  return rows;
+}
+
+/** How many audit rows on `device` carry every one of `texts`, read from a freshly opened audit sheet. */
+async function auditRowCount(device: Device, ...texts: string[]): Promise<number> {
+  await openAuditLog(device.page);
+  const count = await auditRows(device, ...texts).count();
+  await device.page.keyboard.press("Escape");
+  await expect(device.page.getByRole("dialog")).toBeHidden();
+  return count;
+}
+
+test("the assistant's actions on A appear in B's audit log under the assistant's name, and B's invoice names its creator", async ({ browser }) => {
+  // The assistant scenario 8 added; signed in on A, the owner on B.
+  const assistant = { name: "Live Assistant", pin: "1357" };
+  const [a, b] = await twoDevices(browser);
+  await eventually([a, b], async () => (await readStore<{ display_name: string | null }>(a.page, "memberships")).some((row) => row.display_name === assistant.name), true);
+  await a.page.getByRole("button", { name: AUTH.lockButtonLabel, exact: true }).click();
+  await lockOverlay(a.page).getByRole("button", { name: AUTH.lockSwitchUser, exact: true }).click();
+  await login(a.page, assistant);
+
+  await bookNew(a, "مريض سجل");
+  await completeVisit(a, "مريض سجل");
+  await openInvoice(a, "مريض سجل");
+  await payInFull(a);
+  await a.page.keyboard.press("Escape");
+
+  await eventually([a, b], () => auditRowCount(b, "أنشأ حجز", "مريض سجل", assistant.name), 1, "B lists A's booking once, as the assistant's");
+  await eventually([a, b], () => auditRowCount(b, "قفل الزيارة", "مريض سجل", assistant.name), 1, "B lists A's completion");
+  await eventually([a, b], () => auditRowCount(b, "سجّل دفعة", assistant.name), 1, "B lists A's payment");
+  await eventually([a, b], () => rowStatus(b, "مريض سجل", STATUSES), S.statusCompleted);
+  const sheet = await openInvoice(b, "مريض سجل");
+  await expect(sheet.getByText(new RegExp(`^${S.invoiceCreatedPrefix} \\d{2}:\\d{2} · ${assistant.name}$`))).toBeVisible();
+  await b.page.keyboard.press("Escape");
+
+  // Offline on A: the row waits on A and reaches B once A is back.
+  await a.context.setOffline(true);
+  await bookNew(a, "مريض سجل أوفلاين");
+  await a.context.setOffline(false);
+  await eventually([a, b], () => auditRowCount(b, "أنشأ حجز", "مريض سجل أوفلاين", assistant.name), 1, "A's offline booking reaches B's audit log once");
   await closeAll(a, b);
 });
