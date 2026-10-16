@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, Ref } from "react";
 
 export type ButtonSize = "md" | "sm";
 
@@ -15,7 +15,7 @@ export type ButtonVariant = SmCapableVariant | MdOnlyVariant;
 // compact version of those three would even look like.
 type ButtonVariantSizeProps = { variant: SmCapableVariant; size?: ButtonSize } | { variant: MdOnlyVariant; size?: "md" };
 
-export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & ButtonVariantSizeProps;
+export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { ref?: Ref<HTMLButtonElement> } & ButtonVariantSizeProps;
 
 // Shared across every variant: appearance reset, centered content, the
 // token radius design-tokens.md assigns to "buttons, inputs, toggles", and

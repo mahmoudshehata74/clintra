@@ -191,6 +191,10 @@ export const dayScreenStrings = {
   delayMinutesSuffix: "دقيقة",
   delayPickerTitle: "تأخير الطبيب",
   delayClearOption: "شيل التأخير",
+  // The picker's own minutes field, under the presets: whole minutes, 1-240.
+  delayCustomLabel: "عدد الدقايق",
+  delayCustomApply: "سجّل",
+  delayCustomError: "اكتب عدد دقايق صحيح من 1 لحد 240",
   delayLinePrefix: "الطبيب متأخر",
   delayLineActualStart: "البدء الفعلي",
   delayChangedToastMessage: "اتسجل تأخير الطبيب",
