@@ -201,7 +201,9 @@ test("a lost slot conflict names the booking it is about before anything is chos
 
   await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
   const sheet = page.getByRole("dialog");
-  await expect(sheet.getByText(`${PATIENTS.hoda} — الساعة ${clockTimeInCairo(myVisit.scheduled_at!)}`, { exact: true })).toBeVisible();
+  // The planted visit is whichever of her visits plantLostSlotConflict found: a slot's time, or a queue place.
+  const where = myVisit.scheduled_at ? `الساعة ${clockTimeInCairo(myVisit.scheduled_at)}` : `دور ${myVisit.position}`;
+  await expect(sheet.getByText(`${PATIENTS.hoda} — ${where}`, { exact: true })).toBeVisible();
   await expect(sheet.getByRole("button", { name: S.syncReviewKeepAction, exact: true })).toBeVisible();
 });
 
