@@ -99,6 +99,6 @@ class SyncPuller
 
         $row = DB::table($entity)->where('id', $entityId)->first();
 
-        return $row === null ? null : (array) $row;
+        return $row === null ? null : SyncPayload::fromRow($entity, $row);
     }
 }

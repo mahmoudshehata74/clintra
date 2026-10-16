@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { DeviceRegistration, Invoice, Patient, Payment, Prescription, PrescriptionItem, SyncOp, SyncReview, Visit } from "../src/db/types";
+import { clockTimeInCairo } from "../src/domain/time";
 import { emptySlotTiles, gotoSeededDay, login, PATIENTS, pickSearchResult, rowFor, S, selectPractitioner, SLOTS_DR } from "./support";
 
 /** The database the app's FakeTransport keeps as its stand-in server (sync/fakeTransport.ts's FAKE_SERVER_DB_NAME). */
@@ -190,6 +191,33 @@ test("'شيلها' on a lost slot conflict removes the phantom local visit entir
   const opsAfter = await readIndexedDbStore<SyncOp>(page, "sync_ops");
   expect(opsAfter.find((op) => op.op_id === plantedOpId)).toBeUndefined();
   expect(opsAfter.some((op) => op.entity_id === myVisit.id && op.synced_at === null)).toBe(false);
+});
+
+test("a lost slot conflict names the booking it is about before anything is chosen", async ({ page }) => {
+  await gotoSeededDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+
+  const { visit: myVisit } = await plantLostSlotConflict(page, PATIENTS.hoda);
+
+  await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  // The planted visit is whichever of her visits plantLostSlotConflict found: a slot's time, or a queue place.
+  const where = myVisit.scheduled_at ? `الساعة ${clockTimeInCairo(myVisit.scheduled_at)}` : `دور ${myVisit.position}`;
+  await expect(sheet.getByText(`${PATIENTS.hoda} — ${where}`, { exact: true })).toBeVisible();
+  await expect(sheet.getByRole("button", { name: S.syncReviewKeepAction, exact: true })).toBeVisible();
+});
+
+test("the review sheet's text reads in the page's text colour, not the app bar's", async ({ page }) => {
+  await gotoSeededDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await plantLostSlotConflict(page, PATIENTS.hoda);
+
+  await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  const title = page.getByRole("dialog").getByText(S.syncReviewListTitle, { exact: true });
+  await expect(title).toBeVisible();
+  // The sheet is rendered inside the app bar, whose text is on-dark: near white on the sheet's white card.
+  const [titleColor, bodyColor] = await title.evaluate((element) => [getComputedStyle(element).color, getComputedStyle(document.body).color]);
+  expect(titleColor).toBe(bodyColor);
 });
 
 /**

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { HttpStaffServer, StaffServerError, type AddStaffRequest, type AddStaffResponse } from "./staffServer";
 
 const request: AddStaffRequest = {
@@ -54,5 +54,25 @@ describe("HttpStaffServer", () => {
     }) as unknown as typeof fetch;
     const server = new HttpStaffServer("1|token", "https://api.example/api", fetchImpl);
     await expect(server.addStaffMember(request)).rejects.toMatchObject({ reason: "unreachable" });
+  });
+});
+
+describe("HttpStaffServer without a fetchImpl", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("calls the global fetch as a plain function, as a browser requires", async () => {
+    const created = { membership: { id: "membership-1" }, membership_locations: [], membership_practitioners: [] };
+    // A browser's fetch refuses any receiver other than the window ("Illegal invocation").
+    vi.stubGlobal("fetch", function strictFetch(this: unknown) {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+      }
+      return Promise.resolve(new Response(JSON.stringify(created), { status: 201 }));
+    });
+    const server = new HttpStaffServer("1|token", "https://api.example/api");
+
+    expect(await server.addStaffMember(request)).toEqual(created as unknown as AddStaffResponse);
   });
 });

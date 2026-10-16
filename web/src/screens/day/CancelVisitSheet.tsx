@@ -20,24 +20,28 @@ export default function CancelVisitSheet({ patientName, onDismiss, onSelectReaso
 
   return (
     <Sheet onDismiss={onDismiss}>
-      <p className="font-medium">{dayScreenStrings.cancelPromptTitle}</p>
-      <p className="mt-1 text-sm text-muted">{patientName}</p>
-      <div className="mt-4 flex flex-col gap-2">
-        <button
-          ref={firstButtonRef}
-          type="button"
-          onClick={() => onSelectReason(CancelReason.Patient)}
-          className="rounded-control border border-rule p-3 text-center"
-        >
-          {dayScreenStrings.cancelReasonPatient}
-        </button>
-        <button
-          type="button"
-          onClick={() => onSelectReason(CancelReason.Clinic)}
-          className="rounded-control border border-rule p-3 text-center"
-        >
-          {dayScreenStrings.cancelReasonClinic}
-        </button>
+      {/* `.book-body`'s padding: Sheet.tsx draws only the card, so content
+          set straight inside it would touch, and be cut by, its rounded edge. */}
+      <div className="px-5 py-[18px]">
+        <p className="font-medium">{dayScreenStrings.cancelPromptTitle}</p>
+        <p className="mt-1 text-sm text-muted">{patientName}</p>
+        <div className="mt-4 flex flex-col gap-2">
+          <button
+            ref={firstButtonRef}
+            type="button"
+            onClick={() => onSelectReason(CancelReason.Patient)}
+            className="rounded-control border border-rule p-3 text-center"
+          >
+            {dayScreenStrings.cancelReasonPatient}
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelectReason(CancelReason.Clinic)}
+            className="rounded-control border border-rule p-3 text-center"
+          >
+            {dayScreenStrings.cancelReasonClinic}
+          </button>
+        </div>
       </div>
     </Sheet>
   );

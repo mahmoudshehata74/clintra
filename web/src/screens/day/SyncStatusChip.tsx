@@ -5,9 +5,11 @@ import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type Displac
 import { acknowledgeReview, discardMine, getReviewComparison, keepMine, type ReviewComparison } from "../../sync/reviewActions";
 import {
   describeDisplacedContent,
+  describeLostBooking,
   describeReviewFieldDiffs,
   describeSupersededReviews,
   describeSyncReview,
+  SLOT_TAKEN_REASON,
 } from "../../sync/reviewSummary";
 import { useOnlineStatus } from "../../sync/useOnlineStatus";
 import { useServerUnreachable } from "../../sync/useTransportHealth";
@@ -39,14 +41,19 @@ interface ReviewRow {
   displacedContent: string | null;
   /** The reviews a displacement closed and folded in (describeSupersededReviews); null for every other row. */
   supersededSummary: string | null;
+  /** Which booking a slot conflict is about (describeLostBooking); null for every other row. */
+  lostBooking: string | null;
 }
 
-/** The patient behind a displaced visit, so its summary can name them; null for any other row. */
+/** The patient behind a displaced visit or a lost booking, so its summary can name them; null for any other row. */
 function displacedPatientId(review: SyncReview): string | null {
-  if (review.reason !== DISPLACED_BY_SERVER_REASON || review.entity !== "visits") {
+  if (review.entity !== "visits" || review.payload === null) {
     return null;
   }
-  return ((review.payload as DisplacedPayload).row.patient_id as string | undefined) ?? null;
+  if (review.reason === DISPLACED_BY_SERVER_REASON) {
+    return ((review.payload as DisplacedPayload).row.patient_id as string | undefined) ?? null;
+  }
+  return review.reason === SLOT_TAKEN_REASON ? (((review.payload as Record<string, unknown>).patient_id as string | undefined) ?? null) : null;
 }
 
 /**
@@ -87,6 +94,7 @@ export default function SyncStatusChip() {
             comparison: await getReviewComparison(db, review),
             displacedContent: describeDisplacedContent(review, patientNames),
             supersededSummary: describeSupersededReviews(review),
+            lostBooking: describeLostBooking(review, patientNames),
           };
         }),
       );
@@ -132,9 +140,10 @@ export default function SyncStatusChip() {
         <Sheet onDismiss={() => setIsListOpen(false)}>
           <p className="p-3 pb-1 text-sm font-medium">{dayScreenStrings.syncReviewListTitle}</p>
           <div className="flex flex-col overflow-y-auto">
-            {reviewRows.map(({ review, comparison, displacedContent, supersededSummary }) => (
+            {reviewRows.map(({ review, comparison, displacedContent, supersededSummary, lostBooking }) => (
               <div key={review.id} className="flex flex-col gap-2 border-t border-rule p-3">
                 <p className="text-sm">{describeSyncReview(review)}</p>
+                {lostBooking && <p className="rounded-control bg-field p-2 text-xs">{lostBooking}</p>}
 
                 {review.reason === DISPLACED_BY_SERVER_REASON ? (
                   <>

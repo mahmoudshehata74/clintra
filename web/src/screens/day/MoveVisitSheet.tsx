@@ -88,44 +88,48 @@ export default function MoveVisitSheet({
 
   return (
     <Sheet onDismiss={onDismiss}>
-      <p className="font-medium">{dayScreenStrings.moveSheetHeading}</p>
-      <p className="mt-1 text-sm text-muted">{patientName}</p>
-      <div className="mt-3 flex flex-col gap-4 overflow-y-auto">
-        {groups.map((group) => {
-          const schedule = scheduleForWeekday(group.weekday);
-          if (!schedule) {
-            return null;
-          }
-          return (
-            <div key={group.date}>
-              <p className="text-sm font-medium text-muted">
-                {formatCairoDisplayDateParts(group.date).map((part, index) =>
-                  part.type === "day" ? (
-                    <Ltr key={index}>{part.value}</Ltr>
-                  ) : (
-                    <span key={index}>{part.value}</span>
-                  ),
-                )}
-              </p>
-              <ul className="mt-1 flex flex-col gap-1">
-                {group.slots.map((slot) => (
-                  <li key={slot.time}>
-                    <button
-                      type="button"
-                      disabled={isMoving}
-                      onClick={() => handleSelectSlot(group.date, slot.time, schedule)}
-                      className="flex w-full items-center gap-3 rounded-control border border-rule p-3 text-start disabled:opacity-60"
-                    >
-                      <span className="text-muted">
-                        <Ltr>{slot.time}</Ltr>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
+      {/* `.book-body`'s padding: Sheet.tsx draws only the card, so content
+          set straight inside it would touch, and be cut by, its rounded edge. */}
+      <div className="px-5 py-[18px]">
+        <p className="font-medium">{dayScreenStrings.moveSheetHeading}</p>
+        <p className="mt-1 text-sm text-muted">{patientName}</p>
+        <div className="mt-3 flex flex-col gap-4 overflow-y-auto">
+          {groups.map((group) => {
+            const schedule = scheduleForWeekday(group.weekday);
+            if (!schedule) {
+              return null;
+            }
+            return (
+              <div key={group.date}>
+                <p className="text-sm font-medium text-muted">
+                  {formatCairoDisplayDateParts(group.date).map((part, index) =>
+                    part.type === "day" ? (
+                      <Ltr key={index}>{part.value}</Ltr>
+                    ) : (
+                      <span key={index}>{part.value}</span>
+                    ),
+                  )}
+                </p>
+                <ul className="mt-1 flex flex-col gap-1">
+                  {group.slots.map((slot) => (
+                    <li key={slot.time}>
+                      <button
+                        type="button"
+                        disabled={isMoving}
+                        onClick={() => handleSelectSlot(group.date, slot.time, schedule)}
+                        className="flex w-full items-center gap-3 rounded-control border border-rule p-3 text-start disabled:opacity-60"
+                      >
+                        <span className="text-muted">
+                          <Ltr>{slot.time}</Ltr>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </Sheet>
   );

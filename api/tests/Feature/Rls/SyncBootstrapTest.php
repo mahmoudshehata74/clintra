@@ -1,5 +1,6 @@
 <?php
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 
 /**
@@ -226,4 +227,22 @@ test('completeness: after bootstrap drains, the ordinary pull still delivers the
     $this->fx()->table('audit_log')->where('entity_id', $oldVisitId)->delete();
     $this->fx()->table('sync_ledger')->where('op_id', $oldVisitOp['op_id'])->delete();
     $this->fx()->table('visits')->where('id', $oldVisitId)->delete();
+});
+
+test('a bootstrapped visit carries its instants as ISO 8601 UTC strings, as devices store them', function () {
+    $credential = makeAuthenticatedDevice();
+    $specialtyId = $this->makeSpecialtyTemplate(null);
+    $practitionerId = $this->makePractitioner($credential['orgId'], $specialtyId);
+    $patientId = $this->makePatient($credential['orgId']);
+    $today = now('Africa/Cairo')->toDateString();
+    $visitId = $this->makeVisit($credential['orgId'], $credential['locationId'], $practitionerId, $patientId, $credential['membershipId'], [
+        'visit_date' => $today,
+        'position' => 1,
+        'scheduled_at' => $today.' 09:00:00+03',
+    ]);
+
+    $visit = collect(drainBootstrap($credential['token']))->firstWhere('entity_id', $visitId);
+
+    expect($visit['payload']['scheduled_at'])->toBe(CarbonImmutable::parse($today.' 09:00:00+03')->utc()->format('Y-m-d\TH:i:s.v\Z'));
+    expect($visit['payload']['scheduled_at'])->toEndWith('.000Z');
 });

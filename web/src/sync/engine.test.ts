@@ -850,3 +850,135 @@ describe("runPullCycle: device_series", () => {
     expect(await db.sync_review.count()).toBe(0);
   });
 });
+
+/**
+ * A stand-in for the server's rev check (api's SyncOpApplier): a create
+ * starts a row at rev 1; an update is accepted only on the row's current
+ * rev and raises it by one; after a rejected or failed op, the batch's
+ * later ops on that row are blocked (Q2). failFirstAttemptOf fails the
+ * named op's first attempt.
+ */
+class RevCheckingTransport extends StubTransport {
+  readonly revs = new Map<string, number>();
+  private readonly failOnce = new Set<string>();
+
+  constructor() {
+    super(() => {
+      throw new Error("unused");
+    });
+  }
+
+  failFirstAttemptOf(opId: string): void {
+    this.failOnce.add(opId);
+  }
+
+  override async pushOps(ops: readonly SyncOp[]): Promise<PushOpResult[]> {
+    this.calls.push([...ops]);
+    const stopped = new Set<string>();
+    return ops.map((op): PushOpResult => {
+      if (stopped.has(op.entity_id)) {
+        return { op_id: op.op_id, status: "blocked" };
+      }
+      if (this.failOnce.delete(op.op_id)) {
+        stopped.add(op.entity_id);
+        return { op_id: op.op_id, status: "failed", reason: "server_error" };
+      }
+      if (op.action === AuditAction.Create) {
+        this.revs.set(op.entity_id, 1);
+        return { op_id: op.op_id, status: "accepted", rev: 1 };
+      }
+      const current = this.revs.get(op.entity_id);
+      if (current === undefined || op.base_rev !== current) {
+        stopped.add(op.entity_id);
+        return { op_id: op.op_id, status: "rejected", reason: "conflict" };
+      }
+      this.revs.set(op.entity_id, current + 1);
+      return { op_id: op.op_id, status: "accepted", rev: current + 1 };
+    });
+  }
+}
+
+describe("runSyncCycle: a device's own quick successive writes of one row", () => {
+  async function advance(visitId: string, status: Visit["status"]): Promise<void> {
+    const before = (await db.visits.get(visitId))!;
+    await mutate(db, {
+      table: db.visits,
+      entity: "visits",
+      entityId: visitId,
+      action: AuditAction.Update,
+      before,
+      after: { ...before, status },
+      actorMembershipId: "membership-1",
+      orgId: before.org_id,
+    });
+  }
+
+  async function updateOps(): Promise<SyncOp[]> {
+    return (await db.sync_ops.toArray())
+      .filter((op) => op.action === AuditAction.Update)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
+  it("two updates written before either was pushed are both accepted, in order", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    const transport = new RevCheckingTransport();
+    await runSyncCycle(db, transport);
+    await advance(visit.id, VisitStatus.Arrived);
+    await advance(visit.id, VisitStatus.InRoom);
+
+    await runSyncCycle(db, transport);
+
+    expect(transport.calls[1].map((op) => op.base_rev)).toEqual([1, 2]);
+    expect(await db.sync_review.count()).toBe(0);
+    expect((await db.sync_ops.toArray()).every((op) => op.synced_at !== null)).toBe(true);
+    expect((await db.visits.get(visit.id))?.rev).toBe(3);
+  });
+
+  it("a create and two updates in one batch are all accepted", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    await advance(visit.id, VisitStatus.Arrived);
+    await advance(visit.id, VisitStatus.InRoom);
+    const transport = new RevCheckingTransport();
+
+    await runSyncCycle(db, transport);
+
+    expect(transport.calls[0].map((op) => op.base_rev)).toEqual([null, 1, 2]);
+    expect(await db.sync_review.count()).toBe(0);
+    expect((await db.visits.get(visit.id))?.rev).toBe(3);
+  });
+
+  it("an update left unsent behind an accepted one is sent on the new rev next cycle", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    const transport = new RevCheckingTransport();
+    await runSyncCycle(db, transport);
+    await advance(visit.id, VisitStatus.Arrived);
+    await advance(visit.id, VisitStatus.InRoom);
+    const [, second] = await updateOps();
+    transport.failFirstAttemptOf(second.op_id);
+
+    await runSyncCycle(db, transport);
+    await db.sync_ops.update(second.op_id, { next_retry_at: null });
+    await runSyncCycle(db, transport);
+
+    expect(transport.calls[2].map((op) => op.base_rev)).toEqual([2]);
+    expect(await db.sync_review.count()).toBe(0);
+    expect((await db.visits.get(visit.id))?.rev).toBe(3);
+  });
+
+  it("a row another device moved on is still a conflict", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    const transport = new RevCheckingTransport();
+    await runSyncCycle(db, transport);
+    transport.revs.set(visit.id, 2);
+    await advance(visit.id, VisitStatus.Cancelled);
+
+    await runSyncCycle(db, transport);
+
+    const [review] = await db.sync_review.toArray();
+    expect(review?.reason).toBe("conflict");
+  });
+});

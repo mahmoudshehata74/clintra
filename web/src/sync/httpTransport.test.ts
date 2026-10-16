@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { id } from "../domain/id";
 import { AuditAction, type SyncOp } from "../db/types";
 import { HttpTransport, selectSyncTransport } from "./httpTransport";
@@ -66,6 +66,17 @@ describe("HttpTransport.pushOps", () => {
     });
     expect(sentBody.ops[0]).not.toHaveProperty("device_id");
     expect(sentBody.ops[0]).not.toHaveProperty("failure_count");
+  });
+
+  it("sends no base_rev at all for a create, as the server requires", async () => {
+    const fetchImpl = fetchMock();
+    fetchImpl.mockImplementation(async () => jsonResponse(200, { results: [] }));
+    const transport = new HttpTransport({ token: "test-token", fetchImpl });
+
+    await transport.pushOps([makeOp({ action: AuditAction.Create, base_rev: null })]);
+
+    const sentBody = JSON.parse(fetchImpl.mock.calls[0][1]?.body as string);
+    expect(sentBody.ops[0]).not.toHaveProperty("base_rev");
   });
 
   it("passes through each of the five PushOpResult statuses exactly as the server returned them", async () => {
@@ -223,5 +234,27 @@ describe("selectSyncTransport", () => {
     const fallback = { pushOps: vi.fn(), pullSince: vi.fn(), pullBootstrap: vi.fn() };
     const selected = selectSyncTransport("real-token", fallback);
     expect(selected).toBeInstanceOf(HttpTransport);
+  });
+});
+
+describe("HttpTransport without a fetchImpl", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("calls the global fetch as a plain function, as a browser requires", async () => {
+    const calls: string[] = [];
+    // A browser's fetch refuses any receiver other than the window ("Illegal invocation").
+    vi.stubGlobal("fetch", function strictFetch(this: unknown, url: string) {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+      }
+      calls.push(url);
+      return Promise.resolve(jsonResponse(200, { cursor: "5", has_more: false, rows: [] }));
+    });
+    const transport = new HttpTransport({ token: "1|token", baseUrl: "https://api.example/api" });
+
+    await expect(transport.pullSince(null)).resolves.toMatchObject({ hasMore: false });
+    expect(calls).toEqual(["https://api.example/api/sync/pull"]);
   });
 });

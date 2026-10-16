@@ -11,6 +11,12 @@ import { SyncAuthError, type PullSinceResult, type PushOpResult, type SyncTransp
  * bookkeeping" and "the op itself" that api/docs/rls.md's accept-or-reject
  * rule already depends on being sharp.
  */
+/**
+ * An op as POST /api/sync/push takes it. A create has no base_rev and must
+ * not send one, not even as null: the server prohibits it on a create and
+ * otherwise wants an integer (api's PushSyncOpsRequest), so a null there
+ * failed the whole batch's validation.
+ */
 function toWireOp(op: SyncOp) {
   return {
     op_id: op.op_id,
@@ -19,7 +25,7 @@ function toWireOp(op: SyncOp) {
     action: op.action,
     payload: op.payload,
     created_at: op.created_at,
-    base_rev: op.base_rev,
+    ...(op.base_rev === null ? {} : { base_rev: op.base_rev }),
   };
 }
 
@@ -60,7 +66,10 @@ export class HttpTransport implements SyncTransport {
   constructor(options: HttpTransportOptions) {
     this.token = options.token;
     this.baseUrl = options.baseUrl ?? getApiBaseUrl();
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    // The global fetch must be called as a plain function: stored on this
+    // object and called as this.fetchImpl(...), a browser refuses it
+    // ("Illegal invocation") before any request leaves.
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
   }
 
   async pushOps(ops: readonly SyncOp[]): Promise<PushOpResult[]> {

@@ -32,6 +32,8 @@ test-results/
 web/e2e/screenshots/
 # The prototype comparison (pnpm test:compare) regenerates its images and index; never committed.
 web/e2e/compare/
+# The bug hunt's exploratory captures and scratch scripts; never committed.
+web/e2e/bug-hunt/
 
 # local working files
 /local/
