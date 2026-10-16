@@ -68,6 +68,17 @@ describe("HttpTransport.pushOps", () => {
     expect(sentBody.ops[0]).not.toHaveProperty("failure_count");
   });
 
+  it("sends no base_rev at all for a create, as the server requires", async () => {
+    const fetchImpl = fetchMock();
+    fetchImpl.mockImplementation(async () => jsonResponse(200, { results: [] }));
+    const transport = new HttpTransport({ token: "test-token", fetchImpl });
+
+    await transport.pushOps([makeOp({ action: AuditAction.Create, base_rev: null })]);
+
+    const sentBody = JSON.parse(fetchImpl.mock.calls[0][1]?.body as string);
+    expect(sentBody.ops[0]).not.toHaveProperty("base_rev");
+  });
+
   it("passes through each of the five PushOpResult statuses exactly as the server returned them", async () => {
     const results = [
       { op_id: "1", status: "accepted", rev: 4 },
