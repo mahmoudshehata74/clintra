@@ -24,6 +24,12 @@ screens are built on top of the existing data layer.
   pull and bootstrap endpoints, provisioning and activation-code CLI
   commands, full RLS on every tenant table (see `api/docs/rls.md`).
 
+## Provisioning
+Run `php artisan clintra:provision` on the Linux server (or in WSL), in a
+UTF-8 shell: a Windows console garbles the Arabic clinic and doctor names
+(`api/README.md`'s "Provisioning the first organization"; `docs/bug-hunt.md`,
+A-07).
+
 ## Verify
 Web: `pnpm --dir web test` (vitest, 1314 passed) · `pnpm --dir web
 exec tsc -b --noEmit` · `pnpm --dir web build` · `pnpm --dir web test:e2e`.
@@ -444,6 +450,8 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
   broken by id (`sortServicesByName`), so the order is always the same.
 
 ## Backlog
+- **Next PR** — audit_log syncs across devices (append-only on the server, pushed by every device, pulled by every device of the org; the owner sees every device's actions; the invoice's "إنشاء" line names its creator on every device). Needs a server table + RLS — owner-authorised schema change, its own PR. (`docs/bug-hunt.md`, A-04.)
+- A doctor's slots/queue switch in the working-hours editor, taking effect from the next day (today and its visits keep today's mode). Decided (`docs/bug-hunt.md`, A-03) but not built: the mode is one value per weekday row (`schedules.mode`), so "from tomorrow" needs a date-scoped field — a schema change awaiting the owner's go-ahead. Hardening scenario 24 waits on it.
 - Invoice item editing (screen 5's "تعديل بنود") — owner decision of the prototype alignment: recorded, not built.
 - Queue reordering (screen 3's "إعادة ترتيب") — owner decision of the prototype alignment: recorded, not built.
 - Server-side per-person identity: the acting membership sent and verified per request (e.g. a PIN-derived proof). Today the server knows only the membership the device token was issued to (the owner who registered the device), so it cannot tell who is signed in; this would close the staff owner check's gap and the other settings-write gaps.
