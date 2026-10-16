@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\AddStaffMemberRequest;
 use App\Support\EgyptianPhone;
+use App\Support\Sync\SyncSeqLock;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -85,6 +86,10 @@ class StaffController extends Controller
             ),
             'audit_id' => (string) Str::uuid(),
         ];
+
+        // Before the first write: the ledger rows below commit in seq order
+        // with every other sync write of the organization (SyncSeqLock).
+        SyncSeqLock::acquire();
 
         try {
             // A savepoint, so a refusal leaves the request's own

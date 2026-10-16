@@ -276,6 +276,21 @@ are deleted from the device's pulled-row store at start-up — local only;
 the server keeps everything, and this device's own rows are never touched.
 (Open question 5.)
 
+## Seq order is commit order
+
+Both cursors — `sync_ledger.seq` and `device_audit_log.seq` — are identity
+values, assigned at insert. Two writers of one organization could commit
+out of seq order, and a device pulling in between would move its cursor past
+the lower, still-uncommitted seq and never receive that row. Every
+transaction that inserts into either table therefore first takes
+`pg_advisory_xact_lock(hashtextextended('sync_seq:' || org_id::text, 0))` —
+one key per organization, shared by both tables' writers (the sync push,
+the staff add and the audit push), taken before the first insert and held
+to commit. Within an organization seq order then equals commit order;
+other organizations never wait on each other; no grant is needed. The
+`sync_ledger` writers take it from the commit that fixed this
+(`api/docs/rls.md`'s "One organization's sync writes commit in seq order").
+
 ## The device side
 
 **Database version 23**:

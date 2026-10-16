@@ -936,6 +936,53 @@ is server-created, for its own server-side actions, not a client's synced
 history. Designing that reconciliation is future work; see
 `docs/schema.md`'s new "v11 additions" section.
 
+## One organization's sync writes commit in seq order
+
+`sync_ledger.seq` is the pull cursor ("The sync pull endpoint" below), and
+an identity value is assigned when the row is inserted, not when its
+transaction commits. Two push transactions of one organization running at
+once could therefore commit out of seq order: push 1 inserts seq 41 and is
+still applying its next op, push 2 inserts seq 42 and commits. A device that
+pulls at that moment receives 42, stores cursor 42, and never asks for 41
+again — once push 1 commits, its row sits below every cursor that matters.
+Nothing reports the loss; the device simply never has that row.
+
+**Fix**: every transaction that inserts into `sync_ledger` first takes
+`pg_advisory_xact_lock(hashtextextended('sync_seq:' || org_id::text, 0))`
+for its own organization (`App\Support\Sync\SyncSeqLock`, with
+`current_org()` as the organization), before its first insert, and holds it
+until it commits — a transaction-scoped advisory lock, released by the
+commit or rollback itself. The two writers:
+
+- `SyncPushController::push` takes it once per request, after the token's
+  membership is resolved and before the first op is applied, so every op of
+  the batch runs under it.
+- `StaffController::store` takes it before calling `add_staff_member`, so it
+  is held before the function's first write and through the ledger rows
+  written after it.
+
+Both run inside `ApplyMembership`'s request transaction, so the lock is held
+to that transaction's commit. Within one organization the next seq is
+therefore assigned only after the previous writer has committed, and seq
+order equals commit order; a pull can see a seq only once every lower seq
+of its organization is committed. The key is per organization, so other
+organizations never wait on each other, and seq stays one global identity
+(other organizations' values interleave, invisible through RLS, as before).
+Taking the lock before any write — rather than just before the ledger
+insert — keeps it the first lock every writer of an organization takes,
+so a push can never hold a row lock another push waits for while waiting
+for the advisory lock itself. Pulls take no lock. An advisory lock needs no
+grant, so no role changed. `device_audit_log` (`docs/audit-sync.md`) shares
+the same key and rule.
+
+`tests/Feature/Rls/SyncSeqOrderTest.php`: while one connection holds a push
+(or a staff add) open, a second connection's `pg_try_advisory_xact_lock` on
+that organization's key returns false and on another organization's key
+true; and a push from a second device, started in its own process while
+the first push is open, waits for it, so a pull run between the two (in a
+third process) followed by a pull from its cursor receives both rows. With
+the lock removed, all three fail — the third by losing the first push's row.
+
 ## Audit attribution is enforced in the database, not application code
 
 `audit_log_insert`'s `WITH CHECK` originally scoped only the row's org
