@@ -45,7 +45,7 @@ export function PrintHeaderNote({ children }: { children: ReactNode }) {
  * `.print-clinic` — the organization's name, then "{location} · {address} ·
  * {phone}" (see printClinic.ts), each omitted when empty. The phone is its
  * own left-to-right run: its digit groups would otherwise be reordered by
- * the surrounding right-to-left line.
+ * the surrounding right-to-left line, and it stays on one line.
  */
 export function PrintClinicBlock({ title, details, phone }: PrintClinicLines) {
   if (!title && details.length === 0) {
@@ -59,7 +59,7 @@ export function PrintClinicBlock({ title, details, phone }: PrintClinicLines) {
           {details.map((part, index) => (
             <Fragment key={index}>
               {index > 0 && " · "}
-              {phone !== null && index === details.length - 1 ? <Ltr>{part}</Ltr> : part}
+              {phone !== null && index === details.length - 1 ? <Ltr className="whitespace-nowrap">{part}</Ltr> : part}
             </Fragment>
           ))}
         </p>

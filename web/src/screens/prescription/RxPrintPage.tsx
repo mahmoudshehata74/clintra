@@ -152,7 +152,8 @@ function DoctorSpec({ spec }: { spec: NonNullable<RxPrintModel["doctorSpec"]> })
  * The second `.doc-spec` line: the clinic, from printClinic like every other
  * printed page — not PrintClinicBlock's centred block but, as `.rx-doc`
  * shows it, one line ("{organization} · {location} · {address}
- * · هاتف: {phone}"), the phone its own left-to-right run.
+ * · هاتف: {phone}"), the phone its own left-to-right run, kept on one
+ * line so its digit groups never part on a narrow preview.
  */
 function ClinicSpec({ clinic }: { clinic: RxPrintModel["clinic"] }) {
   const parts = [...(clinic.title ? [clinic.title] : []), ...clinic.details];
@@ -166,7 +167,7 @@ function ClinicSpec({ clinic }: { clinic: RxPrintModel["clinic"] }) {
           {index > 0 && " · "}
           {clinic.phone !== null && index === parts.length - 1 ? (
             <>
-              {T.clinicPhonePrefix} <Ltr>{part}</Ltr>
+              {T.clinicPhonePrefix} <Ltr className="whitespace-nowrap">{part}</Ltr>
             </>
           ) : (
             part
