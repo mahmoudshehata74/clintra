@@ -6,6 +6,9 @@ import { formatReceiptNumber } from "../screens/day/invoiceNumber";
 import { dayScreenStrings } from "../screens/day/strings";
 import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type DisplacedPayload } from "./pullCollisions";
 
+/** The rejection reason of a visit whose slot another device booked first. */
+export const SLOT_TAKEN_REASON = "conflict_slot_taken";
+
 // Every syncable table (sync/syncableTables.ts — reviewSummary.test.ts holds
 // each one to a label here), so no assistant ever reads a raw English table
 // name. "device" is the one non-syncable entry: the sync engine's own
@@ -43,7 +46,7 @@ const ENTITY_LABELS: Record<string, string> = {
 // labelled in describeSyncReview, since its label carries the reference code.
 const REASON_LABELS: Record<string, string> = {
   [DISPLACED_BY_SERVER_REASON]: "النسخة دي اتشالت لأن جهاز تاني سبقها على السيرفر",
-  conflict_slot_taken: "الميعاد ده اتحجز من جهاز تاني",
+  [SLOT_TAKEN_REASON]: "الميعاد ده اتحجز من جهاز تاني",
   conflict_already_exists: "السجل ده موجود بالفعل على السيرفر",
   conflict_day_closed: "اليوم ده مقفول، مينفعش يتعدّل",
   conflict_stale_rev: "حد غيّر البيانات دي قبلك",
@@ -183,11 +186,8 @@ export function describeDisplacedContent(review: SyncReview, patientNames: Reado
       const key = row.key as string;
       return `القالب: ${findMessageTemplate(key)?.name ?? key}`;
     }
-    case "visits": {
-      const patient = patientNames.get(row.patient_id as string) ?? "مريض";
-      const scheduledAt = row.scheduled_at as string | null;
-      return scheduledAt ? `${patient} — الساعة ${clockTimeInCairo(scheduledAt)}` : `${patient} — دور ${row.position as number}`;
-    }
+    case "visits":
+      return describeVisitLine(row, patientNames);
     case "day_state":
       return `تأخير ${row.delay_minutes as number} دقيقة`;
     case "cash_close":
@@ -237,4 +237,24 @@ export function describeReviewFieldDiffs(mine: unknown, server: unknown): Review
     }
   }
   return diffs;
+}
+
+/** A visit as one line: "{patient} — الساعة {h:mm}", or "{patient} — دور {n}" for a queue visit. */
+function describeVisitLine(row: Record<string, unknown>, patientNames: ReadonlyMap<string, string>): string {
+  const patient = patientNames.get(row.patient_id as string) ?? "مريض";
+  const scheduledAt = row.scheduled_at as string | null;
+  return scheduledAt ? `${patient} — الساعة ${clockTimeInCairo(scheduledAt)}` : `${patient} — دور ${row.position as number}`;
+}
+
+/**
+ * The booking a slot conflict is about (conflict_slot_taken: this device's
+ * visit, refused because another device took the slot first), in the same
+ * line a displaced visit shows — so the review says which booking before
+ * the assistant keeps or removes it. Null for any other review.
+ */
+export function describeLostBooking(review: SyncReview, patientNames: ReadonlyMap<string, string>): string | null {
+  if (review.reason !== SLOT_TAKEN_REASON || review.entity !== "visits" || review.payload === null) {
+    return null;
+  }
+  return describeVisitLine(review.payload as Record<string, unknown>, patientNames);
 }

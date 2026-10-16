@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AuditAction, type SyncReview } from "../db/types";
 import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type DisplacedPayload } from "./pullCollisions";
-import { describeDisplacedContent, describeReviewFieldDiffs, describeSupersededReviews, describeSyncReview, displacedPayments } from "./reviewSummary";
+import { describeDisplacedContent, describeLostBooking, describeReviewFieldDiffs, describeSupersededReviews, describeSyncReview, displacedPayments } from "./reviewSummary";
 import { SYNCABLE_TABLES } from "./syncableTables";
 
 function makeReview(overrides: Partial<SyncReview> = {}): SyncReview {
@@ -198,5 +198,23 @@ describe("money is never displaced silently", () => {
     expect(describeSupersededReviews(folded)).toBe("كانت مستنية مراجعة قبل كده: الميعاد ده اتحجز من جهاز تاني");
     expect(describeSupersededReviews(visitWithPayments)).toBeNull();
     expect(describeSupersededReviews(makeReview())).toBeNull();
+  });
+});
+
+describe("describeLostBooking", () => {
+  it("names a slot conflict's booking by its patient and its time", () => {
+    const names = new Map([["patient-1", "هدى سمير"]]);
+    const review = makeReview({ payload: { patient_id: "patient-1", scheduled_at: "2026-09-07T07:00:00.000Z", position: 1 } });
+    expect(describeLostBooking(review, names)).toBe("هدى سمير — الساعة 10:00");
+  });
+
+  it("falls back to a plain patient word when the name is not on the device", () => {
+    const review = makeReview({ payload: { patient_id: "patient-9", scheduled_at: "2026-09-07T07:00:00.000Z", position: 1 } });
+    expect(describeLostBooking(review, new Map())).toBe("مريض — الساعة 10:00");
+  });
+
+  it("has nothing to say for any other review", () => {
+    expect(describeLostBooking(makeReview({ reason: "conflict", payload: { patient_id: "patient-1" } }), new Map())).toBeNull();
+    expect(describeLostBooking(makeReview({ entity: "patients" }), new Map())).toBeNull();
   });
 });

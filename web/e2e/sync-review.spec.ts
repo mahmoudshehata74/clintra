@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { DeviceRegistration, Invoice, Patient, Payment, Prescription, PrescriptionItem, SyncOp, SyncReview, Visit } from "../src/db/types";
+import { clockTimeInCairo } from "../src/domain/time";
 import { emptySlotTiles, gotoSeededDay, login, PATIENTS, pickSearchResult, rowFor, S, selectPractitioner, SLOTS_DR } from "./support";
 
 /** The database the app's FakeTransport keeps as its stand-in server (sync/fakeTransport.ts's FAKE_SERVER_DB_NAME). */
@@ -190,6 +191,18 @@ test("'شيلها' on a lost slot conflict removes the phantom local visit entir
   const opsAfter = await readIndexedDbStore<SyncOp>(page, "sync_ops");
   expect(opsAfter.find((op) => op.op_id === plantedOpId)).toBeUndefined();
   expect(opsAfter.some((op) => op.entity_id === myVisit.id && op.synced_at === null)).toBe(false);
+});
+
+test("a lost slot conflict names the booking it is about before anything is chosen", async ({ page }) => {
+  await gotoSeededDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+
+  const { visit: myVisit } = await plantLostSlotConflict(page, PATIENTS.hoda);
+
+  await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet.getByText(`${PATIENTS.hoda} — الساعة ${clockTimeInCairo(myVisit.scheduled_at!)}`, { exact: true })).toBeVisible();
+  await expect(sheet.getByRole("button", { name: S.syncReviewKeepAction, exact: true })).toBeVisible();
 });
 
 /**
