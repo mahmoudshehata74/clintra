@@ -378,3 +378,48 @@ describe("undoMostRecentVisitMutation", () => {
     });
   });
 });
+
+describe("undo and rows from other devices", () => {
+  it("a pulled row for the same patient, written later, does not make this device's undo stale", async () => {
+    await seedDatabase(db);
+    const [membership] = await db.memberships.toArray();
+    const patientId = id();
+    const patient: Patient = {
+      id: patientId,
+      org_id: membership.org_id,
+      full_name: "مريض جديد",
+      phone: null,
+      gender: null,
+      birth_year: null,
+      note: null,
+      created_at: new Date().toISOString(),
+      rev: 1,
+    };
+    const auditLogId = await mutate(db, {
+      table: db.patients,
+      entity: "patients",
+      entityId: patientId,
+      action: AuditAction.Create,
+      before: null,
+      after: patient,
+      actorMembershipId: membership.id,
+      orgId: membership.org_id,
+    });
+    await db.remote_audit_log.add({
+      id: id(),
+      org_id: membership.org_id,
+      location_id: null,
+      practitioner_id: null,
+      actor_membership_id: membership.id,
+      device_id: "device-b",
+      entity: "patients",
+      entity_id: patientId,
+      action: AuditAction.Update,
+      before: patient,
+      after: { ...patient, full_name: "اسم تاني" },
+      at: new Date(Date.now() + 1000).toISOString(),
+    });
+
+    expect(await undoMostRecentPatientMutation(db, auditLogId)).toEqual({ ok: true });
+  });
+});

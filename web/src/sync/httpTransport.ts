@@ -1,6 +1,16 @@
 import { getApiBaseUrl } from "../config/apiBaseUrl";
-import type { SyncOp } from "../db/types";
-import { SyncAuthError, type PullSinceResult, type PushOpResult, type SyncTransport } from "./transport";
+import { remoteAuditRowOf } from "../db/auditEntries";
+import type { RemoteAuditLog, SyncOp } from "../db/types";
+import {
+  SyncAuthError,
+  type AuditTransport,
+  type PullAuditResult,
+  type PullSinceResult,
+  type PushAuditResult,
+  type PushOpResult,
+  type SyncTransport,
+  type WireAuditRow,
+} from "./transport";
 
 /**
  * The wire shape POST /api/sync/push actually validates
@@ -58,7 +68,7 @@ export interface HttpTransportOptions {
  * here; `FakeTransport` is only ever selected for a device with no real
  * token (demo mode's seed-bound device row).
  */
-export class HttpTransport implements SyncTransport {
+export class HttpTransport implements SyncTransport, AuditTransport {
   private readonly token: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -121,6 +131,27 @@ export class HttpTransport implements SyncTransport {
         rev: row.rev,
         payload: row.payload,
       })),
+    };
+  }
+
+  async pushAuditRows(rows: readonly WireAuditRow[]): Promise<PushAuditResult[]> {
+    const body = await this.request("/audit/push", { method: "POST", body: JSON.stringify({ rows }) });
+    return (body as { results: PushAuditResult[] }).results;
+  }
+
+  async pullAuditSince(cursor: string | null): Promise<PullAuditResult> {
+    const query = cursor === null ? "" : `?cursor=${encodeURIComponent(cursor)}`;
+    const body = (await this.request(`/audit/pull${query}`, { method: "GET" })) as {
+      cursor: string;
+      has_more: boolean;
+      rows: Array<RemoteAuditLog & { seq: number }>;
+    };
+
+    return {
+      cursor: body.cursor,
+      hasMore: body.has_more,
+      // The server's seq is the cursor's business, not the row's.
+      rows: body.rows.map(remoteAuditRowOf),
     };
   }
 

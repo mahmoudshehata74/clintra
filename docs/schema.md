@@ -1103,6 +1103,18 @@ the server's evidence (the token's membership as actor).
 Server: `2026_09_12_000034_create_device_audit_log_table.php`
 (`api/docs/rls.md`'s "Device audit rows").
 
+Local: database version 23. A new store, `remote_audit_log`
+(`id, at, [entity+entity_id]`), holds the rows pulled from the
+organization's other devices — the server row's fields except
+`pushed_by_membership_id`, `received_at` and `seq` — so `audit_log` keeps
+only this device's rows and its dense `seq`. The device row gains
+`audit_pushed_seq` (the highest local `seq` the server has answered for)
+and `audit_pull_cursor` (the last `device_audit_log.seq` pulled), neither
+indexed; absent, they read as 0 and null, so no backfill runs and the
+device pushes every local row it holds from seq 0. Pulled rows older than
+60 Cairo days are not kept (`web/src/sync/auditSync.ts`). Versions 1-22
+are unchanged.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.

@@ -6,7 +6,8 @@ import { MUTATION_EVENT_NAME } from "../db/mutate";
 import { AuditAction, type SyncOp } from "../db/types";
 import { chainBaseRevs, rebaseUnsent } from "./baseRevChain";
 import { applyPulledRow, familyTables, foldChildOpsOfRejectedCreate } from "./pullCollisions";
-import { SyncAuthError, type SyncTransport } from "./transport";
+import { pruneRemoteAuditRows, runAuditPull, runAuditPush, type AuditSyncOutcome } from "./auditSync";
+import { hasAuditEndpoints, SyncAuthError, type SyncTransport } from "./transport";
 
 const DEFAULT_INTERVAL_MS = 10_000;
 
@@ -412,6 +413,35 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
   }
 }
 
+/** Feeds an audit pass's outcome into the same transport health the entity sync reports. */
+function recordAuditOutcome(outcome: AuditSyncOutcome): void {
+  if (outcome === "unauthenticated") {
+    notifySyncAuthError();
+  } else if (outcome === "unreachable") {
+    recordTransportFailure();
+  } else {
+    recordTransportSuccess();
+  }
+}
+
+/**
+ * The audit rows' part of a cycle (sync/auditSync.ts; docs/audit-sync.md):
+ * this device's rows up, then the other devices' rows down. Skipped for a
+ * transport with no audit endpoints (a test double), and stopped after the
+ * push when the push could not reach the server.
+ */
+export async function runAuditCycle(db: ClintraDatabase, transport: SyncTransport): Promise<void> {
+  if (!hasAuditEndpoints(transport)) {
+    return;
+  }
+  const pushed = await runAuditPush(db, transport);
+  recordAuditOutcome(pushed);
+  if (pushed !== "done") {
+    return;
+  }
+  recordAuditOutcome(await runAuditPull(db, transport));
+}
+
 export interface SyncEngineHandle {
   /** Runs a cycle immediately (subject to the same never-concurrent guard as the timer). */
   triggerSync: () => void;
@@ -455,15 +485,28 @@ export function startSyncEngine(
   deviceReadiness: DeviceReadiness = ALWAYS_READY,
 ): SyncEngineHandle {
   let isRunning = false;
+  let hasPrunedAudit = false;
   let timerId: ReturnType<typeof setInterval> | null = null;
+
+  // Once per start: pulled audit rows past the 60-day window go.
+  async function pruneAuditOnce(): Promise<void> {
+    if (!hasPrunedAudit) {
+      await pruneRemoteAuditRows(db);
+      hasPrunedAudit = true;
+    }
+  }
 
   function runGuarded() {
     if (isRunning || !deviceReadiness.isReady()) {
       return;
     }
     isRunning = true;
+    // Entity ops go up before audit rows, so the server holds the entities
+    // first; each pull follows its push.
     runSyncCycle(db, transport)
+      .then(() => pruneAuditOnce())
       .then(() => runPullCycle(db, transport))
+      .then(() => runAuditCycle(db, transport))
       .catch((error: unknown) => {
         console.error(error);
       })

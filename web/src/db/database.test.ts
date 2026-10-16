@@ -296,7 +296,7 @@ describe("version 14: visits.note backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const visits = await upgraded.visits.toArray();
 
-    expect(upgraded.verno).toBe(22);
+    expect(upgraded.verno).toBe(23);
     expect(visits.find((visit) => visit.id === withoutNote.id)).toHaveProperty("note", null);
     expect(visits.find((visit) => visit.id === pulledWithNote.id)?.note).toBe("حساسية بنسلين");
     upgraded.close();
@@ -380,7 +380,7 @@ describe("version 15: number series backfill", () => {
 
     const upgraded = new ClintraDatabase(name);
 
-    expect(upgraded.verno).toBe(22);
+    expect(upgraded.verno).toBe(23);
     expect((await upgraded.invoices.toArray()).map((invoice) => invoice.series)).toEqual([1, 1]);
     expect((await upgraded.payments.toArray()).map((payment) => payment.series)).toEqual([1, 1]);
     expect((await upgraded.device.get("seed-device"))?.series).toBe(1);
@@ -430,7 +430,7 @@ describe("version 17: practitioners' syndicate_number and rev backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const practitioners = await upgraded.practitioners.toArray();
 
-    expect(upgraded.verno).toBe(22);
+    expect(upgraded.verno).toBe(23);
     expect(practitioners.find((p) => p.id === local.id)).toEqual({ ...local, syndicate_number: null, rev: 1 });
     expect(practitioners.find((p) => p.id === pulled.id)).toEqual(pulled);
     upgraded.close();
@@ -440,7 +440,7 @@ describe("version 17: practitioners' syndicate_number and rev backfill", () => {
 describe("version 18: messages and message_templates", () => {
   it("adds both stores with their indexes, one template override per key", async () => {
     const local = new ClintraDatabase(`clintra-db-messages-test-${crypto.randomUUID()}`);
-    expect(local.verno).toBe(22);
+    expect(local.verno).toBe(23);
     expect(local.messages.schema.indexes.map((index) => index.src).sort()).toEqual([
       "attempted_at",
       "location_id",
@@ -496,7 +496,7 @@ describe("version 19: number high-water marks", () => {
     legacy.close();
 
     const upgraded = new ClintraDatabase(name);
-    expect(upgraded.verno).toBe(22);
+    expect(upgraded.verno).toBe(23);
     expect((await upgraded.device.get("device-1"))?.number_marks).toEqual({
       [`invoice:${LOCATION_ID}:2:2025`]: 9,
       [`invoice:${LOCATION_ID}:2:2026`]: 5,
@@ -510,7 +510,7 @@ describe("version 19: number high-water marks", () => {
 describe("version 20: care plans", () => {
   it("indexes care_plans by patient and practitioner and care_plan_items by plan and visit, none of them unique", async () => {
     const local = new ClintraDatabase(`clintra-db-care-plans-test-${crypto.randomUUID()}`);
-    expect(local.verno).toBe(22);
+    expect(local.verno).toBe(23);
     expect(local.care_plans.schema.indexes.map((index) => [index.src, index.unique])).toEqual([
       ["patient_id", false],
       ["practitioner_id", false],
@@ -549,7 +549,7 @@ describe("version 20: care plans", () => {
     legacy.close();
 
     const upgraded = new ClintraDatabase(name);
-    expect(upgraded.verno).toBe(22);
+    expect(upgraded.verno).toBe(23);
     expect((await upgraded.patients.get(PATIENT_ID))?.full_name).toBe("كريم");
     expect(await upgraded.care_plans.count()).toBe(0);
     expect(await upgraded.care_plan_items.where("visit_id").equals("visit-1").count()).toBe(0);
@@ -611,10 +611,52 @@ describe("version 21: a device stuck on a locally added staff member", () => {
     const upgraded = new ClintraDatabase(name);
     const remaining = (await upgraded.sync_ops.toArray()).map((row) => row.op_id).sort();
 
-    expect(upgraded.verno).toBe(22);
+    expect(upgraded.verno).toBe(23);
     expect(remaining).toEqual(["op-existing-link", "op-existing-membership", "op-sent-user", "op-visit"]);
     // Only the queue is touched: the member can still sign in on this device.
     expect(await upgraded.memberships.get("membership-new")).toBeDefined();
+    upgraded.close();
+  });
+});
+
+describe("version 23: audit rows from other devices", () => {
+  it("adds remote_audit_log with its indexes and leaves this device's audit rows and device row as they were", async () => {
+    const name = `clintra-db-upgrade-test-${crypto.randomUUID()}`;
+    const current = new ClintraDatabase(name);
+    const stores: Record<string, string | null> = Object.fromEntries(
+      current.tables.map((table) => [
+        table.name,
+        [table.schema.primKey.src, ...table.schema.indexes.map((index) => index.src)].join(", "),
+      ]),
+    );
+    expect(stores.remote_audit_log).toBe("id, at, [entity+entity_id]");
+    current.close();
+    delete stores.remote_audit_log;
+    const legacy = new Dexie(name);
+    legacy.version(22).stores(stores);
+    const ownRow = {
+      id: "audit-1",
+      seq: 1,
+      org_id: "org-1",
+      actor_membership_id: "membership-1",
+      entity: "patients",
+      entity_id: "patient-1",
+      action: AuditAction.Create,
+      before: null,
+      after: { full_name: "كريم" },
+      at: "2026-10-17T07:00:00.000Z",
+    };
+    const device = { id: "device-1", org_id: "org-1", location_id: "location-1", registered_at: "2026-10-01T06:00:00.000Z", pull_cursor: "42", membership_id: null, token: null, series: 1 };
+    await legacy.table("audit_log").add(ownRow);
+    await legacy.table("device").add(device);
+    legacy.close();
+
+    const upgraded = new ClintraDatabase(name);
+    expect(upgraded.verno).toBe(23);
+    expect(await upgraded.audit_log.get("audit-1")).toEqual(ownRow);
+    // No backfill: absent fields read as "nothing pushed, never pulled".
+    expect(await upgraded.device.get("device-1")).toEqual(device);
+    expect(await upgraded.remote_audit_log.count()).toBe(0);
     upgraded.close();
   });
 });

@@ -1,4 +1,4 @@
-import type { SyncOp } from "../db/types";
+import type { AuditAction, RemoteAuditLog, SyncOp } from "../db/types";
 
 /**
  * The outcome of pushing one op, keyed back to it by op_id so a batch push
@@ -76,6 +76,56 @@ export interface SyncTransport {
    * solves.
    */
   pullBootstrap(cursor: string | null): Promise<PullSinceResult>;
+}
+
+/** One audit row as POST /api/audit/push takes it (docs/audit-sync.md's "Rows going up"). */
+export interface WireAuditRow {
+  id: string;
+  org_id: string;
+  location_id: string | null;
+  practitioner_id: string | null;
+  actor_membership_id: string;
+  entity: string;
+  entity_id: string;
+  action: AuditAction;
+  before: unknown | null;
+  after: unknown | null;
+  at: string;
+}
+
+/**
+ * The outcome of pushing one audit row, keyed back to it by id
+ * (api/app/Support/Sync/DeviceAuditPusher.php): accepted, duplicate (already
+ * stored, the same row) and rejected are final; failed is sent again later.
+ */
+export type PushAuditResult =
+  | { id: string; status: "accepted" | "duplicate" }
+  | { id: string; status: "rejected" | "failed"; reason: string };
+
+export interface PullAuditResult {
+  /** Opaque; pass back on the next call. */
+  cursor: string;
+  hasMore: boolean;
+  /** Other devices' rows, oldest first. */
+  rows: RemoteAuditLog[];
+}
+
+/**
+ * The audit endpoints (docs/audit-sync.md): their own push and pull, apart
+ * from the entity sync above. HttpTransport and FakeTransport implement
+ * both interfaces; a test double that implements only SyncTransport simply
+ * has no audit sync (sync/engine.ts checks with hasAuditEndpoints).
+ */
+export interface AuditTransport {
+  /** Pushes up to 200 rows; one result per row, in the same order. */
+  pushAuditRows(rows: readonly WireAuditRow[]): Promise<PushAuditResult[]>;
+  /** Pulls one page of other devices' rows after cursor (null: the first pull, 14 Cairo days back). */
+  pullAuditSince(cursor: string | null): Promise<PullAuditResult>;
+}
+
+export function hasAuditEndpoints(transport: SyncTransport): transport is SyncTransport & AuditTransport {
+  const candidate = transport as Partial<AuditTransport>;
+  return typeof candidate.pushAuditRows === "function" && typeof candidate.pullAuditSince === "function";
 }
 
 /**

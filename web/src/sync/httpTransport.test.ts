@@ -258,3 +258,56 @@ describe("HttpTransport without a fetchImpl", () => {
     expect(calls).toEqual(["https://api.example/api/sync/pull"]);
   });
 });
+
+describe("HttpTransport audit endpoints", () => {
+  const wireRow = {
+    id: "audit-1",
+    org_id: "org-1",
+    location_id: "loc-1",
+    practitioner_id: null,
+    actor_membership_id: "membership-1",
+    entity: "payments",
+    entity_id: "payment-1",
+    action: AuditAction.Create,
+    before: null,
+    after: { amount: 20000 },
+    at: "2026-10-17T07:00:00.000Z",
+  };
+
+  it("posts the rows to /audit/push and returns the server's results", async () => {
+    const fetchImpl = fetchMock();
+    fetchImpl.mockImplementation(async () =>
+      jsonResponse(200, { results: [{ id: "audit-1", status: "rejected", reason: "audit_id_taken" }] }),
+    );
+    const transport = new HttpTransport({ token: "test-token", fetchImpl });
+
+    const results = await transport.pushAuditRows([wireRow]);
+
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe("/api/audit/push");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual({ rows: [wireRow] });
+    expect(results).toEqual([{ id: "audit-1", status: "rejected", reason: "audit_id_taken" }]);
+  });
+
+  it("pulls from /audit/pull, with the cursor when given one, and keeps the rows without the server's seq", async () => {
+    const fetchImpl = fetchMock();
+    const pulled = { ...wireRow, device_id: "device-b" };
+    fetchImpl.mockImplementation(async () => jsonResponse(200, { cursor: "7", has_more: true, rows: [{ ...pulled, seq: 7 }] }));
+    const transport = new HttpTransport({ token: "test-token", fetchImpl });
+
+    expect(await transport.pullAuditSince(null)).toEqual({ cursor: "7", hasMore: true, rows: [pulled] });
+    await transport.pullAuditSince("7");
+
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual(["/api/audit/pull", "/api/audit/pull?cursor=7"]);
+  });
+
+  it("throws SyncAuthError on a 401 from either", async () => {
+    const fetchImpl = fetchMock();
+    fetchImpl.mockImplementation(async () => jsonResponse(401, { error: "unauthenticated" }));
+    const transport = new HttpTransport({ token: "expired-token", fetchImpl });
+
+    await expect(transport.pushAuditRows([wireRow])).rejects.toBeInstanceOf(SyncAuthError);
+    await expect(transport.pullAuditSince(null)).rejects.toBeInstanceOf(SyncAuthError);
+  });
+});
