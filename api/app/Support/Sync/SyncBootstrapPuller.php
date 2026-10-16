@@ -240,7 +240,7 @@ class SyncBootstrapPuller
             'entity' => $entity,
             'entity_id' => $row->id,
             'rev' => (int) $row->rev,
-            'payload' => (array) $row,
+            'payload' => SyncPayload::fromRow($entity, $row),
         ];
     }
 

@@ -261,3 +261,18 @@ test('no pull response body contains a SQLSTATE, query text, or any internal det
     expect($body)->not->toContain('pgsql');
     expect($body)->not->toContain('select ');
 });
+
+test('a pulled row carries its instants as ISO 8601 UTC strings, as devices store them', function () {
+    $credential = makeAuthenticatedDevice();
+    $op = patientOp($credential['orgId']);
+    $op['payload']['created_at'] = '2026-10-16T18:49:29+03:00';
+    pushOps($credential['token'], [$op])->assertOk();
+
+    $rows = pullOps($credential['token'])->assertOk()->json('rows');
+
+    expect($rows[0]['payload']['created_at'])->toBe('2026-10-16T15:49:29.000Z');
+
+    $this->fx()->table('audit_log')->where('entity_id', $op['entity_id'])->delete();
+    $this->fx()->table('sync_ledger')->where('op_id', $op['op_id'])->delete();
+    $this->fx()->table('patients')->where('id', $op['entity_id'])->delete();
+});
