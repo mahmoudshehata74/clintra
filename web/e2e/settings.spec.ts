@@ -514,3 +514,24 @@ test("the new-staff form keeps its PIN masked and its validation", async ({ page
   await dialog.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
   await expect(dialog.getByText(S.staffPinLengthError)).toBeVisible();
 });
+
+test("the new-staff form cancels without adding anyone and opens empty again", async ({ page }) => {
+  await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
+  const before = (await readStore<{ id: string }>(page, "memberships")).length;
+
+  await dialog.getByRole("button", { name: S.staffNewAction, exact: true }).click();
+  await dialog.getByLabel(S.staffNameLabel, { exact: true }).fill(NEW_ASSISTANT_NAME);
+  await dialog.getByLabel(S.staffPinLabel, { exact: true }).fill(NEW_ASSISTANT_PIN);
+  await dialog.getByRole("button", { name: S.settingsCancelAction, exact: true }).click();
+
+  await expect(dialog.getByLabel(S.staffNameLabel, { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText(NEW_ASSISTANT_NAME)).toHaveCount(0);
+  expect(await readStore<{ id: string }>(page, "memberships")).toHaveLength(before);
+
+  await dialog.getByRole("button", { name: S.staffNewAction, exact: true }).click();
+  await expect(dialog.getByLabel(S.staffNameLabel, { exact: true })).toHaveValue("");
+  await expect(dialog.getByLabel(S.staffPinLabel, { exact: true })).toHaveValue("");
+});

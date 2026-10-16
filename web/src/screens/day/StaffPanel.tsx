@@ -112,6 +112,7 @@ export default function StaffPanel({ orgId }: { orgId: string }) {
             locations={data.locations}
             practitioners={data.practitioners}
             onSaved={() => setIsAdding(false)}
+            onCancel={() => setIsAdding(false)}
           />
         )}
       </SetBody>
@@ -123,7 +124,7 @@ export default function StaffPanel({ orgId }: { orgId: string }) {
           </>
         }
       >
-        {/* Hidden while the form is open, as before — its own save is the one action then. */}
+        {/* Hidden while the form is open: its own save and cancel are the actions then. */}
         {!isAdding && (
           <Button variant="primary" onClick={() => setIsAdding(true)}>
             {dayScreenStrings.staffNewAction}
@@ -317,11 +318,13 @@ function NewStaffForm({
   locations,
   practitioners,
   onSaved,
+  onCancel,
 }: {
   orgId: string;
   locations: Location[];
   practitioners: Practitioner[];
   onSaved: () => void;
+  onCancel: () => void;
 }) {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -477,9 +480,14 @@ function NewStaffForm({
           {formMessage}
         </p>
       )}
-      <Button variant="primary" disabled={isSaving} onClick={save}>
-        {dayScreenStrings.settingsSaveAction}
-      </Button>
+      <div className="flex gap-2">
+        <Button variant="primary" className="flex-1" disabled={isSaving} onClick={save}>
+          {dayScreenStrings.settingsSaveAction}
+        </Button>
+        <Button variant="secondary" disabled={isSaving} onClick={onCancel}>
+          {dayScreenStrings.settingsCancelAction}
+        </Button>
+      </div>
     </div>
   );
 }
