@@ -1,5 +1,5 @@
-import { expect, test } from "@playwright/test";
-import { advanceRowTo, invoiceHead, invoiceTotals, labeledRowValue, parsePounds, rowFor, S } from "../e2e/support";
+import { expect, test, type Browser } from "@playwright/test";
+import { advanceRowTo, invoiceHead, invoiceTotals, labeledRowValue, login, parsePounds, readStore, rowFor, S, sidebar, SIDEBAR } from "../e2e/support";
 import { bookNew, eventually, firstEmptySlotTime, nudge, openDevice, pushed, rowCount, rowStatus, seriesLetter, setUpClinic, type Device } from "./liveSupport";
 import { provisionOrg, startApi, stopApi, type LiveOrg } from "./liveServer";
 
@@ -48,7 +48,7 @@ async function completeVisit(device: Device, name: string) {
   await advanceRowTo(device.page, name, S.statusCompleted);
 }
 
-async function twoDevices(browser: import("@playwright/test").Browser): Promise<[Device, Device]> {
+async function twoDevices(browser: Browser): Promise<[Device, Device]> {
   const a = await openDevice(browser, org, "A");
   const b = await openDevice(browser, org, "B");
   return [a, b];
@@ -135,7 +135,6 @@ test("server stopped and restarted: the chip says so, a reload keeps the data, t
     await bookNew(a, "مريض السيرفر واقف");
     await eventually([a], async () => a.page.getByRole("button", { name: S.syncServerUnreachable, exact: true }).count(), 1, "A shows the server unreachable");
     await a.page.reload();
-    const { login } = await import("../e2e/support");
     await login(a.page, { name: org.ownerName, pin: org.ownerPin });
     await expect(rowFor(a.page, "مريض السيرفر واقف")).toBeVisible();
   } finally {
@@ -199,7 +198,6 @@ test("both offline change the same visit (arrive on A, cancel on B): one state o
 test("adding staff offline is refused clearly", async ({ browser }) => {
   const a = await openDevice(browser, org, "A");
   await a.context.setOffline(true);
-  const { sidebar, SIDEBAR } = await import("../e2e/support");
   await sidebar(a.page).getByRole("button", { name: SIDEBAR.navSettings, exact: true }).click();
   const settings = a.page.getByRole("dialog");
   await settings.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
@@ -212,4 +210,24 @@ test("adding staff offline is refused clearly", async ({ browser }) => {
   await expect(settings.getByText(S.staffAddNeedsConnection)).toBeVisible();
   await expect(settings.getByRole("listitem").filter({ hasText: "موظف جديد" })).toHaveCount(0);
   await closeAll(a);
+});
+
+test("adding staff online creates them on the server, and the other device gets them", async ({ browser }) => {
+  const [a, b] = await twoDevices(browser);
+  await sidebar(a.page).getByRole("button", { name: SIDEBAR.navSettings, exact: true }).click();
+  const settings = a.page.getByRole("dialog");
+  await settings.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
+  await settings.getByRole("button", { name: S.staffNewAction, exact: true }).click();
+  await settings.getByLabel(S.staffNameLabel, { exact: true }).fill("Live Assistant");
+  await settings.getByLabel(S.staffPhoneLabel, { exact: true }).fill(`011${String(Date.now()).slice(-8)}`);
+  await settings.getByLabel(S.staffPinLabel, { exact: true }).fill("1357");
+  await settings.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
+  await expect(settings.getByRole("listitem").filter({ hasText: "Live Assistant" })).toBeVisible();
+  await eventually(
+    [a, b],
+    async () => (await readStore<{ display_name: string | null }>(b.page, "memberships")).some((row) => row.display_name === "Live Assistant"),
+    true,
+    "B gets the new staff member",
+  );
+  await closeAll(a, b);
 });

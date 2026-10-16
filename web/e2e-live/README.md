@@ -25,6 +25,8 @@ path the ordinary e2e suite never takes (it runs on the in-browser
    once both reconnect, both show the same status.
 7. Adding a staff member offline is refused with "إضافة موظف محتاجة اتصال
    بالإنترنت" and adds no one.
+8. Adding a staff member online creates them on the server, and the other
+   device receives them.
 
 Every wait nudges the sync engine (as returning to the tab does) and polls;
 nothing sleeps.
