@@ -68,7 +68,10 @@ export class HttpStaffServer implements StaffServer {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
 
-  constructor(token: string, baseUrl: string = getApiBaseUrl(), fetchImpl: typeof fetch = fetch) {
+  // The default calls the global fetch as a plain function: stored and
+  // called as this.fetchImpl(...), a browser refuses fetch itself ("Illegal
+  // invocation") before any request leaves.
+  constructor(token: string, baseUrl: string = getApiBaseUrl(), fetchImpl: typeof fetch = (input, init) => fetch(input, init)) {
     this.token = token;
     this.baseUrl = baseUrl;
     this.fetchImpl = fetchImpl;

@@ -60,7 +60,10 @@ export class HttpTransport implements SyncTransport {
   constructor(options: HttpTransportOptions) {
     this.token = options.token;
     this.baseUrl = options.baseUrl ?? getApiBaseUrl();
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    // The global fetch must be called as a plain function: stored on this
+    // object and called as this.fetchImpl(...), a browser refuses it
+    // ("Illegal invocation") before any request leaves.
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
   }
 
   async pushOps(ops: readonly SyncOp[]): Promise<PushOpResult[]> {
