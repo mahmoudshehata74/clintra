@@ -268,8 +268,9 @@ test("moving an appointment to tomorrow takes 3 taps or fewer", async ({ page })
   // that order, skipping any day with zero empty slots (moveTargets.ts).
   // Today (the seeded day) always has some remaining empty slots in the demo
   // grid, so it renders at index 0; tomorrow has no bookings on it at all, so
-  // it always has slots and always renders right after, at index 1.
-  const tomorrowGroup = dialog.locator("div.mt-3.flex.flex-col.gap-4 > div").nth(1);
+  // it always has slots and always renders right after, at index 1. Each
+  // group lists its slots in one list, so the second list is tomorrow's.
+  const tomorrowGroup = dialog.getByRole("list").nth(1);
 
   taps++;
   await tomorrowGroup.locator("button").first().click(); // tap 3 — pick a slot tomorrow
