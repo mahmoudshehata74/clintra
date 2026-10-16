@@ -50,6 +50,11 @@ export async function controlsMissingHitTest(scope: Locator): Promise<string[]> 
     const failures: string[] = [];
     for (const element of controls) {
       const html = element as HTMLElement;
+      // A disabled control takes no taps (pointer-events: none), so the tap
+      // lands on whatever holds it — not a target to test.
+      if (html.matches(":disabled") || html.getAttribute("aria-disabled") === "true") {
+        continue;
+      }
       if (!html.checkVisibility({ opacityProperty: true, visibilityProperty: true })) {
         continue;
       }
