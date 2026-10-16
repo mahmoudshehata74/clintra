@@ -121,6 +121,24 @@ test('an open staff add holds its organization\'s sync lock', function () {
     }
 });
 
+test('an open audit push holds the same organization lock as a sync push', function () {
+    $orgX = makeAuthenticatedDevice();
+    $orgY = makeAuthenticatedDevice();
+
+    DB::connection('pgsql')->beginTransaction();
+
+    try {
+        $response = $this->withToken($orgX['token'])->postJson('/api/audit/push', ['rows' => [auditRow($orgX)]]);
+        $response->assertOk();
+        $response->assertJsonPath('results.0.status', 'accepted');
+
+        expect(trySyncSeqLock($orgX['orgId']))->toBeFalse();
+        expect(trySyncSeqLock($orgY['orgId']))->toBeTrue();
+    } finally {
+        DB::connection('pgsql')->rollBack();
+    }
+});
+
 test('a pull run between two pushes never skips a seq once both have committed', function () {
     $credential = makeAuthenticatedDevice();
     $otherToken = secondDeviceToken($credential);

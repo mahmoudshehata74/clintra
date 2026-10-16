@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\DeviceAuditController;
 use App\Http\Controllers\DeviceRegistrationController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\SyncBootstrapController;
@@ -36,6 +37,11 @@ Route::middleware(['membership', 'throttle:sync'])->get('/sync/bootstrap', [Sync
 // Adding a staff member happens on the server, online only — see
 // App\Http\Controllers\StaffController. Same middleware as sync.
 Route::middleware(['membership', 'throttle:sync'])->post('/staff', [StaffController::class, 'store']);
+
+// Device audit rows up and down — see App\Http\Controllers\DeviceAuditController
+// and docs/audit-sync.md. Same middleware as sync.
+Route::middleware(['membership', 'throttle:sync'])->post('/audit/push', [DeviceAuditController::class, 'push']);
+Route::middleware(['membership', 'throttle:sync'])->get('/audit/pull', [DeviceAuditController::class, 'pull']);
 
 Route::get('/health', function () {
     $composer = json_decode(file_get_contents(base_path('composer.json')), true);

@@ -26,6 +26,7 @@ final class SyncPayload
     /** table => its jsonb columns. */
     private const JSON_COLUMNS = [
         'visit_form_data' => ['data'],
+        'device_audit_log' => ['before', 'after'],
     ];
 
     /** Postgres's text form of a timestamptz value. */

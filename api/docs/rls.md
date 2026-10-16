@@ -1089,6 +1089,46 @@ limit as every settings write, and it closes with the backlog's
 server-side per-person identity, which would let the policy compare the
 actor with a proven acting membership without changing the table.
 
+**The endpoints** (`App\Http\Controllers\DeviceAuditController`), behind
+the `membership` middleware and `throttle:sync`, on the RLS-bound
+`clintra_app` connection, like the sync endpoints and separate from them —
+an audit row is not a sync op, writes no `sync_ledger` row and no
+`audit_log` row, and never enters a device's sync review:
+
+- `POST /api/audit/push` — 1 to 200 rows (the request refuses any other
+  size with 422). It takes the organization's sync lock before the first
+  insert ("One organization's sync writes commit in seq order"). Each row
+  gets its own result and savepoint (`App\Support\Sync\DeviceAuditPusher`):
+  `accepted`; `duplicate` (the id is stored with the same content —
+  nothing written, so a resend is a no-op); `rejected` with `audit_invalid`
+  (a field that does not parse, a before/after that does not match the
+  action, more than 64 KB of JSON), `org_mismatch`, `unknown_entity`
+  (outside `SyncableTables::NAMES` and `users`), `audit_secret_field` (a
+  `memberships` record with `pin_hash` or `pin_salt`), `actor_not_in_org`,
+  `scope_mismatch` (a tag that disagrees with the record's own
+  `location_id`/`practitioner_id`, a `practitioners` row not tagged with
+  itself, or a tag outside the pusher's scope) or `audit_id_taken` (the id
+  is stored with other content, or is another organization's); `failed`
+  (`internal_error`, reported) for anything else. `pushed_by_membership_id`
+  and `device_id` are the token's, whatever the body says. Laravel's global
+  `TrimStrings` and `ConvertEmptyStringsToNull` skip this route
+  (`bootstrap/app.php`), so a record is stored as the device wrote it and a
+  resend matches it.
+- `GET /api/audit/pull?cursor=` — the organization's rows other devices
+  wrote, `seq` order, 200 a page (`App\Support\Sync\DeviceAuditPuller`).
+  The calling device's own rows are left out. No cursor: the first page
+  starts at the first visible row whose `at` falls in the last 14 Cairo days
+  (`SyncWindow::AUDIT_FIRST_PULL_DAYS`), or at the caller's end when there
+  is none. A cursor above the caller's visible maximum is 422
+  `invalid_cursor`. `pushed_by_membership_id` and `received_at` are not
+  sent.
+
+`DeviceAuditSyncTest.php` covers each status and reason, the token's
+membership and device overriding the body, a resend, a refused row amid
+accepted ones, the batch limits, cross-organization pushes and pulls,
+paging, the first pull's window and the own-device exclusion;
+`SyncSeqOrderTest.php` proves the audit push holds the shared lock.
+
 `DeviceAuditLogTest.php` pins both RLS flags, both policies' deparsed text,
 the grants (clintra_app's exactly SELECT and INSERT; none for any other
 role), the identity, the indexes, the foreign keys and the action check,
