@@ -207,6 +207,19 @@ test("a lost slot conflict names the booking it is about before anything is chos
   await expect(sheet.getByRole("button", { name: S.syncReviewKeepAction, exact: true })).toBeVisible();
 });
 
+test("the review sheet's text reads in the page's text colour, not the app bar's", async ({ page }) => {
+  await gotoSeededDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await plantLostSlotConflict(page, PATIENTS.hoda);
+
+  await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  const title = page.getByRole("dialog").getByText(S.syncReviewListTitle, { exact: true });
+  await expect(title).toBeVisible();
+  // The sheet is rendered inside the app bar, whose text is on-dark: near white on the sheet's white card.
+  const [titleColor, bodyColor] = await title.evaluate((element) => [getComputedStyle(element).color, getComputedStyle(document.body).color]);
+  expect(titleColor).toBe(bodyColor);
+});
+
 /**
  * Asks the running sync engine for a cycle now, as coming back to the tab
  * does (sync/engine.ts's visibilitychange handler), instead of waiting for

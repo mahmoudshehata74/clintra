@@ -206,7 +206,10 @@ export default function Sheet({ onDismiss, size = "md", children }: SheetProps) 
           onPointerCancel={handlePointerUp}
         />
         <div
-          className={`pointer-events-auto flex w-full max-h-full flex-col overflow-y-auto rounded-t-panel border border-rule bg-card shadow-l ${SIZE_MAX_WIDTH[size]}`}
+          // text-text: the card sets its own text colour rather than
+          // inheriting one — the sync review sheet is rendered inside the
+          // app bar, whose on-dark text was near white on this white card.
+          className={`pointer-events-auto flex w-full max-h-full flex-col overflow-y-auto rounded-t-panel border border-rule bg-card text-text shadow-l ${SIZE_MAX_WIDTH[size]}`}
           style={dragTransform}
           role="dialog"
           aria-modal="true"
