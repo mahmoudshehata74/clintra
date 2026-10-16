@@ -219,6 +219,13 @@ a Sanctum token plus the org's locations/practitioners/memberships. See
 `api/docs/rls.md`'s "Provisioning"/"Registration" sections for the full
 reasoning.
 
+**Run `clintra:provision` on the Linux server (or in WSL), in a UTF-8
+shell.** The clinic, location and doctor names are usually Arabic, and a
+Windows console reads the answers in its OEM code page, which has no
+Arabic: the names are stored garbled, with no error (`docs/bug-hunt.md`,
+A-07). Check with `locale` that the shell's charmap is UTF-8 before
+answering the prompts.
+
 Devices get replaced — mint a fresh code for an existing org with:
 
 ```

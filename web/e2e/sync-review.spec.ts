@@ -1,7 +1,19 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { DeviceRegistration, Invoice, Patient, Payment, Prescription, PrescriptionItem, SyncOp, SyncReview, Visit } from "../src/db/types";
 import { clockTimeInCairo } from "../src/domain/time";
-import { emptySlotTiles, gotoSeededDay, login, PATIENTS, pickSearchResult, rowFor, S, selectPractitioner, SLOTS_DR } from "./support";
+import {
+  emptySlotTiles,
+  gotoSeededDay,
+  login,
+  PATIENTS,
+  pickSearchResult,
+  rowFor,
+  S,
+  SAVE_FAILED,
+  selectPractitioner,
+  setStorageWritesFailing,
+  SLOTS_DR,
+} from "./support";
 
 /** The database the app's FakeTransport keeps as its stand-in server (sync/fakeTransport.ts's FAKE_SERVER_DB_NAME). */
 const FAKE_SERVER_DB = "clintra-fake-server";
@@ -561,4 +573,24 @@ test("a change another device put on the server before a load shows right after 
   await expect(rowFor(page, renamed)).toBeVisible();
   // The first cycle after the load never ran ahead of the device row.
   expect(consoleErrors.filter((text) => text.includes("pull_requires_registered_device"))).toEqual([]);
+});
+
+test("a review action that fails to save says so and leaves the review open, then resolves on the next try", async ({ page }) => {
+  await gotoSeededDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await plantLostSlotConflict(page, PATIENTS.hoda);
+
+  await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet.getByText(S.syncReviewNoServerRow)).toBeVisible();
+
+  await setStorageWritesFailing(page, true);
+  await sheet.getByRole("button", { name: S.syncReviewKeepAction, exact: true }).click();
+  await expect(sheet.getByRole("alert")).toHaveText(SAVE_FAILED);
+  await expect(page.getByRole("button", { name: S.syncNeedsReview, exact: true })).toBeVisible();
+  expect((await readIndexedDbStore<SyncReview>(page, "sync_review")).filter((review) => review.needs_review)).toHaveLength(1);
+
+  await setStorageWritesFailing(page, false);
+  await sheet.getByRole("button", { name: S.syncReviewKeepAction, exact: true }).click();
+  await expect(page.getByRole("button", { name: S.syncNeedsReview, exact: true })).toHaveCount(0);
 });

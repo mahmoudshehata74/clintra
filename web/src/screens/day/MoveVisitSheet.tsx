@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import Ltr from "../../components/Ltr";
+import { SheetPanelBody } from "../../components/ui/SheetPanel";
 import { db } from "../../db/database";
 import type { Schedule, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
@@ -8,6 +9,7 @@ import { ScheduleMode } from "../../domain/scheduleMode";
 import { addDaysToClinicDay, formatCairoDisplayDateParts, type ClinicDay } from "../../domain/time";
 import { computeMoveTargets } from "./moveTargets";
 import Sheet from "./Sheet";
+import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
 import type { UndoAction } from "./undoAction";
 
@@ -88,12 +90,10 @@ export default function MoveVisitSheet({
 
   return (
     <Sheet onDismiss={onDismiss}>
-      {/* `.book-body`'s padding: Sheet.tsx draws only the card, so content
-          set straight inside it would touch, and be cut by, its rounded edge. */}
-      <div className="px-5 py-[18px]">
-        <p className="font-medium">{dayScreenStrings.moveSheetHeading}</p>
-        <p className="mt-1 text-sm text-muted">{patientName}</p>
-        <div className="mt-3 flex flex-col gap-4 overflow-y-auto">
+      <SheetHeader title={dayScreenStrings.moveSheetHeading} onDismiss={onDismiss} />
+      <SheetPanelBody>
+        <p className="text-sm text-muted">{patientName}</p>
+        <div className="flex flex-col gap-4">
           {groups.map((group) => {
             const schedule = scheduleForWeekday(group.weekday);
             if (!schedule) {
@@ -130,7 +130,7 @@ export default function MoveVisitSheet({
             );
           })}
         </div>
-      </div>
+      </SheetPanelBody>
     </Sheet>
   );
 }

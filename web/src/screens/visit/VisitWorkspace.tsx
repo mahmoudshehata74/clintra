@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useGuardedActingMembership } from "../../auth/useActingMembership";
 import Ltr from "../../components/Ltr";
+import { saveFailedStrings } from "../../components/strings";
+import { attemptSave } from "../../components/ui/attemptSave";
 import RxDoseText from "./RxDoseText";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
@@ -113,7 +115,7 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
   const actingPractitionerId = useGuardedActingMembership()?.practitioner_id ?? null;
   // Saves still in flight, so "حفظ ومتابعة لاحقًا" can wait for them; one
   // Set for the component's lifetime, mutated only from event handlers.
-  const [pendingSaves] = useState(() => new Set<Promise<unknown>>());
+  const [pendingSaves] = useState(() => new Set<Promise<boolean>>());
   // The session length runs live while in the room; nothing else re-renders
   // it, so this ticks once a minute (the doctor's day's own pattern).
   const [, forceMinuteTick] = useState(0);
@@ -201,8 +203,12 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
   const minutes = sessionMinutes(visit, now);
 
   async function saveAndClose() {
-    await Promise.all(pendingSaves);
-    onClose();
+    // A field whose save failed keeps the sheet open, its line under it and
+    // what was typed still in it.
+    const saved = await Promise.all(pendingSaves);
+    if (saved.every(Boolean)) {
+      onClose();
+    }
   }
 
   const runRow = (
@@ -360,8 +366,8 @@ interface VisitFieldsProps {
   visitId: string;
   /** The stored values, live. */
   stored: VisitFormFieldValues;
-  /** Every save still in flight, so "حفظ ومتابعة لاحقًا" can wait for them. */
-  pendingSaves: Set<Promise<unknown>>;
+  /** Every save still in flight (attemptSave's result), so "حفظ ومتابعة لاحقًا" can wait for them. */
+  pendingSaves: Set<Promise<boolean>>;
 }
 
 /**
@@ -380,6 +386,7 @@ function VisitFields({ visitId, stored, pendingSaves }: VisitFieldsProps) {
   // it without itself re-running on every focus change (that would refetch a
   // value the field's own save had not committed yet, visibly reverting what
   // the doctor just typed for an instant).
+  const [failed, setFailed] = useState<Record<VisitFormFieldKey, boolean>>({ complaint: false, diagnosis: false });
   const focusedFieldRef = useRef<VisitFormFieldKey | null>(null);
   const savedTimeouts = useRef<Partial<Record<VisitFormFieldKey, ReturnType<typeof setTimeout>>>>({});
 
@@ -418,13 +425,13 @@ function VisitFields({ visitId, stored, pendingSaves }: VisitFieldsProps) {
     if (value === stored[field]) {
       return;
     }
-    const save = saveVisitFormField(db, visitId, field, value);
+    const save = attemptSave(() => saveVisitFormField(db, visitId, field, value));
     pendingSaves.add(save);
-    try {
-      await save;
+    const saved = await save;
+    pendingSaves.delete(save);
+    setFailed((prev) => ({ ...prev, [field]: !saved }));
+    if (saved) {
       markJustSaved(field);
-    } finally {
-      pendingSaves.delete(save);
     }
   }
 
@@ -436,6 +443,7 @@ function VisitFields({ visitId, stored, pendingSaves }: VisitFieldsProps) {
           id={`visit-form-${field.key}`}
           label={field.label}
           hint={justSaved[field.key] ? dayScreenStrings.visitFormSavedIndicator : undefined}
+          error={failed[field.key] ? saveFailedStrings.line : undefined}
         >
           <TextArea
             value={values[field.key]}

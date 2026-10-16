@@ -31,3 +31,9 @@ export const timeFieldStrings = {
 export const appBarStrings = {
   brandName: "Clintra",
 } as const;
+
+// The one line a control shows when its write fails — refused, or a storage
+// error (components/ui/SaveFailedLine.tsx).
+export const saveFailedStrings = {
+  line: "ماتحفظش، جرّب تاني",
+} as const;

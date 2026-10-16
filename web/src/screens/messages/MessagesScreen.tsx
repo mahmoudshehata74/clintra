@@ -1,10 +1,12 @@
 import { useState } from "react";
 import PageMain from "../../components/PageMain";
 import Ltr from "../../components/Ltr";
+import { attemptSave } from "../../components/ui/attemptSave";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import Field, { TextArea } from "../../components/ui/Field";
+import SaveFailedLine from "../../components/ui/SaveFailedLine";
 import { db } from "../../db/database";
 import { markMessageSent, resetTemplate, saveTemplateBody, TemplateError, unmarkMessageSent } from "../../db/messages";
 import { MessageChannel, type Membership, type Message, type MessageTemplate } from "../../db/types";
@@ -340,6 +342,13 @@ const CHANNEL_ICON_LOOK: Record<MessageChannel, string> = {
 };
 
 function RecentMessages({ rows }: { rows: RecentRow[] }) {
+  const [failedMessageId, setFailedMessageId] = useState<string | null>(null);
+
+  async function toggleSent(messageId: string, isSent: boolean) {
+    const saved = await attemptSave(() => (isSent ? unmarkMessageSent(db, messageId) : markMessageSent(db, messageId)));
+    setFailedMessageId(saved ? null : messageId);
+  }
+
   return (
     // `.msg-sent`
     <section aria-labelledby="recent-messages-heading" className="mt-4">
@@ -372,11 +381,12 @@ function RecentMessages({ rows }: { rows: RecentRow[] }) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => void (isSent ? unmarkMessageSent(db, message.id) : markMessageSent(db, message.id))}
+                  onClick={() => void toggleSent(message.id, isSent)}
                   className={`${STATUS_BASE} ${isSent ? STATUS_SENT : STATUS_PENDING}`}
                 >
                   {isSent ? T.statusSent : T.statusOpened}
                 </button>
+                {failedMessageId === message.id && <SaveFailedLine className="col-span-full" />}
               </li>
             );
           })}

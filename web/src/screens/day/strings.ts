@@ -221,7 +221,7 @@ export const dayScreenStrings = {
   slotsCardSubtitleFreeSuffix: "فاضية",
   // `.slot .time .until` — shown under the time, state-dependent.
   untilSincePrefix: "من",
-  // The same line under a minute, the queue's and doctor's day's rule.
+  // The same line under a minute, the queue's and doctor's day's rule (and the audit log's).
   untilNow: "دلوقتي",
   // The empty slot's own free-text line and its dashed quick-book button —
   // distinct from emptySlot above, which stays the button's accessible name.
@@ -479,7 +479,8 @@ export const dayScreenStrings = {
   auditEventCountUnit: "حدث",
   // The filter group's accessible name (role="group" has none of its own).
   auditFilterGroupLabel: "تصفية السجل",
-  // `.aud-time`'s elapsed part, today only: "12:18 · من 3د".
+  // `.aud-time`'s elapsed part, today only: "12:18 · من 3د" ("12:18 · دلوقتي",
+  // untilNow, under a minute).
   auditElapsedPrefix: "من",
   auditSheetEmpty: "مفيش حركة النهاردة",
   // `.filts`: the prototype's four (auditLogFilters.ts's groups).

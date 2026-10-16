@@ -35,13 +35,13 @@ an edge).
 | B-09 | Day | any | Mark a patient arrived, then call them in, before the first push is acknowledged | Both changes sync | Both carried the same base_rev; the server refused the second as stale: a review against itself, and the pull put the visit back to "وصل" | blocker | fixed in b36cb54 |
 | B-10 | Sync review list | any | Two devices book one slot offline; the loser opens "فيه حاجة محتاجة مراجعة" | The row names the booking | "زيارة — الميعاد ده اتحجز من جهاز تاني" with keep/remove and no patient or time, until a later pull displaced it | minor | fixed in 7bc7f7e |
 | B-11 | Sync review list | both / light | Open "فيه حاجة محتاجة مراجعة" | Readable text | The sheet sits inside the app bar and inherited its on-dark text: near white on the white card | major | fixed in 0dbaa69 |
-| A-01 | Settings → staff | any | "＋ إضافة موظف" | A way back out of the form | No cancel: only saving, or closing the settings sheet (`StaffPanel.tsx` says the save is its one action) | minor | [ask] Add "إلغاء" to the add-staff form like every other settings form? |
-| A-02 | Audit log | any | Open it right after an action | — | The newest rows read "من 0د" | minor | [ask] Keep "من 0د" in the first minute, or show something like "دلوقتي"? |
-| A-03 | Settings → working hours | any | Hardening scenario 24: switch a doctor between slots and queue | A way to switch | No control switches a schedule's mode; the scenario cannot be run | major | [ask] Add a slots/queue switch to the hours editor (and what happens to the day's visits), or drop scenario 24? |
-| A-04 | Invoice, audit log | two devices | Device A completes a visit; open its invoice and the audit log on device B | — | B's invoice reads "إنشاء 19:14" with no name, and B's audit log lists none of A's actions: `audit_log` is local to the device that wrote it | minor | [ask] Is per-device attribution the intended v1 behaviour, or should audit rows sync? |
-| A-05 | Sync review, services, messages, visit workspace | any | A write fails (refused or a storage error) | An Arabic line saying it did not save | Silent: "خليها كده"/"شيلها"/"تمام", a price override's "حذف", a message's "اتفتحت"/"اتبعتت", and a visit field's save on blur leave an unhandled rejection and no message | minor | [ask] The wording for a failed save on these controls (one shared line?) |
-| A-06 | Move and cancel sheets | any | Open either | — | No head and no close button, unlike every other sheet (backdrop, drag and Escape still close them); they predate the restyle and were left tokens-only | minor | [ask] Give them `SheetPanelHead` (title + ×) like the others? |
-| A-07 | Provisioning (CLI) | Windows console | `php artisan clintra:provision` with an Arabic clinic or doctor name | The name stored as typed | The console layer reads input in the OEM code page, which has no Arabic: the name is stored garbled (seen when answers are piped; a Windows console cannot type Arabic in that code page either) | major | [ask] Provision from a UTF-8 shell (Linux/WSL) as a documented rule, or have the command take the names as options? (no provisioning code changed here) |
+| A-01 | Settings → staff | any | "＋ إضافة موظف" | A way back out of the form | No cancel: only saving, or closing the settings sheet (`StaffPanel.tsx` says the save is its one action) | minor | decided: the form gets "إلغاء" like every other settings form — fixed in f133688 |
+| A-02 | Audit log | any | Open it right after an action | — | The newest rows read "من 0د" | minor | decided: under a minute reads "دلوقتي" wherever the "من Nد" pattern is used — the audit log was the one place left; fixed in 9d757b0 |
+| A-03 | Settings → working hours | any | Hardening scenario 24: switch a doctor between slots and queue | A way to switch | No control switches a schedule's mode; the scenario cannot be run | major | decided: a slots/queue switch in the hours editor, taking effect from the next day (today and its visits keep today's mode, said under the switch) — not built: `schedules.mode` is one value per weekday row and no existing field can date the change, so it needs a schema change the owner has not yet authorised (`docs/session-handoff.md`'s backlog) |
+| A-04 | Invoice, audit log | two devices | Device A completes a visit; open its invoice and the audit log on device B | — | B's invoice reads "إنشاء 19:14" with no name, and B's audit log lists none of A's actions: `audit_log` is local to the device that wrote it | minor | decided: audit rows sync across devices — the next PR, with a server table and RLS (`docs/session-handoff.md`'s backlog) |
+| A-05 | Sync review, services, messages, visit workspace | any | A write fails (refused or a storage error) | An Arabic line saying it did not save | Silent: "خليها كده"/"شيلها"/"تمام", a price override's "حذف", a message's "اتفتحت"/"اتبعتت", and a visit field's save on blur leave an unhandled rejection and no message | minor | decided: one shared line, "ماتحفظش، جرّب تاني" (`saveFailedStrings` in `web/src/components/strings.ts`) — fixed in e4db891 |
+| A-06 | Move and cancel sheets | any | Open either | — | No head and no close button, unlike every other sheet (backdrop, drag and Escape still close them); they predate the restyle and were left tokens-only | minor | decided: yes, through `SheetHeader` — fixed in 647cf2b |
+| A-07 | Provisioning (CLI) | Windows console | `php artisan clintra:provision` with an Arabic clinic or doctor name | The name stored as typed | The console layer reads input in the OEM code page, which has no Arabic: the name is stored garbled (seen when answers are piped; a Windows console cannot type Arabic in that code page either) | major | decided: a documented rule, no code change — run `clintra:provision` on the Linux server (or WSL) in a UTF-8 shell (`api/README.md`, `docs/session-handoff.md`) |
 
 The live run's scenarios that passed once the blockers above were fixed:
 two-device booking and status, payment round trip, series letter, offline
@@ -98,7 +98,7 @@ and online (`web/e2e-live/README.md`).
   opening (window.open is recorded, never followed).
 - Hardening section 9 as the human drill it specifies (two people, an
   unannounced network cut); its scenarios were driven by script instead,
-  and scenario 24 cannot be run (A-03).
+  and scenario 24 cannot be run until A-03's switch is built.
 - An 8-hour offline window (hardening section 7).
 
 ## Progress
@@ -108,3 +108,22 @@ it forced (B-02), the exploratory pass (B-03, B-04, A-01–A-03, A-06), the
 live run and the sync fixes it forced (B-05–B-11, A-04, A-07), the code
 sweep (A-05) and this table. What is left is the gate and the pull
 request.
+
+## Decisions (fix/bug-hunt-asks)
+
+The owner decided every [ask] row; the table's Status column records each
+decision. A-01, A-02, A-05 and A-06 are fixed with their tests; A-07 is a
+documented rule; A-04 is the next PR; A-03 is decided but waits on a
+schema change.
+
+### Existing tests edited
+
+- `web/e2e/hardening.spec.ts` ("moving an appointment to tomorrow takes 3
+  taps or fewer"): found the move sheet's day groups by a CSS class the
+  shared sheet body (A-06) no longer carries; it now takes the second day's
+  slot list by role, the same target, the same three taps.
+- Otherwise none: every decision added new tests (`web/e2e/settings.spec.ts`,
+  `audit-elapsed.spec.ts`, `sync-review.spec.ts`, `messages.spec.ts`,
+  `visit-workspace.spec.ts`, `sheet-padding.spec.ts`,
+  `web/src/components/ui/attemptSave.test.ts`); `web/e2e/support.ts` gained
+  `setStorageWritesFailing` and `SAVE_FAILED`.

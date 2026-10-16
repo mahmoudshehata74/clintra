@@ -18,6 +18,8 @@ import {
   selectPractitioner,
   setTimeField,
   SLOTS_DR,
+  SAVE_FAILED,
+  setStorageWritesFailing,
 } from "./support";
 
 const NEW_ASSISTANT_NAME = "منى الجديدة";
@@ -513,4 +515,51 @@ test("the new-staff form keeps its PIN masked and its validation", async ({ page
   await dialog.getByLabel(S.staffPinLabel, { exact: true }).fill("12");
   await dialog.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
   await expect(dialog.getByText(S.staffPinLengthError)).toBeVisible();
+});
+
+test("the new-staff form cancels without adding anyone and opens empty again", async ({ page }) => {
+  await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
+  const before = (await readStore<{ id: string }>(page, "memberships")).length;
+
+  await dialog.getByRole("button", { name: S.staffNewAction, exact: true }).click();
+  await dialog.getByLabel(S.staffNameLabel, { exact: true }).fill(NEW_ASSISTANT_NAME);
+  await dialog.getByLabel(S.staffPinLabel, { exact: true }).fill(NEW_ASSISTANT_PIN);
+  await dialog.getByRole("button", { name: S.settingsCancelAction, exact: true }).click();
+
+  await expect(dialog.getByLabel(S.staffNameLabel, { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText(NEW_ASSISTANT_NAME)).toHaveCount(0);
+  expect(await readStore<{ id: string }>(page, "memberships")).toHaveLength(before);
+
+  await dialog.getByRole("button", { name: S.staffNewAction, exact: true }).click();
+  await expect(dialog.getByLabel(S.staffNameLabel, { exact: true })).toHaveValue("");
+  await expect(dialog.getByLabel(S.staffPinLabel, { exact: true })).toHaveValue("");
+});
+
+test("deleting a price override that fails to save says so and keeps it, then deletes on the next try", async ({ page }) => {
+  await gotoRealDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
+  await openSettings(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: S.settingsServicesTab, exact: true }).click();
+  const row = dialog.getByRole("listitem").filter({ hasText: "كشف عام" });
+  await row.getByRole("button", { name: S.serviceEditAction, exact: true }).click();
+  await row.getByRole("button", { name: S.serviceOverrideAddAction, exact: true }).click();
+  await row.getByLabel(S.serviceOverrideTargetPractitioner, { exact: true }).selectOption({ index: 1 });
+  await row.getByLabel(S.servicePriceLabel, { exact: true }).fill("250");
+  // The override form sits under the service's own form, so its "حفظ" is the last.
+  await row.getByRole("button", { name: S.settingsSaveAction, exact: true }).last().click();
+  const remove = row.getByRole("button", { name: S.serviceOverrideDeleteAction, exact: true });
+  await expect(remove).toHaveCount(1);
+
+  await setStorageWritesFailing(page, true);
+  await remove.click();
+  await expect(row.getByRole("alert")).toHaveText(SAVE_FAILED);
+  await expect(remove).toHaveCount(1);
+
+  await setStorageWritesFailing(page, false);
+  await remove.click();
+  await expect(remove).toHaveCount(0);
+  await expect(row.getByRole("alert")).toHaveCount(0);
 });

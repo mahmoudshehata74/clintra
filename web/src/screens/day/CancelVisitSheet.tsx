@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
+import { SheetPanelBody } from "../../components/ui/SheetPanel";
 import { CancelReason } from "../../domain/visitStatus";
 import type { VisitCancelReason } from "../../db/visitCancel";
 import Sheet from "./Sheet";
+import SheetHeader from "./SheetHeader";
 import { dayScreenStrings } from "./strings";
 
 interface CancelVisitSheetProps {
@@ -10,7 +12,7 @@ interface CancelVisitSheetProps {
   onSelectReason: (reason: VisitCancelReason) => void;
 }
 
-/** The cancel-reason prompt: two buttons, no free-text, per the specification. */
+/** The cancel-reason prompt: two buttons, no free-text, per the specification, under the shared sheet head (title + ×). */
 export default function CancelVisitSheet({ patientName, onDismiss, onSelectReason }: CancelVisitSheetProps) {
   const firstButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -20,12 +22,10 @@ export default function CancelVisitSheet({ patientName, onDismiss, onSelectReaso
 
   return (
     <Sheet onDismiss={onDismiss}>
-      {/* `.book-body`'s padding: Sheet.tsx draws only the card, so content
-          set straight inside it would touch, and be cut by, its rounded edge. */}
-      <div className="px-5 py-[18px]">
-        <p className="font-medium">{dayScreenStrings.cancelPromptTitle}</p>
-        <p className="mt-1 text-sm text-muted">{patientName}</p>
-        <div className="mt-4 flex flex-col gap-2">
+      <SheetHeader title={dayScreenStrings.cancelPromptTitle} onDismiss={onDismiss} />
+      <SheetPanelBody>
+        <p className="text-sm text-muted">{patientName}</p>
+        <div className="flex flex-col gap-2">
           <button
             ref={firstButtonRef}
             type="button"
@@ -42,7 +42,7 @@ export default function CancelVisitSheet({ patientName, onDismiss, onSelectReaso
             {dayScreenStrings.cancelReasonClinic}
           </button>
         </div>
-      </div>
+      </SheetPanelBody>
     </Sheet>
   );
 }

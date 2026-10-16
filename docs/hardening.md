@@ -32,7 +32,7 @@ Both were fixed before this document's numbers were finalized.
 | 5 | Marking arrival: 1 tap | Auto (regression) | 1 tap | ✅ Pass |
 | 6 | Moving to tomorrow: ≤3 taps | Auto | 3 taps | ✅ Pass |
 | 7 | Offline: 8 hours, zero data loss | Manual drill (documented below) | Not yet run | ⏳ Pending manual run |
-| 8 | Sync after disconnect: no duplication, no loss | Auto | Converges correctly | ✅ Pass (with architecture caveat) |
+| 8 | Sync after disconnect: no duplication, no loss | Auto: fake transport (e2e) + real API, two devices (`test:live`, local) | Converges on both since #37; before #37 only the fake transport had been measured | ✅ Pass (live run local only, not CI) |
 | 9 | Simulated clinic day: 30 scenarios, zero errors | Manual drill (checklist below) | Not yet run | ⏳ Pending manual run |
 
 All automated criteria live in `web/e2e/hardening.spec.ts`, kept separate
@@ -252,72 +252,79 @@ run and its result filled in.
 
 ## 8. Sync after disconnect: no duplication, no loss
 
-**Measurement**: automated, `web/e2e/hardening.spec.ts` → `"offline work is
-never lost locally, and a resend after reconnecting does not duplicate the
-record"`, using the real sync engine (`sync/engine.ts`) and its fake
-"server" (`sync/fakeTransport.ts`, a second real IndexedDB database,
-`clintra-fake-server` — not a mock) rather than hand-constructed unit
-fixtures, so this exercises the full UI-to-transport pipeline end to end.
+Measured two ways: the e2e suite on the in-browser fake transport, and,
+since #37, two real devices against the real API (`web/e2e-live`,
+`pnpm --dir web test:live`).
 
-**Important architecture caveat**: `context.setOffline()` (Playwright's
-network-condition emulation) genuinely flips the app's own connectivity
-indicator, because that reads `navigator.onLine` — but it does **not**
-block `FakeTransport`, because `FakeTransport` is a second in-browser
-IndexedDB database, not a network call. Nothing in `sync/engine.ts` gates
-on online status either — it pushes on a timer, on tab-visibility, and
-immediately after every local write, unconditionally. This is correct and
-expected for the current pre-Laravel architecture (there is no real network
-dependency yet to interrupt), but it means this test cannot hold a real
-network partition open the way it will once `HttpTransport` exists. **Once
-`HttpTransport` ships, this test should be redone with an intercepted
-network route (`page.route()`) that actually rejects requests during the
-"offline" window**, which `setOffline` cannot exercise against a fake
-in-memory transport.
+### The real transport: `web/e2e-live` (test:live)
 
-Given that, what this test actually proves, and how:
+`web/e2e-live/sync.live.spec.ts` registers two devices of one freshly
+provisioned clinic, each in its own browser context, and syncs them over
+`HttpTransport` against the Laravel API and Postgres (`clintra_test`). It
+covers, in order (`web/e2e-live/README.md`):
 
-1. **No local data loss while offline**: with the connectivity chip showing
-   "local-only," book a patient into a slot. The write must land locally
-   regardless of connectivity, since `mutate()` never awaits a network
-   round-trip. Verified by reading the `visits` object store directly via a
-   raw IndexedDB connection before and after, and confirming a row changed.
-   (This surfaced a genuine subtlety worth noting: `bookExistingPatientVisit`
-   reuses an existing cancelled/no-show visit's own row — same `id` — when
-   the tapped slot is one it previously occupied, rather than always
-   inserting a fresh row, so a naive "count went up by exactly one" check is
-   the wrong assertion; the test diffs each row's full content instead. This
-   was caught and fixed during authoring — see the summary above.)
-2. **Convergence once reachable**: after flipping back online, poll until
-   the local `sync_ops` row for that visit shows a `synced_at` timestamp,
-   then confirm the fake server's `visits` table has that exact row, exactly
-   once.
-3. **No duplication on a forced resend**: reset that same `sync_ops` row's
-   `synced_at` back to `null` directly (simulating "the device does not
-   know whether its earlier push actually reached the server," which is
-   precisely the scenario `op_id` deduplication exists for — see
-   `docs/schema.md`'s sync rules), then trigger another sync cycle. Confirm
-   the fake server's `visits` table still has exactly one row for that
-   visit afterward, not two.
+1. A booking on one device appears on the other once; a status change made
+   on the second appears on the first.
+2. A payment round trip, with each device's invoice numbers in its own
+   series letter.
+3. Offline work coming back once: one device offline books three patients
+   and takes a payment; once it reconnects the other shows each booking
+   once and the payment once.
+4. The API stopped and restarted: the chip reads "السيرفر مش راد", a reload
+   keeps the new booking, and both devices converge once the API is back.
+5. The same slot booked offline on both: the first to reconnect keeps it;
+   the other is asked to review, naming its lost booking, and receives the
+   winner's.
+6. The same visit changed offline on both: once both reconnect they show
+   the same status.
+7. Adding staff offline is refused and adds no one; online it reaches the
+   server and the other device.
 
-This full-stack version complements, rather than replaces, the existing
-focused unit coverage in `sync/fakeTransport.test.ts` ("dedups by op_id:
-resending the exact same op does not double-write") and `sync/engine.test.ts`
-(accepted/duplicate/rejected/ordering/never-concurrent, plus a genuine
-two-device slot-collision race against two real `FakeTransport` instances) —
-those already exhaustively cover the transport and engine contracts in
-isolation; this test proves the same contract holds when driven through the
-real UI end to end.
+It runs locally only (it starts the API and provisions an organization,
+which it removes afterwards); CI runs the fake-transport suite below.
 
-**Result**: passes consistently. No duplication, no loss, in either
-direction of the reconnect.
+**The earlier "converges correctly" held for the fake transport only.**
+The first live run found three blockers no fake-transport test could see
+(`docs/bug-hunt.md`): `HttpTransport` failed every request with "Illegal
+invocation" (B-05), every create carried `base_rev: null` and the server
+rejected the whole batch (B-07), and two quick changes to one visit
+reviewed against themselves (B-09). All three were fixed in #37, with the
+live run above passing afterwards.
 
-**Verdict**: ✅ Pass, with the architecture caveat above recorded for when
-`HttpTransport` exists.
+### The fake transport: `web/e2e/hardening.spec.ts` (CI)
 
-**بالعربي**: البيانات ما بتتفقدش محليًا وقت انقطاع الشبكة، والمزامنة بترجع
-تظبط نفسها من غير تكرار حتى لو نفس العملية اتبعتت تاني بالغلط — لكن مهم نعرف
-إن الاختبار ده بيقيس الجزء المتاح دلوقتي بس (مفيش سيرفر حقيقي لسه)، ولازم
-يتعاد بطريقة تقطع الشبكة فعلًا لما الـ API الحقيقي يشتغل.
+`"offline work is never lost locally, and a resend after reconnecting does
+not duplicate the record"` drives the real sync engine (`sync/engine.ts`)
+against `sync/fakeTransport.ts`, a second in-browser IndexedDB database
+(`clintra-fake-server`). `context.setOffline()` flips the app's
+connectivity chip but does not block that transport, so this proves the
+engine's and the UI's side of the contract, not the network's:
+
+1. **No local data loss while offline**: a booking made while the chip
+   reads "local-only" lands in the local `visits` store (`mutate()` never
+   waits on the network). The test diffs each row's content rather than
+   counting rows: a booking can reuse a freed cancelled/no-show visit's own
+   row.
+2. **Convergence once reachable**: the visit's `sync_ops` row gets its
+   `synced_at`, and the fake server holds that row exactly once.
+3. **No duplication on a forced resend**: resetting that op's `synced_at`
+   and syncing again still leaves one row on the fake server (`op_id`
+   deduplication, `docs/schema.md`'s sync rules).
+
+`sync/fakeTransport.test.ts` and `sync/engine.test.ts` cover the same
+contracts in isolation, including a two-device slot race between two
+`FakeTransport` instances.
+
+**Result**: both pass: the fake-transport test in every e2e run, the live
+run locally on #37's head and after.
+
+**Verdict**: ✅ Pass. The real-transport half is a local run, not a CI
+check.
+
+**بالعربي**: البيانات ما بتتفقدش وقت انقطاع الشبكة، ومن غير تكرار. من #37
+فيه اختبار بجهازين حقيقيين على الـ API الحقيقي (`test:live`)، وهو اللي لقى
+ثلاث مشاكل في المزامنة الحقيقية واتصلحت. قبل كده، "بيتظبط صح" كانت متقاسة
+على السيرفر الوهمي بس.
 
 ---
 
@@ -430,7 +437,7 @@ sufficient on its own if it took visible hesitation to get there.
 | **3. App opens on today: ≤1s** | ❌ Fails as measured on this dev machine (0.75s–2.3s observed) | Re-measure on the actual target tablet hardware, idle, with a stopwatch — this dev sandbox's shared/variable CPU makes it an unreliable stand-in for the specification's own "measured with a stopwatch" methodology. If it's still over budget on real hardware, look at the boot critical path in `DayScreen.tsx`'s load effect (seed check → device registration → four sequential `Promise.all` reads) for anything that can be parallelized further or deferred past first paint. |
 | **7. Offline: 8 hours, zero data loss** | ⏳ Not yet run | Needs a human to actually run the manual drill in section 7 above, on the target tablet, over a real 8-hour window. |
 | **9. Simulated clinic day: 30 scenarios** | ⏳ Not yet run | Needs two humans to run the checklist in section 9 above, including the unannounced mid-drill network cut, repeated until zero confusion. |
-| **8. Sync after disconnect** (informational, not failing) | ✅ Passes, but only proves what the current architecture has to prove | Once `HttpTransport` replaces `FakeTransport`, redo this test with `page.route()` intercepting and rejecting requests during the "offline" window, since `setOffline` does not affect `FakeTransport` at all. |
+| **8. Sync after disconnect** (informational, not failing) | ✅ Passes on the fake transport (CI) and the real API with two devices (`test:live`, local since #37) | Run `test:live` in CI once the workflow can start the API and a Postgres with the provisioning roles. |
 
 Nothing above was fixed in this task, per the brief: these are recorded for
 a separate decision on which to pursue.
