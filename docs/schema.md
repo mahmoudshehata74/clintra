@@ -1070,6 +1070,39 @@ unsent `users` op, and every unsent op of a membership created with one of
 those users and of that membership's link rows; sent ops and the local rows
 stay. Versions 1-20 are unchanged.
 
+## v22 additions
+
+### device_audit_log
+
+Every device's local `audit_log` rows, synced so each device of the
+organization sees who did what on any of them (`docs/audit-sync.md`,
+backlog A-04). Append-only: never updated or deleted, anywhere.
+
+| Column | Type | Null | Meaning |
+|---|---|---|---|
+| `id` | uuid, primary key | no | the device's local `audit_log.id` |
+| `org_id` | uuid → organizations | no | |
+| `location_id` | uuid → locations | yes | scope tag; null = organization-wide |
+| `practitioner_id` | uuid → practitioners | yes | scope tag; null = organization-wide |
+| `actor_membership_id` | uuid → memberships | no | who the device says acted (its PIN session) |
+| `pushed_by_membership_id` | uuid → memberships | no | the token's membership (server-set) |
+| `device_id` | uuid → device | no | the token's device (server-set) |
+| `entity` | varchar(64) | no | the audited table |
+| `entity_id` | uuid | no | the audited row (no foreign key) |
+| `action` | varchar(6), create/update/delete | no | |
+| `before` | jsonb | yes | the record before; `memberships` records never carry `pin_hash`/`pin_salt` |
+| `after` | jsonb | yes | the record after, likewise |
+| `at` | timestamptz | no | the device clock at the write |
+| `received_at` | timestamptz, default now() | no | the server clock at the push |
+| `seq` | bigint, identity (always), unique | no | the pull cursor |
+
+Every foreign key is RESTRICT. Indexes: `(org_id, seq)`, `(org_id, at)`,
+`(entity, entity_id)`. The server's own `audit_log` is unchanged and stays
+the server's evidence (the token's membership as actor).
+
+Server: `2026_09_12_000034_create_device_audit_log_table.php`
+(`api/docs/rls.md`'s "Device audit rows").
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.

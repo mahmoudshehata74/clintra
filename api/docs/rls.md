@@ -1028,6 +1028,73 @@ membership attributing one to a *different* membership in the same org is
 rejected (`42501`); a cross-org insert is still rejected, confirming the
 original check wasn't weakened by ANDing the new one onto it.
 
+## Device audit rows
+
+`device_audit_log` (`2026_09_12_000034_create_device_audit_log_table.php`,
+`docs/schema.md`'s v22 additions, `docs/audit-sync.md`) holds every device's
+local audit rows, so the owner sees who did what on any device. It is a
+table of its own, not rows in `audit_log`, because the two kinds of row say
+different things. An `audit_log` row is the server's evidence: its actor is
+the token's membership, which `audit_log_insert` checks. A device audit
+row's actor is the person signed in by PIN on that device — which the
+server cannot see, since every device token is bound to the owner who
+registered the device (`docs/auth-plan.md`). Requiring the token's
+membership as the actor would name the owner on every row, so the actor is
+accepted as the device's claim, limited to the organization's members, and
+what the server does know is stored beside it: `pushed_by_membership_id`
+(checked against `current_membership()`) and `device_id` (the token's
+device, set by the push endpoint). `audit_log`, its policies and its grants
+are unchanged, and `docs/sync-plan.md`'s Q1/Q13 still hold for it.
+
+| Object | device_audit_log | audit_log (for comparison) |
+|---|---|---|
+| RLS | ENABLE + FORCE | ENABLE + FORCE |
+| SELECT policy | `device_audit_log_select`: org + location tag + practitioner tag | `audit_log_select`: org |
+| INSERT policy | `device_audit_log_insert`: the SELECT expression + pusher = `current_membership()` + actor and device of `current_org()` | `audit_log_insert`: org + actor = `current_membership()` |
+| UPDATE / DELETE policy | none | none |
+| `clintra_app` grant | SELECT, INSERT (granted alone, not the trait's four) | SELECT, INSERT (UPDATE, DELETE revoked) |
+| Provisioning roles | nothing | INSERT (their own server rows) |
+| `seq` | identity, GENERATED ALWAYS, UNIQUE | identity, BY DEFAULT, UNIQUE |
+| Foreign keys | org, location, practitioner, actor, pusher, device; all RESTRICT | org, actor; RESTRICT |
+
+```sql
+-- device_audit_log_select (USING)
+org_id = current_org()
+AND (location_id IS NULL OR location_id IN (SELECT * FROM allowed_locations()))
+AND (practitioner_id IS NULL OR practitioner_id IN (SELECT * FROM allowed_practitioners()))
+
+-- device_audit_log_insert (WITH CHECK): the same, and
+AND pushed_by_membership_id = current_membership()
+AND actor_membership_id IN (SELECT id FROM memberships WHERE org_id = current_org())
+AND device_id IN (SELECT id FROM device WHERE org_id = current_org())
+```
+
+A null tag means organization-wide (an entity with no location or
+practitioner: a patient, a service, a membership). Each `OR` branch sits
+inside an `AND` with `org_id = current_org()`, so none is reachable without
+a membership ("A worked failure: specialty_templates' OR clause").
+
+**Append-only, two layers.** No UPDATE or DELETE policy exists, and
+`clintra_app` holds no UPDATE or DELETE grant — a refused statement fails
+with `42501` on the grant, as on `audit_log`. `clintra_owner` is bound by
+FORCE and has no policy for either command, so its UPDATE and DELETE affect
+zero rows. No trigger refuses them for every role: `clintra_fixtures`
+(test-only, `BYPASSRLS`) is what the Pest cleanup and the live run's org
+removal delete through. `seq` is `GENERATED ALWAYS`, so no writer supplies
+one (`428C9`).
+
+**Known gap: the actor is a claim.** A device holding a stolen token could
+name any member of its own organization as the actor. That is the same
+limit as every settings write, and it closes with the backlog's
+server-side per-person identity, which would let the policy compare the
+actor with a proven acting membership without changing the table.
+
+`DeviceAuditLogTest.php` pins both RLS flags, both policies' deparsed text,
+the grants (clintra_app's exactly SELECT and INSERT; none for any other
+role), the identity, the indexes, the foreign keys and the action check,
+and proves the cross-organization and listed-location isolation, the
+refused UPDATE/DELETE, the pusher check and the accepted claimed actor.
+
 ## Redundant grants revoked, not just inert
 
 `audit_log` and `sync_ledger` are both meant to be append-only, and both
