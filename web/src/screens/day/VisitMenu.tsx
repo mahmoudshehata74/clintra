@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+import Popover from "../../components/ui/Popover";
 import { patientProfileStrings } from "../patient/strings";
 import { dayScreenStrings } from "./strings";
 
@@ -30,96 +31,55 @@ interface VisitMenuProps {
  * specification's rule that destructive actions live in their own group.
  * Every item is a plain focusable button, so Tab/Shift+Tab and Enter/Space
  * reach them with no extra wiring; Escape and an outside click both close it.
+ *
+ * The menu is a Popover (a body-level portal anchored to the ⋯ button), so
+ * it always opens fully on screen — flipped above the button near the
+ * bottom of the window — and no card's overflow can cut it.
  */
 export default function VisitMenu({ actions }: VisitMenuProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!actions.isOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: PointerEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        actions.onClose();
-      }
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        actions.onClose();
-      }
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- actions is a fresh object every render; only isOpen and onClose matter here.
-  }, [actions.isOpen, actions.onClose]);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const item = "p-3 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset";
+  const plainItem = `${item} hover:bg-field focus-visible:ring-green`;
+  const dangerItem = `${item} bg-danger-wash text-danger hover:bg-danger-wash/60 focus-visible:ring-danger`;
 
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={actions.isOpen ? actions.onClose : actions.onOpen}
         aria-label={dayScreenStrings.menuOpenAriaLabel}
         aria-haspopup="menu"
         aria-expanded={actions.isOpen}
-        className="shrink-0 rounded-full px-2 py-1 text-lg text-muted"
+        className="shrink-0 rounded-full px-2 py-1 text-lg text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green"
       >
         ⋯
       </button>
 
       {actions.isOpen && (
-        <div
-          ref={containerRef}
-          role="menu"
-          className="absolute end-0 top-full z-10 mt-1 flex w-48 flex-col overflow-hidden rounded-panel border border-rule bg-card shadow-l"
-        >
+        <Popover anchorRef={triggerRef} onClose={actions.onClose} role="menu" widthClassName="w-48">
           {actions.onMove && (
-            <button type="button" role="menuitem" onClick={actions.onMove} className="p-3 text-start hover:bg-field">
+            <button type="button" role="menuitem" onClick={actions.onMove} className={plainItem}>
               {dayScreenStrings.moveMenuLabel}
             </button>
           )}
           {actions.onSendToEnd && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={actions.onSendToEnd}
-              className="p-3 text-start hover:bg-field"
-            >
+            <button type="button" role="menuitem" onClick={actions.onSendToEnd} className={plainItem}>
               {dayScreenStrings.sendToEndOfQueueMenuLabel}
             </button>
           )}
           {actions.onInvoice && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={actions.onInvoice}
-              className="p-3 text-start hover:bg-field"
-            >
+            <button type="button" role="menuitem" onClick={actions.onInvoice} className={plainItem}>
               {dayScreenStrings.invoiceMenuLabel}
             </button>
           )}
           {actions.onSendMessage && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={actions.onSendMessage}
-              className="p-3 text-start hover:bg-field"
-            >
+            <button type="button" role="menuitem" onClick={actions.onSendMessage} className={plainItem}>
               {dayScreenStrings.sendMessageMenuLabel}
             </button>
           )}
           {actions.onOpenProfile && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={actions.onOpenProfile}
-              className="p-3 text-start hover:bg-field"
-            >
+            <button type="button" role="menuitem" onClick={actions.onOpenProfile} className={plainItem}>
               {patientProfileStrings.menuLabel}
             </button>
           )}
@@ -128,26 +88,16 @@ export default function VisitMenu({ actions }: VisitMenuProps) {
               <div className="border-t border-danger-line" />
             )}
           {actions.onCancel && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={actions.onCancel}
-              className="bg-danger-wash p-3 text-start text-danger hover:bg-danger-wash/60"
-            >
+            <button type="button" role="menuitem" onClick={actions.onCancel} className={dangerItem}>
               {dayScreenStrings.cancelMenuLabel}
             </button>
           )}
           {actions.onNoShow && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={actions.onNoShow}
-              className="bg-danger-wash p-3 text-start text-danger hover:bg-danger-wash/60"
-            >
+            <button type="button" role="menuitem" onClick={actions.onNoShow} className={dangerItem}>
               {dayScreenStrings.noShowMenuLabel}
             </button>
           )}
-        </div>
+        </Popover>
       )}
     </div>
   );

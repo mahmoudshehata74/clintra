@@ -159,7 +159,7 @@ test("the workspace's quick buttons, the day's menu and the doctor's day open th
 
   const row = rowFor(page, PATIENTS.karim);
   await row.getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
-  await row.getByRole("menuitem", { name: PROFILE.menuLabel, exact: true }).click();
+  await page.getByRole("menuitem", { name: PROFILE.menuLabel, exact: true }).click();
   sheet = profileSheet(page);
   await expect(profileTab(sheet, PROFILE.tabAll)).toHaveAttribute("aria-pressed", "true");
   await expect(profileEvents(sheet)).toHaveCount(9);

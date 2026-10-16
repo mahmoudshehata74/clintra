@@ -11,7 +11,7 @@ export const CONTROL_SELECTOR =
   'button, a[href], input:not([type="hidden"]), select, textarea, [role="menuitem"], [role="button"], [role="tab"]';
 
 /** Asserts the element's box lies inside the viewport (1px of rounding allowed). */
-export async function expectInsideViewport(target: Locator): Promise<void> {
+export async function expectInsideViewport(target: Locator, label = "overlay"): Promise<void> {
   const box = await target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return {
@@ -23,10 +23,10 @@ export async function expectInsideViewport(target: Locator): Promise<void> {
       height: document.documentElement.clientHeight,
     };
   });
-  expect(box.top, "top edge inside the viewport").toBeGreaterThanOrEqual(-1);
-  expect(box.left, "left edge inside the viewport").toBeGreaterThanOrEqual(-1);
-  expect(box.bottom, "bottom edge inside the viewport").toBeLessThanOrEqual(box.height + 1);
-  expect(box.right, "right edge inside the viewport").toBeLessThanOrEqual(box.width + 1);
+  expect(box.top, `${label}: top edge inside the viewport`).toBeGreaterThanOrEqual(-1);
+  expect(box.left, `${label}: left edge inside the viewport`).toBeGreaterThanOrEqual(-1);
+  expect(box.bottom, `${label}: bottom edge inside the viewport`).toBeLessThanOrEqual(box.height + 1);
+  expect(box.right, `${label}: right edge inside the viewport`).toBeLessThanOrEqual(box.width + 1);
 }
 
 /**

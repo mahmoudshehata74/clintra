@@ -393,7 +393,7 @@ export const sendSheet = (page: Page) =>
 export async function openSendSheetFromRow(page: Page, patientName: string): Promise<Locator> {
   const row = rowFor(page, patientName);
   await row.getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
-  await row.getByRole("menuitem", { name: S.sendMessageMenuLabel, exact: true }).click();
+  await row.page().getByRole("menuitem", { name: S.sendMessageMenuLabel, exact: true }).click();
   const sheet = sendSheet(page);
   await expect(sheet.getByLabel(MSG.sendBodyLabel, { exact: true })).toBeVisible();
   return sheet;
