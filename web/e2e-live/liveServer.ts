@@ -151,3 +151,22 @@ export async function mintCode(org: LiveOrg): Promise<string> {
   }
   return code;
 }
+
+/**
+ * Removes live-run organizations, and everything hanging off them, from
+ * clintra_test (removeLiveOrgs.php, through the local fixtures role): the
+ * given ones, or with none every "Live Clinic …" an earlier run left. The
+ * payments of two device series at one location would otherwise stay
+ * behind and trip the Pest suite's migration rollback check.
+ */
+export function removeLiveOrgs(orgIds: readonly string[] = []): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("php", [path.join(path.dirname(fileURLToPath(import.meta.url)), "removeLiveOrgs.php"), ...orgIds], { cwd: API_DIR, env: ENV });
+    let output = "";
+    child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
+    child.stderr.on("data", (chunk: Buffer) => (output += chunk.toString("utf8")));
+    child.on("error", reject);
+    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`removeLiveOrgs exited ${code}:
+${output}`))));
+  });
+}

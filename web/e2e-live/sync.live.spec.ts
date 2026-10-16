@@ -1,7 +1,7 @@
 import { expect, test, type Browser } from "@playwright/test";
 import { advanceRowTo, invoiceHead, invoiceTotals, labeledRowValue, login, parsePounds, readStore, rowFor, S, sidebar, SIDEBAR } from "../e2e/support";
 import { bookNew, eventually, firstEmptySlotTime, nudge, openDevice, pushed, rowCount, rowStatus, seriesLetter, setUpClinic, type Device } from "./liveSupport";
-import { provisionOrg, startApi, stopApi, type LiveOrg } from "./liveServer";
+import { provisionOrg, removeLiveOrgs, startApi, stopApi, type LiveOrg } from "./liveServer";
 
 // Two devices of one freshly provisioned organization, each its own browser
 // context, against the real API on clintra_test (README.md here). Every
@@ -14,12 +14,14 @@ let org: LiveOrg;
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
+  await removeLiveOrgs();
   await startApi();
   org = await provisionOrg();
 });
 
 test.afterAll(async () => {
   await stopApi();
+  await removeLiveOrgs([org.orgId]);
 });
 
 /** Opens a visit's invoice from its row's menu. */

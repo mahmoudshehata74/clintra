@@ -59,8 +59,14 @@ The run:
 - provisions a new organization through `php artisan clintra:provision`,
   answering its prompts on stdin, and mints a fresh activation code per
   device with `clintra:mint-activation-code`. Each run therefore works on
-  its own clinic and never shares slots with an earlier run; the rows stay
-  in `clintra_test`.
+  its own clinic and never shares slots with an earlier run.
+- removes that organization, with every row hanging off it, when it ends,
+  and first any "Live Clinic …" an interrupted run left
+  (`removeLiveOrgs.php`, through the local-only `clintra_fixtures` role,
+  refusing any database but `clintra_test`). Left behind, the payments two
+  device series take at one location would trip the Pest suite's migration
+  rollback check. By hand, from `api/`:
+  `DB_DATABASE=clintra_test php ../web/e2e-live/removeLiveOrgs.php`.
 
 The provisioned names are Latin ("Live Clinic 1234", "Live Owner") on
 purpose: on Windows, the console layer reads piped answers in the OEM code
