@@ -56,6 +56,11 @@ export function auditScopeTags(row: ScopedRow, parent: AuditScopeParent | undefi
   if (AUDIT_SCOPE_PARENT_FIELD[row.entity]) {
     return parent ? { location_id: idOrNull(parent.location_id), practitioner_id: idOrNull(parent.practitioner_id) } : null;
   }
+  return recordScopeTags(row);
+}
+
+/** The tags a row's own record gives: its `location_id` and `practitioner_id`, each null when it has none. */
+export function recordScopeTags(row: Pick<AuditEntry, "before" | "after">): AuditScopeTags {
   const record = recordOf(row);
   return { location_id: idOrNull(record?.location_id), practitioner_id: idOrNull(record?.practitioner_id) };
 }
