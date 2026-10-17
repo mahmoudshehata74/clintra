@@ -5,7 +5,7 @@ import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import type { ClinicDay, Patient, Schedule, Service, Visit } from "../../db/types";
 import { formatEgyptianPhoneForDisplay } from "../../domain/phone";
-import { ScheduleMode } from "../../domain/scheduleMode";
+import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
 import { formatWeekdayFullDate } from "../../domain/displayDate";
 import { clockTimeInCairo, weekdayOf } from "../../domain/time";
 import { SheetPanelBody } from "../../components/ui/SheetPanel";
@@ -73,7 +73,7 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
           candidate.location_id === locationId &&
           candidate.weekday === weekday,
       );
-      const isQueueMode = schedule?.mode === ScheduleMode.Queue;
+      const isQueueMode = schedule !== undefined && effectiveScheduleMode(schedule, tomorrow) === ScheduleMode.Queue;
 
       const allVisits = await db.visits
         .where("[practitioner_id+visit_date]")

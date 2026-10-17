@@ -540,6 +540,10 @@ export const dayScreenStrings = {
   hoursAddWorkingDayAction: "خليه يوم شغل",
   hoursMakeDayOffAction: "خليه إجازة",
   hoursUpcomingVisitsError: "فيه حجوزات جاية في اليوم ده، انقلها أو الغيها الأول",
+  // The doctor's slots/queue switch above the week (A-03): it takes effect
+  // from tomorrow, and the line under it says so.
+  hoursModeSwitchLabel: "طريقة الحجز",
+  hoursModeSwitchNote: "التغيير يبدأ من بكرة، والنهارده يفضل زي ما هو",
 
   // Panel B — services.
   serviceDurationSuffix: "دقيقة",

@@ -1,5 +1,6 @@
 import type { Schedule } from "../../db/types";
-import { ScheduleMode } from "../../domain/scheduleMode";
+import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
+import { addDaysToClinicDay, weekdayOf, type ClinicDay } from "../../domain/time";
 import type { UpdateWorkingHoursResult } from "../../db/scheduleSettings";
 
 export type WorkingHoursMode =
@@ -25,11 +26,14 @@ const DAY_OFF_HOURS = "—";
  * in the order the week reads — every weekday is listed, and one with no
  * schedule at this practitioner+location reads as a day off ("—"). A
  * weekday with more than one schedule (a split day) gets one row per
- * schedule, earliest first.
+ * schedule, earliest first. A row's mode is the one its next day on that
+ * weekday has, from today on (effectiveScheduleMode): today's weekday reads
+ * today's mode, the others the mode they will next open in.
  */
-export function buildWorkingHoursRows(schedules: readonly Schedule[]): WorkingHoursRow[] {
+export function buildWorkingHoursRows(schedules: readonly Schedule[], today: ClinicDay): WorkingHoursRow[] {
   const rows: WorkingHoursRow[] = [];
   for (let weekday = 0; weekday <= 6; weekday += 1) {
+    const nextDate = addDaysToClinicDay(today, (weekday - weekdayOf(today) + 7) % 7);
     const forDay = schedules
       .filter((schedule) => schedule.weekday === weekday)
       .sort((a, b) => a.start_time.localeCompare(b.start_time));
@@ -44,7 +48,7 @@ export function buildWorkingHoursRows(schedules: readonly Schedule[]): WorkingHo
         schedule,
         hours: `${schedule.start_time} — ${schedule.end_time}`,
         mode:
-          schedule.mode === ScheduleMode.Slots
+          effectiveScheduleMode(schedule, nextDate) === ScheduleMode.Slots
             ? { kind: "slots", slotMinutes: schedule.slot_minutes }
             : { kind: "queue", maxCapacity: schedule.max_capacity },
       });
