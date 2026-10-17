@@ -33,6 +33,10 @@ path the ordinary e2e suite never takes (it runs on the in-browser
    assistant's name, and B's invoice reads "إنشاء {time} · {the
    assistant}". A booking A makes offline reaches B's audit log once A is
    back (docs/audit-sync.md).
+10. With the assistant signed in on A: a booking A makes reads "سجّله
+    {the assistant}" on B, and still on A after its own pull — not the
+    owner the device token belongs to (api/docs/rls.md's "Actor
+    attribution").
 
 Every wait nudges the sync engine (as returning to the tab does) and polls;
 nothing sleeps.
