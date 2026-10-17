@@ -7,6 +7,7 @@ import { mutate } from "../db/mutate";
 import { getDeviceId } from "../db/deviceRegistration";
 import { AuditAction, type SyncOp, type Visit } from "../db/types";
 import { FakeTransport } from "./fakeTransport";
+import { describeSyncReview } from "./reviewSummary";
 import {
   DEVICE_SERIES_CONFLICT_REASON,
   describeFailedOpEscalation,
@@ -160,6 +161,20 @@ describe("runSyncCycle", () => {
       needs_review: true,
     });
     expect(reviews[0].payload).toEqual(visit);
+  });
+
+  it("puts an actor_not_in_org rejection up for review, keeping the op, with an Arabic summary", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "rejected", reason: "actor_not_in_org" }));
+
+    await runSyncCycle(db, transport);
+
+    const [op] = await db.sync_ops.toArray();
+    expect(op.synced_at).toBeNull();
+    const [review] = await db.sync_review.toArray();
+    expect(review).toMatchObject({ op_id: op.op_id, entity: "visits", reason: "actor_not_in_org", needs_review: true });
+    expect(describeSyncReview(review)).toBe("زيارة — الموظف المسجّل على التغيير ده مش من موظفين العيادة، فالتغيير ده مش هيوصل");
   });
 
   it("does not re-push an op that already has an open review row, avoiding duplicate review spam every cycle", async () => {

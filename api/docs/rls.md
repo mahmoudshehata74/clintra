@@ -1135,6 +1135,54 @@ role), the identity, the indexes, the foreign keys and the action check,
 and proves the cross-organization and listed-location isolation, the
 refused UPDATE/DELETE, the pusher check and the accepted claimed actor.
 
+## Actor attribution
+
+Six columns say who acted on a synced row
+(`App\Support\Sync\SyncableTables::ACTOR_COLUMNS`): `visits.created_by`,
+`payments.created_by`, `prescriptions.created_by`, `messages.created_by`,
+`message_templates.updated_by` and `cash_close.closed_by`. They are the
+only columns of a synced table that reference `memberships` as an actor
+(`membership_locations` and `membership_practitioners` reference the
+membership they describe, not who wrote them). The push used to overwrite
+every one with the token's membership — the owner who registered the
+device, for every device — so after a pull each device's "سجّله …" byline,
+cash close, invoice and receipt named the owner instead of the person who
+acted.
+
+They follow the device audit rows' rule (`docs/audit-sync.md`'s decision
+2), applied by `SyncOpApplier::claimsActorInOrg` and `buildAttributes`:
+
+- **A claim naming a membership of the token's organization** — active or
+  not, so a row written offline before a deactivation still goes up — is
+  stored as sent.
+- **Any other claim** (another organization's membership, a uuid that is
+  no membership, anything but a uuid) refuses the op as `rejected` /
+  `actor_not_in_org`, before any write; the device lists it for review
+  (`web/src/sync/reviewSummary.ts`).
+- **An absent or null claim** falls back to the token's membership.
+- **Where the column is not written** — a delete, and a message marked sent
+  (an append-only update keeps its creator) — the claim is not checked.
+
+`sync_ledger.actor_membership_id` and the server's own `audit_log` rows
+keep the token's membership, the proven sender; `audit_log_insert`'s
+`actor_membership_id = current_membership()` is unchanged.
+
+**Attribution only.** No permission check reads the claim: every policy
+compares `current_membership()`, `current_org()`, `allowed_locations()`
+and `allowed_practitioners()`, all derived from the token's membership.
+No policy constrains an actor column (only `audit_log` and
+`device_audit_log` pin a column to `current_membership()`, and neither is
+one of the six), so no migration came with this; the foreign keys to
+`memberships` do not see RLS, which is why the organization check is made
+in the applier. The gap is the device audit rows' one: a device with a
+stolen token could name any staff member of its own organization. It
+closes with the backlog's server-side per-person identity (a proof of the
+acting membership per request), which turns the claim into a check.
+
+Tested by `tests/Feature/Rls/ActorAttributionTest.php` (each column: a
+same-org claim kept, a cross-org claim refused, an absent claim falling
+back) and the live run's scenario 10 (`web/e2e-live/README.md`).
+
 ## Redundant grants revoked, not just inert
 
 `audit_log` and `sync_ledger` are both meant to be append-only, and both
@@ -1301,7 +1349,9 @@ upload anything again.
   prescription for a visit that already has one
   (`conflict_visit_has_prescription`, again never
   `conflict_already_exists`) and any write the printed lock refuses
-  (`prescription_printed` — see "Prescriptions" above).
+  (`prescription_printed` — see "Prescriptions" above). On every table
+  with an actor column, a claimed actor outside the token's organization
+  (`actor_not_in_org` — see "Actor attribution" above).
 - `failed` — anything else: an org mismatch, a future-dated or
   out-of-window `created_at`, or a caught `QueryException` this class
   doesn't otherwise model (a foreign key pointing at nothing, for
@@ -1310,11 +1360,11 @@ upload anything again.
   server-side and mapped to the single generic reason `internal_error`.
 
 **Trust, per docs/sync-plan.md's Q12/Q13 — applied, not just decided.**
-`actor_membership_id`, and any table's own equivalent (`visits.created_by`,
-`payments.created_by`, `prescriptions.created_by`, `cash_close.closed_by` —
-`App\Support\Sync\SyncableTables::ACTOR_COLUMNS`), is always the
-token-resolved membership, overwritten after merging the payload,
-regardless of what the payload itself claims. `org_id` is different:
+`sync_ledger.actor_membership_id` and `audit_log.actor_membership_id` are
+always the token-resolved membership, whatever the payload claims. A
+table's own actor column (`SyncableTables::ACTOR_COLUMNS`) is the device's
+claim, held to the token's organization — see "Actor attribution" above.
+`org_id` is different:
 where a table's payload carries one directly (`SyncableTables::DIRECT_ORG_ID_TABLES`),
 a mismatch against `current_org()` is checked explicitly and returns
 `failed` with a clean `org_mismatch` reason, before any write is

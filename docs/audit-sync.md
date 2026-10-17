@@ -572,8 +572,11 @@ rejected; (4) the first pull's window is 14 Cairo days; (5) pulled rows
 older than 60 days are deleted on the device; (6) a rejected audit row stays
 on the device, unshown and not retried; (7) the server's own per-op
 `audit_log` rows stay unchanged; (8) `pin_hash`/`pin_salt` never travel;
-(9) the overwritten actor columns are their own PR, the next one
-(`docs/session-handoff.md`'s backlog); (10) no all-role trigger; (11) the
+(9) the overwritten actor columns are their own PR, the next one — since
+built: they keep the device's claim when it names a member of the token's
+organization, refuse it as `actor_not_in_org` otherwise and fall back to
+the token's membership when absent (`api/docs/rls.md`'s "Actor
+attribution"); (10) no all-role trigger; (11) the
 sync chip does not count audit rows; (12) a 64 KB per-row limit.
 
 ## As built

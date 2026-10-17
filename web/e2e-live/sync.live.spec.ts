@@ -297,3 +297,26 @@ test("the assistant's actions on A appear in B's audit log under the assistant's
   await eventually([a, b], () => auditRowCount(b, "أنشأ حجز", "مريض سجل أوفلاين", assistant.name), 1, "A's offline booking reaches B's audit log once");
   await closeAll(a, b);
 });
+
+/** Who `name`'s day row on `device` says recorded it (the "سجّله …" byline), or null. */
+async function recordedBy(device: Device, name: string): Promise<string | null> {
+  const text = (await rowFor(device.page, name).first().innerText().catch(() => "")) ?? "";
+  const line = text.split("\n").find((part) => part.startsWith(`${S.recordedByPrefix} `));
+  return line ? line.slice(S.recordedByPrefix.length + 1).trim() : null;
+}
+
+test("the assistant's booking on A reads as the assistant's on B", async ({ browser }) => {
+  const assistant = { name: "Live Assistant", pin: "1357" };
+  const [a, b] = await twoDevices(browser);
+  await eventually([a, b], async () => (await readStore<{ display_name: string | null }>(a.page, "memberships")).some((row) => row.display_name === assistant.name), true);
+  await a.page.getByRole("button", { name: AUTH.lockButtonLabel, exact: true }).click();
+  await lockOverlay(a.page).getByRole("button", { name: AUTH.lockSwitchUser, exact: true }).click();
+  await login(a.page, assistant);
+
+  await bookNew(a, "مريض بتوقيع");
+  await eventually([a, b], () => rowCount(b, "مريض بتوقيع"), 1, "B receives A's booking");
+  await eventually([a, b], () => recordedBy(b, "مريض بتوقيع"), assistant.name, "B's byline names the assistant, not the token's owner");
+  await eventually([a, b], () => pushed(a), true);
+  await eventually([a, b], () => recordedBy(a, "مريض بتوقيع"), assistant.name, "A keeps the assistant after its own pull");
+  await closeAll(a, b);
+});

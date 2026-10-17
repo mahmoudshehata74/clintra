@@ -133,7 +133,9 @@ function forgetPrescriptions(string $orgId): void
 test('a prescription created together with its first item is accepted, both at rev 1, created_by from the token', function () {
     $fixture = prescriptionFixture();
     $credential = $fixture['credential'];
-    $create = prescriptionOp($credential, $fixture, 1, 1, ['payload' => ['created_by' => (string) Str::uuid()]]);
+    $create = prescriptionOp($credential, $fixture, 1, 1);
+    // No claim: the token's membership (ActorAttributionTest covers claims).
+    unset($create['payload']['created_by']);
     $item = prescriptionItemOp($create['entity_id']);
 
     pushOps($credential['token'], [$create, $item])->assertOk()->assertJson(['results' => [

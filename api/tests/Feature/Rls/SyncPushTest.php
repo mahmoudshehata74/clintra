@@ -353,9 +353,10 @@ test('audit rows are attributed to the token\'s membership even when the payload
     $response->assertOk();
     $response->assertJson(['results' => [['op_id' => $op['op_id'], 'status' => 'accepted']]]);
 
+    // The visit's own actor column keeps the same-org claim (ActorAttributionTest);
+    // the audit row is the token's.
     $visitRow = $this->fx()->table('visits')->where('id', $visitId)->first();
-    expect($visitRow->created_by)->toBe($credential['membershipId']);
-    expect($visitRow->created_by)->not->toBe($otherMembershipId);
+    expect($visitRow->created_by)->toBe($otherMembershipId);
 
     $auditRow = $this->fx()->table('audit_log')->where('entity_id', $visitId)->first();
     expect($auditRow->actor_membership_id)->toBe($credential['membershipId']);

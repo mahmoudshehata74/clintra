@@ -40,11 +40,14 @@ class SyncableTables
     public const DIRECT_ORG_ID_TABLES = ['care_plans', 'invoices', 'memberships', 'message_templates', 'messages', 'patients', 'practitioners', 'prescriptions', 'services', 'visits'];
 
     /**
-     * table => the payload column naming the acting membership. Always
-     * server-overridden with the token-resolved membership, never trusted
-     * from the payload — the same principle audit_log.actor_membership_id
-     * already enforces (docs/sync-plan.md's Q12/Q13), extended to every
-     * other "who did this" column in the schema.
+     * table => the payload column naming the acting membership: the person
+     * signed in on the device. Kept from the payload when it names a
+     * membership of the token's organization, refused as `actor_not_in_org`
+     * when it names anything else, and the token's membership when absent
+     * (SyncOpApplier::claimsActorInOrg). Attribution only — no permission
+     * check reads it; audit_log.actor_membership_id and
+     * sync_ledger.actor_membership_id stay the token's (api/docs/rls.md's
+     * "Actor attribution").
      */
     public const ACTOR_COLUMNS = [
         'cash_close' => 'closed_by',
