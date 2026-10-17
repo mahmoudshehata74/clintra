@@ -37,7 +37,7 @@ import { cancelVisit, markVisitNoShow, type VisitCancelReason } from "../../db/v
 import { sendVisitToEndOfQueue, undoSendVisitToEndOfQueue } from "../../db/visitQueue";
 import { undoMostRecentVisitMutation } from "../../db/visitUndo";
 import type { Piastres } from "../../domain/money";
-import { ScheduleMode } from "../../domain/scheduleMode";
+import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
 import { addDaysToClinicDay, clockTimeInCairo, todayInCairo, weekdayOf, type ClockTime } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import { formatActorName } from "./actorLabel";
@@ -260,7 +260,7 @@ export default function DayScreen({
   );
   const isQueueMode =
     currentPractitionerScheduleState.kind === "scheduled" &&
-    currentPractitionerScheduleState.schedule.mode === ScheduleMode.Queue;
+    effectiveScheduleMode(currentPractitionerScheduleState.schedule, today) === ScheduleMode.Queue;
 
   useEffect(() => {
     onTitleChange(isQueueMode ? dayScreenStrings.appBarTitleQueue : dayScreenStrings.appBarTitle);

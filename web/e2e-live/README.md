@@ -37,6 +37,11 @@ path the ordinary e2e suite never takes (it runs on the in-browser
     {the assistant}" on B, and still on A after its own pull — not the
     owner the device token belongs to (api/docs/rls.md's "Actor
     attribution").
+11. The owner on A makes tomorrow a working day and switches the doctor to
+    queue: B receives both schedule rows still in slots today and in queue
+    from tomorrow (`next_mode_from`), B's grid today is unchanged, and B's
+    working hours show the switch on queue and tomorrow's weekday in queue
+    (docs/bug-hunt.md's A-03).
 
 Every wait nudges the sync engine (as returning to the tab does) and polls;
 nothing sleeps.

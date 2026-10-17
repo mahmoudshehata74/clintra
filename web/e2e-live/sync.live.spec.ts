@@ -15,6 +15,7 @@ import {
   sidebar,
   SIDEBAR,
 } from "../e2e/support";
+import { addDaysToClinicDay, todayInCairo, weekdayOf } from "../src/domain/time";
 import { bookNew, eventually, firstEmptySlotTime, nudge, openDevice, pushed, rowCount, rowStatus, seriesLetter, setUpClinic, type Device } from "./liveSupport";
 import { provisionOrg, removeLiveOrgs, startApi, stopApi, type LiveOrg } from "./liveServer";
 
@@ -318,5 +319,60 @@ test("the assistant's booking on A reads as the assistant's on B", async ({ brow
   await eventually([a, b], () => recordedBy(b, "مريض بتوقيع"), assistant.name, "B's byline names the assistant, not the token's owner");
   await eventually([a, b], () => pushed(a), true);
   await eventually([a, b], () => recordedBy(a, "مريض بتوقيع"), assistant.name, "A keeps the assistant after its own pull");
+  await closeAll(a, b);
+});
+
+/** Opens the owner's settings on its working-hours tab. */
+async function openHours(device: Device) {
+  await sidebar(device.page).getByRole("button", { name: SIDEBAR.navSettings, exact: true }).click();
+  const settings = device.page.getByRole("dialog");
+  await expect(settings.getByRole("button", { name: S.settingsHoursTab, exact: true })).toHaveAttribute("aria-pressed", "true");
+  return settings;
+}
+
+test("the owner's switch to queue on A reaches B from tomorrow, today unchanged", async ({ browser }) => {
+  const today = todayInCairo();
+  const tomorrow = addDaysToClinicDay(today, 1);
+  const todayName = S.weekdayNames[weekdayOf(today)];
+  const tomorrowName = S.weekdayNames[weekdayOf(tomorrow)];
+  const [a, b] = await twoDevices(browser);
+  // Both fresh devices pulled the same day: the same empty slots on each.
+  const emptySlots = (device: Device) => device.page.locator("button[data-slot-time]").count();
+  await eventually([a, b], async () => {
+    const onA = await emptySlots(a);
+    return onA > 0 && onA === (await emptySlots(b));
+  }, true, "both devices show today's grid");
+  const emptyOnB = await emptySlots(b);
+
+  // Tomorrow becomes a working day too, then the doctor switches to queue.
+  const settingsA = await openHours(a);
+  const tomorrowRowA = settingsA.getByRole("listitem").filter({ hasText: tomorrowName });
+  await tomorrowRowA.getByRole("button", { name: S.hoursEditAction, exact: true }).click();
+  await tomorrowRowA.getByRole("button", { name: S.hoursAddWorkingDayAction, exact: true }).click();
+  await expect(tomorrowRowA).not.toContainText(S.hoursModeDayOff);
+  const switchA = settingsA.getByRole("group", { name: S.hoursModeSwitchLabel, exact: true });
+  await switchA.getByRole("button", { name: S.hoursModeQueue, exact: true }).click();
+  await expect(tomorrowRowA).toContainText(S.hoursModeQueue);
+  await a.page.keyboard.press("Escape");
+
+  const switchedRows = async (device: Device) =>
+    (await readStore<{ mode: string; next_mode: string | null; next_mode_from: string | null }>(device.page, "schedules"))
+      .map((row) => `${row.mode}>${row.next_mode}@${row.next_mode_from}`)
+      .sort();
+  await eventually([a, b], () => pushed(a), true);
+  await eventually([a, b], () => switchedRows(b), [`slots>queue@${tomorrow}`, `slots>queue@${tomorrow}`], "B gets both rows switched from tomorrow");
+  expect(await switchedRows(a)).toEqual(await switchedRows(b));
+
+  // B: today's grid as it was, tomorrow's weekday in queue.
+  expect(await emptySlots(b)).toBe(emptyOnB);
+  await expect(b.page.getByText(S.queueSummaryCurrentTurnLabel)).toHaveCount(0);
+  const settingsB = await openHours(b);
+  const switchB = settingsB.getByRole("group", { name: S.hoursModeSwitchLabel, exact: true });
+  await expect(switchB.getByRole("button", { name: S.hoursModeQueue, exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(settingsB.getByRole("listitem").filter({ hasText: tomorrowName })).toContainText(S.hoursModeQueue);
+  await expect(settingsB.getByRole("listitem").filter({ hasText: todayName })).toContainText(
+    new RegExp(`${S.hoursModeSlots} [0-9]+${S.minutesShortUnit}`),
+  );
+  await b.page.keyboard.press("Escape");
   await closeAll(a, b);
 });

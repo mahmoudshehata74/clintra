@@ -31,9 +31,9 @@ UTF-8 shell: a Windows console garbles the Arabic clinic and doctor names
 A-07).
 
 ## Verify
-Web: `pnpm --dir web test` (vitest, 1535 passed) · `pnpm --dir web
+Web: `pnpm --dir web test` (vitest, 1550 passed) · `pnpm --dir web
 exec tsc -b --noEmit` · `pnpm --dir web build` · `pnpm --dir web test:e2e`.
-API: `cd api && php artisan test` (Pest, 397 passed).
+API: `cd api && php artisan test` (Pest, 431 passed).
 
 ## Rebuild order (approved)
 1. `docs/design-rule.md` points at the prototype — done (PR #1).
@@ -458,6 +458,17 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
   (`web/src/components/ui/TimeField.tsx`: hour 00–23 and minute in 5-minute
   steps, Latin digits), labelled "من" and "لحد" — never the native time
   input, which follows the device locale ("09:00 AM").
+- **12 (slots/queue switch)**: above the week, a two-way "مواعيد"/"طابور"
+  switch per doctor (A-03), showing the mode from tomorrow, with "التغيير
+  يبدأ من بكرة، والنهارده يفضل زي ما هو" under it. Tapped, every schedule
+  row of the doctor at the location gets `next_mode` and `next_mode_from` =
+  tomorrow (Cairo) and the weekday's visits from tomorrow on are converted
+  (`switchModeFromTomorrow`, `web/src/db/scheduleModeSwitch.ts`); today's
+  rows, visits and grid are untouched. Tapped back before tomorrow, both
+  fields are cleared and those visits converted back. A day's mode is read
+  only through `effectiveScheduleMode` (`web/src/domain/scheduleMode.ts`); a
+  row whose switch has started is folded (mode := next_mode, both cleared)
+  on its next save. Each row's badge reads its weekday's next day.
 - **13 (services, edit and add)**: a row's "تعديل" opens the service form
   above its price overrides (which work as before); "خدمة جديدة" opens the
   same form; only one of the two is open at a time. Fields: "اسم الخدمة"
@@ -471,7 +482,7 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
   broken by id (`sortServicesByName`), so the order is always the same.
 
 ## Backlog
-- **Next PR** — A-03, its own schema PR: schedules gain next_mode (slots|queue) and next_mode_from (date); a date's mode is next_mode once it reaches next_mode_from, else mode; the working-hours editor's switch writes them for tomorrow; today's visits untouched; migration + sync payload + Pest; owner-authorised schema change. Hardening scenario 24 waits on it. (`docs/bug-hunt.md`, A-03.)
+- A-03 — done in `feat/schedule-mode-from-tomorrow`: schedules carry `next_mode` and `next_mode_from` (`docs/schema.md`'s v23 additions), and the working-hours switch takes effect from tomorrow (screen 12's notes above). Hardening scenario 24 runs on it. (`docs/bug-hunt.md`, A-03.)
 - Invoice item editing (screen 5's "تعديل بنود") — owner decision of the prototype alignment: recorded, not built.
 - Queue reordering (screen 3's "إعادة ترتيب") — owner decision of the prototype alignment: recorded, not built.
 - Server-side per-person identity: the acting membership sent and verified per request (e.g. a PIN-derived proof). Today the server knows only the membership the device token was issued to (the owner who registered the device), so it cannot tell who is signed in; this would close the staff owner check's gap and the other settings-write gaps, and turn the claimed actor (device audit rows and the actor columns, `api/docs/rls.md`'s "Actor attribution") into a check.
