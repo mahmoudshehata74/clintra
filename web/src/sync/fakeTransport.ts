@@ -1,10 +1,45 @@
 import Dexie, { type Table } from "dexie";
+import { remoteAuditRowOf } from "../db/auditEntries";
 import { ClintraDatabase } from "../db/database";
-import { AuditAction, type SyncOp } from "../db/types";
+import { getDeviceId } from "../db/deviceRegistration";
+import { AuditAction, type RemoteAuditLog, type SyncOp } from "../db/types";
 import { id } from "../domain/id";
 import type { AddStaffRequest, AddStaffResponse } from "./staffServer";
 import { SYNCABLE_TABLES } from "./syncableTables";
-import type { PulledChange, PullSinceResult, PushOpResult, SyncTransport } from "./transport";
+import { addDaysToClinicDay, cairoInstant, todayInCairo } from "../domain/time";
+import type {
+  AuditTransport,
+  PullAuditResult,
+  PulledChange,
+  PullSinceResult,
+  PushAuditResult,
+  PushOpResult,
+  SyncTransport,
+  WireAuditRow,
+} from "./transport";
+
+/** The fields a pushed audit row carries, in one order, to compare a resend with what is stored. */
+function wireAuditRowOf(row: WireAuditRow): WireAuditRow {
+  return {
+    id: row.id,
+    org_id: row.org_id,
+    location_id: row.location_id,
+    practitioner_id: row.practitioner_id,
+    actor_membership_id: row.actor_membership_id,
+    entity: row.entity,
+    entity_id: row.entity_id,
+    action: row.action,
+    before: row.before,
+    after: row.after,
+    at: row.at,
+  };
+}
+
+/** A device audit row as this fake server stores it: the pushing device's and its arrival order (the server's seq). */
+type StoredAuditRow = RemoteAuditLog & { seq: number };
+
+/** The days a first audit pull reaches back, today included (api/app/Support/Sync/SyncWindow.php's AUDIT_FIRST_PULL_DAYS). */
+const AUDIT_FIRST_PULL_DAYS = 14;
 
 /** The default name two tabs on the same device share, so they see one coherent server. */
 export const FAKE_SERVER_DB_NAME = "clintra-fake-server";
@@ -42,11 +77,18 @@ function tableForEntity(db: ClintraDatabase, entity: string): Table<unknown, str
  * share one coherent view: both connect to the same IndexedDB database
  * under this name, and IndexedDB serializes their overlapping writes.
  */
-export class FakeTransport implements SyncTransport {
+export class FakeTransport implements SyncTransport, AuditTransport {
   private readonly db: ClintraDatabase;
+  private readonly callerDeviceId: () => string;
 
-  constructor(dbName: string = FAKE_SERVER_DB_NAME) {
+  /**
+   * `callerDeviceId` names the device calling the audit endpoints — this
+   * browser's own by default; a test standing in for two devices passes
+   * each its own.
+   */
+  constructor(dbName: string = FAKE_SERVER_DB_NAME, callerDeviceId: () => string = getDeviceId) {
     this.db = new ClintraDatabase(dbName);
+    this.callerDeviceId = callerDeviceId;
   }
 
   async pushOps(ops: readonly SyncOp[]): Promise<PushOpResult[]> {
@@ -200,6 +242,63 @@ export class FakeTransport implements SyncTransport {
       payload: op.action === AuditAction.Delete ? null : (op.payload as Record<string, unknown>),
     }));
     return { cursor: newCursor, hasMore: false, changes };
+  }
+
+  /**
+   * The stand-in for POST /api/audit/push, kept in this fake server's own
+   * `remote_audit_log` store with the pushing device and an arrival seq. The
+   * server's statuses for what a well-behaved device can send: accepted,
+   * duplicate (the same row again), rejected for an entity the server does
+   * not take, a PIN field, or an id already holding other content. It does
+   * not check organizations, actors or scope — it holds none of them.
+   */
+  async pushAuditRows(rows: readonly WireAuditRow[]): Promise<PushAuditResult[]> {
+    const deviceId = this.callerDeviceId();
+    return this.db.transaction("rw", this.db.remote_audit_log, async () => {
+      const results: PushAuditResult[] = [];
+      for (const row of rows) {
+        results.push(await this.pushAuditRow(row, deviceId));
+      }
+      return results;
+    });
+  }
+
+  private async pushAuditRow(row: WireAuditRow, deviceId: string): Promise<PushAuditResult> {
+    if (![...SYNCABLE_TABLES, "users"].includes(row.entity)) {
+      return { id: row.id, status: "rejected", reason: "unknown_entity" };
+    }
+    const records = [row.before, row.after] as (Record<string, unknown> | null)[];
+    if (row.entity === "memberships" && records.some((record) => record !== null && ("pin_hash" in record || "pin_salt" in record))) {
+      return { id: row.id, status: "rejected", reason: "audit_secret_field" };
+    }
+    const stored = (await this.db.remote_audit_log.get(row.id)) as StoredAuditRow | undefined;
+    if (stored) {
+      return JSON.stringify(wireAuditRowOf(stored)) === JSON.stringify(wireAuditRowOf(row))
+        ? { id: row.id, status: "duplicate" }
+        : { id: row.id, status: "rejected", reason: "audit_id_taken" };
+    }
+    const seq = (await this.db.remote_audit_log.count()) + 1;
+    const toStore: StoredAuditRow = { ...row, device_id: deviceId, seq };
+    await this.db.remote_audit_log.add(toStore);
+    return { id: row.id, status: "accepted" };
+  }
+
+  /**
+   * The stand-in for GET /api/audit/pull: every other device's row after
+   * the cursor, in arrival order, in one page. The first pull (no cursor)
+   * starts at the first row of the last 14 Cairo days.
+   */
+  async pullAuditSince(cursor: string | null): Promise<PullAuditResult> {
+    const deviceId = this.callerDeviceId();
+    const all = ((await this.db.remote_audit_log.toArray()) as StoredAuditRow[]).sort((a, b) => a.seq - b.seq);
+    const windowStart = cairoInstant(addDaysToClinicDay(todayInCairo(), -(AUDIT_FIRST_PULL_DAYS - 1)), "00:00");
+    const since = cursor !== null ? Number(cursor) : (all.find((row) => row.at >= windowStart)?.seq ?? all.length + 1) - 1;
+    const rows = all.filter((row) => row.seq > since && row.device_id !== deviceId);
+    return {
+      cursor: String(rows.at(-1)?.seq ?? since),
+      hasMore: false,
+      rows: rows.map(remoteAuditRowOf),
+    };
   }
 
   /**

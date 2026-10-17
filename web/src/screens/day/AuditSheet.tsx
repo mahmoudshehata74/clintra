@@ -1,18 +1,20 @@
 import { useState } from "react";
 import Ltr from "../../components/Ltr";
 import ToggleGroup from "../../components/ui/ToggleGroup";
+import { auditEntriesOfDay } from "../../db/auditEntries";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
-import type { AuditLog, CarePlan, ClinicDay, Membership, Patient, Prescription, User, Visit } from "../../db/types";
+import type { AuditEntry, CarePlan, ClinicDay, Membership, Patient, Prescription, User, Visit } from "../../db/types";
 import { PaymentMethod } from "../../db/types";
 import { describeAuditVerb, describeVisitFormChange } from "../../domain/auditVerb";
 import { formatWeekdayDayMonth } from "../../domain/displayDate";
 import type { Piastres } from "../../domain/money";
-import { clockTimeInCairo, todayInCairo } from "../../domain/time";
+import { auditScopeTags, isInAuditScope, type AuditScopeParent } from "../../domain/auditScope";
+import { clockTimeInCairo } from "../../domain/time";
 import { formatMoneyAmount } from "../money";
 import { formatActorName } from "./actorLabel";
 import { auditDotTone, type AuditDotTone } from "./auditDotTone";
-import { type AuditFilter, filterAuditRows, isAuditRowInScope } from "./auditLogFilters";
+import { type AuditFilter, filterAuditRows } from "./auditLogFilters";
 import { computeSinceLabel } from "../doctor/doctorDay";
 import { formatBareReceiptNumber, formatInvoiceNumber } from "./invoiceNumber";
 import Sheet from "./Sheet";
@@ -28,7 +30,7 @@ interface AuditSheetProps {
 }
 
 interface AuditRowView {
-  row: AuditLog;
+  row: AuditEntry;
   verb: string;
   /** What the row is about, after the verb ("أنشأ حجز · كريم فتحي"); "" for none. */
   subject: string;
@@ -75,7 +77,7 @@ const AUDITED_ENTITIES = new Set([
   "membership_practitioners",
 ]);
 
-function payloadOf(row: Pick<AuditLog, "before" | "after">): Record<string, unknown> | null {
+function payloadOf(row: Pick<AuditEntry, "before" | "after">): Record<string, unknown> | null {
   return (row.after ?? row.before) as Record<string, unknown> | null;
 }
 
@@ -102,10 +104,9 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
 
   const rows =
     useLiveQuery<AuditRowView[]>(async () => {
-      const allRows = await db.audit_log.toArray();
-      const candidateRows = allRows.filter(
-        (row) => AUDITED_ENTITIES.has(row.entity) && todayInCairo(new Date(row.at)) === today,
-      );
+      // Every device's rows of the day: this device's own and those pulled
+      // from the organization's others (db/auditEntries.ts).
+      const candidateRows = (await auditEntriesOfDay(db, today)).filter((row) => AUDITED_ENTITIES.has(row.entity));
 
       // visit_form_data's own payload carries only visit_id and
       // form_definition_id — no location_id or practitioner_id to scope by
@@ -113,7 +114,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
       // front lets both the scope check below and descriptionFor() treat it
       // the same way the reference entities are treated, rather than the
       // field's mere absence silently admitting every organisation's rows
-      // (isAuditRowInScope's documented "absence means org-wide" rule is
+      // (domain/auditScope.ts's "absence means org-wide" rule is
       // correct for entities with no location/practitioner concept at all —
       // this is not that; the fields exist, one join away).
       const formDataVisitIds = [
@@ -146,7 +147,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         itemPrescriptions.filter((p): p is Prescription => p != null).map((p) => [p.id, p]),
       );
 
-      function itemPrescriptionOf(row: AuditLog): Prescription | undefined {
+      function itemPrescriptionOf(row: AuditEntry): Prescription | undefined {
         const prescriptionId = payloadOf(row)?.prescription_id;
         return typeof prescriptionId === "string" ? itemPrescriptionsById.get(prescriptionId) : undefined;
       }
@@ -164,33 +165,34 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
       const itemPlans = await db.care_plans.bulkGet(itemPlanIds);
       const itemPlansById = new Map(itemPlans.filter((p): p is CarePlan => p != null).map((p) => [p.id, p]));
 
-      function itemPlanOf(row: AuditLog): CarePlan | undefined {
+      function itemPlanOf(row: AuditEntry): CarePlan | undefined {
         const planId = payloadOf(row)?.care_plan_id;
         return typeof planId === "string" ? itemPlansById.get(planId) : undefined;
       }
 
-      function isInScope(row: AuditLog): boolean {
+      // The parent a child row is scoped by — the visit of a visit form,
+      // the prescription of a drug, the plan of a session.
+      function scopeParentOf(row: AuditEntry): AuditScopeParent | undefined {
         if (row.entity === "visit_form_data") {
           const visitId = payloadOf(row)?.visit_id;
-          const visit = typeof visitId === "string" ? formDataVisitsById.get(visitId) : undefined;
-          return visit ? visit.location_id === locationId && visit.practitioner_id === practitionerId : false;
+          return typeof visitId === "string" ? formDataVisitsById.get(visitId) : undefined;
         }
         if (row.entity === "prescription_items") {
-          const prescription = itemPrescriptionOf(row);
-          return prescription
-            ? prescription.location_id === locationId && prescription.practitioner_id === practitionerId
-            : false;
+          return itemPrescriptionOf(row);
         }
         if (row.entity === "care_plan_items") {
-          const plan = itemPlanOf(row);
-          return plan ? plan.location_id === locationId && plan.practitioner_id === practitionerId : false;
+          return itemPlanOf(row);
         }
-        // A practitioner's own row carries neither field, only its id: it
-        // is in scope on that practitioner's log, at any location.
-        if (row.entity === "practitioners") {
-          return row.entity_id === practitionerId;
-        }
-        return isAuditRowInScope(row, practitionerId, locationId);
+        return undefined;
+      }
+
+      // domain/auditScope.ts: a row's own location and practitioner, its
+      // parent's for a child row (none without the parent: not listed), a
+      // practitioner's own row at any location; a field the row has no
+      // concept of never excludes it.
+      function isInScope(row: AuditEntry): boolean {
+        const tags = auditScopeTags(row, scopeParentOf(row));
+        return tags !== null && isInAuditScope(tags, practitionerId, locationId);
       }
 
       const scoped = candidateRows.filter(isInScope);
@@ -209,7 +211,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
       const usersById = new Map(users.filter((u): u is User => u != null).map((u) => [u.id, u]));
 
       // The patient a row is about, for the entities whose line names one.
-      function patientIdOf(row: AuditLog): string | undefined {
+      function patientIdOf(row: AuditEntry): string | undefined {
         if (row.entity === "prescription_items") {
           return itemPrescriptionOf(row)?.patient_id;
         }
@@ -245,7 +247,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         return formatActorName(membership, user);
       }
 
-      function contextFor(row: AuditLog): string {
+      function contextFor(row: AuditEntry): string {
         const payload = payloadOf(row);
         if (!payload) {
           return "";
@@ -275,7 +277,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         return "";
       }
 
-      function subjectFor(row: AuditLog): string {
+      function subjectFor(row: AuditEntry): string {
         const payload = payloadOf(row);
         if (!payload) {
           return "";

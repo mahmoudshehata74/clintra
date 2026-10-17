@@ -2,6 +2,7 @@ import Dexie, { type EntityTable } from "dexie";
 import { numberMarkKey } from "./deviceRegistration";
 import type {
   AuditLog,
+  RemoteAuditLog,
   CarePlan,
   CarePlanItem,
   CashClose,
@@ -58,6 +59,7 @@ export class ClintraDatabase extends Dexie {
   payments!: EntityTable<Payment, "id">;
   cash_close!: EntityTable<CashClose, "id">;
   audit_log!: EntityTable<AuditLog, "id">;
+  remote_audit_log!: EntityTable<RemoteAuditLog, "id">;
   specialty_templates!: EntityTable<SpecialtyTemplate, "id">;
   form_definitions!: EntityTable<FormDefinition, "id">;
   visit_form_data!: EntityTable<VisitFormData, "id">;
@@ -529,6 +531,17 @@ export class ClintraDatabase extends Dexie {
     // no audit row.
     this.version(22).stores({
       preferences: "key",
+    });
+
+    // Audit rows from the organization's other devices (docs/audit-sync.md):
+    // a store of their own, so audit_log keeps only this device's rows and
+    // its dense seq. `at` serves the audit sheet's today range and the
+    // 60-day retention; [entity+entity_id] the invoice's creator line. The
+    // device row's two new fields (audit_pushed_seq, audit_pull_cursor) read
+    // as 0 and null while absent, so no backfill runs: every existing local
+    // row is pushed from seq 0.
+    this.version(23).stores({
+      remote_audit_log: "id, at, [entity+entity_id]",
     });
   }
 }

@@ -27,6 +27,12 @@ path the ordinary e2e suite never takes (it runs on the in-browser
    بالإنترنت" and adds no one.
 8. Adding a staff member online creates them on the server, and the other
    device receives them.
+9. With that staff member signed in on A (an assistant) and the owner on B:
+   A books, completes and is paid for a visit; B's audit log lists the
+   booking, the completion and the payment once each, under the
+   assistant's name, and B's invoice reads "إنشاء {time} · {the
+   assistant}". A booking A makes offline reaches B's audit log once A is
+   back (docs/audit-sync.md).
 
 Every wait nudges the sync engine (as returning to the tab does) and polls;
 nothing sleeps.

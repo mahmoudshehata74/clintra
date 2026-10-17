@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\PushSyncOpsRequest;
 use App\Support\Sync\SyncOpApplier;
+use App\Support\Sync\SyncSeqLock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -42,6 +43,10 @@ class SyncPushController extends Controller
 
         $membershipId = DB::selectOne('select current_membership() as id')->id;
         $ops = $request->validated()['ops'];
+
+        // Before any op writes: this push holds its organization's sync
+        // lock until the request commits (SyncSeqLock).
+        SyncSeqLock::acquire();
 
         $results = [];
         $blockedEntityIds = [];

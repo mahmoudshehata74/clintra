@@ -440,6 +440,29 @@ export interface AuditLog {
 }
 
 /**
+ * An audit row as the audit sheet and the invoice read it, whichever device
+ * wrote it (db/auditEntries.ts): this device's own `audit_log` row without
+ * its device-local `seq`, or a row pulled from another device.
+ */
+export type AuditEntry = Omit<AuditLog, "seq">;
+
+/**
+ * An audit row another device of the organization wrote, pulled from
+ * GET /api/audit/pull (sync/auditSync.ts; docs/audit-sync.md). Kept in its
+ * own store, `remote_audit_log`, so nothing that reasons about this
+ * device's own `seq` (undo, the session-link restore) ever sees it. Never
+ * edited; deleted only by the 60-day retention (sync/auditSync.ts's
+ * pruneRemoteAuditRows). Added in database version 23.
+ */
+export interface RemoteAuditLog extends AuditEntry {
+  /** The scope tags its device pushed (domain/auditScope.ts); null = organization-wide. */
+  location_id: string | null;
+  practitioner_id: string | null;
+  /** The device that wrote it. */
+  device_id: string;
+}
+
+/**
  * One outbound change, queued for the future sync transport. Added in
  * database version 2, alongside the audited mutation pipeline (see
  * db/mutate.ts). op_id is its own primary key, distinct from entity_id.
@@ -568,6 +591,19 @@ export interface DeviceRegistration {
    * which reads as no marks. Added in database version 19.
    */
   number_marks?: Record<string, number>;
+  /**
+   * The highest local `audit_log.seq` the server has answered for
+   * (sync/auditSync.ts's runAuditPush): every row above it is still to go
+   * up, so a device starts by pushing every row it holds. Absent reads as 0.
+   * Added in database version 23.
+   */
+  audit_pushed_seq?: number;
+  /**
+   * The last `device_audit_log.seq` this device has pulled
+   * (sync/auditSync.ts's runAuditPull). Absent or null: the next pull is
+   * the first, which starts 14 Cairo days back. Added in database version 23.
+   */
+  audit_pull_cursor?: string | null;
 }
 
 // Declared now, unused in v1, no screens.

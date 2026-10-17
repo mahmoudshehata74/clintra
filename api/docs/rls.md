@@ -936,6 +936,53 @@ is server-created, for its own server-side actions, not a client's synced
 history. Designing that reconciliation is future work; see
 `docs/schema.md`'s new "v11 additions" section.
 
+## One organization's sync writes commit in seq order
+
+`sync_ledger.seq` is the pull cursor ("The sync pull endpoint" below), and
+an identity value is assigned when the row is inserted, not when its
+transaction commits. Two push transactions of one organization running at
+once could therefore commit out of seq order: push 1 inserts seq 41 and is
+still applying its next op, push 2 inserts seq 42 and commits. A device that
+pulls at that moment receives 42, stores cursor 42, and never asks for 41
+again — once push 1 commits, its row sits below every cursor that matters.
+Nothing reports the loss; the device simply never has that row.
+
+**Fix**: every transaction that inserts into `sync_ledger` first takes
+`pg_advisory_xact_lock(hashtextextended('sync_seq:' || org_id::text, 0))`
+for its own organization (`App\Support\Sync\SyncSeqLock`, with
+`current_org()` as the organization), before its first insert, and holds it
+until it commits — a transaction-scoped advisory lock, released by the
+commit or rollback itself. The two writers:
+
+- `SyncPushController::push` takes it once per request, after the token's
+  membership is resolved and before the first op is applied, so every op of
+  the batch runs under it.
+- `StaffController::store` takes it before calling `add_staff_member`, so it
+  is held before the function's first write and through the ledger rows
+  written after it.
+
+Both run inside `ApplyMembership`'s request transaction, so the lock is held
+to that transaction's commit. Within one organization the next seq is
+therefore assigned only after the previous writer has committed, and seq
+order equals commit order; a pull can see a seq only once every lower seq
+of its organization is committed. The key is per organization, so other
+organizations never wait on each other, and seq stays one global identity
+(other organizations' values interleave, invisible through RLS, as before).
+Taking the lock before any write — rather than just before the ledger
+insert — keeps it the first lock every writer of an organization takes,
+so a push can never hold a row lock another push waits for while waiting
+for the advisory lock itself. Pulls take no lock. An advisory lock needs no
+grant, so no role changed. `device_audit_log` (`docs/audit-sync.md`) shares
+the same key and rule.
+
+`tests/Feature/Rls/SyncSeqOrderTest.php`: while one connection holds a push
+(or a staff add) open, a second connection's `pg_try_advisory_xact_lock` on
+that organization's key returns false and on another organization's key
+true; and a push from a second device, started in its own process while
+the first push is open, waits for it, so a pull run between the two (in a
+third process) followed by a pull from its cursor receives both rows. With
+the lock removed, all three fail — the third by losing the first push's row.
+
 ## Audit attribution is enforced in the database, not application code
 
 `audit_log_insert`'s `WITH CHECK` originally scoped only the row's org
@@ -980,6 +1027,113 @@ membership can insert an audit row attributed to itself; the same
 membership attributing one to a *different* membership in the same org is
 rejected (`42501`); a cross-org insert is still rejected, confirming the
 original check wasn't weakened by ANDing the new one onto it.
+
+## Device audit rows
+
+`device_audit_log` (`2026_09_12_000034_create_device_audit_log_table.php`,
+`docs/schema.md`'s v22 additions, `docs/audit-sync.md`) holds every device's
+local audit rows, so the owner sees who did what on any device. It is a
+table of its own, not rows in `audit_log`, because the two kinds of row say
+different things. An `audit_log` row is the server's evidence: its actor is
+the token's membership, which `audit_log_insert` checks. A device audit
+row's actor is the person signed in by PIN on that device — which the
+server cannot see, since every device token is bound to the owner who
+registered the device (`docs/auth-plan.md`). Requiring the token's
+membership as the actor would name the owner on every row, so the actor is
+accepted as the device's claim, limited to the organization's members, and
+what the server does know is stored beside it: `pushed_by_membership_id`
+(checked against `current_membership()`) and `device_id` (the token's
+device, set by the push endpoint). `audit_log`, its policies and its grants
+are unchanged, and `docs/sync-plan.md`'s Q1/Q13 still hold for it.
+
+| Object | device_audit_log | audit_log (for comparison) |
+|---|---|---|
+| RLS | ENABLE + FORCE | ENABLE + FORCE |
+| SELECT policy | `device_audit_log_select`: org + location tag + practitioner tag | `audit_log_select`: org |
+| INSERT policy | `device_audit_log_insert`: the SELECT expression + pusher = `current_membership()` + actor and device of `current_org()` | `audit_log_insert`: org + actor = `current_membership()` |
+| UPDATE / DELETE policy | none | none |
+| `clintra_app` grant | SELECT, INSERT (granted alone, not the trait's four) | SELECT, INSERT (UPDATE, DELETE revoked) |
+| Provisioning roles | nothing | INSERT (their own server rows) |
+| `seq` | identity, GENERATED ALWAYS, UNIQUE | identity, BY DEFAULT, UNIQUE |
+| Foreign keys | org, location, practitioner, actor, pusher, device; all RESTRICT | org, actor; RESTRICT |
+
+```sql
+-- device_audit_log_select (USING)
+org_id = current_org()
+AND (location_id IS NULL OR location_id IN (SELECT * FROM allowed_locations()))
+AND (practitioner_id IS NULL OR practitioner_id IN (SELECT * FROM allowed_practitioners()))
+
+-- device_audit_log_insert (WITH CHECK): the same, and
+AND pushed_by_membership_id = current_membership()
+AND actor_membership_id IN (SELECT id FROM memberships WHERE org_id = current_org())
+AND device_id IN (SELECT id FROM device WHERE org_id = current_org())
+```
+
+A null tag means organization-wide (an entity with no location or
+practitioner: a patient, a service, a membership). Each `OR` branch sits
+inside an `AND` with `org_id = current_org()`, so none is reachable without
+a membership ("A worked failure: specialty_templates' OR clause").
+
+**Append-only, two layers.** No UPDATE or DELETE policy exists, and
+`clintra_app` holds no UPDATE or DELETE grant — a refused statement fails
+with `42501` on the grant, as on `audit_log`. `clintra_owner` is bound by
+FORCE and has no policy for either command, so its UPDATE and DELETE affect
+zero rows. No trigger refuses them for every role: `clintra_fixtures`
+(test-only, `BYPASSRLS`) is what the Pest cleanup and the live run's org
+removal delete through. `seq` is `GENERATED ALWAYS`, so no writer supplies
+one (`428C9`).
+
+**Known gap: the actor is a claim.** A device holding a stolen token could
+name any member of its own organization as the actor. That is the same
+limit as every settings write, and it closes with the backlog's
+server-side per-person identity, which would let the policy compare the
+actor with a proven acting membership without changing the table.
+
+**The endpoints** (`App\Http\Controllers\DeviceAuditController`), behind
+the `membership` middleware and `throttle:sync`, on the RLS-bound
+`clintra_app` connection, like the sync endpoints and separate from them —
+an audit row is not a sync op, writes no `sync_ledger` row and no
+`audit_log` row, and never enters a device's sync review:
+
+- `POST /api/audit/push` — 1 to 200 rows (the request refuses any other
+  size with 422). It takes the organization's sync lock before the first
+  insert ("One organization's sync writes commit in seq order"). Each row
+  gets its own result and savepoint (`App\Support\Sync\DeviceAuditPusher`):
+  `accepted`; `duplicate` (the id is stored with the same content —
+  nothing written, so a resend is a no-op); `rejected` with `audit_invalid`
+  (a field that does not parse, a before/after that does not match the
+  action, more than 64 KB of JSON), `org_mismatch`, `unknown_entity`
+  (outside `SyncableTables::NAMES` and `users`), `audit_secret_field` (a
+  `memberships` record with `pin_hash` or `pin_salt`), `actor_not_in_org`,
+  `scope_mismatch` (a tag that disagrees with the record's own
+  `location_id`/`practitioner_id`, a `practitioners` row not tagged with
+  itself, or a tag outside the pusher's scope) or `audit_id_taken` (the id
+  is stored with other content, or is another organization's); `failed`
+  (`internal_error`, reported) for anything else. `pushed_by_membership_id`
+  and `device_id` are the token's, whatever the body says. Laravel's global
+  `TrimStrings` and `ConvertEmptyStringsToNull` skip this route
+  (`bootstrap/app.php`), so a record is stored as the device wrote it and a
+  resend matches it.
+- `GET /api/audit/pull?cursor=` — the organization's rows other devices
+  wrote, `seq` order, 200 a page (`App\Support\Sync\DeviceAuditPuller`).
+  The calling device's own rows are left out. No cursor: the first page
+  starts at the first visible row whose `at` falls in the last 14 Cairo days
+  (`SyncWindow::AUDIT_FIRST_PULL_DAYS`), or at the caller's end when there
+  is none. A cursor above the caller's visible maximum is 422
+  `invalid_cursor`. `pushed_by_membership_id` and `received_at` are not
+  sent.
+
+`DeviceAuditSyncTest.php` covers each status and reason, the token's
+membership and device overriding the body, a resend, a refused row amid
+accepted ones, the batch limits, cross-organization pushes and pulls,
+paging, the first pull's window and the own-device exclusion;
+`SyncSeqOrderTest.php` proves the audit push holds the shared lock.
+
+`DeviceAuditLogTest.php` pins both RLS flags, both policies' deparsed text,
+the grants (clintra_app's exactly SELECT and INSERT; none for any other
+role), the identity, the indexes, the foreign keys and the action check,
+and proves the cross-organization and listed-location isolation, the
+refused UPDATE/DELETE, the pusher check and the accepted claimed actor.
 
 ## Redundant grants revoked, not just inert
 

@@ -5,6 +5,7 @@ import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import { CardFooter } from "../../components/ui/Card";
 import { SheetPanelCloseButton } from "../../components/ui/SheetPanel";
+import { findAuditEntry } from "../../db/auditEntries";
 import { db } from "../../db/database";
 import { formatMoneyAmount } from "../money";
 import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo } from "../../domain/time";
@@ -43,7 +44,7 @@ interface InvoiceData {
   payments: Payment[];
   patient: Patient | undefined;
   practitioner: Practitioner | undefined;
-  /** Who created the invoice, from its audit row — `.runrow .count`'s name; null when this device has no such row. */
+  /** Who created the invoice, from its audit row on any device — `.runrow .count`'s name; null when no row has reached this device. */
   createdByName: string | null;
 }
 
@@ -97,9 +98,8 @@ export default function InvoiceSheet({
       db.payments.where("invoice_id").equals(invoiceId).toArray(),
       db.patients.get(invoice.patient_id),
       db.practitioners.get(invoice.practitioner_id),
-      db.audit_log
-        .filter((row) => row.entity === "invoices" && row.entity_id === invoiceId && row.action === AuditAction.Create)
-        .first(),
+      // Whichever device created it (db/auditEntries.ts).
+      findAuditEntry(db, "invoices", invoiceId, AuditAction.Create),
     ]);
     const creator = createdRow ? await db.memberships.get(createdRow.actor_membership_id) : undefined;
     const creatorUser = creator ? await db.users.get(creator.user_id) : undefined;

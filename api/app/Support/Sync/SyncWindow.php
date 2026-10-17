@@ -13,4 +13,11 @@ namespace App\Support\Sync;
 class SyncWindow
 {
     public const DAYS = 60;
+
+    /**
+     * A device's first audit pull starts this many Cairo days back, today
+     * included (docs/audit-sync.md's "Rows going down"); its cursor then
+     * continues forward.
+     */
+    public const AUDIT_FIRST_PULL_DAYS = 14;
 }

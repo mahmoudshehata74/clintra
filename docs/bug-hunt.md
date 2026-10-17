@@ -38,7 +38,7 @@ an edge).
 | A-01 | Settings → staff | any | "＋ إضافة موظف" | A way back out of the form | No cancel: only saving, or closing the settings sheet (`StaffPanel.tsx` says the save is its one action) | minor | decided: the form gets "إلغاء" like every other settings form — fixed in f133688 |
 | A-02 | Audit log | any | Open it right after an action | — | The newest rows read "من 0د" | minor | decided: under a minute reads "دلوقتي" wherever the "من Nد" pattern is used — the audit log was the one place left; fixed in 9d757b0 |
 | A-03 | Settings → working hours | any | Hardening scenario 24: switch a doctor between slots and queue | A way to switch | No control switches a schedule's mode; the scenario cannot be run | major | decided: a slots/queue switch in the hours editor, taking effect from the next day (today and its visits keep today's mode, said under the switch) — not built: `schedules.mode` is one value per weekday row and no existing field can date the change, so it needs a schema change the owner has not yet authorised (`docs/session-handoff.md`'s backlog) |
-| A-04 | Invoice, audit log | two devices | Device A completes a visit; open its invoice and the audit log on device B | — | B's invoice reads "إنشاء 19:14" with no name, and B's audit log lists none of A's actions: `audit_log` is local to the device that wrote it | minor | decided: audit rows sync across devices — the next PR, with a server table and RLS (`docs/session-handoff.md`'s backlog) |
+| A-04 | Invoice, audit log | two devices | Device A completes a visit; open its invoice and the audit log on device B | — | B's invoice reads "إنشاء 19:14" with no name, and B's audit log lists none of A's actions: `audit_log` is local to the device that wrote it | minor | decided: audit rows sync across devices, with a server table and RLS — done in `feat/audit-sync` (`docs/audit-sync.md`) |
 | A-05 | Sync review, services, messages, visit workspace | any | A write fails (refused or a storage error) | An Arabic line saying it did not save | Silent: "خليها كده"/"شيلها"/"تمام", a price override's "حذف", a message's "اتفتحت"/"اتبعتت", and a visit field's save on blur leave an unhandled rejection and no message | minor | decided: one shared line, "ماتحفظش، جرّب تاني" (`saveFailedStrings` in `web/src/components/strings.ts`) — fixed in e4db891 |
 | A-06 | Move and cancel sheets | any | Open either | — | No head and no close button, unlike every other sheet (backdrop, drag and Escape still close them); they predate the restyle and were left tokens-only | minor | decided: yes, through `SheetHeader` — fixed in 647cf2b |
 | A-07 | Provisioning (CLI) | Windows console | `php artisan clintra:provision` with an Arabic clinic or doctor name | The name stored as typed | The console layer reads input in the OEM code page, which has no Arabic: the name is stored garbled (seen when answers are piped; a Windows console cannot type Arabic in that code page either) | major | decided: a documented rule, no code change — run `clintra:provision` on the Linux server (or WSL) in a UTF-8 shell (`api/README.md`, `docs/session-handoff.md`) |
@@ -113,7 +113,7 @@ request.
 
 The owner decided every [ask] row; the table's Status column records each
 decision. A-01, A-02, A-05 and A-06 are fixed with their tests; A-07 is a
-documented rule; A-04 is the next PR; A-03 is decided but waits on a
+documented rule; A-04 is done (`feat/audit-sync`); A-03 is decided but waits on a
 schema change.
 
 ### Existing tests edited

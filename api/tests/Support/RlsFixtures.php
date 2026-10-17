@@ -21,6 +21,7 @@ trait RlsFixtures
     private array $fixtureIds = [];
 
     private const CLEANUP_ORDER = [
+        'device_audit_log',
         'audit_log',
         'sync_ledger',
         'visits',
@@ -432,6 +433,34 @@ trait RlsFixtures
         ], $overrides)));
 
         return $this->track('audit_log', $id);
+    }
+
+    /**
+     * One device audit row, as a device pushed it (docs/audit-sync.md).
+     *
+     * @param  array<string, mixed>  $overrides
+     */
+    protected function makeDeviceAuditLog(string $orgId, string $actorMembershipId, string $deviceId, array $overrides = []): string
+    {
+        $attributes = $this->normalizeTimestamps(array_merge([
+            'id' => (string) Str::uuid(),
+            'org_id' => $orgId,
+            'location_id' => null,
+            'practitioner_id' => null,
+            'actor_membership_id' => $actorMembershipId,
+            'pushed_by_membership_id' => $actorMembershipId,
+            'device_id' => $deviceId,
+            'entity' => 'patients',
+            'entity_id' => (string) Str::uuid(),
+            'action' => 'create',
+            'before' => null,
+            'after' => json_encode(['full_name' => 'patient']),
+            'at' => now(),
+        ], $overrides));
+
+        $this->fx()->table('device_audit_log')->insert($attributes);
+
+        return $this->track('device_audit_log', $attributes['id']);
     }
 
     /**

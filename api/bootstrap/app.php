@@ -40,6 +40,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // it publishes one — see docs/deployment.md's "HTTPS and reverse
         // proxies".
         $middleware->trustProxies(at: '*');
+
+        // A device audit row is stored as the device wrote it: its records'
+        // strings keep their spaces and an empty string stays "" (both
+        // global input middlewares would otherwise rewrite them, and a
+        // resend would no longer match the stored row — docs/audit-sync.md).
+        $isAuditPush = fn (Request $request) => $request->is('api/audit/push');
+        $middleware->trimStrings(except: [$isAuditPush]);
+        $middleware->convertEmptyStringsToNull(except: [$isAuditPush]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // This is an API-only backend: every response is JSON, never an HTML error page.
