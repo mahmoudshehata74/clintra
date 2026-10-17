@@ -173,7 +173,9 @@ test('the checks, unique key, indexes and non-cascading foreign keys are in plac
 
 test('a message is created at rev 1 with created_by from the token, then marked and unmarked; nothing else changes', function () {
     ['credential' => $credential, 'patientId' => $patientId] = messageFixture();
-    $row = messageRow($credential, $patientId, ['created_by' => (string) Str::uuid()]);
+    $row = messageRow($credential, $patientId);
+    // No claim: the token's membership (ActorAttributionTest covers claims).
+    unset($row['created_by']);
     $create = messageOp($row);
 
     pushOps($credential['token'], [$create])->assertOk()
@@ -300,7 +302,9 @@ test('every template key, including custom, and both channels are accepted', fun
 
 test('a template override is created, updated and deleted, with updated_by from the token', function () {
     $credential = makeAuthenticatedDevice();
-    $row = templateRow($credential, ['updated_by' => (string) Str::uuid()]);
+    $row = templateRow($credential);
+    // No claim: the token's membership (ActorAttributionTest covers claims).
+    unset($row['updated_by']);
 
     $create = templateOp($row);
     pushOps($credential['token'], [$create])->assertJson(['results' => [['status' => 'accepted', 'rev' => 1]]]);
@@ -369,9 +373,11 @@ test('org B can neither read nor write org A\'s messages and template overrides'
         ['op_id' => $editAsIs['op_id'], 'status' => 'failed', 'reason' => 'org_mismatch'],
     ]]);
 
-    // With org B's own org_id: the rows are invisible, so nothing matches.
+    // With org B's own org_id (and, for the template, org B's own member as
+    // the actor, as B's device would send): the rows are invisible, so
+    // nothing matches.
     $markDisguised = messageOp(array_merge($message, ['org_id' => $credentialB['orgId'], 'marked_sent_at' => now()->toIso8601String()]), 'update', 1);
-    $editDisguised = templateOp(array_merge($template, ['org_id' => $credentialB['orgId'], 'body' => 'B']), 'update', 1);
+    $editDisguised = templateOp(array_merge($template, ['org_id' => $credentialB['orgId'], 'body' => 'B', 'updated_by' => $credentialB['membershipId']]), 'update', 1);
     pushOps($credentialB['token'], [$markDisguised, $editDisguised])->assertJson(['results' => [
         ['op_id' => $markDisguised['op_id'], 'status' => 'rejected', 'reason' => 'conflict_stale_rev'],
         ['op_id' => $editDisguised['op_id'], 'status' => 'rejected', 'reason' => 'conflict_stale_rev'],

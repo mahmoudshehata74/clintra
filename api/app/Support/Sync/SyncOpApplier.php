@@ -82,6 +82,10 @@ class SyncOpApplier
             return $this->rejected($op, 'series_mismatch');
         }
 
+        if (! $this->claimsActorInOrg($op, $table, $currentOrgId)) {
+            return $this->rejected($op, 'actor_not_in_org');
+        }
+
         $op = $this->withStoredEmptyTitle($op, $table);
         $profileRule = $this->applyProfileRule($op, $table);
 
@@ -366,9 +370,9 @@ class SyncOpApplier
      *   (a second device re-sending the same print, for instance) is
      *   `accepted` as a no-op: nothing is written — no rev bump, no ledger
      *   or audit row — and the result carries the row's current rev. The
-     *   actor column (created_by) is left out of the comparison: the server
-     *   assigns it from the token on every write it does apply, so the
-     *   payload's value never decides anything.
+     *   actor column (created_by) is left out of the comparison: it says
+     *   who acted, not what the prescription holds, and a no-op writes
+     *   nothing, so the stored creator stays.
      * - A prescription_items create, update or delete is refused as
      *   `prescription_printed` when its parent is printed — the parent the
      *   payload names and, for an update or delete, the parent the row
@@ -498,8 +502,8 @@ class SyncOpApplier
      *   from the stored one is refused as `message_immutable` (a column
      *   carried unchanged, as a device's whole row is, is fine; timestamps
      *   compare as instants; the actor column is left out of the comparison,
-     *   as in leavesRowUnchanged, since the payload's value never decides
-     *   anything). An accepted update is narrowed to the allowed
+     *   as in leavesRowUnchanged, since an update never writes it). An
+     *   accepted update is narrowed to the allowed
      *   columns, so it writes `marked_sent_at` and nothing else — not even the
      *   actor column, which stays the creator's (buildAttributes).
      *   `marked_sent_at` must be null or a timestamp (`message_invalid`).
@@ -813,23 +817,69 @@ class SyncOpApplier
     }
 
     /**
+     * The actor column's claim (SyncableTables::ACTOR_COLUMNS): the person
+     * signed in on the device, which the token cannot tell — every device's
+     * token carries the owner who registered it. A claim is accepted when it
+     * names a membership of the token's own organization, active or not (a
+     * row written offline before a deactivation must still go up), the same
+     * rule as device audit rows (docs/audit-sync.md's decision 2). A claim
+     * that is not one — another organization's membership, a membership that
+     * does not exist, anything but a uuid — is refused as `actor_not_in_org`.
+     * An absent or null claim is not checked: buildAttributes falls back to
+     * the token's membership.
+     *
+     * Attribution only: no permission check reads the claim — every one
+     * stays on the token's membership (the RLS policies' current_membership(),
+     * the ledger and the server's own audit_log). A device with a stolen
+     * token could name any staff member of its organization; server-side
+     * per-person identity (the backlog) closes that (api/docs/rls.md's
+     * "Actor attribution").
+     *
+     * Not checked where the column is not written: a delete, and an update
+     * of an append-only row (it keeps its creator).
+     */
+    private function claimsActorInOrg(array $op, string $table, string $orgId): bool
+    {
+        $actorColumn = SyncableTables::actorColumn($table);
+
+        if ($actorColumn === null || $op['action'] === 'delete' || $this->keepsCreator($op, $table)) {
+            return true;
+        }
+
+        $claim = ($op['payload'] ?? [])[$actorColumn] ?? null;
+
+        if ($claim === null) {
+            return true;
+        }
+
+        // Read through memberships' own policy (the caller's organization
+        // only), with the organization named as well; a non-uuid never
+        // reaches the uuid column.
+        return is_string($claim) && Str::isUuid($claim)
+            && DB::table('memberships')->where('id', $claim)->where('org_id', $orgId)->exists();
+    }
+
+    /** An append-only row's actor column is its creator's: an update there (a message marked sent) leaves it alone. */
+    private function keepsCreator(array $op, string $table): bool
+    {
+        return $op['action'] === 'update' && array_key_exists($table, SyncableTables::APPEND_ONLY_COLUMNS);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function buildAttributes(array $op, string $table, string $membershipId): array
     {
         $attributes = array_merge($op['payload'] ?? [], ['id' => $op['entity_id']]);
 
-        // "Who did this" is always the token's membership, never the
-        // payload's — docs/sync-plan.md's Q12, extended from
-        // audit_log.actor_membership_id to every table with an equivalent
-        // column.
-        // An append-only row's actor column is its creator's: an update
-        // there (a message marked sent) leaves it alone.
+        // "Who did this" is the device's claim, already held to the token's
+        // organization (claimsActorInOrg); without one, the token's
+        // membership. sync_ledger and audit_log keep the token's membership
+        // regardless (recordAcceptedWrite).
         $actorColumn = SyncableTables::actorColumn($table);
-        $keepsCreator = $op['action'] === 'update' && array_key_exists($table, SyncableTables::APPEND_ONLY_COLUMNS);
 
-        if ($actorColumn !== null && ! $keepsCreator) {
-            $attributes[$actorColumn] = $membershipId;
+        if ($actorColumn !== null && ! $this->keepsCreator($op, $table)) {
+            $attributes[$actorColumn] = $attributes[$actorColumn] ?? $membershipId;
         }
 
         // rev is never accepted from a client under any name — the
