@@ -471,11 +471,10 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
   broken by id (`sortServicesByName`), so the order is always the same.
 
 ## Backlog
-- **Next PR** — the actor columns the sync push overwrites with the token's membership (`visits.created_by`, `payments.created_by`, `prescriptions.created_by`, `messages.created_by`, `message_templates.updated_by`, `cash_close.closed_by`; `SyncOpApplier::buildAttributes`): since every device token is the registering owner's, after a pull every device's "سجّله …" byline names the owner instead of the person who booked. Owner-confirmed as its own PR, the very next one after audit sync. (`docs/audit-sync.md`, question 9.)
-- **After the actor-columns PR** — A-03, its own schema PR: schedules gain next_mode (slots|queue) and next_mode_from (date); a date's mode is next_mode once it reaches next_mode_from, else mode; the working-hours editor's switch writes them for tomorrow; today's visits untouched; migration + sync payload + Pest; owner-authorised schema change. Hardening scenario 24 waits on it. (`docs/bug-hunt.md`, A-03.)
+- **Next PR** — A-03, its own schema PR: schedules gain next_mode (slots|queue) and next_mode_from (date); a date's mode is next_mode once it reaches next_mode_from, else mode; the working-hours editor's switch writes them for tomorrow; today's visits untouched; migration + sync payload + Pest; owner-authorised schema change. Hardening scenario 24 waits on it. (`docs/bug-hunt.md`, A-03.)
 - Invoice item editing (screen 5's "تعديل بنود") — owner decision of the prototype alignment: recorded, not built.
 - Queue reordering (screen 3's "إعادة ترتيب") — owner decision of the prototype alignment: recorded, not built.
-- Server-side per-person identity: the acting membership sent and verified per request (e.g. a PIN-derived proof). Today the server knows only the membership the device token was issued to (the owner who registered the device), so it cannot tell who is signed in; this would close the staff owner check's gap and the other settings-write gaps.
+- Server-side per-person identity: the acting membership sent and verified per request (e.g. a PIN-derived proof). Today the server knows only the membership the device token was issued to (the owner who registered the device), so it cannot tell who is signed in; this would close the staff owner check's gap and the other settings-write gaps, and turn the claimed actor (device audit rows and the actor columns, `api/docs/rls.md`'s "Actor attribution") into a check.
 - Members added locally on a device that was stuck before the staff-identity fix stay local-only — none exist today. If one appears, re-add the person online and deactivate the local row.
 
 ## Data decisions for the rebuild

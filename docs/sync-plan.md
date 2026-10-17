@@ -761,6 +761,15 @@ them as one rule would be wrong:
   owner's decision, until server-side per-person identity can prove who is
   signed in. `audit_log_insert` and its actor check are unchanged.
 
+- **Addendum (actor columns, `docs/audit-sync.md`'s question 9):** the
+  per-table actor columns (`SyncableTables::ACTOR_COLUMNS`) now follow the
+  same rule: the device's claim is kept when it names a member of the
+  token's organization, refused as `actor_not_in_org` otherwise, and an
+  absent claim is the token's membership. `actor_membership_id` in
+  `sync_ledger` and `audit_log` is still the token's. Attribution only — no
+  permission check reads the claim (`api/docs/rls.md`'s "Actor
+  attribution").
+
 ---
 
 ## Local unique collisions on pull
