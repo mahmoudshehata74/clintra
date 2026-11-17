@@ -20,6 +20,9 @@ function schedule(overrides: Partial<Schedule>): Schedule {
   };
 }
 
+// A Monday (weekday 1).
+const TODAY = "2026-10-19";
+
 const STRINGS = { slots: "مواعيد", queue: "طابور", dayOff: "إجازة", minutesUnit: "د", patientsUnit: "مريض" };
 
 describe("buildWorkingHoursRows", () => {
@@ -27,7 +30,7 @@ describe("buildWorkingHoursRows", () => {
     const rows = buildWorkingHoursRows([
       schedule({ id: "mon", weekday: 1 }),
       schedule({ id: "thu", weekday: 4, mode: ScheduleMode.Queue, slot_minutes: null, max_capacity: 20, start_time: "17:00", end_time: "21:00" }),
-    ]);
+    ], TODAY);
     expect(rows.map((row) => row.weekday)).toEqual([0, 1, 2, 3, 4, 5, 6]);
     expect(rows[0]).toEqual({ key: "off-0", weekday: 0, schedule: undefined, hours: "—", mode: { kind: "day_off" } });
     expect(rows[1]).toMatchObject({ key: "mon", hours: "09:00 — 14:00", mode: { kind: "slots", slotMinutes: 30 } });
@@ -38,9 +41,26 @@ describe("buildWorkingHoursRows", () => {
     const rows = buildWorkingHoursRows([
       schedule({ id: "late", weekday: 2, start_time: "17:00", end_time: "20:00" }),
       schedule({ id: "early", weekday: 2, start_time: "09:00", end_time: "12:00" }),
-    ]);
+    ], TODAY);
     expect(rows.filter((row) => row.weekday === 2).map((row) => row.key)).toEqual(["early", "late"]);
     expect(rows).toHaveLength(8);
+  });
+
+  it("reads each weekday's mode on its next day: today's mode today, the switched mode from tomorrow", () => {
+    const pending = { mode: ScheduleMode.Slots, next_mode: ScheduleMode.Queue, next_mode_from: "2026-10-20", max_capacity: null };
+    const rows = buildWorkingHoursRows(
+      [
+        schedule({ id: "sun", weekday: 0, ...pending }),
+        schedule({ id: "mon", weekday: 1, ...pending }),
+        schedule({ id: "tue", weekday: 2, ...pending }),
+      ],
+      TODAY,
+    );
+    // Monday is today, before the switch starts; Tuesday is tomorrow, and
+    // Sunday's next day (2026-10-25) is after it.
+    expect(rows[1].mode).toEqual({ kind: "slots", slotMinutes: 30 });
+    expect(rows[2].mode).toEqual({ kind: "queue", maxCapacity: null });
+    expect(rows[0].mode).toEqual({ kind: "queue", maxCapacity: null });
   });
 });
 

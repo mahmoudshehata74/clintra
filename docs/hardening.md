@@ -390,7 +390,12 @@ continuous sitting, on the deployed app, as a single simulated day):
 
 *Day-level operations (24–27)*
 24. Switch a practitioner's schedule between slots mode and queue mode
-    (owner/settings) mid-simulation and confirm no visit data is lost.
+    (owner/settings, the working-hours switch) mid-simulation. The switch
+    takes effect from tomorrow: confirm today's grid, today's visits and
+    today's mode are unchanged, the line under the switch says so, and
+    tomorrow opens in the new mode with every visit already booked from
+    tomorrow on converted (none lost or duplicated, none before tomorrow
+    touched). Switch back before tomorrow and confirm nothing changes.
 25. Add a patient to the queue directly (queue-mode day) and confirm their
     expected-wait estimate appears once at least two consultations have
     completed that day.

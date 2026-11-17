@@ -140,6 +140,15 @@ export interface Schedule {
   start_time: ClockTime;
   end_time: ClockTime;
   mode: ScheduleMode;
+  /**
+   * The mode from next_mode_from on — a slots/queue switch dated tomorrow by
+   * the working-hours editor (db/scheduleModeSwitch.ts). Null, or absent on
+   * a row written before it existed, with no switch pending. Read a day's
+   * mode through effectiveScheduleMode, never mode alone.
+   */
+  next_mode?: ScheduleMode | null;
+  /** The first Cairo day next_mode applies to; set and cleared with next_mode. */
+  next_mode_from?: ClinicDay | null;
   /** Slots mode only. */
   slot_minutes: number | null;
   /** Queue mode only. */

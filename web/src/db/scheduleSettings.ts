@@ -1,5 +1,5 @@
 import { id } from "../domain/id";
-import { ScheduleMode } from "../domain/scheduleMode";
+import { effectiveScheduleMode, foldScheduleMode, ScheduleMode } from "../domain/scheduleMode";
 import { todayInCairo, weekdayOf } from "../domain/time";
 import { occupiesSlot } from "../domain/visitStatus";
 import { resolveActingMembership } from "./actingMembership";
@@ -39,6 +39,11 @@ export type UpdateWorkingHoursResult =
  * task forbids), it returns "visits_on_old_grid" so the UI can tell the owner
  * to clear or move those visits first. start_time/end_time and queue capacity
  * are always editable — they don't rewrite any visit.
+ *
+ * Which of slot length or capacity is edited follows the row's mode today
+ * (effectiveScheduleMode). A row whose slots/queue switch has taken effect
+ * is folded on this save (foldScheduleMode): mode becomes next_mode and
+ * both next_* are cleared, in the same write.
  */
 export async function updateWorkingHours(
   db: ClintraDatabase,
@@ -60,7 +65,8 @@ export async function updateWorkingHours(
     return { ok: false, reason: "end_before_start" };
   }
 
-  const isSlots = schedule.mode === ScheduleMode.Slots;
+  const today = todayInCairo();
+  const isSlots = effectiveScheduleMode(schedule, today) === ScheduleMode.Slots;
   if (isSlots) {
     if (update.slotMinutes === null || update.slotMinutes <= 0) {
       return { ok: false, reason: "invalid_slot_minutes" };
@@ -82,7 +88,7 @@ export async function updateWorkingHours(
   }
 
   const after: Schedule = {
-    ...schedule,
+    ...foldScheduleMode(schedule, today),
     start_time: update.startTime,
     end_time: update.endTime,
     slot_minutes: isSlots ? update.slotMinutes : schedule.slot_minutes,
@@ -113,9 +119,10 @@ const DEFAULT_SLOT_MINUTES = 30;
  * What a day off turned into a working day starts from: the most common
  * hours among the practitioner's existing working days at this location
  * (ties go to the earlier start, then the earlier end), else 09:00–17:00.
- * The new row copies its mode, slot length, capacity and resource count from
- * the earliest weekday that has those hours; with no working day at all it
- * is a slots day of 30 minutes.
+ * The new row copies its mode (with any slots/queue switch still to come),
+ * slot length, capacity and resource count from the earliest weekday that
+ * has those hours; with no working day at all it is a slots day of 30
+ * minutes.
  */
 export function workingDayTemplate(schedules: readonly Schedule[]): {
   startTime: string;
@@ -172,7 +179,8 @@ export async function addWorkingDay(
     return { ok: false, reason: "already_working_day" };
   }
 
-  const { copyFrom } = workingDayTemplate(existing);
+  const { copyFrom: template } = workingDayTemplate(existing);
+  const copyFrom = template && foldScheduleMode(template, todayInCairo());
   const schedule: Schedule = {
     id: id(),
     practitioner_id: input.practitionerId,
@@ -181,6 +189,8 @@ export async function addWorkingDay(
     start_time: input.startTime,
     end_time: input.endTime,
     mode: copyFrom?.mode ?? ScheduleMode.Slots,
+    next_mode: copyFrom?.next_mode ?? null,
+    next_mode_from: copyFrom?.next_mode_from ?? null,
     slot_minutes: copyFrom ? copyFrom.slot_minutes : DEFAULT_SLOT_MINUTES,
     max_capacity: copyFrom ? copyFrom.max_capacity : null,
     resource_count: copyFrom?.resource_count ?? 1,

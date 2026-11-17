@@ -64,7 +64,8 @@ id, service_id, practitioner_id?, location_id?, price
 ### schedules
 id, practitioner_id, location_id, weekday (0-6), start_time, end_time,
 mode (slots|queue), slot_minutes? (slots mode only),
-max_capacity? (queue mode only), resource_count (default 1)
+max_capacity? (queue mode only), resource_count (default 1),
+next_mode? (slots|queue), next_mode_from? (date) — see v23 additions
 
 ### schedule_exceptions
 id, practitioner_id, date, type (closed|extra|shifted), start_time?,
@@ -1114,6 +1115,43 @@ indexed; absent, they read as 0 and null, so no backfill runs and the
 device pushes every local row it holds from seq 0. Pulled rows older than
 60 Cairo days are not kept (`web/src/sync/auditSync.ts`). Versions 1-22
 are unchanged.
+
+## v23 additions
+
+### schedules.next_mode, schedules.next_mode_from
+
+A doctor's slots/queue switch, dated (`docs/bug-hunt.md`'s A-03, hardening
+scenario 24). Owner-authorised; no policy or grant change.
+
+| Column | Type | Null | Meaning |
+|---|---|---|---|
+| `next_mode` | varchar(255), CHECK `slots`/`queue` (mode's own type) | yes | the mode from `next_mode_from` on |
+| `next_mode_from` | date | yes | the first Cairo day `next_mode` applies to |
+
+Both are null with no switch pending, and are written and cleared together
+by the device. A date's effective mode is `next_mode` when
+`next_mode_from` is set and the date is on or after it, else `mode` — on
+the device, `effectiveScheduleMode` (`web/src/domain/scheduleMode.ts`),
+the only way any screen reads a day's mode; the server reads no mode.
+
+The working-hours switch writes `next_mode` and `next_mode_from` = tomorrow
+(Cairo) on every row the doctor has at the location, and converts the
+weekday's visits dated tomorrow or later; switching back before tomorrow
+clears both and converts them back. Today's rows read the same mode either
+way. A row whose `next_mode_from` is today or earlier is folded on its next
+save (`mode` := `next_mode`, both cleared), which changes no day from today
+on.
+
+The `schedules_scope` policy filters rows, not columns, and clintra_app's
+grant is table-level, so both columns are read and written by exactly the
+roles that read and write `mode`. Both travel in the sync payload like
+every other schedule field (the pull returns the date as `YYYY-MM-DD`).
+
+Server: `2026_09_12_000035_add_next_mode_to_schedules_table.php`.
+
+Local: no new database version. Both fields are optional on the device's
+`Schedule` and read as null while absent, so no backfill runs; a pulled row
+brings them. Versions 1-23 are unchanged.
 
 ## Rules
 

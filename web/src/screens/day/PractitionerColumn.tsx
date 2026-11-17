@@ -4,7 +4,7 @@ import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Card, { CardFooter, CardHead } from "../../components/ui/Card";
 import { countCompletedConsultations } from "../../domain/consultStats";
-import { ScheduleMode } from "../../domain/scheduleMode";
+import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
 import { clockTimeInCairo, type ClinicDay, type ClockTime } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Schedule, Service, Visit } from "../../db/types";
@@ -114,7 +114,7 @@ export default function PractitionerColumn({
     );
   }
 
-  if (scheduleState.schedule.mode === ScheduleMode.Queue) {
+  if (effectiveScheduleMode(scheduleState.schedule, today) === ScheduleMode.Queue) {
     return (
       <QueueColumn
         practitionerName={practitionerName}

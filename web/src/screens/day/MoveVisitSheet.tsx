@@ -5,7 +5,7 @@ import { db } from "../../db/database";
 import type { Schedule, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { moveVisit } from "../../db/visitMove";
-import { ScheduleMode } from "../../domain/scheduleMode";
+import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
 import { addDaysToClinicDay, formatCairoDisplayDateParts, type ClinicDay } from "../../domain/time";
 import { computeMoveTargets } from "./moveTargets";
 import Sheet from "./Sheet";
@@ -53,19 +53,20 @@ export default function MoveVisitSheet({
       return new Map(dates.map((date, index) => [date, perDate[index]]));
     }, [visit.practitioner_id, startDate]) ?? new Map<ClinicDay, Visit[]>();
 
-  function scheduleForWeekday(weekday: number): Schedule | undefined {
+  // A slots row only: a day in queue mode on that date has no slot to move to.
+  function scheduleForDay(weekday: number, date: ClinicDay): Schedule | undefined {
     return schedules.find(
       (schedule) =>
         schedule.practitioner_id === visit.practitioner_id &&
         schedule.location_id === locationId &&
         schedule.weekday === weekday &&
-        schedule.mode === ScheduleMode.Slots,
+        effectiveScheduleMode(schedule, date) === ScheduleMode.Slots,
     );
   }
 
   const groups = computeMoveTargets(
     startDate,
-    scheduleForWeekday,
+    scheduleForDay,
     (date) => visitsByDate.get(date) ?? [],
   );
 
@@ -95,7 +96,7 @@ export default function MoveVisitSheet({
         <p className="text-sm text-muted">{patientName}</p>
         <div className="flex flex-col gap-4">
           {groups.map((group) => {
-            const schedule = scheduleForWeekday(group.weekday);
+            const schedule = scheduleForDay(group.weekday, group.date);
             if (!schedule) {
               return null;
             }

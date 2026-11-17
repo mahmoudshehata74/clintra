@@ -1,13 +1,18 @@
 import { useState } from "react";
+import { attemptSave } from "../../components/ui/attemptSave";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Field, { TextInput } from "../../components/ui/Field";
+import SaveFailedLine from "../../components/ui/SaveFailedLine";
 import TimeField from "../../components/ui/TimeField";
+import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
+import { modeFromTomorrow, switchModeFromTomorrow } from "../../db/scheduleModeSwitch";
 import { addWorkingDay, removeWorkingDay, updateWorkingHours, workingDayTemplate } from "../../db/scheduleSettings";
 import type { Schedule } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
-import { ScheduleMode } from "../../domain/scheduleMode";
+import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
+import { todayInCairo } from "../../domain/time";
 import { SetBody, SetList, SetRow } from "./SettingsLayout";
 import { dayScreenStrings } from "./strings";
 import {
@@ -50,6 +55,12 @@ interface FieldError {
  * practitioner's most common hours (workingDayTemplate), and "خليه يوم شغل"
  * saves it as a working day (addWorkingDay). Saving is per row, so there is
  * no `.runrow` "save all" footer here.
+ *
+ * Above the week, the doctor's slots/queue switch (docs/bug-hunt.md's A-03,
+ * not in the prototype): it shows the mode from tomorrow and, tapped,
+ * switches every row from tomorrow (switchModeFromTomorrow), with the line
+ * under it saying today stays as it is. A row's badge reads its weekday's
+ * next day, and its editor edits slot length or capacity by today's mode.
  */
 export default function WorkingHoursPanel({
   practitionerId,
@@ -72,6 +83,9 @@ export default function WorkingHoursPanel({
   const [maxCapacity, setMaxCapacity] = useState("");
   const [error, setError] = useState<FieldError | null>(null);
   const [saving, setSaving] = useState(false);
+  const [switchFailed, setSwitchFailed] = useState(false);
+  const today = todayInCairo();
+  const tomorrowMode = modeFromTomorrow(schedules, today);
 
   function beginEdit(row: WorkingHoursRow) {
     setEditingKey(row.key);
@@ -88,8 +102,20 @@ export default function WorkingHoursPanel({
     setError(null);
   }
 
+  async function switchMode(newMode: ScheduleMode) {
+    if (saving || newMode === tomorrowMode) {
+      return;
+    }
+    setSaving(true);
+    try {
+      setSwitchFailed(!(await attemptSave(() => switchModeFromTomorrow(db, { practitionerId, locationId, newMode }))));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function save(schedule: Schedule) {
-    const isSlots = schedule.mode === ScheduleMode.Slots;
+    const isSlots = effectiveScheduleMode(schedule, today) === ScheduleMode.Slots;
     if (endTime <= startTime) {
       setError({ field: "end", message: dayScreenStrings.hoursEndBeforeStartError });
       return;
@@ -158,10 +184,26 @@ export default function WorkingHoursPanel({
 
   return (
     <SetBody>
+      {tomorrowMode && (
+        <div className="mb-3 flex flex-col items-start gap-1.5">
+          <ToggleGroup
+            variant="channel"
+            label={dayScreenStrings.hoursModeSwitchLabel}
+            value={tomorrowMode}
+            onChange={switchMode}
+            options={[
+              { value: ScheduleMode.Slots, label: dayScreenStrings.hoursModeSlots },
+              { value: ScheduleMode.Queue, label: dayScreenStrings.hoursModeQueue },
+            ]}
+          />
+          <p className="text-[12.5px] text-muted">{dayScreenStrings.hoursModeSwitchNote}</p>
+          {switchFailed && <SaveFailedLine />}
+        </div>
+      )}
       <SetList>
-        {buildWorkingHoursRows(schedules).map((row) => {
+        {buildWorkingHoursRows(schedules, today).map((row) => {
           const schedule = row.schedule;
-          const isSlots = schedule?.mode === ScheduleMode.Slots;
+          const isSlots = schedule !== undefined && effectiveScheduleMode(schedule, today) === ScheduleMode.Slots;
           const isEditing = editingKey === row.key;
           const idPrefix = `hours-${row.key}`;
           return (

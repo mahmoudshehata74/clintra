@@ -13,7 +13,7 @@ import { bookExistingPatientVisit } from "../../db/visitBooking";
 import { formatEgyptianPhoneForDisplay } from "../../domain/phone";
 import { resolveServicePrice } from "../../domain/pricing";
 import { generateTimeChoices } from "../../domain/schedule";
-import { ScheduleMode } from "../../domain/scheduleMode";
+import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
 import type { ClinicDay, ClockTime } from "../../domain/time";
 import { addDaysToClinicDay, clockTimeInCairo, formatCairoDisplayDateParts, todayInCairo } from "../../domain/time";
 import { VisitSource } from "../../domain/visitSource";
@@ -158,7 +158,7 @@ export default function BookingSheet({
     }
     // A care plan's session starts with its patient chosen: the queue's
     // confirm step, or the day's slots.
-    if (scheduleState.kind === "scheduled" && scheduleState.schedule.mode === ScheduleMode.Queue) {
+    if (scheduleState.kind === "scheduled" && effectiveScheduleMode(scheduleState.schedule, visitDate) === ScheduleMode.Queue) {
       const position = visitsForPractitioner.reduce((max, visit) => Math.max(max, visit.position), 0) + 1;
       return { kind: "confirm_queue", patient: prefill.patient, position };
     }
@@ -191,7 +191,7 @@ export default function BookingSheet({
   }, [query]);
 
   const schedule = scheduleState.kind === "scheduled" ? scheduleState.schedule : null;
-  const isQueueMode = schedule?.mode === ScheduleMode.Queue;
+  const isQueueMode = schedule !== null && effectiveScheduleMode(schedule, visitDate) === ScheduleMode.Queue;
   const noScheduleMessage =
     prefill && scheduleState.kind === "day_off" ? dayScreenStrings.bookingPrefillDayOff : resolveBookingScheduleNote(scheduleState);
   const service = resolveSelectedService(services, selectedServiceId);

@@ -10,7 +10,7 @@ import type { Invoice, Patient, Practitioner, Service, Visit } from "../../db/ty
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitCompleted, markVisitInRoom } from "../../db/visitAttendance";
 import { findGeneralFormDefinition, readVisitFormValues, type VisitFormFieldValues } from "../../db/visitForm";
-import { ScheduleMode } from "../../domain/scheduleMode";
+import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
 import { clockTimeInCairo, weekdayOf, type ClinicDay } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import { arabicCount, type ArabicCountForms } from "../../domain/arabicText";
@@ -128,11 +128,12 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
         candidate.location_id === locationId &&
         candidate.weekday === weekday,
     );
+    const isQueueMode = schedule !== undefined && effectiveScheduleMode(schedule, today) === ScheduleMode.Queue;
     const visits = dayVisits.filter((visit) => visit.location_id === locationId);
     const visitIds = visits.map((visit) => visit.id);
 
     const current = findCurrentVisit(visits);
-    const next = findNextPatient(visits, schedule?.mode === ScheduleMode.Queue);
+    const next = findNextPatient(visits, isQueueMode);
     const historyPatientIds = new Set([current?.patient_id, next?.visit.patient_id].filter(Boolean));
 
     const [patients, todayInvoices, allVisits, allInvoices] = await Promise.all([
@@ -161,7 +162,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
 
     return {
       practitioner,
-      isQueueMode: schedule?.mode === ScheduleMode.Queue,
+      isQueueMode,
       visits,
       patientsById: new Map(patients.filter((p): p is Patient => p != null).map((p) => [p.id, p])),
       servicesById: new Map(services.map((service) => [service.id, service])),

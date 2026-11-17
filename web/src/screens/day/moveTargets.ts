@@ -18,7 +18,8 @@ const MOVE_TARGET_DAY_COUNT = 8; // today plus the next 7 days
  */
 export function computeMoveTargets(
   startDate: ClinicDay,
-  scheduleForWeekday: (weekday: number) => Schedule | undefined,
+  /** The day's schedule row, given its weekday and date (a row's mode can change from a date on). */
+  scheduleForDay: (weekday: number, date: ClinicDay) => Schedule | undefined,
   visitsForDate: (date: ClinicDay) => readonly Visit[],
 ): MoveDayGroup[] {
   const groups: MoveDayGroup[] = [];
@@ -26,7 +27,7 @@ export function computeMoveTargets(
   for (let offset = 0; offset < MOVE_TARGET_DAY_COUNT; offset++) {
     const date = addDaysToClinicDay(startDate, offset);
     const weekday = weekdayOf(date);
-    const schedule = scheduleForWeekday(weekday);
+    const schedule = scheduleForDay(weekday, date);
     if (!schedule) {
       continue;
     }
