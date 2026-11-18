@@ -65,6 +65,7 @@ const REASON_LABELS: Record<string, string> = {
   actor_not_in_org: "الموظف المسجّل على التغيير ده مش من موظفين العيادة، فالتغيير ده مش هيوصل",
   conflict: "فيه تعارض في البيانات",
   unknown_entity: "السيرفر مبيستقبلش النوع ده من البيانات، فالتغيير ده مش هيوصل",
+  op_id_reused: "العملية دي اتبعتت قبل كده بمحتوى مختلف",
 };
 
 // An unknown_entity row names a table the server does not sync (a users op
