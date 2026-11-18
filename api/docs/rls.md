@@ -1331,8 +1331,14 @@ upload anything again.
 **Four result statuses, one meaning each** (`App\Support\Sync\SyncOpApplier`):
 
 - `accepted` — applied; the response carries the new `rev`.
-- `duplicate` — `op_id` already in `sync_ledger`, checked before any
-  write, never reapplied (the brief's own idempotency rule).
+- `duplicate` — `op_id` already in `sync_ledger` with the same content
+  (entity, entity_id, action, base_rev and payload), checked before any
+  write, never reapplied (the brief's own idempotency rule). The content
+  is read back from the ledger row (entity, entity_id, the rev it
+  produced) and the audit row written with it (action, payload as
+  stored); nothing extra is stored. An `op_id` already applied with any
+  other content is `rejected` as `op_id_reused`: the op in front of the
+  server was never written, so it is never reported as done.
 - `rejected` — a genuine business conflict: a stale `base_rev` (edit
   conflict), an insert whose `entity_id` already has a row, a slot
   already occupied (`conflict_slot_taken` — see "Slot conflicts" below),
@@ -1351,7 +1357,13 @@ upload anything again.
   `conflict_already_exists`) and any write the printed lock refuses
   (`prescription_printed` — see "Prescriptions" above). On every table
   with an actor column, a claimed actor outside the token's organization
-  (`actor_not_in_org` — see "Actor attribution" above).
+  (`actor_not_in_org` — see "Actor attribution" above). An
+  `invoice_items` write, or an `invoices` update that changes `total`,
+  when the invoice has any payment (`invoice_has_payment` — what an
+  invoice bills changes only while it is unpaid; a payment's own update of
+  `paid` and `status` changes no total and goes through). The payments are
+  read through their own policy, so another organization's invoice never
+  reads as paid: such an op is left to the write itself, which RLS refuses.
 - `failed` — anything else: an org mismatch, a future-dated or
   out-of-window `created_at`, or a caught `QueryException` this class
   doesn't otherwise model (a foreign key pointing at nothing, for

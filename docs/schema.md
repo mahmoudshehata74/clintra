@@ -1153,6 +1153,24 @@ Local: no new database version. Both fields are optional on the device's
 `Schedule` and read as null while absent, so no backfill runs; a pulled row
 brings them. Versions 1-23 are unchanged.
 
+## Invoice item editing
+
+No schema change and no new local database version. An invoice's items can
+be added, removed, or have their `qty` or `unit_price` changed only while the
+invoice has no payment, is not `void`, and no `cash_close` exists for its
+location and Africa/Cairo day (`domain/invoiceItemEdit.ts`,
+`db/invoiceItems.ts`). Each line's `total` is `qty × unit_price` and the
+invoice's `total` the sum of its lines, in integer piastres; an unpaid
+invoice's `status` follows its total (`paid` at zero, as a zero-total
+invoice is created, otherwise `unpaid`). A removed line is deleted —
+`invoice_items` has no retired flag, and the audit row keeps the line as it
+was. The visit is never touched, so its time and slot stay as they are.
+
+The server refuses an `invoice_items` write, or an `invoices` update that
+changes `total`, once the invoice has a payment: `invoice_has_payment`
+(`api/docs/rls.md`, "The sync push endpoint"). The device puts it up for
+review as "الفاتورة دي اتدفع فيها، مينفعش تتعدّل".
+
 ## v24 additions
 
 ### cash_close.opening_amount
@@ -1213,7 +1231,8 @@ modify with no sync op or audit row. Versions 1-23 are unchanged.
 - Practitioner availability is computed across all locations: a practitioner
   booked at a time in one location is busy in every other location.
 - `no_show` is a status in its own right and is never merged with `cancelled`.
-- An invoice can never be voided once any payment exists against it.
+- An invoice can never be voided once any payment exists against it, and
+  its items and total never change once one does.
 - Every payment carries its own receipt number.
 - An organization has at most one membership per user (checked by
   `add_staff_member`, v21 additions).

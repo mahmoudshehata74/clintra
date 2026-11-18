@@ -122,6 +122,17 @@ describe("renderTemplate", () => {
     expect(text).not.toMatch(/[٠-٩۰-۹]/);
   });
 
+  it("renders in one pass: a value containing {{...}} is never expanded again", () => {
+    const { text, missing } = renderTemplate("أهلاً {{patient_name}} — {{doctor_name}} — {{clinic_name}}", {
+      patient_name: "{{clinic_name}} {{balance}}",
+      doctor_name: "{{patient_name}}",
+      clinic_name: "عيادة النور",
+      balance: 5000 as Piastres,
+    });
+    expect(text).toBe("أهلاً {{clinic_name}} {{balance}} — {{patient_name}} — عيادة النور");
+    expect(missing).toEqual([]);
+  });
+
   it("reports what a default body is missing so a screen can warn before sending", () => {
     const { missing } = renderTemplate(MESSAGE_TEMPLATES[3].defaultBody, { patient_name: "عمر" });
     expect(missing).toEqual(["session_label", "clinic_name", "date", "time", "clinic_phone"]);

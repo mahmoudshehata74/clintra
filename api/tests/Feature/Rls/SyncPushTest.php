@@ -114,6 +114,67 @@ test('a replayed op_id returns duplicate and does not double-apply', function ()
     $this->fx()->table('patients')->where('id', $op['entity_id'])->delete();
 });
 
+test('an applied op_id resent with different content is op_id_reused, never duplicate', function (string $field) {
+    $credential = makeAuthenticatedDevice();
+    $create = patientOp($credential['orgId']);
+    pushOps($credential['token'], [$create])->assertOk();
+    $update = patientOp($credential['orgId'], [
+        'entity_id' => $create['entity_id'],
+        'action' => 'update',
+        'base_rev' => 1,
+        'payload' => [...$create['payload'], 'full_name' => 'اسم معدل'],
+    ]);
+    pushOps($credential['token'], [$update])->assertOk()
+        ->assertJson(['results' => [['op_id' => $update['op_id'], 'status' => 'accepted', 'rev' => 2]]]);
+    $otherId = (string) Str::uuid();
+
+    $reused = match ($field) {
+        'entity' => [...$update, 'entity' => 'visits'],
+        'entity_id' => [...$update, 'entity_id' => $otherId, 'payload' => [...$update['payload'], 'id' => $otherId]],
+        'action' => [...$update, 'action' => 'delete'],
+        'payload' => [...$update, 'payload' => [...$update['payload'], 'full_name' => 'اسم تالت']],
+        'base_rev' => [...$update, 'base_rev' => 2],
+    };
+
+    pushOps($credential['token'], [$reused])->assertOk()
+        ->assertJson(['results' => [['op_id' => $update['op_id'], 'status' => 'rejected', 'reason' => 'op_id_reused']]]);
+
+    $row = $this->fx()->table('patients')->where('id', $create['entity_id'])->first();
+    expect($row->full_name)->toBe('اسم معدل');
+    expect($row->rev)->toBe(2);
+    expect($this->fx()->table('patients')->where('id', $otherId)->exists())->toBeFalse();
+    expect($this->fx()->table('sync_ledger')->where('op_id', $update['op_id'])->count())->toBe(1);
+
+    $this->fx()->table('audit_log')->where('entity_id', $create['entity_id'])->delete();
+    $this->fx()->table('sync_ledger')->where('entity_id', $create['entity_id'])->delete();
+    $this->fx()->table('patients')->where('id', $create['entity_id'])->delete();
+})->with(['entity', 'entity_id', 'action', 'payload', 'base_rev']);
+
+test('an identical resend of an applied update or delete stays duplicate', function () {
+    $credential = makeAuthenticatedDevice();
+    $create = patientOp($credential['orgId']);
+    $update = patientOp($credential['orgId'], [
+        'entity_id' => $create['entity_id'],
+        'action' => 'update',
+        'base_rev' => 1,
+        'payload' => [...$create['payload'], 'full_name' => 'اسم معدل'],
+    ]);
+    $delete = patientOp($credential['orgId'], ['entity_id' => $create['entity_id'], 'action' => 'delete', 'base_rev' => 2, 'payload' => null]);
+    pushOps($credential['token'], [$create, $update, $delete])->assertOk();
+
+    pushOps($credential['token'], [$create, $update, $delete])->assertOk()->assertJson(['results' => [
+        ['op_id' => $create['op_id'], 'status' => 'duplicate'],
+        ['op_id' => $update['op_id'], 'status' => 'duplicate'],
+        ['op_id' => $delete['op_id'], 'status' => 'duplicate'],
+    ]]);
+
+    expect($this->fx()->table('patients')->where('id', $create['entity_id'])->exists())->toBeFalse();
+    expect($this->fx()->table('sync_ledger')->where('entity_id', $create['entity_id'])->count())->toBe(3);
+
+    $this->fx()->table('audit_log')->where('entity_id', $create['entity_id'])->delete();
+    $this->fx()->table('sync_ledger')->where('entity_id', $create['entity_id'])->delete();
+});
+
 test('a stale base_rev is rejected and the row is unchanged', function () {
     $credential = makeAuthenticatedDevice();
     $createOp = patientOp($credential['orgId']);

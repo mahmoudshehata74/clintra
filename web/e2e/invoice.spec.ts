@@ -217,3 +217,50 @@ test("a refused payment prints nothing", async ({ page }) => {
   await expect(page.getByText(S.paymentReceiptNumberPrefix, { exact: true })).toHaveCount(0);
   await page.emulateMedia({ media: null });
 });
+
+test("an unpaid invoice's items are edited: a quantity and price changed, a service added, the total recomputed", async ({ page }) => {
+  const dialog = await completeAndOpenInvoice(page);
+  await dialog.getByRole("button", { name: S.editItemsAction, exact: true }).click();
+  const editor = dialog.locator("[data-invoice-items-editor]");
+
+  await editor.getByRole("textbox", { name: `${S.invoiceItemQtyLabel} استشارة متابعة`, exact: true }).fill("2");
+  await editor.getByRole("textbox", { name: `${S.invoiceItemUnitPriceLabel} استشارة متابعة`, exact: true }).fill("160");
+  await editor.getByRole("group", { name: S.editItemsAddServiceLabel }).getByRole("button", { name: /^كشف عام/ }).click();
+  await editor.getByRole("button", { name: S.editItemsAddAction, exact: true }).click();
+  await editor.getByRole("textbox", { name: `${S.invoiceItemUnitPriceLabel} كشف عام`, exact: true }).fill("300.50");
+  await expect(editor.locator("[data-invoice-items-draft-total]")).toContainText("620.50");
+  await editor.getByRole("button", { name: S.editItemsSaveAction, exact: true }).click();
+
+  await expect(editor).toBeHidden();
+  await expect(dialog.getByRole("row").filter({ hasText: "كشف عام" })).toBeVisible();
+  expect(parsePounds(await labeledRowValue(invoiceTotals(dialog), S.invoiceTotalLabel))).toBe(620.5);
+  expect(parsePounds(await labeledRowValue(invoiceTotals(dialog), S.invoiceRemainingLabel))).toBe(620.5);
+});
+
+test("removing a line takes it off the invoice; the last line cannot be removed and saved", async ({ page }) => {
+  const dialog = await completeAndOpenInvoice(page);
+  await dialog.getByRole("button", { name: S.editItemsAction, exact: true }).click();
+  const editor = dialog.locator("[data-invoice-items-editor]");
+  await editor.getByRole("button", { name: `${S.editItemsRemoveAction} استشارة متابعة`, exact: true }).click();
+  await editor.getByRole("button", { name: S.editItemsSaveAction, exact: true }).click();
+  await expect(editor.getByText(S.editItemsNoItemsError)).toBeVisible();
+  await editor.getByRole("button", { name: S.editItemsCancelAction, exact: true }).click();
+  await expect(editor).toBeHidden();
+  await expect(dialog.getByRole("row").filter({ hasText: "استشارة متابعة" })).toBeVisible();
+});
+
+test("after a partial payment the edit action is gone, with its reason", async ({ page }) => {
+  const dialog = await completeAndOpenInvoice(page);
+  await expect(dialog.getByRole("button", { name: S.editItemsAction, exact: true })).toBeVisible();
+  const total = parsePounds(await labeledRowValue(invoiceTotals(dialog), S.invoiceTotalLabel));
+  await dialog.getByRole("button", { name: S.recordPaymentAction }).click();
+  const payment = page.getByRole("dialog");
+  await payment.getByRole("textbox").first().fill((total / 2).toFixed(2));
+  await payment.getByRole("button", { name: S.paymentMethodCash, exact: true }).click();
+  await payment.getByRole("button", { name: S.paymentConfirmButton, exact: true }).click();
+
+  const invoice = page.getByRole("dialog");
+  await expect(invoice.getByText(S.invoiceStatusPartial)).toBeVisible();
+  await expect(invoice.getByRole("button", { name: S.editItemsAction, exact: true })).toHaveCount(0);
+  await expect(invoice.getByText(S.editItemsPaidReason, { exact: true })).toBeVisible();
+});

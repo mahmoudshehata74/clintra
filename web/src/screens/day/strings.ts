@@ -291,6 +291,23 @@ export const dayScreenStrings = {
   voidInvoiceAction: "إلغاء الفاتورة",
   // Shown instead of an enabled voidInvoiceAction once any payment exists.
   voidInvoiceDisabledReason: "مفيش إلغاء بعد تسجيل دفعة",
+  // Invoice item editing (InvoiceItemsEditor.tsx): only while the invoice
+  // has no payment, is not void and its day is not closed; otherwise the
+  // action is hidden and one of the three reasons shows instead.
+  editItemsAction: "تعديل بنود",
+  editItemsPaidReason: "مفيش تعديل بنود بعد تسجيل دفعة",
+  editItemsVoidReason: "الفاتورة ملغاة، مفيش تعديل بنود",
+  editItemsDayClosedReason: "اليوم اتقفل، مفيش تعديل بنود",
+  editItemsAddServiceLabel: "إضافة خدمة",
+  editItemsAddAction: "إضافة بند",
+  editItemsRemoveAction: "شيل",
+  editItemsSaveAction: "حفظ البنود",
+  editItemsCancelAction: "إلغاء",
+  editItemsNewTotalLabel: "الإجمالي الجديد",
+  editItemsNoItemsError: "لازم يفضل بند واحد على الأقل",
+  editItemsQtyError: "الكمية لازم تكون رقم صحيح من 1 وطالع",
+  editItemsPriceError: "السعر لازم يكون رقم بالجنيه، زي 150 أو 150.50",
+  editItemsNotFoundError: "الفاتورة دي مش موجودة على الجهاز ده",
   voidInvoiceToastMessage: "اتلغت الفاتورة",
   paymentsListHeading: "الدفعات",
   // Prefixes a payment row's receipt number, e.g. "إيصال رقم 3".
