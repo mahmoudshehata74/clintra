@@ -31,6 +31,8 @@ export interface CloseCashInput {
   /** cash_close has no org_id of its own (same reasoning as day_state — see mutate.ts); needed only to stamp this write's audit_log row. */
   orgId: string;
   date: ClinicDay;
+  /** The drawer's opening float; the expected total is it plus the day's paid sum. */
+  openingAmount: Piastres;
   totalCollected: Piastres;
   /** Required by the caller (see cashCloseForm.ts) when totalCollected differs from the expected total. */
   differenceNote: string | null;
@@ -48,7 +50,9 @@ export type CloseCashResult =
  * ConstraintError rather than trusting a read-then-write race window. Total
  * expected is recomputed here from the invoices table directly rather than
  * trusting a number the caller's UI last rendered, same reasoning as every
- * other re-read-inside-the-transaction write in this codebase.
+ * other re-read-inside-the-transaction write in this codebase, and the
+ * opening float is added to it: expected = opening + the day's paid sum,
+ * difference = counted - expected.
  */
 export async function closeCashForDay(db: ClintraDatabase, input: CloseCashInput): Promise<CloseCashResult> {
   const actor = await resolveActingMembership(db);
@@ -56,13 +60,15 @@ export async function closeCashForDay(db: ClintraDatabase, input: CloseCashInput
   try {
     return await runAtomicMutations(db, [db.invoices, db.cash_close], async (write) => {
       const invoicesAtLocation = await db.invoices.where("location_id").equals(input.locationId).toArray();
-      const totalExpected = computeExpectedCashTotal(invoicesAtLocation, input.locationId, input.date);
+      const totalExpected = (input.openingAmount +
+        computeExpectedCashTotal(invoicesAtLocation, input.locationId, input.date)) as Piastres;
       const difference = (input.totalCollected - totalExpected) as Piastres;
 
       const cashClose: CashClose = {
         id: id(),
         location_id: input.locationId,
         date: input.date,
+        opening_amount: input.openingAmount,
         total_expected: totalExpected,
         total_collected: input.totalCollected,
         difference,

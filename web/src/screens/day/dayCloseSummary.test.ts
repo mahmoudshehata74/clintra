@@ -78,6 +78,7 @@ const CLOSE: CashClose = {
   id: "close-1",
   location_id: LOCATION,
   date: DAY,
+  opening_amount: 0 as Piastres,
   total_expected: 90000 as Piastres,
   total_collected: 85000 as Piastres,
   difference: -5000 as Piastres,
@@ -140,6 +141,15 @@ describe("buildDayCloseSummary", () => {
       { method: PaymentMethod.Transfer, label: "تحويل", amount: 0 },
     ]);
     expect(summary.totalCollected).toBe(90000);
+  });
+
+  it("carries the close's opening float, 0 for a close without one", () => {
+    expect(summary.opening).toBe(0);
+    const withOpening = buildDayCloseSummary(
+      { date: DAY, visits: [], invoices: [], payments: [], cashClose: { ...CLOSE, opening_amount: 50000 as Piastres }, closedByName: null },
+      cairoInstant("2026-09-07", "18:15"),
+    );
+    expect(withOpening.opening).toBe(50000);
   });
 
   it("carries the close's own figures, its note, who closed it and when it was printed", () => {

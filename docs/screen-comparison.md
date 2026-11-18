@@ -131,6 +131,7 @@ App capture: the cash close sheet on the real day after one visit paid in full i
 - [decided] Bottom sheet against the prototype's page card; the summary grid is two across in the sheet against four across on the page (`docs/session-handoff.md:367-374`).
 - [decided] "تصدير CSV" instead of "تصدير Excel" (`docs/design-rule.md:52-54`).
 - [decided] "اقفل اليوم واطبع الملخص" closes the day and prints its summary (`docs/session-handoff.md:391-401`).
+- [decided] The "رصيد أول اليوم" field (starting at 0) before the drawer amount, which the prototype does not have: "إجمالي المتوقع" is the opening plus the day's collected cash, and the difference is the drawer amount minus that; the closed view, the printed summary and the CSV carry it too (`docs/schema.md`'s v24 additions).
 - [data] The sub-line's time is the capture's pinned clock ("09:00"); amounts, the invoice and no-show counts, and the closer's name (the owner ran the capture).
 - [decided] The card head's badge ("الصندوق") has no glass fill, only its border (`.c-head .badge` has an 8% white fill) (`docs/session-handoff.md:321-323`).
 - [decided] The summary cells' units are `muted`, not `faint` (`docs/session-handoff.md:294-301`).

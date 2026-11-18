@@ -134,6 +134,7 @@ function makeCashClose(overrides: Partial<CashClose> = {}): CashClose {
     id: id(),
     location_id: "location-1",
     date: VISIT_DATE,
+    opening_amount: 0 as Piastres,
     total_expected: 50000 as Piastres,
     total_collected: 50000 as Piastres,
     difference: 0 as Piastres,

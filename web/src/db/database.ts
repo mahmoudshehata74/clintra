@@ -543,6 +543,21 @@ export class ClintraDatabase extends Dexie {
     this.version(23).stores({
       remote_audit_log: "id, at, [entity+entity_id]",
     });
+
+    // The cash close's opening float (docs/schema.md's v24 additions):
+    // cash_close gains opening_amount, not indexed, so no store changes.
+    // Every close stored before it is given 0, as the server's DEFAULT gives
+    // its existing rows — a raw modify, so no sync op and no audit row.
+    this.version(24)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx
+          .table("cash_close")
+          .toCollection()
+          .modify((row: { opening_amount?: number }) => {
+            row.opening_amount ??= 0;
+          });
+      });
   }
 }
 

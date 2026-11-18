@@ -5,6 +5,7 @@ import type { Piastres } from "../../domain/money";
 import { buildDayInvoicesCsv, csvFileNameForDay, type CsvInvoiceRow } from "./cashCloseCsv";
 
 const DATE = "2026-09-07";
+const NO_OPENING = 0 as Piastres;
 
 function invoiceFixture(overrides: Partial<Invoice> = {}): Invoice {
   return {
@@ -37,26 +38,26 @@ function row(overrides: Partial<CsvInvoiceRow> = {}): CsvInvoiceRow {
 
 describe("buildDayInvoicesCsv", () => {
   it("emits only the header row when there are no invoices", () => {
-    expect(buildDayInvoicesCsv(DATE, [])).toBe("التاريخ,المريض,الخدمة,المبلغ,حالة الدفع\r\n");
+    expect(buildDayInvoicesCsv(DATE, [], NO_OPENING)).toBe("التاريخ,المريض,الخدمة,المبلغ,رصيد أول اليوم,حالة الدفع\r\n");
   });
 
   it("emits one row per invoice with the expected columns, CRLF-terminated", () => {
-    const csv = buildDayInvoicesCsv(DATE, [row()]);
+    const csv = buildDayInvoicesCsv(DATE, [row()], NO_OPENING);
     const lines = csv.split("\r\n");
-    expect(lines[0]).toBe("التاريخ,المريض,الخدمة,المبلغ,حالة الدفع");
-    expect(lines[1]).toBe("2026-09-07,منى عبد الله,كشف عام,150,مدفوعة بالكامل");
+    expect(lines[0]).toBe("التاريخ,المريض,الخدمة,المبلغ,رصيد أول اليوم,حالة الدفع");
+    expect(lines[1]).toBe("2026-09-07,منى عبد الله,كشف عام,150,0,مدفوعة بالكامل");
     expect(lines[2]).toBe(""); // trailing CRLF
   });
 
   it("joins multiple service items with ' + '", () => {
-    const csv = buildDayInvoicesCsv(DATE, [row({ itemDescriptions: ["كشف عام", "أشعة"] })]);
+    const csv = buildDayInvoicesCsv(DATE, [row({ itemDescriptions: ["كشف عام", "أشعة"] })], NO_OPENING);
     expect(csv).toContain("كشف عام + أشعة");
   });
 
   it("formats the amount with a fraction only when the piastres remainder is non-zero, no thousands separator", () => {
-    const whole = buildDayInvoicesCsv(DATE, [row({ invoice: invoiceFixture({ total: 123400 as Piastres }) })]);
+    const whole = buildDayInvoicesCsv(DATE, [row({ invoice: invoiceFixture({ total: 123400 as Piastres }) })], NO_OPENING);
     expect(whole).toContain(",1234,");
-    const fraction = buildDayInvoicesCsv(DATE, [row({ invoice: invoiceFixture({ total: 123450 as Piastres }) })]);
+    const fraction = buildDayInvoicesCsv(DATE, [row({ invoice: invoiceFixture({ total: 123450 as Piastres }) })], NO_OPENING);
     expect(fraction).toContain(",1234.50,");
   });
 
@@ -68,38 +69,45 @@ describe("buildDayInvoicesCsv", () => {
       [InvoiceStatus.Void, "ملغاة"],
     ];
     for (const [status, label] of statuses) {
-      const csv = buildDayInvoicesCsv(DATE, [row({ invoice: invoiceFixture({ status }) })]);
+      const csv = buildDayInvoicesCsv(DATE, [row({ invoice: invoiceFixture({ status }) })], NO_OPENING);
       expect(csv).toContain(`,${label}\r\n`);
     }
   });
 
   it("quotes a cell containing a comma", () => {
-    const csv = buildDayInvoicesCsv(DATE, [row({ patientName: "محمد, أحمد" })]);
+    const csv = buildDayInvoicesCsv(DATE, [row({ patientName: "محمد, أحمد" })], NO_OPENING);
     expect(csv).toContain('"محمد, أحمد"');
   });
 
   it("quotes a cell containing a double quote, doubling the embedded quote", () => {
-    const csv = buildDayInvoicesCsv(DATE, [row({ patientName: 'اسمه "الدكتور"' })]);
+    const csv = buildDayInvoicesCsv(DATE, [row({ patientName: 'اسمه "الدكتور"' })], NO_OPENING);
     expect(csv).toContain('"اسمه ""الدكتور"""');
   });
 
   it("quotes a cell containing a newline", () => {
-    const csv = buildDayInvoicesCsv(DATE, [row({ patientName: "سطر1\nسطر2" })]);
+    const csv = buildDayInvoicesCsv(DATE, [row({ patientName: "سطر1\nسطر2" })], NO_OPENING);
     expect(csv).toContain('"سطر1\nسطر2"');
   });
 
   it.each([["=cmd()"], ["+1+1"], ["-1+1"], ["@SUM(1)"], ["\tA1"]])(
     "prefixes a cell beginning with %s with a single quote, so it never runs as a formula",
     (dangerous) => {
-      const csv = buildDayInvoicesCsv(DATE, [row({ patientName: dangerous })]);
+      const csv = buildDayInvoicesCsv(DATE, [row({ patientName: dangerous })], NO_OPENING);
       const patientCell = csv.split("\r\n")[1].split(",")[1];
       expect(patientCell.startsWith("'")).toBe(true);
       expect(patientCell).toBe(`'${dangerous}`);
     },
   );
 
+  it("carries the day's opening float on every row, in the same plain pounds as the amount", () => {
+    const csv = buildDayInvoicesCsv(DATE, [row(), row({ patientName: "كريم فتحي" })], 50050 as Piastres);
+    const lines = csv.split("\r\n");
+    expect(lines[1]).toBe("2026-09-07,منى عبد الله,كشف عام,150,500.50,مدفوعة بالكامل");
+    expect(lines[2]).toBe("2026-09-07,كريم فتحي,كشف عام,150,500.50,مدفوعة بالكامل");
+  });
+
   it("does not neutralize a cell that merely contains, but does not start with, a dangerous character", () => {
-    const csv = buildDayInvoicesCsv(DATE, [row({ patientName: "أحمد = الدكتور" })]);
+    const csv = buildDayInvoicesCsv(DATE, [row({ patientName: "أحمد = الدكتور" })], NO_OPENING);
     expect(csv).toContain("أحمد = الدكتور");
     expect(csv).not.toContain("'أحمد");
   });

@@ -376,3 +376,46 @@ test("the owner's switch to queue on A reaches B from tomorrow, today unchanged"
   await b.page.keyboard.press("Escape");
   await closeAll(a, b);
 });
+
+/** The closed day's figure under `label`, read from a freshly opened cash close sheet. */
+async function closedFigure(device: Device, label: string): Promise<string | null> {
+  await device.page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true }).click();
+  const sheet = device.page.getByRole("dialog");
+  await expect(sheet.getByText(S.cashCloseSummaryHeading)).toBeVisible();
+  const closed = (await sheet.getByText(S.cashCloseClosedAtLabel, { exact: true }).count()) > 0;
+  const value = closed ? await labeledRowValue(sheet, label) : null;
+  await device.page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  return value;
+}
+
+test("A closes the day with an opening float; B shows the same opening and expected", async ({ browser }) => {
+  const [a, b] = await twoDevices(browser);
+  await a.page.evaluate(() => {
+    window.print = () => {};
+  });
+  await a.page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true }).click();
+  const sheet = a.page.getByRole("dialog");
+  await sheet.getByLabel(S.cashCloseOpeningLabel, { exact: true }).fill("250.50");
+  await sheet.getByPlaceholder(S.cashCloseCollectedPlaceholder).fill("0");
+  await sheet.getByLabel(S.cashCloseNotePlaceholder).fill("اختبار الرصيد");
+  const confirm = sheet.getByRole("button", { name: S.cashCloseConfirmButton, exact: true }).last();
+  const toast = a.page.getByText(S.cashCloseToastMessage);
+  const blocked = sheet.getByText(S.cashClosePastDueBlockedError);
+  await confirm.click();
+  await expect(toast.or(blocked)).toBeVisible();
+  if (await blocked.isVisible()) {
+    // Earlier tests' bookings may already be past due today.
+    await sheet.getByLabel(S.cashClosePastDueAcknowledgeLabel).check();
+    await confirm.click();
+  }
+  await expect(toast).toBeVisible();
+  await eventually([a], () => pushed(a), true, "A's close reaches the server");
+
+  const expectedOnA = await closedFigure(a, S.cashCloseExpectedLabel);
+  expect(await closedFigure(a, S.cashCloseOpeningLabel)).toContain("250.50");
+  expect(expectedOnA).not.toBeNull();
+  await eventually([a, b], () => closedFigure(b, S.cashCloseOpeningLabel), await closedFigure(a, S.cashCloseOpeningLabel), "B gets A's opening");
+  await eventually([a, b], () => closedFigure(b, S.cashCloseExpectedLabel), expectedOnA, "B shows A's expected");
+  await closeAll(a, b);
+});

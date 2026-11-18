@@ -17,7 +17,7 @@ import { clockTimeInCairo, todayInCairo, type ClinicDay } from "../../domain/tim
 import { VisitStatus } from "../../domain/visitStatus";
 import { formatMoneyAmount } from "../money";
 import { buildDayInvoicesCsv, csvFileNameForDay, type CsvInvoiceRow } from "./cashCloseCsv";
-import { validateCashCloseForm } from "./cashCloseForm";
+import { expectedCash, parseOpeningAmount, validateCashCloseForm } from "./cashCloseForm";
 import { computePastDueVisits, pastDueVisitWhenLabel } from "./pastDueVisits";
 import Sheet from "./Sheet";
 import SheetCardHead from "./SheetCardHead";
@@ -100,6 +100,8 @@ export default function CashCloseSheet({
   onNoShowMarked,
   onRequestMove,
 }: CashCloseSheetProps) {
+  const [openingInput, setOpeningInput] = useState("0");
+  const [openingError, setOpeningError] = useState<string | null>(null);
   const [totalCollectedInput, setTotalCollectedInput] = useState("");
   const [note, setNote] = useState("");
   const [acknowledgedPastDue, setAcknowledgedPastDue] = useState(false);
@@ -113,7 +115,10 @@ export default function CashCloseSheet({
 
   const invoicesAtLocation =
     useLiveQuery(() => db.invoices.where("location_id").equals(locationId).toArray(), [locationId]) ?? [];
-  const expected = computeExpectedCashTotal(invoicesAtLocation, locationId, date);
+  // The cash the day collected; expected cash adds the opening float typed
+  // below (cashCloseForm.ts), which reads as 0 while it does not parse.
+  const collectedToday = computeExpectedCashTotal(invoicesAtLocation, locationId, date);
+  const expected = expectedCash(parseOpeningAmount(openingInput) ?? (0 as Piastres), collectedToday);
   const invoicesToday = invoicesAtLocation.filter((invoice) => todayInCairo(new Date(invoice.issued_at)) === date);
   const paidInvoiceCount = invoicesToday.filter((invoice) => invoice.status === InvoiceStatus.Paid).length;
 
@@ -145,7 +150,7 @@ export default function CashCloseSheet({
     }, [locationId, date]) ?? [];
 
   function handleExportCsv() {
-    const csv = buildDayInvoicesCsv(date, csvRows);
+    const csv = buildDayInvoicesCsv(date, csvRows, data.existingClose?.opening_amount ?? parseOpeningAmount(openingInput) ?? (0 as Piastres));
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -224,10 +229,11 @@ export default function CashCloseSheet({
 
   async function handleConfirm() {
     const validation = validateCashCloseForm(
-      { totalCollectedInput, note, pastDueCount: pastDueVisits.length, acknowledgedPastDue },
-      expected,
+      { openingInput, totalCollectedInput, note, pastDueCount: pastDueVisits.length, acknowledgedPastDue },
+      collectedToday,
     );
     if (!validation.ok) {
+      setOpeningError(validation.openingError);
       setCollectedError(validation.collectedError);
       setNoteError(validation.noteError);
       setPastDueError(validation.pastDueError);
@@ -241,6 +247,7 @@ export default function CashCloseSheet({
         locationId,
         orgId,
         date,
+        openingAmount: validation.openingAmount,
         totalCollected: validation.totalCollected,
         differenceNote: validation.note,
       });
@@ -280,6 +287,7 @@ export default function CashCloseSheet({
                 {dayScreenStrings.cashCloseSummaryHeading}
               </p>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
+                <CloseCell label={dayScreenStrings.cashCloseOpeningLabel} value={formatMoneyAmount(closedClose.opening_amount)} unit={CURRENCY_UNIT} />
                 <CloseCell label={dayScreenStrings.cashCloseExpectedLabel} value={formatMoneyAmount(closedClose.total_expected)} unit={CURRENCY_UNIT} />
                 <CloseCell
                   label={dayScreenStrings.cashCloseGridCollectedLabel}
@@ -386,6 +394,17 @@ export default function CashCloseSheet({
               <CloseCell label={dayScreenStrings.slabNoShowCellLabel} value={noShowCountToday} />
             </div>
           </div>
+
+          <Field label={dayScreenStrings.cashCloseOpeningLabel} id="cash-close-opening" error={openingError ?? undefined}>
+            <TextInput
+              inputMode="decimal"
+              value={openingInput}
+              onChange={(event) => {
+                setOpeningInput(event.target.value);
+                setOpeningError(null);
+              }}
+            />
+          </Field>
 
           <Field label={dayScreenStrings.cashCloseActualCashFieldLabel} id="cash-close-collected" error={collectedError ?? undefined}>
             <TextInput

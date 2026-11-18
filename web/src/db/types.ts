@@ -405,6 +405,13 @@ export interface CashClose {
   id: string;
   location_id: string;
   date: ClinicDay;
+  /**
+   * The drawer's opening float, counted before the day's first payment
+   * (docs/schema.md's v24 additions); 0 on every close stored before it.
+   * total_expected includes it.
+   */
+  opening_amount: Piastres;
+  /** opening_amount plus the paid sum of the day's invoices (db/cashClose.ts). */
   total_expected: Piastres;
   total_collected: Piastres;
   difference: Piastres;

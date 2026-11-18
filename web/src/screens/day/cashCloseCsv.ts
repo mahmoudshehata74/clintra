@@ -10,7 +10,7 @@ export interface CsvInvoiceRow {
   itemDescriptions: readonly string[];
 }
 
-const HEADER = ["التاريخ", "المريض", "الخدمة", "المبلغ", "حالة الدفع"];
+const HEADER = ["التاريخ", "المريض", "الخدمة", "المبلغ", "رصيد أول اليوم", "حالة الدفع"];
 
 /** A cell beginning with one of these runs as a formula in Excel/Sheets if left unescaped. */
 const FORMULA_PREFIX_PATTERN = /^[=+\-@\t]/;
@@ -50,10 +50,11 @@ function csvRow(cells: readonly string[]): string {
 /**
  * Builds the day close sheet's CSV export: one row per invoice issued on
  * `date` at this location, already filtered and resolved by the caller (see
- * CashCloseSheet.tsx). CRLF line endings per RFC 4180; the caller is
+ * CashCloseSheet.tsx). "رصيد أول اليوم" is the day's own figure (the close's
+ * opening_amount), so every row carries the same one. CRLF line endings per RFC 4180; the caller is
  * responsible for the UTF-8 BOM the download itself needs (see csvFileNameForDay).
  */
-export function buildDayInvoicesCsv(date: ClinicDay, rows: readonly CsvInvoiceRow[]): string {
+export function buildDayInvoicesCsv(date: ClinicDay, rows: readonly CsvInvoiceRow[], openingAmount: Piastres): string {
   const lines = [
     csvRow(HEADER),
     ...rows.map((row) =>
@@ -62,6 +63,7 @@ export function buildDayInvoicesCsv(date: ClinicDay, rows: readonly CsvInvoiceRo
         row.patientName,
         row.itemDescriptions.join(" + "),
         formatCsvAmount(row.invoice.total),
+        formatCsvAmount(openingAmount),
         STATUS_LABEL[row.invoice.status] ?? row.invoice.status,
       ]),
     ),
