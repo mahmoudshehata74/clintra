@@ -9,6 +9,7 @@ import {
   login,
   openAuditLog,
   parsePounds,
+  PROFILE,
   readStore,
   rowFor,
   S,
@@ -440,6 +441,37 @@ test("an edit on B offline after A recorded a payment is put up for review on B"
   await expect(b.page.getByRole("dialog")).toContainText("الفاتورة دي اتدفع فيها، مينفعش تتعدّل");
   await b.page.keyboard.press("Escape");
   await eventually([a, b], () => invoiceTotalOn(a, "مريض دفع قبل التعديل").then((total) => total !== 999), true, "A never gets B's edit");
+  await closeAll(a, b);
+});
+
+/** Opens the patients screen on `device` and searches for `query`. */
+async function searchPatientsOn(device: Device, query: string) {
+  await sidebar(device.page).getByRole("button", { name: SIDEBAR.navPatients, exact: true }).click();
+  await device.page.getByPlaceholder(PROFILE.searchPlaceholder).fill(query);
+}
+
+test("a patient archived on A is hidden on B, and shows there with the archived switch on", async ({ browser }) => {
+  const [a, b] = await twoDevices(browser);
+  // A patient whose one visit is cancelled has nothing still to come.
+  await bookNew(a, "مريض للأرشيف");
+  await rowFor(a.page, "مريض للأرشيف").getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
+  await a.page.getByRole("menuitem", { name: S.cancelMenuLabel, exact: true }).click();
+  await a.page.getByRole("button", { name: S.cancelReasonPatient, exact: true }).click();
+  await expect(rowFor(a.page, "مريض للأرشيف")).toContainText(S.statusCancelled);
+
+  await searchPatientsOn(b, "مريض للأرشيف");
+  const resultsOnB = b.page.getByRole("list", { name: PROFILE.resultsLabel, exact: true }).getByRole("button").filter({ hasText: "مريض للأرشيف" });
+  await eventually([a, b], () => resultsOnB.count(), 1, "B finds the patient before the archive");
+
+  await searchPatientsOn(a, "مريض للأرشيف");
+  await a.page.getByRole("list", { name: PROFILE.resultsLabel, exact: true }).getByRole("button").filter({ hasText: "مريض للأرشيف" }).click();
+  await a.page.getByRole("button", { name: PROFILE.archiveAction, exact: true }).click();
+  await expect(a.page.getByRole("button", { name: PROFILE.restoreAction, exact: true })).toBeVisible();
+  await eventually([a, b], () => pushed(a), true, "A's archive reaches the server");
+
+  await eventually([a, b], () => b.page.getByText(PROFILE.searchNoMatch, { exact: true }).count(), 1, "B hides the archived patient");
+  await b.page.getByRole("switch", { name: PROFILE.showArchivedLabel, exact: true }).click();
+  await expect(resultsOnB).toContainText(PROFILE.archivedBadge);
   await closeAll(a, b);
 });
 

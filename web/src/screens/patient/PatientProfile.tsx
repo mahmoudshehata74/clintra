@@ -8,9 +8,11 @@ import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import type { Invoice, Patient, PrescriptionItem, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
+import { archivePatient, restorePatient } from "../../db/patientArchive";
 import { markVisitCompleted } from "../../db/visitAttendance";
 import { findGeneralFormDefinition, readVisitFormValues, type VisitFormFieldValues } from "../../db/visitForm";
 import { readsClinicalText } from "../../domain/clinicalAccess";
+import { isArchived } from "../../domain/patientArchive";
 import { todayInCairo } from "../../domain/time";
 import CarePlanSheet from "../carePlan/CarePlanSheet";
 import InvoiceSheet from "../day/InvoiceSheet";
@@ -162,6 +164,7 @@ export default function PatientProfile({ patientId, initialTab = "all" }: Patien
           {hero.stalledLine}
         </p>
       )}
+      <ArchiveBar patient={data.patient} />
 
       {/* `.pt-tabs` */}
       <div className="border-b border-rule bg-field px-[18px] py-2">
@@ -287,6 +290,54 @@ function Hero({ hero, onOpenPlan }: { hero: ProfileHero; onOpenPlan: (planId: st
         </div>
       </div>
     </section>
+  );
+}
+
+// ── Archiving ────────────────────────────────────────────────────────────
+
+/**
+ * Under the hero, for every role: "أرشفة المريض", or for an archived
+ * patient the line saying so and "إرجاع من الأرشيف" (db/patientArchive.ts).
+ * No prototype screen for it: tokens and shared components only. A refused
+ * archive (a visit still to come) says why in place.
+ */
+function ArchiveBar({ patient }: { patient: Patient }) {
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const archived = isArchived(patient);
+
+  async function toggle() {
+    setError(null);
+    setIsSaving(true);
+    try {
+      const result = archived ? await restorePatient(db, patient.id) : await archivePatient(db, patient.id);
+      if (!result.ok && result.reason === "upcoming_visit") {
+        setError(T.archiveBlockedUpcoming);
+      }
+    } catch (caught) {
+      console.error(caught);
+      setError(archived ? T.restoreFailed : T.archiveFailed);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule px-6 py-2.5 max-[600px]:px-[18px]">
+      {archived && (
+        <p role="status" className="m-0 flex-1 text-[12.5px] font-semibold text-muted">
+          {T.archivedLine}
+        </p>
+      )}
+      <Button variant="secondary" size="sm" className="ms-auto" disabled={isSaving} onClick={() => void toggle()}>
+        {archived ? T.restoreAction : T.archiveAction}
+      </Button>
+      {error && (
+        <p role="alert" className="m-0 w-full text-[12.5px] font-semibold text-danger">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 

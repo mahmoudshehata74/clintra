@@ -1,4 +1,5 @@
 import { normalizeArabicText } from "../domain/arabicText";
+import { isArchived } from "../domain/patientArchive";
 import { normalizeEgyptianPhone } from "../domain/phone";
 import { VisitStatus } from "../domain/visitStatus";
 import type { ClintraDatabase } from "./database";
@@ -17,11 +18,14 @@ export interface PatientSearchResult {
  * and, separately, by phone number normalised the same way the number was
  * stored. An empty query returns no results — this never lists every
  * patient. Name matches are ranked by how early the query appears in the
- * name; phone matches follow. Capped to MAX_RESULTS.
+ * name; phone matches follow. Capped to MAX_RESULTS. An archived patient
+ * (db/patientArchive.ts) is left out unless `includeArchived` — the
+ * patients screen's "إظهار المؤرشفين"; the booking sheet never asks for them.
  */
 export async function searchPatients(
   db: ClintraDatabase,
   rawQuery: string,
+  { includeArchived = false }: { includeArchived?: boolean } = {},
 ): Promise<PatientSearchResult[]> {
   const trimmed = rawQuery.trim();
   if (!trimmed) {
@@ -33,6 +37,7 @@ export async function searchPatients(
 
   const patients = await db.patients.toArray();
   const matches = patients
+    .filter((patient) => includeArchived || !isArchived(patient))
     .map((patient) => {
       const nameIndex = normalizeArabicText(patient.full_name).indexOf(normalizedQuery);
       const phoneMatches = phoneQuery.ok && patient.phone === phoneQuery.value;

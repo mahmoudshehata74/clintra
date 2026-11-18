@@ -1203,6 +1203,45 @@ Local: database version 24. No store changes (`opening_amount` is not
 indexed); its upgrade gives every stored close `opening_amount: 0`, a raw
 modify with no sync op or audit row. Versions 1-23 are unchanged.
 
+## v25 additions
+
+### patients.archived_at
+
+When the patient was archived; null while they are not. No policy or grant
+change.
+
+| Column | Type | Null | Meaning |
+|---|---|---|---|
+| `archived_at` | timestamptz, no default | yes | when the patient was archived ("أرشفة المريض"); null once restored ("إرجاع من الأرشيف") |
+
+Any role archives or restores from the patient profile (`db/patientArchive.ts`),
+through the ordinary audited, synced update; the audit log reads "أرشف المريض" /
+"رجّع المريض من الأرشيف". Archiving is refused while any of the patient's
+visits is still to come — booked or confirmed for today or later, or arrived
+or in the room today (`domain/patientArchive.ts`'s `blocksArchiving`) — with
+"مينفعش تأرشف المريض وعنده حجز جاي. الغي الحجز الأول أو استنى لما يخلص." The
+rule is the device's: the server stores whatever an accepted update carries.
+
+An archived patient is left out of the booking sheet's search and of the
+patients screen's, which shows them, marked "مؤرشف", only with "إظهار
+المؤرشفين" on (`db/patientSearch.ts`'s `includeArchived`). Their visits,
+invoices, payments and audit rows are untouched, and their profile still
+opens.
+
+Every patient stored before this reads null: on the server the column is
+added with no default and no UPDATE, so no row is rewritten, and the
+`patients_scope` policy filters rows, not columns, with clintra_app's grant
+table-level. The column travels in the sync payload like every other patient
+field (pulled as ISO 8601 UTC); an update pushed without it (a device not yet
+updated) leaves it as it is.
+
+Server: `2026_09_12_000037_add_archived_at_to_patients.php`.
+
+Local: database version 25. No store changes (`archived_at` is not indexed);
+its upgrade gives every stored patient `archived_at: null`, a raw modify with
+no sync op or audit row. The field is optional on `Patient`: a row without it
+reads as not archived. Versions 1-24 are unchanged.
+
 ## Rules
 
 - A visit's `position` is unique per practitioner per day.

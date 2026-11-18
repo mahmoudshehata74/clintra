@@ -186,6 +186,12 @@ export interface Patient {
   birth_year: number | null;
   note: string | null;
   created_at: Instant;
+  /**
+   * When the patient was archived (db/patientArchive.ts); null while they
+   * are not. Absent on a row written before docs/schema.md's v25 additions
+   * and not yet upgraded or pulled again — read as not archived.
+   */
+  archived_at?: Instant | null;
   /** Server-assigned; see rev's own doc comment on Visit. */
   rev: number;
 }

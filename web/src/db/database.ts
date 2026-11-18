@@ -558,6 +558,21 @@ export class ClintraDatabase extends Dexie {
             row.opening_amount ??= 0;
           });
       });
+
+    // Patient archiving (docs/schema.md's v25 additions): patients gain
+    // archived_at, not indexed, so no store changes. Every patient stored
+    // before it is given null, as the server's existing rows read — a raw
+    // modify, so no sync op and no audit row.
+    this.version(25)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx
+          .table("patients")
+          .toCollection()
+          .modify((row: { archived_at?: string | null }) => {
+            row.archived_at ??= null;
+          });
+      });
   }
 }
 
