@@ -11,7 +11,22 @@ import { formatMoneyAmount } from "../money";
 import { clockTimeInCairo, formatCairoDisplayDate, todayInCairo } from "../../domain/time";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { voidInvoice } from "../../db/invoiceVoid";
-import { AuditAction, InvoiceStatus, PaymentMethod, type Invoice, type InvoiceItem, type Patient, type Payment, type Practitioner } from "../../db/types";
+import { isInvoiceDayClosed } from "../../db/invoiceItems";
+import { invoiceItemEditRefusal, type InvoiceItemEditRefusal } from "../../domain/invoiceItemEdit";
+import InvoiceItemsEditor from "./InvoiceItemsEditor";
+import { saveRefusalMessage } from "./invoiceItemsForm";
+import {
+  AuditAction,
+  InvoiceStatus,
+  PaymentMethod,
+  type Invoice,
+  type InvoiceItem,
+  type Patient,
+  type Payment,
+  type Practitioner,
+  type Service,
+  type ServicePriceOverride,
+} from "../../db/types";
 import { withDoctorPrefix } from "./doctorName";
 import { formatBareInvoiceNumber, formatBareReceiptNumber, formatInvoiceNumber, formatReceiptNumber } from "./invoiceNumber";
 import { STATUS_LABEL } from "./invoiceStatusLabel";
@@ -46,6 +61,11 @@ interface InvoiceData {
   practitioner: Practitioner | undefined;
   /** Who created the invoice, from its audit row on any device — `.runrow .count`'s name; null when no row has reached this device. */
   createdByName: string | null;
+  /** A cash_close exists for the invoice's location and Cairo day. */
+  dayClosed: boolean;
+  /** The services an item can be added from (the active ones), and their price overrides. */
+  services: Service[];
+  overrides: ServicePriceOverride[];
 }
 
 // `.inv-status` (unpaid/partial) / `.inv-status.paid` (paid) through the
@@ -87,19 +107,23 @@ export default function InvoiceSheet({
 }: InvoiceSheetProps) {
   const [printTarget, setPrintTarget] = useState<PrintTarget | null>(null);
   const [isVoiding, setIsVoiding] = useState(false);
+  const [isEditingItems, setIsEditingItems] = useState(false);
 
   const data = useLiveQuery<InvoiceData | null>(async () => {
     const invoice = await db.invoices.get(invoiceId);
     if (!invoice) {
       return null;
     }
-    const [items, payments, patient, practitioner, createdRow] = await Promise.all([
+    const [items, payments, patient, practitioner, createdRow, dayClosed, services, overrides] = await Promise.all([
       db.invoice_items.where("invoice_id").equals(invoiceId).toArray(),
       db.payments.where("invoice_id").equals(invoiceId).toArray(),
       db.patients.get(invoice.patient_id),
       db.practitioners.get(invoice.practitioner_id),
       // Whichever device created it (db/auditEntries.ts).
       findAuditEntry(db, "invoices", invoiceId, AuditAction.Create),
+      isInvoiceDayClosed(db, invoice),
+      db.services.toArray(),
+      db.service_price_overrides.toArray(),
     ]);
     const creator = createdRow ? await db.memberships.get(createdRow.actor_membership_id) : undefined;
     const creatorUser = creator ? await db.users.get(creator.user_id) : undefined;
@@ -110,6 +134,9 @@ export default function InvoiceSheet({
       patient,
       practitioner,
       createdByName: creator ? staffName(creator, creatorUser) : null,
+      dayClosed,
+      services: services.filter((service) => service.is_active && service.org_id === invoice.org_id),
+      overrides,
     };
   }, [invoiceId]);
   // Called before the loading return below so the hook order never changes;
@@ -149,11 +176,14 @@ export default function InvoiceSheet({
     );
   }
 
-  const { invoice, items, payments, patient, practitioner, createdByName } = data;
+  const { invoice, items, payments, patient, practitioner, createdByName, dayClosed, services, overrides } = data;
   const remaining = (invoice.total - invoice.paid) as typeof invoice.total;
   const hasRemaining = remaining > 0;
   const canRecordPayment = invoice.status === InvoiceStatus.Unpaid || invoice.status === InvoiceStatus.Partial;
   const hasPayments = payments.length > 0;
+  const editRefusal: InvoiceItemEditRefusal | null = invoiceItemEditRefusal({ invoice, paymentCount: payments.length, dayClosed });
+  // A payment recorded (here or on another device) while editing ends the edit.
+  const showEditor = isEditingItems && editRefusal === null;
 
   async function handleVoid() {
     setIsVoiding(true);
@@ -203,40 +233,62 @@ export default function InvoiceSheet({
           <div className="flex flex-col gap-[14px] p-[18px]">
             <p className="text-xs text-muted">{dayScreenStrings.printHeaderPlaceholder}</p>
 
-            <table className="w-full border-separate border-spacing-0 tabular-nums">
-              <thead>
-                <tr>
-                  <th className="border-b-[1.5px] border-rule bg-field px-3 py-[9px] text-start text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
-                    {dayScreenStrings.invoiceItemLabel}
-                  </th>
-                  <th className="border-b-[1.5px] border-rule bg-field px-3 py-[9px] text-start text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
-                    {dayScreenStrings.invoiceItemQtyLabel}
-                  </th>
-                  <th className="border-b-[1.5px] border-rule bg-field px-3 py-[9px] text-end text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
-                    {dayScreenStrings.invoiceItemUnitPriceLabel}
-                  </th>
-                  <th className="border-b-[1.5px] border-rule bg-field px-3 py-[9px] text-end text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
-                    {dayScreenStrings.invoiceItemTotalLabel}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="[&>tr:last-child>td]:border-b-0">
-                {items.map((item) => (
-                  <tr key={item.id}>
-                    <td className="border-b border-hair px-3 py-[9px] text-[13px] font-semibold text-text">{item.description}</td>
-                    <td className="border-b border-hair px-3 py-[9px] text-[13px] font-semibold text-text">
-                      <Ltr>{item.qty}</Ltr>
-                    </td>
-                    <td className="border-b border-hair px-3 py-[9px] text-end text-[13px] font-bold text-text">
-                      <Ltr>{formatMoneyAmount(item.unit_price)}</Ltr>
-                    </td>
-                    <td className="border-b border-hair px-3 py-[9px] text-end text-[13px] font-bold text-text">
-                      <Ltr>{formatMoneyAmount(item.total)}</Ltr>
-                    </td>
+            <div data-invoice-items-action className="flex flex-wrap items-center justify-end gap-2">
+              {editRefusal === null ? (
+                !showEditor && (
+                  <Button variant="secondary" size="sm" onClick={() => setIsEditingItems(true)}>
+                    {dayScreenStrings.editItemsAction}
+                  </Button>
+                )
+              ) : (
+                <p className="text-sm text-muted">{saveRefusalMessage(editRefusal)}</p>
+              )}
+            </div>
+
+            {showEditor ? (
+              <InvoiceItemsEditor
+                invoice={invoice}
+                items={items}
+                services={services}
+                overrides={overrides}
+                onDone={() => setIsEditingItems(false)}
+              />
+            ) : (
+              <table className="w-full border-separate border-spacing-0 tabular-nums">
+                <thead>
+                  <tr>
+                    <th className="border-b-[1.5px] border-rule bg-field px-3 py-[9px] text-start text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
+                      {dayScreenStrings.invoiceItemLabel}
+                    </th>
+                    <th className="border-b-[1.5px] border-rule bg-field px-3 py-[9px] text-start text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
+                      {dayScreenStrings.invoiceItemQtyLabel}
+                    </th>
+                    <th className="border-b-[1.5px] border-rule bg-field px-3 py-[9px] text-end text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
+                      {dayScreenStrings.invoiceItemUnitPriceLabel}
+                    </th>
+                    <th className="border-b-[1.5px] border-rule bg-field px-3 py-[9px] text-end text-[11px] font-bold uppercase tracking-[0.05em] text-muted">
+                      {dayScreenStrings.invoiceItemTotalLabel}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="[&>tr:last-child>td]:border-b-0">
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      <td className="border-b border-hair px-3 py-[9px] text-[13px] font-semibold text-text">{item.description}</td>
+                      <td className="border-b border-hair px-3 py-[9px] text-[13px] font-semibold text-text">
+                        <Ltr>{item.qty}</Ltr>
+                      </td>
+                      <td className="border-b border-hair px-3 py-[9px] text-end text-[13px] font-bold text-text">
+                        <Ltr>{formatMoneyAmount(item.unit_price)}</Ltr>
+                      </td>
+                      <td className="border-b border-hair px-3 py-[9px] text-end text-[13px] font-bold text-text">
+                        <Ltr>{formatMoneyAmount(item.total)}</Ltr>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
 
             {/* `.totals` */}
             <div data-invoice-totals className="flex flex-col gap-2 rounded-card border border-rule bg-field px-4 py-[14px]">
