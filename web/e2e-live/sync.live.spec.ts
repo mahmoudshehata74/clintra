@@ -380,3 +380,65 @@ test("the owner's switch to queue on A reaches B from tomorrow, today unchanged"
   await b.page.keyboard.press("Escape");
   await closeAll(a, b);
 });
+
+/** Sets the open invoice's first line to `price` pounds and saves the edit. */
+async function editFirstLinePrice(device: Device, price: string) {
+  const sheet = device.page.getByRole("dialog");
+  await sheet.getByRole("button", { name: S.editItemsAction, exact: true }).click();
+  const editor = sheet.locator("[data-invoice-items-editor]");
+  await editor.getByRole("textbox", { name: new RegExp(`^${S.invoiceItemUnitPriceLabel} `) }).first().fill(price);
+  await editor.getByRole("button", { name: S.editItemsSaveAction, exact: true }).click();
+  await expect(editor).toBeHidden();
+}
+
+/** The invoice's total as the device shows it, read from a freshly opened sheet. */
+async function invoiceTotalOn(device: Device, name: string): Promise<number> {
+  const sheet = await openInvoice(device, name);
+  const total = parsePounds(await labeledRowValue(invoiceTotals(sheet), S.invoiceTotalLabel));
+  await device.page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  return total;
+}
+
+test("an invoice's items edited on A: B shows the new total", async ({ browser }) => {
+  const [a, b] = await twoDevices(browser);
+  await bookNew(a, "مريض تعديل بنود");
+  await completeVisit(a, "مريض تعديل بنود");
+  await openInvoice(a, "مريض تعديل بنود");
+  await editFirstLinePrice(a, "777.50");
+  await a.page.keyboard.press("Escape");
+  await eventually([a], () => pushed(a), true, "A pushes the edit");
+  await eventually([a, b], () => rowStatus(b, "مريض تعديل بنود", STATUSES), S.statusCompleted);
+  await eventually([a, b], () => invoiceTotalOn(b, "مريض تعديل بنود"), 777.5, "B shows A's new total");
+  await closeAll(a, b);
+});
+
+test("an edit on B offline after A recorded a payment is put up for review on B", async ({ browser }) => {
+  const [a, b] = await twoDevices(browser);
+  await bookNew(a, "مريض دفع قبل التعديل");
+  await completeVisit(a, "مريض دفع قبل التعديل");
+  await eventually([a, b], () => rowStatus(b, "مريض دفع قبل التعديل", STATUSES), S.statusCompleted, "the invoice reaches B");
+  await eventually([a, b], () => rowFor(b.page, "مريض دفع قبل التعديل").getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).count(), 1);
+
+  await b.context.setOffline(true);
+  await openInvoice(b, "مريض دفع قبل التعديل");
+  await editFirstLinePrice(b, "999");
+  await b.page.keyboard.press("Escape");
+
+  const sheet = await openInvoice(a, "مريض دفع قبل التعديل");
+  await sheet.getByRole("button", { name: S.recordPaymentAction }).click();
+  const payment = a.page.getByRole("dialog").filter({ hasText: S.paymentMethodLabel });
+  await payment.getByRole("textbox").first().fill("10");
+  await payment.getByRole("button", { name: S.paymentConfirmButton, exact: true }).click();
+  await expect(a.page.getByText(S.invoiceStatusPartial).first()).toBeVisible();
+  await a.page.keyboard.press("Escape");
+  await eventually([a], () => pushed(a), true, "A's payment reaches the server first");
+
+  await b.context.setOffline(false);
+  await eventually([a, b], async () => b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).count(), 1, "B is asked to review");
+  await b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  await expect(b.page.getByRole("dialog")).toContainText("الفاتورة دي اتدفع فيها، مينفعش تتعدّل");
+  await b.page.keyboard.press("Escape");
+  await eventually([a, b], () => invoiceTotalOn(a, "مريض دفع قبل التعديل").then((total) => total !== 999), true, "A never gets B's edit");
+  await closeAll(a, b);
+});

@@ -1357,7 +1357,13 @@ upload anything again.
   `conflict_already_exists`) and any write the printed lock refuses
   (`prescription_printed` — see "Prescriptions" above). On every table
   with an actor column, a claimed actor outside the token's organization
-  (`actor_not_in_org` — see "Actor attribution" above).
+  (`actor_not_in_org` — see "Actor attribution" above). An
+  `invoice_items` write, or an `invoices` update that changes `total`,
+  when the invoice has any payment (`invoice_has_payment` — what an
+  invoice bills changes only while it is unpaid; a payment's own update of
+  `paid` and `status` changes no total and goes through). The payments are
+  read through their own policy, so another organization's invoice never
+  reads as paid: such an op is left to the write itself, which RLS refuses.
 - `failed` — anything else: an org mismatch, a future-dated or
   out-of-window `created_at`, or a caught `QueryException` this class
   doesn't otherwise model (a foreign key pointing at nothing, for

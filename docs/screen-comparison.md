@@ -107,7 +107,7 @@ App capture: the invoice sheet, half the total paid in cash.
 - [decided] The payment method reads "كاش", not "نقدي" (`docs/session-handoff.md:198`).
 - [decided] The receipt and creation times read "10:00", the 24-hour clock (`docs/session-handoff.md:185`).
 - [decided] The "طباعة" link on each payment row (`docs/session-handoff.md:367-374`).
-- [decided] No "تعديل بنود" pill: item editing is backlog (`docs/session-handoff.md:447`).
+- [decided] "تعديل بنود" shows only while the invoice has no payment, is not void and its day is not closed; this capture is half paid, so it reads "مفيش تعديل بنود بعد تسجيل دفعة" instead. Its edit mode (each line's quantity and price, "شيل", a service added at its price, the new total, "حفظ البنود") is the app's own layout, built from the shared field, button and service-chip components (`docs/schema.md`, "Invoice item editing").
 - [decided] The "إلغاء الفاتورة" block with "مفيش إلغاء بعد تسجيل دفعة" (`docs/session-handoff.md:367-374`).
 - [data] Invoice number, patient, items and amounts; the invoice is dated today although the seeded day is a past Monday (writes use the real clock).
 - [decided] The head's status "مدفوعة جزئيًا" is a solid badge, white on warning, where `.inv-status` is a 22% tint (`docs/session-handoff.md:302-303`).

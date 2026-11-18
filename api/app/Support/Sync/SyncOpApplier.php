@@ -114,6 +114,12 @@ class SyncOpApplier
             return $carePlanRule;
         }
 
+        $invoicePaymentRule = $this->applyInvoicePaymentRule($op, $table);
+
+        if ($invoicePaymentRule !== null) {
+            return $invoicePaymentRule;
+        }
+
         $printedLock = $this->applyPrintedLock($op, $table);
 
         if ($printedLock !== null) {
@@ -435,6 +441,64 @@ class SyncOpApplier
         }
 
         return null;
+    }
+
+    /**
+     * Invoice item editing (docs/schema.md's "Invoice item editing"): what an
+     * invoice bills changes only while it has no payment.
+     *
+     * - An invoice_items create, update or delete is refused as
+     *   `invoice_has_payment` when its invoice has a payment — the invoice
+     *   the payload names and, for an update or delete, the one the row has
+     *   now.
+     * - An invoices update that changes `total` is refused the same way. A
+     *   payment's own update of the invoice (paid and status, db/payments.ts)
+     *   leaves the total as it is and goes through.
+     *
+     * Payments are read through their own policy, so another organization's
+     * invoice never reads as paid: an op naming one is left to the write
+     * itself, which RLS refuses. The push request holds the organization's
+     * sync lock (SyncSeqLock), so no payment of this organization commits
+     * between this check and the write.
+     *
+     * @return array{op_id: string, status: string, reason: string}|null null means the op is not affected by the rule.
+     */
+    private function applyInvoicePaymentRule(array $op, string $table): ?array
+    {
+        $payload = $op['payload'] ?? [];
+        $invoiceIds = [];
+
+        if ($table === 'invoices') {
+            if ($op['action'] !== 'update' || ! array_key_exists('total', $payload)) {
+                return null;
+            }
+
+            $storedTotal = DB::table('invoices')->where('id', $op['entity_id'])->value('total');
+
+            if ($storedTotal === null || (string) $storedTotal === (string) $payload['total']) {
+                return null;
+            }
+
+            $invoiceIds[] = $op['entity_id'];
+        } elseif ($table === 'invoice_items') {
+            if ($op['action'] !== 'delete' && isset($payload['invoice_id'])) {
+                $invoiceIds[] = $payload['invoice_id'];
+            }
+
+            if ($op['action'] !== 'create') {
+                $currentInvoiceId = DB::table('invoice_items')->where('id', $op['entity_id'])->value('invoice_id');
+
+                if ($currentInvoiceId !== null) {
+                    $invoiceIds[] = $currentInvoiceId;
+                }
+            }
+        }
+
+        if ($invoiceIds === [] || ! DB::table('payments')->whereIn('invoice_id', array_unique($invoiceIds))->exists()) {
+            return null;
+        }
+
+        return $this->rejected($op, 'invoice_has_payment');
     }
 
     /**
