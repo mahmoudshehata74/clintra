@@ -124,7 +124,7 @@ id, invoice_id, service_id, description, qty, unit_price, total
 id, invoice_id, amount, method, receipt_number, note?, created_by, created_at
 
 ### cash_close
-id, location_id, date, total_expected, total_collected, difference,
+id, location_id, date, opening_amount (v24 additions), total_expected, total_collected, difference,
 difference_note? (required when difference is not zero), closed_by, closed_at
 
 ### audit_log
@@ -1170,6 +1170,38 @@ The server refuses an `invoice_items` write, or an `invoices` update that
 changes `total`, once the invoice has a payment: `invoice_has_payment`
 (`api/docs/rls.md`, "The sync push endpoint"). The device puts it up for
 review as "الفاتورة دي اتدفع فيها، مينفعش تتعدّل".
+
+## v24 additions
+
+### cash_close.opening_amount
+
+The drawer's opening float ("رصيد أول اليوم"), counted before the day's
+first payment. Owner-authorised; no policy or grant change.
+
+| Column | Type | Null | Meaning |
+|---|---|---|---|
+| `opening_amount` | integer (piastres), DEFAULT 0, CHECK `>= 0` | no | the cash in the drawer when the day opened |
+
+A close's `total_expected` is now `opening_amount` plus the paid sum of the
+day's invoices at the location (`db/cashClose.ts`), and `difference` is
+`total_collected` minus that; the note is still required whenever the
+difference is not zero. The cash close sheet's field starts at 0 (blank
+reads as 0). The printed day-close summary shows it as its own row, and the
+day's CSV carries it as the column "رصيد أول اليوم" on every row (the
+close's figure once the day is closed, the typed one before).
+
+Every close stored before this reads 0: on the server the DEFAULT fills the
+column without rewriting a row, and the `cash_close_scope` policy filters
+rows, not columns, with clintra_app's grant table-level. The column travels
+in the sync payload like every other cash close field; a close pushed
+without it (a device not yet updated) stores 0, and a negative one is
+refused by the CHECK.
+
+Server: `2026_09_12_000036_add_opening_amount_to_cash_close.php`.
+
+Local: database version 24. No store changes (`opening_amount` is not
+indexed); its upgrade gives every stored close `opening_amount: 0`, a raw
+modify with no sync op or audit row. Versions 1-23 are unchanged.
 
 ## Rules
 

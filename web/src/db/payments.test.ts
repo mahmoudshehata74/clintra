@@ -170,6 +170,7 @@ describe("recordPayment", () => {
       id: "close-1",
       location_id: invoice.location_id,
       date: today,
+      opening_amount: 0 as typeof invoice.total,
       total_expected: 0 as typeof invoice.total,
       total_collected: 0 as typeof invoice.total,
       difference: 0 as typeof invoice.total,

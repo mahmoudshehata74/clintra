@@ -115,6 +115,9 @@ export default function DayCloseSummaryPrint({ orgId, locationId, date, onDone }
             <Row label={S.daySummaryTotalCollectedLabel} strong>
               <Money value={summary.totalCollected} />
             </Row>
+            <Row label={S.cashCloseOpeningLabel}>
+              <Money value={summary.opening} />
+            </Row>
             <Row label={S.daySummaryExpectedCashLabel}>
               <Money value={summary.expected} />
             </Row>

@@ -66,6 +66,7 @@ describe("closeCashForDay", () => {
       locationId: invoice.location_id,
       orgId: invoice.org_id,
       date: today,
+      openingAmount: 0 as Piastres,
       totalCollected: invoice.total,
       differenceNote: null,
     });
@@ -86,6 +87,7 @@ describe("closeCashForDay", () => {
       locationId: invoice.location_id,
       orgId: invoice.org_id,
       date: today,
+      openingAmount: 0 as Piastres,
       totalCollected: shortfall,
       differenceNote: "50 قرش ناقصة في الدرج",
     });
@@ -96,6 +98,26 @@ describe("closeCashForDay", () => {
     expect(result.cashClose.difference_note).toBe("50 قرش ناقصة في الدرج");
   });
 
+  it("adds the opening float to the expected total and stores it; the difference is counted minus that", async () => {
+    const invoice = await seedPaidInvoice();
+    const today = todayInCairo(new Date(invoice.issued_at));
+
+    const result = await closeCashForDay(db, {
+      locationId: invoice.location_id,
+      orgId: invoice.org_id,
+      date: today,
+      openingAmount: 50000 as Piastres,
+      totalCollected: (invoice.total + 49000) as Piastres,
+      differenceNote: "ناقص 10 جنيه",
+    });
+
+    if (!result.ok) throw new Error("expected success");
+    expect(result.cashClose.opening_amount).toBe(50000);
+    expect(result.cashClose.total_expected).toBe(invoice.total + 50000);
+    expect(result.cashClose.difference).toBe(-1000);
+    expect((await db.cash_close.get(result.cashClose.id))?.opening_amount).toBe(50000);
+  });
+
   it("rejects a second close for the same location and date", async () => {
     const invoice = await seedPaidInvoice();
     const today = todayInCairo(new Date(invoice.issued_at));
@@ -104,6 +126,7 @@ describe("closeCashForDay", () => {
       locationId: invoice.location_id,
       orgId: invoice.org_id,
       date: today,
+      openingAmount: 0 as Piastres,
       totalCollected: invoice.total,
       differenceNote: null,
     });
@@ -113,6 +136,7 @@ describe("closeCashForDay", () => {
       locationId: invoice.location_id,
       orgId: invoice.org_id,
       date: today,
+      openingAmount: 0 as Piastres,
       totalCollected: invoice.total,
       differenceNote: null,
     });
@@ -128,6 +152,7 @@ describe("closeCashForDay", () => {
       locationId: invoice.location_id,
       orgId: invoice.org_id,
       date: today,
+      openingAmount: 0 as Piastres,
       totalCollected: invoice.total,
       differenceNote: null,
     });
@@ -137,6 +162,7 @@ describe("closeCashForDay", () => {
       locationId: invoice.location_id,
       orgId: invoice.org_id,
       date: "2099-01-01",
+      openingAmount: 0 as Piastres,
       totalCollected: 0 as Piastres,
       differenceNote: null,
     });

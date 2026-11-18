@@ -108,6 +108,7 @@ describe("saveInvoiceItems", () => {
       locationId: closed.invoice.location_id,
       orgId: closed.invoice.org_id,
       date: todayInCairo(new Date(closed.invoice.issued_at)),
+      openingAmount: p(0),
       totalCollected: p(0),
       differenceNote: null,
     });

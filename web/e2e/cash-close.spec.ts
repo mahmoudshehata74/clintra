@@ -154,7 +154,7 @@ test("exporting CSV downloads a header row plus one row per invoice issued today
   }
   const content = Buffer.concat(chunks).toString("utf-8").replace(/^\uFEFF/, "");
   const lines = content.split("\r\n");
-  expect(lines[0]).toBe("التاريخ,المريض,الخدمة,المبلغ,حالة الدفع");
+  expect(lines[0]).toBe("التاريخ,المريض,الخدمة,المبلغ,رصيد أول اليوم,حالة الدفع");
   expect(lines[1]).toContain(PATIENTS.mona);
   expect(lines[1]).toContain(S.invoiceStatusUnpaid);
 });
@@ -358,4 +358,81 @@ test("a closed day reprints its summary from the closed state", async ({ page })
   // The sheet itself stays off paper.
   await expect(page.getByRole("button", { name: S.cashClosePrintSummaryAction, exact: true })).toBeHidden();
   await page.emulateMedia({ media: null });
+});
+
+test("with an opening float, expected cash is opening plus collected; the close keeps it and shows it closed", async ({ page }) => {
+  await gotoRealDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await openCashClose(page);
+  const dialog = page.getByRole("dialog");
+  const opening = dialog.getByLabel(S.cashCloseOpeningLabel, { exact: true });
+  await expect(opening).toHaveValue("0");
+  // No invoices today yet: expected is the opening alone.
+  await opening.fill("500.50");
+  await expect.poll(async () => parsePounds(await labeledRowValue(dialog, S.cashCloseExpectedLabel))).toBe(500.5);
+
+  const collected = dialog.getByPlaceholder(S.cashCloseCollectedPlaceholder);
+  await collected.fill("0");
+  await confirmButton(dialog).click();
+  await expect(dialog.getByText(S.cashCloseNoteRequiredError)).toBeVisible();
+
+  await collected.fill("500.50");
+  await expect(dialog.getByText(S.cashCloseMatchedTitle)).toBeVisible();
+  await confirmButton(dialog).click();
+  await expect(page.getByText(S.cashCloseToastMessage)).toBeVisible();
+  await expect(dialog).toBeHidden();
+
+  await openCashClose(page);
+  const closed = page.getByRole("dialog");
+  await expect(closed.getByText(S.cashCloseClosedAtLabel)).toBeVisible();
+  expect(parsePounds(await labeledRowValue(closed, S.cashCloseOpeningLabel))).toBe(500.5);
+  expect(parsePounds(await labeledRowValue(closed, S.cashCloseExpectedLabel))).toBe(500.5);
+  await expect(closed.getByText(S.cashCloseNoDifferenceNoteLabel)).toBeVisible();
+});
+
+test("an opening float that is not pounds is refused under its field", async ({ page }) => {
+  await gotoRealDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await openCashClose(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel(S.cashCloseOpeningLabel, { exact: true }).fill("خمسمية");
+  await dialog.getByPlaceholder(S.cashCloseCollectedPlaceholder).fill("0");
+  await confirmButton(dialog).click();
+  await expect(dialog.getByText(S.cashCloseOpeningInvalidError)).toBeVisible();
+  await expect(page.getByText(S.cashCloseToastMessage)).toHaveCount(0);
+});
+
+test("the printed summary and the CSV carry the opening float", async ({ page }) => {
+  await countPrints(page);
+  await gotoRealDay(page);
+  await selectPractitioner(page, SLOTS_DR);
+  await openCashClose(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel(S.cashCloseOpeningLabel, { exact: true }).fill("300");
+  await dialog.getByPlaceholder(S.cashCloseCollectedPlaceholder).fill("300");
+  await expect(dialog.getByText(S.cashCloseMatchedTitle)).toBeVisible();
+  await confirmButton(dialog).click();
+  await expect.poll(() => printCalls(page)).toBe(1);
+
+  await page.emulateMedia({ media: "print" });
+  await expect(summaryRow(page, S.cashCloseOpeningLabel)).toHaveText(`300 ${S.tileCurrencyUnit}`);
+  await expect(summaryRow(page, S.daySummaryExpectedCashLabel)).toHaveText(`300 ${S.tileCurrencyUnit}`);
+  await page.emulateMedia({ media: null });
+
+  await openCashClose(page);
+  const closed = page.getByRole("dialog");
+  const downloadPromise = page.waitForEvent("download");
+  await closed.getByRole("button", { name: S.cashCloseExportCsvAction, exact: true }).click();
+  const download = await downloadPromise;
+  const chunks: Buffer[] = [];
+  for await (const chunk of await download.createReadStream()) {
+    chunks.push(chunk as Buffer);
+  }
+  const csv = Buffer.concat(chunks).toString("utf-8").replace(/^\uFEFF/, "");
+  const [header, ...rows] = csv.split("\r\n").filter((line) => line !== "");
+  const column = header.split(",").indexOf(S.cashCloseOpeningLabel);
+  expect(column).toBeGreaterThan(-1);
+  for (const row of rows) {
+    expect(row.split(",")[column]).toBe("300");
+  }
 });

@@ -368,6 +368,10 @@ export const dayScreenStrings = {
   cashCloseGridInvoicesLabel: "فاتورة",
   cashCloseGridInvoicesUnit: "مدفوعة",
   cashCloseActualCashFieldLabel: "الكاش الفعلي في الدرج",
+  // The drawer's opening float (docs/schema.md's v24 additions): the sheet's
+  // field and closed cell, the printed summary's row and the CSV column.
+  cashCloseOpeningLabel: "رصيد أول اليوم",
+  cashCloseOpeningInvalidError: "رصيد أول اليوم لازم يكون رقم بالجنيه، زي 500 أو 500.50",
   cashCloseCollectedPlaceholder: "المبلغ المحصل (جنيه)",
   cashCloseCollectedInvalidError: "المبلغ ده مش صحيح",
   cashCloseDifferenceLabel: "الفرق",

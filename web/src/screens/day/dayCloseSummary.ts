@@ -38,7 +38,8 @@ export interface DayCloseSummary {
   byMethod: DayCloseMethodLine[];
   /** The four methods' sum. */
   totalCollected: Piastres;
-  /** The close's own figures: expected (cashClose.total_expected), counted (total_collected), difference and note. */
+  /** The close's own figures: opening (cashClose.opening_amount), expected (total_expected, which includes it), counted (total_collected), difference and note. */
+  opening: Piastres;
   expected: Piastres;
   counted: Piastres;
   difference: Piastres;
@@ -88,6 +89,7 @@ export function buildDayCloseSummary(source: DayCloseSummarySource, printedAt: I
     cancelledCount: countOf(VisitStatus.Cancelled),
     byMethod,
     totalCollected: byMethod.reduce((sum, line) => (sum + line.amount) as Piastres, 0 as Piastres),
+    opening: source.cashClose.opening_amount,
     expected: source.cashClose.total_expected,
     counted: source.cashClose.total_collected,
     difference: source.cashClose.difference,
