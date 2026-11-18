@@ -1331,8 +1331,14 @@ upload anything again.
 **Four result statuses, one meaning each** (`App\Support\Sync\SyncOpApplier`):
 
 - `accepted` — applied; the response carries the new `rev`.
-- `duplicate` — `op_id` already in `sync_ledger`, checked before any
-  write, never reapplied (the brief's own idempotency rule).
+- `duplicate` — `op_id` already in `sync_ledger` with the same content
+  (entity, entity_id, action, base_rev and payload), checked before any
+  write, never reapplied (the brief's own idempotency rule). The content
+  is read back from the ledger row (entity, entity_id, the rev it
+  produced) and the audit row written with it (action, payload as
+  stored); nothing extra is stored. An `op_id` already applied with any
+  other content is `rejected` as `op_id_reused`: the op in front of the
+  server was never written, so it is never reported as done.
 - `rejected` — a genuine business conflict: a stale `base_rev` (edit
   conflict), an insert whose `entity_id` already has a row, a slot
   already occupied (`conflict_slot_taken` — see "Slot conflicts" below),
