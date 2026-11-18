@@ -408,6 +408,49 @@ describe("buildProfileEvents", () => {
   });
 });
 
+describe("buildProfileEvents for the front desk (an assistant or manager)", () => {
+  const events = buildProfileEvents(source(), false);
+  const clinicalWords = ["خشونة بسيطة", "التهاب وتر الرضفة", "ألم في الركبة", "شكوى", "Diclofenac", "Paracetamol", "دوائين", "تحسن ملحوظ"];
+
+  it("keeps every event but the doctor's note, in the same order", () => {
+    const full = buildProfileEvents(source()).map((event) => event.key);
+    expect(events.map((event) => event.key)).toEqual(full.filter((key) => !key.startsWith("note:")));
+  });
+
+  it("reads a visit as its status and doctor only, opening nothing", () => {
+    expect(byKey(events, "visit:v-today")).toMatchObject({ title: "زيارة — خلصت", time: "16:15", muted: false, target: null });
+    expect(detailText(byKey(events, "visit:v-today"))).toBe("د. أحمد المصري");
+    // A plan session reads as a visit too: no session title.
+    expect(byKey(events, "visit:v-session").title).toBe("زيارة — خلصت");
+    expect(byKey(events, "visit:v-cancelled")).toMatchObject({ title: "زيارة — ملغي", muted: true, target: null });
+    expect(byKey(events, "visit:v-noshow")).toMatchObject({ title: "زيارة — لم يحضر", muted: true, target: null });
+  });
+
+  it("reads a prescription as وصفة طبية with its doctor and printed state, opening nothing", () => {
+    const rx = byKey(events, "rx:rx-1");
+    expect(rx).toMatchObject({ kind: "rx", title: "وصفة طبية", time: "9:20", target: null });
+    expect(detailText(rx)).toBe("د. أحمد المصري · اتطبعت");
+  });
+
+  it("carries no complaint, diagnosis, drug or note anywhere", () => {
+    const text = events.map((event) => `${event.title} ${detailText(event)}`).join(" | ");
+    for (const word of clinicalWords) {
+      expect(text).not.toContain(word);
+    }
+  });
+
+  it("keeps messages and payments as the doctor reads them", () => {
+    const full = buildProfileEvents(source());
+    for (const key of ["msg:msg-1", "pay:pay-today", "pay:pay-session"]) {
+      expect(byKey(events, key)).toEqual(byKey(full, key));
+    }
+  });
+
+  it("counts no notes", () => {
+    expect(profileTabCounts(events).notes).toBe(0);
+  });
+});
+
 describe("tabs", () => {
   const events = buildProfileEvents(source());
 

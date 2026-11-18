@@ -52,6 +52,8 @@ export const patientProfileStrings = {
   // `.pt-event.visit`
   visitIcon: "ز",
   visitTitle: "زيارة",
+  // The status word in the front desk's "زيارة — خلصت" (domain/clinicalAccess.ts).
+  visitCompletedStatus: "خلصت",
   sessionPrefix: "جلسة",
   sessionOf: "من",
   doctorPrefix: "د.",

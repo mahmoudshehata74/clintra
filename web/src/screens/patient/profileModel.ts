@@ -227,11 +227,46 @@ function sessionTitle(visit: Visit, source: PatientProfileSource): string | null
   return `${head} · ${index + 1} ${T.sessionOf} ${counted.length}`;
 }
 
-function visitEvents(source: PatientProfileSource, itemsByPrescriptionId: ReadonlyMap<string, PrescriptionItem[]>): ProfileEvent[] {
+/** "د. {name}" for the visit's or prescription's doctor; null when the doctor is not on this device. */
+function doctorDetail(source: PatientProfileSource, practitionerId: string): DetailPart[] | null {
+  const doctor = source.practitioners.find((practitioner) => practitioner.id === practitionerId)?.full_name;
+  return doctor ? [{ text: `${T.doctorPrefix} ${doctor}`, tone: "strong" }] : null;
+}
+
+/**
+ * A visit as the front desk reads it (domain/clinicalAccess.ts): "زيارة —
+ * {status}" with its doctor, nothing it opens and no note.
+ */
+function restrictedVisitEvent(visit: Visit, source: PatientProfileSource): ProfileEvent {
+  const doctor = doctorDetail(source, visit.practitioner_id);
+  const status = visit.status === VisitStatus.Completed ? T.visitCompletedStatus : visitStatusLabel(visit.status);
+  const at = visitInstant(visit);
+  return {
+    key: `visit:${visit.id}`,
+    kind: "visit",
+    day: visit.visit_date,
+    at,
+    time: clock(at),
+    title: `${T.visitTitle} — ${status}`,
+    details: doctor ? [doctor] : [],
+    muted: visit.status !== VisitStatus.Completed,
+    target: null,
+  };
+}
+
+function visitEvents(
+  source: PatientProfileSource,
+  itemsByPrescriptionId: ReadonlyMap<string, PrescriptionItem[]>,
+  clinical: boolean,
+): ProfileEvent[] {
   const doctorNames = new Map(source.practitioners.map((practitioner) => [practitioner.id, practitioner.full_name]));
   const events: ProfileEvent[] = [];
   for (const visit of source.visits) {
     if (!SHOWN_VISIT_STATUSES.has(visit.status)) {
+      continue;
+    }
+    if (!clinical) {
+      events.push(restrictedVisitEvent(visit, source));
       continue;
     }
     const values = source.formValuesByVisitId.get(visit.id);
@@ -294,12 +329,31 @@ function visitEvents(source: PatientProfileSource, itemsByPrescriptionId: Readon
 function prescriptionEvents(
   source: PatientProfileSource,
   itemsByPrescriptionId: ReadonlyMap<string, PrescriptionItem[]>,
+  clinical: boolean,
 ): ProfileEvent[] {
   return source.prescriptions.flatMap((prescription): ProfileEvent[] => {
     const items = sortRxItems(itemsByPrescriptionId.get(prescription.id) ?? []);
     // A prescription whose every drug was removed prescribes nothing.
     if (items.length === 0) {
       return [];
+    }
+    const printed: DetailPart[] = [{ text: prescription.printed_at ? T.rxPrinted : T.rxNotPrinted, tone: "plain" }];
+    if (!clinical) {
+      // The front desk reads "وصفة طبية", its doctor and whether it was printed: no drug, no count, no printed page.
+      const doctor = doctorDetail(source, prescription.practitioner_id);
+      return [
+        {
+          key: `rx:${prescription.id}`,
+          kind: "rx",
+          day: todayInCairo(new Date(prescription.created_at)),
+          at: prescription.created_at,
+          time: clock(prescription.created_at),
+          title: T.rxTitle,
+          details: doctor ? [doctor, printed] : [printed],
+          muted: false,
+          target: null,
+        },
+      ];
     }
     const names = items.flatMap((item, index): DetailPart[] => [
       ...(index === 0 ? [] : [{ text: "، ", tone: "plain" as const }]),
@@ -313,7 +367,7 @@ function prescriptionEvents(
         at: prescription.created_at,
         time: clock(prescription.created_at),
         title: `${T.rxTitle} · ${countPhrase(items.length, RX_COUNT_FORMS)}`,
-        details: [names, [{ text: prescription.printed_at ? T.rxPrinted : T.rxNotPrinted, tone: "plain" }]],
+        details: [names, printed],
         muted: false,
         target: { kind: "rx", prescriptionId: prescription.id },
       },
@@ -382,15 +436,21 @@ function paymentEvents(source: PatientProfileSource): ProfileEvent[] {
 // Within one time, the visit leads, its note follows it, then the rest.
 const KIND_ORDER: Record<ProfileEventKind, number> = { visit: 0, note: 1, rx: 2, msg: 3, pay: 4 };
 
-/** Every event of the patient's history, newest first: by day, then by time (untimed last), then by kind. */
-export function buildProfileEvents(source: PatientProfileSource): ProfileEvent[] {
+/**
+ * Every event of the patient's history, newest first: by day, then by time
+ * (untimed last), then by kind. `clinical` false (an assistant or manager,
+ * domain/clinicalAccess.ts) leaves out the complaint, the diagnosis, the
+ * visit form, the drugs and the doctor's notes: a visit or prescription
+ * reads with its date, doctor and status only and opens nothing.
+ */
+export function buildProfileEvents(source: PatientProfileSource, clinical = true): ProfileEvent[] {
   const itemsByPrescriptionId = new Map<string, PrescriptionItem[]>();
   for (const item of source.prescriptionItems) {
     itemsByPrescriptionId.set(item.prescription_id, [...(itemsByPrescriptionId.get(item.prescription_id) ?? []), item]);
   }
   return [
-    ...visitEvents(source, itemsByPrescriptionId),
-    ...prescriptionEvents(source, itemsByPrescriptionId),
+    ...visitEvents(source, itemsByPrescriptionId, clinical),
+    ...prescriptionEvents(source, itemsByPrescriptionId, clinical),
     ...messageEvents(source),
     ...paymentEvents(source),
   ].sort(
