@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useGuardedActingMembership } from "../../auth/useActingMembership";
 import Ltr from "../../components/Ltr";
 import SlashDate from "../../components/SlashDate";
 import Button from "../../components/ui/Button";
@@ -9,6 +10,7 @@ import type { Invoice, Patient, PrescriptionItem, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitCompleted } from "../../db/visitAttendance";
 import { findGeneralFormDefinition, readVisitFormValues, type VisitFormFieldValues } from "../../db/visitForm";
+import { readsClinicalText } from "../../domain/clinicalAccess";
 import { todayInCairo } from "../../domain/time";
 import CarePlanSheet from "../carePlan/CarePlanSheet";
 import InvoiceSheet from "../day/InvoiceSheet";
@@ -127,12 +129,18 @@ type OpenSheet =
  * "اعرض أقدم" for 100 more. Tapping a visit opens its workspace, a
  * prescription its printed page, a payment its invoice, the plan stat the
  * plan. The host frames it: a card on the patients page, a sheet elsewhere.
+ * An assistant or manager sees no complaint, diagnosis, visit form, drug or
+ * note, and a visit or prescription opens nothing for them
+ * (domain/clinicalAccess.ts).
  */
 export default function PatientProfile({ patientId, initialTab = "all" }: PatientProfileProps) {
   const [tab, setTab] = useState<ProfileTab>(initialTab);
   const [pages, setPages] = useState(1);
   const [openSheet, setOpenSheet] = useState<OpenSheet>(null);
   const data = useLiveQuery(() => loadProfile(patientId), [patientId]);
+  // An assistant or manager reads each visit and prescription with its date,
+  // doctor and status only (domain/clinicalAccess.ts).
+  const clinical = readsClinicalText(useGuardedActingMembership());
 
   if (!data) {
     return <p className="px-6 py-5 text-muted">{T.loadingLabel}</p>;
@@ -140,7 +148,7 @@ export default function PatientProfile({ patientId, initialTab = "all" }: Patien
 
   const now = new Date();
   const hero = buildProfileHero(data, now);
-  const events = buildProfileEvents(data);
+  const events = buildProfileEvents(data, clinical);
   const counts = profileTabCounts(events);
   const page = pageProfileEvents(filterProfileEvents(events, tab), pages);
   const days = groupProfileEvents(page.events, todayInCairo(now), planStartDays(data.plans));

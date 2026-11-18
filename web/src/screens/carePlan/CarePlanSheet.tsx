@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useGuardedActingMembership } from "../../auth/useActingMembership";
+import { readsClinicalText } from "../../domain/clinicalAccess";
 import Ltr from "../../components/Ltr";
 import SlashDate from "../../components/SlashDate";
 import Button from "../../components/ui/Button";
@@ -132,7 +133,10 @@ async function loadPlan(planId: string): Promise<PlanData | null> {
 }
 
 function PlanView({ planId }: { planId: string }) {
-  const actingPractitionerId = useGuardedActingMembership()?.practitioner_id ?? null;
+  const actingMembership = useGuardedActingMembership();
+  const actingPractitionerId = actingMembership?.practitioner_id ?? null;
+  // The front desk reads the plan without its diagnosis (domain/clinicalAccess.ts).
+  const showDiagnosis = readsClinicalText(actingMembership);
   const [isEditing, setIsEditing] = useState(false);
   const [reminderVisitId, setReminderVisitId] = useState<string | null>(null);
   const [booking, setBooking] = useState<BookNextState | null>(null);
@@ -174,7 +178,7 @@ function PlanView({ planId }: { planId: string }) {
 
   return (
     <SheetPanelBody>
-      <PlanHero model={model} />
+      <PlanHero model={model} showDiagnosis={showDiagnosis} />
       {model.statusLine && (
         <p
           role="status"
@@ -245,7 +249,7 @@ function PlanView({ planId }: { planId: string }) {
 }
 
 /** `.plan-hero`: `.top` (`.avatar`, `.info` `.name` `.goal`, `.kbd`), `.plan-progress` (`.plan-prog-h`, `.plan-bar`), `.plan-legs`. */
-function PlanHero({ model }: { model: CarePlanSheetModel }) {
+function PlanHero({ model, showDiagnosis }: { model: CarePlanSheetModel; showDiagnosis: boolean }) {
   return (
     <section
       aria-label={T.sheetTitle}
@@ -262,8 +266,12 @@ function PlanHero({ model }: { model: CarePlanSheetModel }) {
           <div className="text-xl font-bold tracking-[-0.01em] text-on-copper">{model.patientName}</div>
           <div className="mt-[3px] text-[12.5px] text-on-copper">
             <b className="font-semibold text-on-copper">{T.goalLabel}</b> {model.goal}
-            {" · "}
-            <b className="font-semibold text-on-copper">{T.diagnosisLabel}</b> {model.diagnosis}
+            {showDiagnosis && (
+              <>
+                {" · "}
+                <b className="font-semibold text-on-copper">{T.diagnosisLabel}</b> {model.diagnosis}
+              </>
+            )}
           </div>
         </div>
         <div className="ms-auto whitespace-nowrap rounded-chip border border-glass/20 bg-glass/[0.12] px-2.5 py-1 text-[11px] text-on-copper">
