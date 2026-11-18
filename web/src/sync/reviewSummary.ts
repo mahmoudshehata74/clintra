@@ -66,6 +66,7 @@ const REASON_LABELS: Record<string, string> = {
   conflict: "فيه تعارض في البيانات",
   unknown_entity: "السيرفر مبيستقبلش النوع ده من البيانات، فالتغيير ده مش هيوصل",
   invoice_has_payment: "الفاتورة دي اتدفع فيها، مينفعش تتعدّل",
+  op_id_reused: "العملية دي اتبعتت قبل كده بمحتوى مختلف",
 };
 
 // An unknown_entity row names a table the server does not sync (a users op

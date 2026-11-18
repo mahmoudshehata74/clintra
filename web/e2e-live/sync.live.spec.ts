@@ -16,7 +16,7 @@ import {
   SIDEBAR,
 } from "../e2e/support";
 import { addDaysToClinicDay, todayInCairo, weekdayOf } from "../src/domain/time";
-import { bookNew, eventually, firstEmptySlotTime, nudge, openDevice, pushed, rowCount, rowStatus, seriesLetter, setUpClinic, type Device } from "./liveSupport";
+import { bookNew, eventually, firstEmptySlotTime, firstPullLanded, nudge, openDevice, pushed, rowCount, rowStatus, seriesLetter, setUpClinic, type Device } from "./liveSupport";
 import { provisionOrg, removeLiveOrgs, startApi, stopApi, type LiveOrg } from "./liveServer";
 
 // Two devices of one freshly provisioned organization, each its own browser
@@ -123,6 +123,8 @@ test("payment round trip; B's invoice numbers carry its series letter", async ({
 
 test("A offline books three and takes a payment; back online, B shows each once", async ({ browser }) => {
   const [a, b] = await twoDevices(browser);
+  // A must hold the schedule before it goes offline, or it has no slot to book.
+  await eventually([a], () => firstPullLanded(a), true, "A's first pull lands");
   await a.context.setOffline(true);
   await expect(a.page.getByRole("button", { name: S.syncLocal, exact: true })).toBeVisible();
   const names = ["مريض أوفلاين 1", "مريض أوفلاين 2", "مريض أوفلاين 3"];
@@ -148,6 +150,8 @@ test("A offline books three and takes a payment; back online, B shows each once"
 
 test("server stopped and restarted: the chip says so, a reload keeps the data, then it converges", async ({ browser }) => {
   const [a, b] = await twoDevices(browser);
+  // Stopping the API before A's first pull lands would leave A with no slots to book.
+  await eventually([a], () => firstPullLanded(a), true, "A's first pull lands");
   await stopApi();
   try {
     await bookNew(a, "مريض السيرفر واقف");

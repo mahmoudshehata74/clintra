@@ -42,6 +42,7 @@ describe("describeSyncReview", () => {
     ["conflict_visit_has_prescription", "الزيارة دي ليها وصفة بالفعل من جهاز تاني"],
     ["prescription_printed", "الوصفة دي اتطبعت، مينفعش تتعدّل"],
     ["invoice_has_payment", "الفاتورة دي اتدفع فيها، مينفعش تتعدّل"],
+    ["op_id_reused", "العملية دي اتبعتت قبل كده بمحتوى مختلف"],
   ])("labels %s in Arabic", (reason, label) => {
     expect(describeSyncReview(makeReview({ entity: "prescriptions", reason }))).toBe(`وصفة — ${label}`);
   });

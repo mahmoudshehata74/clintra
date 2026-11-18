@@ -53,10 +53,12 @@ class SyncOpApplier
      */
     private function applyInTransaction(array $op, string $membershipId, string $deviceId): array
     {
-        $alreadySeen = DB::table('sync_ledger')->where('op_id', $op['op_id'])->exists();
+        $applied = DB::table('sync_ledger')->where('op_id', $op['op_id'])->first();
 
-        if ($alreadySeen) {
-            return ['op_id' => $op['op_id'], 'status' => 'duplicate'];
+        if ($applied !== null) {
+            return $this->matchesAppliedOp($op, $applied)
+                ? ['op_id' => $op['op_id'], 'status' => 'duplicate']
+                : $this->rejected($op, 'op_id_reused');
         }
 
         $table = $op['entity'];
@@ -982,6 +984,75 @@ class SyncOpApplier
             'after' => $op['action'] === 'delete' ? null : json_encode($op['payload']),
             'at' => $now,
         ]);
+    }
+
+    /**
+     * A resent op is a `duplicate` only when it is the op that was applied:
+     * the same entity, entity_id, action, base_rev and payload. An op_id
+     * already applied with any other content is `op_id_reused`, never
+     * reported as done — the content in front of us was never written.
+     *
+     * Nothing new is stored for this: the ledger row names the entity, the
+     * entity_id and the rev the op produced (so the base_rev it was applied
+     * on: none for a create, rev - 1 for an update, rev for a delete), and
+     * the audit row written in the same transaction (same entity, actor and
+     * instant, and a before-image at that base_rev) holds the action and the
+     * payload as stored. The incoming payload is compared as it would be
+     * stored (storedPayload); a delete's payload is never stored, so only its
+     * other fields are compared. Both rows are read through their own RLS
+     * policies (this org only).
+     */
+    private function matchesAppliedOp(array $op, object $applied): bool
+    {
+        if ($op['entity'] !== $applied->entity || strtolower($op['entity_id']) !== strtolower($applied->entity_id)) {
+            return false;
+        }
+
+        $appliedRev = (int) $applied->rev;
+        $appliedOnRev = match ($op['action']) {
+            'create' => null,
+            'update' => $appliedRev - 1,
+            'delete' => $appliedRev,
+        };
+        $baseRev = isset($op['base_rev']) ? (int) $op['base_rev'] : null;
+
+        if ($baseRev !== $appliedOnRev) {
+            return false;
+        }
+
+        $audit = DB::table('audit_log')
+            ->where('entity', $applied->entity)
+            ->where('entity_id', $applied->entity_id)
+            ->where('actor_membership_id', $applied->actor_membership_id)
+            ->where('at', $applied->applied_at)
+            ->where('action', $op['action']);
+
+        $audit = $appliedOnRev === null
+            ? $audit->whereNull('before')
+            : $audit->whereRaw("(before->>'rev')::integer = ?", [$appliedOnRev]);
+
+        if ($op['action'] === 'delete') {
+            return $audit->exists();
+        }
+
+        return $audit->whereRaw('after = ?::jsonb', [json_encode($this->storedPayload($op, $op['entity']))])->exists();
+    }
+
+    /**
+     * The payload as an accepted op stores it in audit_log: a practitioner's
+     * null title as "" (withStoredEmptyTitle), and an append-only row's
+     * update narrowed to its editable columns (applyMessageRule).
+     */
+    private function storedPayload(array $op, string $table): mixed
+    {
+        $payload = $this->withStoredEmptyTitle($op, $table)['payload'] ?? null;
+        $editable = SyncableTables::APPEND_ONLY_COLUMNS[$table] ?? null;
+
+        if ($editable !== null && $op['action'] === 'update' && is_array($payload)) {
+            return array_intersect_key($payload, array_flip($editable));
+        }
+
+        return $payload;
     }
 
     private function rejected(array $op, string $reason): array

@@ -177,6 +177,20 @@ describe("runSyncCycle", () => {
     expect(describeSyncReview(review)).toBe("زيارة — الموظف المسجّل على التغيير ده مش من موظفين العيادة، فالتغيير ده مش هيوصل");
   });
 
+  it("puts an op_id_reused rejection up for review, never marking the op synced, with an Arabic summary", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    const transport = new StubTransport((op) => ({ op_id: op.op_id, status: "rejected", reason: "op_id_reused" }));
+
+    await runSyncCycle(db, transport);
+
+    const [op] = await db.sync_ops.toArray();
+    expect(op.synced_at).toBeNull();
+    const [review] = await db.sync_review.toArray();
+    expect(review).toMatchObject({ op_id: op.op_id, entity: "visits", reason: "op_id_reused", needs_review: true });
+    expect(describeSyncReview(review)).toBe("زيارة — العملية دي اتبعتت قبل كده بمحتوى مختلف");
+  });
+
   it("does not re-push an op that already has an open review row, avoiding duplicate review spam every cycle", async () => {
     const visit = makeVisit();
     await writeVisit(visit);
