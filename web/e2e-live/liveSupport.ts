@@ -57,6 +57,18 @@ export async function pushed(device: Device): Promise<boolean> {
   return ops.every((op) => op.synced_at !== null);
 }
 
+/**
+ * This device's first pull has landed: its pull cursor is written (the
+ * engine writes it only after applying a page, sync/engine.ts's
+ * runPullCycle) and today's schedules are on the device, so its grid has
+ * slots to book.
+ */
+export async function firstPullLanded(device: Device): Promise<boolean> {
+  const [row] = await readStore<{ pull_cursor: string | null }>(device.page, "device");
+  const schedules = await readStore<{ id: string }>(device.page, "schedules");
+  return (row?.pull_cursor ?? null) !== null && schedules.length > 0;
+}
+
 /** How many day-grid rows show `name`. */
 export function rowCount(device: Device, name: string): Promise<number> {
   return rowFor(device.page, name).count();

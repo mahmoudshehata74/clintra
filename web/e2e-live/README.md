@@ -14,9 +14,10 @@ path the ordinary e2e suite never takes (it runs on the in-browser
    appears on A.
 2. A payment taken on B reaches A; B's invoice numbers carry B's own series
    letter.
-3. A goes offline, books three patients and takes a payment, comes back:
+3. Once A's first pull has landed, A goes offline, books three patients and takes a payment, comes back:
    B shows each booking once and the payment once.
-4. The API is stopped: A's chip reads "السيرفر مش راد", a reload keeps A's
+4. Once A's first pull has landed (pull cursor written, schedules on the
+   device — `firstPullLanded`), the API is stopped: A's chip reads "السيرفر مش راد", a reload keeps A's
    new booking; the API is started again and both devices converge.
 5. Both devices go offline and book the same slot: the first to reconnect
    keeps it; the other is asked to review, naming its lost booking and
