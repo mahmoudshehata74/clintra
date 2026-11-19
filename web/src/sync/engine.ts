@@ -263,13 +263,56 @@ export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport
  * runBootstrapWindow and runPullCycle's own loop below: both receive the
  * identical PulledChange shape, and both apply it the same way.
  */
-async function applyChange(db: ClintraDatabase, change: { entity: string; entity_id: string; payload: Record<string, unknown> | null }): Promise<void> {
+async function applyChange(
+  db: ClintraDatabase,
+  change: { entity: string; entity_id: string; payload: Record<string, unknown> | null },
+  pending: ReadonlySet<string>,
+): Promise<void> {
   const table = resolveTable(db, change.entity);
   if (change.payload === null) {
     await table.delete(change.entity_id);
-  } else {
-    await applyPulledRow(db, change.entity, change.payload);
+    return;
   }
+  if (pending.has(rowKey(change.entity, change.entity_id)) && (await isNoNewerThanLocal(table, change.entity_id, change.payload))) {
+    return;
+  }
+  await applyPulledRow(db, change.entity, change.payload);
+}
+
+function rowKey(entity: string, entityId: string): string {
+  return `${entity}:${entityId}`;
+}
+
+/**
+ * The rows this device has written and not pushed yet, whose writes are
+ * still on their way up (no open review holds them back). Read once per
+ * pulled page.
+ */
+async function rowsWithPendingWrites(db: ClintraDatabase): Promise<Set<string>> {
+  const reviews = await db.sync_review.toArray();
+  const heldBack = new Set(reviews.filter((review) => review.needs_review).map((review) => review.op_id));
+  const ops = await db.sync_ops.toArray();
+  return new Set(
+    ops.filter((op) => op.synced_at === null && !heldBack.has(op.op_id)).map((op) => rowKey(op.entity, op.entity_id)),
+  );
+}
+
+/**
+ * A pulled row at a rev this device already holds carries nothing the
+ * local row lacks: it is the server's copy from before this device's own
+ * later, unsent writes — typically the echo of a push that was in flight
+ * while the user went on writing the same row (the #44 live failure: a
+ * pulled "booked" over a local "arrived" made the next tap an invalid
+ * transition that wrote nothing). Such a row is skipped; those writes'
+ * push and the pull after it bring the server's row. A newer rev — another
+ * device moved the row on — is applied as before, and the unsent write
+ * meets its conflict on push.
+ */
+async function isNoNewerThanLocal(table: Table<unknown, string>, entityId: string, payload: Record<string, unknown>): Promise<boolean> {
+  const local = (await table.get(entityId)) as { rev?: unknown } | undefined;
+  const localRev = typeof local?.rev === "number" ? local.rev : null;
+  const pulledRev = typeof payload.rev === "number" ? payload.rev : null;
+  return localRev !== null && pulledRev !== null && pulledRev <= localRev;
 }
 
 /** The sync_review reason recordDeviceSeries leaves when the server reports a different series than the one this device already mints in. */
@@ -359,8 +402,9 @@ async function runBootstrapWindow(db: ClintraDatabase, transport: SyncTransport)
       return;
     }
 
+    const pending = await rowsWithPendingWrites(db);
     for (const change of result.changes) {
-      await applyChange(db, change);
+      await applyChange(db, change, pending);
     }
     await recordDeviceSeries(db, result.deviceSeries);
 
@@ -417,8 +461,9 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
       return;
     }
 
+    const pending = await rowsWithPendingWrites(db);
     for (const change of result.changes) {
-      await applyChange(db, change);
+      await applyChange(db, change, pending);
     }
     await recordDeviceSeries(db, result.deviceSeries);
 

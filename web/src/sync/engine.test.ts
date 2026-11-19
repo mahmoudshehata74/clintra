@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { id } from "../domain/id";
+import { LocationScope, PractitionerScope } from "../domain/scope";
+import { Role } from "../domain/role";
 import { VisitSource } from "../domain/visitSource";
 import { VisitStatus } from "../domain/visitStatus";
 import { ClintraDatabase } from "../db/database";
 import { mutate } from "../db/mutate";
 import { getDeviceId } from "../db/deviceRegistration";
 import { AuditAction, type SyncOp, type Visit } from "../db/types";
+import { markVisitArrived, markVisitInRoom } from "../db/visitAttendance";
 import { FakeTransport } from "./fakeTransport";
 import { describeSyncReview } from "./reviewSummary";
 import {
@@ -1009,5 +1012,125 @@ describe("runSyncCycle: a device's own quick successive writes of one row", () =
 
     const [review] = await db.sync_review.toArray();
     expect(review?.reason).toBe("conflict");
+  });
+});
+
+/**
+ * The #44 live failure: B books a visit and taps "وصل" while the booking's
+ * push is still in flight. The pull that follows that push returns the
+ * server's copy — still booked, at the rev this device already holds — and
+ * used to write it over the local arrived row, so the next tap ("في الكشف")
+ * found a booked visit, refused it as an invalid transition and wrote
+ * nothing.
+ */
+describe("runPullCycle: a pulled row no newer than an unsent local write", () => {
+  beforeEach(async () => {
+    await db.device.add({
+      id: getDeviceId(),
+      org_id: "org-1",
+      location_id: "location-1",
+      registered_at: new Date().toISOString(),
+      pull_cursor: "0",
+      membership_id: null,
+      token: null,
+      series: 1,
+    });
+    // The acting membership the vitest setup's resolver reads back for the taps.
+    await db.memberships.add({
+      id: "membership-1",
+      user_id: "user-1",
+      org_id: "org-1",
+      role: Role.Assistant,
+      location_scope: LocationScope.All,
+      practitioner_scope: PractitionerScope.All,
+      practitioner_id: null,
+      pin_hash: "hash",
+      pin_salt: "salt",
+      is_active: true,
+      rev: 1,
+    });
+  });
+
+  /** Pushes like the server, and runs `duringPush` while the request is in flight. */
+  class InFlightTransport extends RevCheckingTransport {
+    duringPush: (() => Promise<void>) | null = null;
+    serverRows = new Map<string, Visit>();
+
+    override async pushOps(ops: readonly SyncOp[]): Promise<PushOpResult[]> {
+      const results = await super.pushOps(ops);
+      for (const [index, op] of ops.entries()) {
+        const result = results[index];
+        if (result.status === "accepted" && op.payload) {
+          this.serverRows.set(op.entity_id, { ...(op.payload as Visit), rev: result.rev });
+        }
+      }
+      const during = this.duringPush;
+      this.duringPush = null;
+      await during?.();
+      return results;
+    }
+
+    override async pullSince(): Promise<PullSinceResult> {
+      return {
+        cursor: "1",
+        hasMore: false,
+        changes: [...this.serverRows.values()].map((row) => ({ entity: "visits", entity_id: row.id, rev: row.rev, payload: { ...row } })),
+      };
+    }
+  }
+
+  it("keeps the local arrived row, so the in-room tap that follows writes and pushes", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    const transport = new InFlightTransport();
+    transport.duringPush = async () => {
+      await markVisitArrived(db, visit.id);
+    };
+
+    await runSyncCycle(db, transport);
+    await runPullCycle(db, transport);
+
+    expect((await db.visits.get(visit.id))?.status).toBe(VisitStatus.Arrived);
+    await markVisitInRoom(db, visit.id);
+    await runSyncCycle(db, transport);
+    await runPullCycle(db, transport);
+
+    expect(transport.calls[1].map((op) => (op.payload as Visit).status)).toEqual([VisitStatus.Arrived, VisitStatus.InRoom]);
+    expect(await db.sync_review.count()).toBe(0);
+    expect((await db.visits.get(visit.id))?.status).toBe(VisitStatus.InRoom);
+    expect((await db.visits.get(visit.id))?.rev).toBe(3);
+  });
+
+  it("still takes a newer row another device wrote, and the unsent write goes to review", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    const transport = new InFlightTransport();
+    await runSyncCycle(db, transport);
+    await markVisitArrived(db, visit.id);
+    const elsewhere = { ...transport.serverRows.get(visit.id)!, status: VisitStatus.Cancelled, rev: 2 };
+    transport.serverRows.set(visit.id, elsewhere);
+    transport.revs.set(visit.id, 2);
+
+    await runPullCycle(db, transport);
+    expect((await db.visits.get(visit.id))?.status).toBe(VisitStatus.Cancelled);
+    await runSyncCycle(db, transport);
+
+    const [review] = await db.sync_review.toArray();
+    expect(review?.reason).toBe("conflict");
+  });
+
+  it("still takes the server's row once the local write is up for review", async () => {
+    const visit = makeVisit();
+    await writeVisit(visit);
+    const transport = new InFlightTransport();
+    await runSyncCycle(db, transport);
+    await markVisitArrived(db, visit.id);
+    transport.revs.set(visit.id, 2);
+    await runSyncCycle(db, transport);
+    expect(await db.sync_review.count()).toBe(1);
+
+    await runPullCycle(db, transport);
+
+    expect((await db.visits.get(visit.id))?.status).toBe(VisitStatus.Booked);
   });
 });

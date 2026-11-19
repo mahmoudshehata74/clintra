@@ -912,7 +912,14 @@ settled or a pull displaces the parent.
 | `audit_log` | `seq` | no | not syncable; never pulled |
 
 The primary key (`id`) of every store is not a collision: a pulled row
-with a local row's id *is* that row, and the upsert overwrites it.
+with a local row's id *is* that row, and the upsert overwrites it —
+except when that row still has an unsent op on its way up (no open
+review) and the pulled rev is no newer than the local row's: that is the
+server's copy from before this device's own later writes (typically the
+echo of a push that was in flight while the user wrote the row again), so
+the engine skips it and the next push and pull bring the server's row
+(`web/src/sync/engine.ts`'s `isNoNewerThanLocal`). A newer rev is still
+applied, and the unsent write meets its conflict on push.
 `sync_ops`, `sync_review` and `device` are never pulled. The three
 number-series indexes cannot collide in normal operation. If one ever
 did, `applyPulledRow` handles it generically, as (a) or (b).
