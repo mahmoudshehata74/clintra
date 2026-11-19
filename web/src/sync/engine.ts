@@ -8,7 +8,7 @@ import { chainBaseRevs, rebaseUnsent } from "./baseRevChain";
 import { applyPulledRow, familyTables, foldChildOpsOfRejectedCreate } from "./pullCollisions";
 import { backOffGroup, GROUP_REJECTED_REASON, recordRefusedGroup } from "./syncGroups";
 import { pruneRemoteAuditRows, runAuditPull, runAuditPush, type AuditSyncOutcome } from "./auditSync";
-import { hasAuditEndpoints, SyncAuthError, type SyncTransport } from "./transport";
+import { hasAuditEndpoints, SyncAuthError, type PulledChange, type SyncTransport } from "./transport";
 
 const DEFAULT_INTERVAL_MS = 10_000;
 
@@ -279,6 +279,22 @@ async function applyChange(
   await applyPulledRow(db, change.entity, change.payload);
 }
 
+/**
+ * Applies one pulled page in one read-write transaction over every table,
+ * so the rows with pending writes, read at its start, stay exact until it
+ * commits: a write the user makes meanwhile waits for the page, and the
+ * next page sees its op. Read once outside it, a tap landing while a long
+ * page was still being applied had its row overwritten by that page.
+ */
+async function applyPage(db: ClintraDatabase, changes: readonly PulledChange[]): Promise<void> {
+  await db.transaction("rw", db.tables, async () => {
+    const pending = await rowsWithPendingWrites(db);
+    for (const change of changes) {
+      await applyChange(db, change, pending);
+    }
+  });
+}
+
 function rowKey(entity: string, entityId: string): string {
   return `${entity}:${entityId}`;
 }
@@ -402,10 +418,7 @@ async function runBootstrapWindow(db: ClintraDatabase, transport: SyncTransport)
       return;
     }
 
-    const pending = await rowsWithPendingWrites(db);
-    for (const change of result.changes) {
-      await applyChange(db, change, pending);
-    }
+    await applyPage(db, result.changes);
     await recordDeviceSeries(db, result.deviceSeries);
 
     cursor = result.cursor;
@@ -461,10 +474,7 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
       return;
     }
 
-    const pending = await rowsWithPendingWrites(db);
-    for (const change of result.changes) {
-      await applyChange(db, change, pending);
-    }
+    await applyPage(db, result.changes);
     await recordDeviceSeries(db, result.deviceSeries);
 
     cursor = result.cursor;

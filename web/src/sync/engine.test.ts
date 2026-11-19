@@ -1133,4 +1133,50 @@ describe("runPullCycle: a pulled row no newer than an unsent local write", () =>
 
     expect((await db.visits.get(visit.id))?.status).toBe(VisitStatus.Booked);
   });
+
+  it("keeps a write made while a pulled page is being applied, even when the page carries the row later on", async () => {
+    // A fresh device's backfill page: many rows, the visit near its end, all at the revs this device holds.
+    const visit = makeVisit();
+    await writeVisit(visit);
+    const transport = new InFlightTransport();
+    await runSyncCycle(db, transport);
+    const patients: PulledChange[] = Array.from({ length: 40 }, (_, index) => ({
+      entity: "patients",
+      entity_id: `patient-page-${index}`,
+      rev: 1,
+      payload: {
+        id: `patient-page-${index}`,
+        org_id: "org-1",
+        full_name: `مريض ${index}`,
+        phone: null,
+        gender: null,
+        birth_year: null,
+        note: null,
+        created_at: "2026-09-07T06:00:00.000Z",
+        rev: 1,
+      },
+    }));
+    const serverVisit = transport.serverRows.get(visit.id)!;
+    let pageHandedOver: () => void = () => undefined;
+    const handedOver = new Promise<void>((resolve) => {
+      pageHandedOver = resolve;
+    });
+    transport.pullSince = async () => {
+      pageHandedOver();
+      return {
+        cursor: "2",
+        hasMore: false,
+        changes: [...patients, { entity: "visits", entity_id: visit.id, rev: serverVisit.rev, payload: { ...serverVisit } }],
+      };
+    };
+
+    const pull = runPullCycle(db, transport);
+    await handedOver;
+    // The tap, while the page is being applied.
+    await markVisitArrived(db, visit.id);
+    await pull;
+
+    expect((await db.visits.get(visit.id))?.status).toBe(VisitStatus.Arrived);
+    expect(await db.patients.count()).toBe(40);
+  });
 });
