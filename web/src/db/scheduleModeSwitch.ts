@@ -1,3 +1,5 @@
+import { id } from "../domain/id";
+import { orderedWrites } from "../domain/queueReorder";
 import { addMinutesToClockTime } from "../domain/schedule";
 import { effectiveScheduleMode, foldScheduleMode, ScheduleMode } from "../domain/scheduleMode";
 import { addDaysToClinicDay, cairoInstant, todayInCairo, weekdayOf, type ClinicDay } from "../domain/time";
@@ -10,18 +12,11 @@ export type SwitchScheduleModeResult =
   | { ok: true }
   | { ok: false; reason: "schedule_not_found" | "slot_minutes_required" };
 
-// Positions are parked here first, then written to their true values — see
-// visitQueue.ts's sendVisitToEndOfQueue for the full reasoning; the same
-// transient-collision risk applies whenever several visits' positions are
-// reassigned together.
-const PARK_OFFSET = 1_000_000;
-
 /** The slot length a queue doctor's days get when switched to slots with none set (as a new working day's). */
 const DEFAULT_SLOT_MINUTES = 30;
 
-/** A conversion, as planned by planConversion: raw parking puts first, then the audited updates, in order. */
+/** A conversion, as planned by planConversion: the audited updates, in the order they must be written. */
 interface ConversionPlan {
-  parked: Visit[];
   updates: { before: Visit; after: Visit }[];
 }
 
@@ -44,16 +39,20 @@ interface ConversionPlan {
  *   translated visit lands exactly on a real slot rather than one slot
  *   late. The caller makes sure the schedule has a slot_minutes.
  *
- * No visit is ever dropped. Reassigning positions (slots -> queue only —
- * the new ordering can genuinely differ from the existing slot-index
- * positions) parks every affected visit at position + PARK_OFFSET first, an
- * unaudited raw write that never commits on its own and is invisible to
- * any other reader, then writes each one's real final position — writing
- * the shifted positions directly, in any order, could otherwise transiently
- * collide with whichever visit currently holds a target position.
+ * No visit is ever dropped. The new positions (slots -> queue only) are
+ * written in domain/queueReorder.ts's orderedWrites order over every
+ * position the doctor's day holds (`dayPositions`): a visit whose place is
+ * still taken is parked below zero first, so no two visits ever share a
+ * position, on the device or op by op on the server. Each update's before
+ * is the visit as the update before it left it.
  */
-function planConversion(schedule: Schedule, visits: readonly Visit[], newMode: ScheduleMode): ConversionPlan {
-  const plan: ConversionPlan = { parked: [], updates: [] };
+function planConversion(
+  schedule: Schedule,
+  visits: readonly Visit[],
+  newMode: ScheduleMode,
+  dayPositions: (date: string) => number[],
+): ConversionPlan {
+  const plan: ConversionPlan = { updates: [] };
   const visitsByDate = new Map<string, Visit[]>();
   for (const visit of visits) {
     const list = visitsByDate.get(visit.visit_date);
@@ -64,17 +63,30 @@ function planConversion(schedule: Schedule, visits: readonly Visit[], newMode: S
     }
   }
 
-  for (const visitsForDay of visitsByDate.values()) {
+  for (const [date, visitsForDay] of visitsByDate) {
     if (newMode === ScheduleMode.Queue) {
       const sortedByTime = [...visitsForDay].sort((a, b) => (a.scheduled_at ?? "").localeCompare(b.scheduled_at ?? ""));
-      for (const visit of sortedByTime) {
-        plan.parked.push({ ...visit, position: visit.position + PARK_OFFSET });
-      }
-      sortedByTime.forEach((visit, index) => {
-        const after: Visit = { ...visit, position: index + 1, scheduled_at: null };
+      const target = new Map(sortedByTime.map((visit, index) => [visit.id, index + 1]));
+      // A write to the visit's own new position is its conversion; any other is a parking step.
+      const written = (before: Visit, position: number): Visit => {
+        if (position !== target.get(before.id)) {
+          return { ...before, position };
+        }
+        const after: Visit = { ...before, position, scheduled_at: null };
         delete after.unique_scheduled_at;
-        plan.updates.push({ before: visit, after });
-      });
+        return after;
+      };
+      const current = new Map(sortedByTime.map((visit) => [visit.id, visit]));
+      for (const visit of sortedByTime.filter((candidate) => candidate.position === target.get(candidate.id))) {
+        plan.updates.push({ before: visit, after: written(visit, visit.position) });
+      }
+      const moves = sortedByTime.map((visit) => ({ visitId: visit.id, from: visit.position, to: target.get(visit.id)! }));
+      for (const step of orderedWrites(moves, dayPositions(date))) {
+        const before = current.get(step.visitId)!;
+        const after = written(before, step.position);
+        plan.updates.push({ before, after });
+        current.set(after.id, after);
+      }
     } else {
       for (const visit of visitsForDay) {
         const time = addMinutesToClockTime(schedule.start_time, (visit.position - 1) * schedule.slot_minutes!);
@@ -88,6 +100,11 @@ function planConversion(schedule: Schedule, visits: readonly Visit[], newMode: S
     }
   }
   return plan;
+}
+
+/** Every position a doctor's visits hold on each date, for planConversion. */
+function positionsOfDay(allVisits: readonly Visit[], practitionerId: string): (date: string) => number[] {
+  return (date) => allVisits.filter((visit) => visit.practitioner_id === practitionerId && visit.visit_date === date).map((visit) => visit.position);
 }
 
 /**
@@ -142,10 +159,9 @@ export async function switchScheduleMode(
         visit.location_id === schedule.location_id &&
         weekdayOf(visit.visit_date) === weekday,
     );
-    const plan = planConversion(schedule, visits, newMode);
-    for (const parked of plan.parked) {
-      await db.visits.put(parked);
-    }
+    const plan = planConversion(schedule, visits, newMode, positionsOfDay(allVisits, practitionerId));
+    // Every visit it moves and the row it changes: one group, all or nothing on the server.
+    const groupId = id();
     for (const { before, after } of plan.updates) {
       await write({
         table: db.visits,
@@ -156,6 +172,7 @@ export async function switchScheduleMode(
         after,
         actorMembershipId: actor.id,
         orgId: practitioner.org_id,
+        groupId,
       });
     }
 
@@ -169,6 +186,7 @@ export async function switchScheduleMode(
       after: updatedSchedule,
       actorMembershipId: actor.id,
       orgId: practitioner.org_id,
+      groupId,
     });
 
     return { ok: true };
@@ -229,6 +247,8 @@ export async function switchModeFromTomorrow(
 
     const allVisits = await db.visits.toArray();
     const convertedWeekdays = new Set<number>();
+    // The whole switch — every visit it moves and every row it changes — is one group: all or nothing on the server.
+    const groupId = id();
 
     for (const row of rows) {
       const folded = foldScheduleMode(row, today);
@@ -251,10 +271,7 @@ export async function switchModeFromTomorrow(
               visit.visit_date >= tomorrow &&
               weekdayOf(visit.visit_date) === row.weekday,
           );
-          const plan = planConversion(after, visits, input.newMode);
-          for (const parked of plan.parked) {
-            await db.visits.put(parked);
-          }
+          const plan = planConversion(after, visits, input.newMode, positionsOfDay(allVisits, input.practitionerId));
           for (const { before, after: converted } of plan.updates) {
             await write({
               table: db.visits,
@@ -265,6 +282,7 @@ export async function switchModeFromTomorrow(
               after: converted,
               actorMembershipId: actor.id,
               orgId: practitioner.org_id,
+              groupId,
             });
           }
         }
@@ -280,6 +298,7 @@ export async function switchModeFromTomorrow(
           after,
           actorMembershipId: actor.id,
           orgId: practitioner.org_id,
+          groupId,
         });
       }
     }

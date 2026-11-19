@@ -855,9 +855,13 @@ entity's *current* state (`SyncPuller::currentPayload`), not its state as
 of that ledger entry. So when accepted rows trade keys on the server (a
 swap of two queue positions, done through a third value), an earlier
 entry in a page can carry a key that a local row still holds until a
-later entry in the same page moves it. A queue reorder does exactly that
-(`feat/queue-reorder`, `web/src/db/visitQueue.ts`): its position moves
-reach the server as one group (api/docs/rls.md, "A group applies whole or
+later entry in the same page moves it. A queue reorder, "send to end of
+queue" and its undo (`web/src/db/visitQueue.ts`), and a doctor's switch
+between slots and queue (`web/src/db/scheduleModeSwitch.ts`: every visit
+it renumbers and every schedule row it changes) do exactly that: each
+change's position moves are written in `orderedWrites` order (a visit
+whose place is still taken parked below zero first, so no two visits
+share a position at any step) and reach the server as one group (api/docs/rls.md, "A group applies whole or
 not at all"), and another device pulls them one row at a time. So a pulled
 visit that takes the [practitioner, day, position] of an accepted local
 visit — and does not share its scheduled time — parks that local visit (`isParkableQueueBlocker`, `parkVisit`: a
@@ -875,8 +879,10 @@ out of the queue, puts each row back as it was before the group's first
 write of it (through the pull's own key-safe write) unless a pull has
 already brought a newer version of it, and leaves one review whose payload is the whole group. The sheet
 reads "ترتيب الدور — اتغيّر من جهاز تاني قبل ما ترتيبك يوصل، فرجع زي ما اتعمل
-هناك" and offers only "تمام": the other device's order is already kept,
-and arrives by pull. A `failed` op of a group backs off the whole group,
+هناك" — or, for a group that changed a schedule row (a mode switch),
+"نظام الحجز (مواعيد أو دور) — اتغيّر من جهاز تاني قبل ما تغييرك يوصل، فرجع زي
+ما اتعمل هناك" — and offers only "تمام": the other device's change is
+already kept, and arrives by pull. A `failed` op of a group backs off the whole group,
 so a group is never resent in part.
 
 **c. Children of a rejected create.** On the server, a child create whose
@@ -919,7 +925,10 @@ server's copy from before this device's own later writes (typically the
 echo of a push that was in flight while the user wrote the row again), so
 the engine skips it and the next push and pull bring the server's row
 (`web/src/sync/engine.ts`'s `isNoNewerThanLocal`). A newer rev is still
-applied, and the unsent write meets its conflict on push.
+applied, and the unsent write meets its conflict on push. Each pulled page
+is applied in one read-write transaction (`applyPage`), so the set of
+rows with unsent writes, read at its start, holds until it commits: a
+write made meanwhile waits for the page, and the next page sees it.
 `sync_ops`, `sync_review` and `device` are never pulled. The three
 number-series indexes cannot collide in normal operation. If one ever
 did, `applyPulledRow` handles it generically, as (a) or (b).

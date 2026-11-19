@@ -119,27 +119,57 @@ export type SendToEndOfQueueResult =
   | { ok: true; moves: QueueReorderMove[] }
   | { ok: false; reason: "visit_not_found" | "not_waiting" };
 
-// Positions are parked here first, then written to their true values — see
-// the doc comment on sendVisitToEndOfQueue for why.
-const PARK_OFFSET = 1_000_000;
-
 const WAITING_STATUSES = new Set<VisitStatus>([VisitStatus.Booked, VisitStatus.Arrived]);
+
+/**
+ * Writes `moves` on one queue day as one group of ops (SyncOp.group_id), in
+ * the order orderedWrites gives over every position the day holds, each op
+ * carrying its visit's rev as this device saw it — so no two visits ever
+ * share a position on the device or, op by op, on the server, which applies
+ * the group whole or not at all (sync/syncGroups.ts). Resolves to each
+ * moved visit's last write's audit row. Writes inline, inside the caller's
+ * transaction: every await here is a real Dexie write.
+ */
+async function writeQueueMoves(
+  write: AtomicWriter,
+  db: ClintraDatabase,
+  day: readonly Visit[],
+  moves: readonly QueueMove[],
+  actorId: string,
+): Promise<Map<string, string>> {
+  const groupId = id();
+  const current = new Map(day.map((row) => [row.id, row]));
+  const lastWrite = new Map<string, string>();
+  for (const step of orderedWrites(
+    moves,
+    day.map((row) => row.position),
+  )) {
+    const before = current.get(step.visitId)!;
+    const after: Visit = { ...before, position: step.position };
+    const auditLogId = await write({
+      table: db.visits,
+      entity: "visits",
+      entityId: before.id,
+      action: AuditAction.Update,
+      before,
+      after,
+      actorMembershipId: actorId,
+      orgId: before.org_id,
+      groupId,
+    });
+    current.set(after.id, after);
+    lastWrite.set(after.id, auditLogId);
+  }
+  return lastWrite;
+}
 
 /**
  * Sends a waiting (booked/arrived) visit to the back of its queue: every
  * visit after it shifts one position earlier, and it takes the vacated
- * highest position. Every visit whose position changes is parked at
- * position + PARK_OFFSET first (a raw, unaudited write — this intermediate
- * state never commits on its own and is never visible to any other reader,
- * since IndexedDB only exposes a transaction's fully-committed end state),
- * then written to its true final position. Without this, writing the
- * shifted positions directly, in any order, would transiently collide with
- * whatever visit currently holds that target position and one of them
- * would still be there — the unique index would reject it. The parked
- * write and the final write are separated by the same reasoning that makes
- * the final state, and only the final state, the thing the audit log
- * records: before/after here are each visit's real before and after, never
- * the throwaway parked value.
+ * highest position. Written as one group (writeQueueMoves): the server
+ * applies the whole move or none of it, and a move made on positions
+ * another device already changed is refused, put back here and left as one
+ * review. The moves returned carry each visit's last write, for the undo.
  */
 export async function sendVisitToEndOfQueue(db: ClintraDatabase, visitId: string): Promise<SendToEndOfQueueResult> {
   const actor = await resolveActingMembership(db);
@@ -165,38 +195,17 @@ export async function sendVisitToEndOfQueue(db: ClintraDatabase, visitId: string
       return { ok: true, moves: [] };
     }
 
-    for (const visit of [pushed, ...affected]) {
-      await db.visits.put({ ...visit, position: visit.position + PARK_OFFSET });
-    }
-
-    const moves: QueueReorderMove[] = [];
-    for (const visit of affected) {
-      const newPosition = visit.position - 1;
-      const auditLogId = await write({
-        table: db.visits,
-        entity: "visits",
-        entityId: visit.id,
-        action: AuditAction.Update,
-        before: visit,
-        after: { ...visit, position: newPosition },
-        actorMembershipId: actor.id,
-        orgId: visit.org_id,
-      });
-      moves.push({ visitId: visit.id, auditLogId, previousPosition: visit.position, newPosition });
-    }
-
-    const pushedAuditLogId = await write({
-      table: db.visits,
-      entity: "visits",
-      entityId: pushed.id,
-      action: AuditAction.Update,
-      before: pushed,
-      after: { ...pushed, position: maxPosition },
-      actorMembershipId: actor.id,
-      orgId: pushed.org_id,
-    });
-    moves.push({ visitId: pushed.id, auditLogId: pushedAuditLogId, previousPosition: pushed.position, newPosition: maxPosition });
-
+    const planned: QueueMove[] = [
+      ...affected.map((visit) => ({ visitId: visit.id, from: visit.position, to: visit.position - 1 })),
+      { visitId: pushed.id, from: pushed.position, to: maxPosition },
+    ];
+    const lastWrite = await writeQueueMoves(write, db, visitsForDay, planned, actor.id);
+    const moves = planned.map((move) => ({
+      visitId: move.visitId,
+      auditLogId: lastWrite.get(move.visitId)!,
+      previousPosition: move.from,
+      newPosition: move.to,
+    }));
     return { ok: true, moves };
   });
 }
@@ -207,13 +216,11 @@ const UNDO_WINDOW_MS = 5 * 60 * 1000;
 
 /**
  * Restores the exact position ordering sendVisitToEndOfQueue had just
- * changed — atomically, all moves reversed together or none. Refuses if any
- * affected visit's position no longer matches what that move set it to
- * (something else has repositioned it since — a later reorder or another
- * write this function's caller does not know about) or if the undo window
- * has passed. Uses the same park-then-final-position technique in reverse
- * for the same reason: writing several visits back to their original
- * positions in any single order can transiently collide with each other.
+ * changed — atomically, all moves reversed together or none, written as one
+ * group the same way (writeQueueMoves). Refuses if any affected visit's
+ * position no longer matches what that move set it to (something else has
+ * repositioned it since — a later reorder or another write this function's
+ * caller does not know about) or if the undo window has passed.
  */
 export async function undoSendVisitToEndOfQueue(
   db: ClintraDatabase,
@@ -240,24 +247,15 @@ export async function undoSendVisitToEndOfQueue(
       return { ok: false, reason: "stale" };
     }
 
-    for (const visit of currentVisits) {
-      await db.visits.put({ ...visit!, position: visit!.position + PARK_OFFSET });
-    }
-
-    for (let index = 0; index < moves.length; index++) {
-      const current = currentVisits[index]!;
-      await write({
-        table: db.visits,
-        entity: "visits",
-        entityId: current.id,
-        action: AuditAction.Update,
-        before: current,
-        after: { ...current, position: moves[index].previousPosition },
-        actorMembershipId: actor.id,
-        orgId: current.org_id,
-      });
-    }
-
+    const first = currentVisits[0]!;
+    const day = await db.visits.where("[practitioner_id+visit_date]").equals([first.practitioner_id, first.visit_date]).toArray();
+    await writeQueueMoves(
+      write,
+      db,
+      day,
+      moves.map((move) => ({ visitId: move.visitId, from: move.newPosition, to: move.previousPosition })),
+      actor.id,
+    );
     return { ok: true };
   });
 }
@@ -269,18 +267,13 @@ export type MoveWaitingVisitResult =
 /**
  * Moves a waiting (arrived) visit one place up or down its queue
  * (domain/queueReorder.ts's moveOnePlace): it trades positions with the
- * neighbouring waiting visit; nobody else moves. Written as one group of
- * ops (SyncOp.group_id) in the order orderedWrites gives — the first visit
- * of each cycle parked below zero, so no two visits ever share a position
- * on the device or, op by op, on the server — and each op carries its
- * visit's rev as this device saw it. The server applies the group whole or
- * not at all: a reorder made on positions another device already moved is
- * refused as conflict_stale_rev, put back here, and left as one review
- * (sync/syncGroups.ts).
+ * neighbouring waiting visit; nobody else moves. Written as one group
+ * (writeQueueMoves): a reorder made on positions another device already
+ * moved is refused as conflict_stale_rev, put back here, and left as one
+ * review (sync/syncGroups.ts).
  */
 export async function moveWaitingVisit(db: ClintraDatabase, visitId: string, direction: "up" | "down"): Promise<MoveWaitingVisitResult> {
   const actor = await resolveActingMembership(db);
-  const groupId = id();
 
   return runAtomicMutations(db, [db.visits], async (write) => {
     const visit = await db.visits.get(visitId);
@@ -292,24 +285,7 @@ export async function moveWaitingVisit(db: ClintraDatabase, visitId: string, dir
     if (!moves || moves.length === 0) {
       return { ok: false, reason: "cannot_move" };
     }
-
-    const current = new Map(day.map((row) => [row.id, row]));
-    for (const step of orderedWrites(moves)) {
-      const before = current.get(step.visitId)!;
-      const after: Visit = { ...before, position: step.position };
-      await write({
-        table: db.visits,
-        entity: "visits",
-        entityId: before.id,
-        action: AuditAction.Update,
-        before,
-        after,
-        actorMembershipId: actor.id,
-        orgId: before.org_id,
-        groupId,
-      });
-      current.set(after.id, after);
-    }
+    await writeQueueMoves(write, db, day, moves, actor.id);
     return { ok: true, moves };
   });
 }

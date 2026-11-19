@@ -1,5 +1,5 @@
 import { PaymentMethod, type Payment, type SyncReview } from "../db/types";
-import { isRefusedGroupReview } from "./syncGroups";
+import { isRefusedGroupReview, type RefusedGroupPayload } from "./syncGroups";
 import { findMessageTemplate } from "../domain/messageTemplates";
 import { formatPiastresForDisplay, type Piastres } from "../domain/money";
 import { clockTimeInCairo } from "../domain/time";
@@ -124,6 +124,9 @@ function describePayment(payment: Payment): string {
 /** A queue reorder another device's reorder beat to the server (sync/syncGroups.ts): put back, the other order kept. */
 export const QUEUE_REORDER_REFUSED_LABEL = "ترتيب الدور — اتغيّر من جهاز تاني قبل ما ترتيبك يوصل، فرجع زي ما اتعمل هناك";
 
+/** A switch between slots and queue (db/scheduleModeSwitch.ts) another device's change beat to the server: put back whole. */
+export const MODE_SWITCH_REFUSED_LABEL = "نظام الحجز (مواعيد أو دور) — اتغيّر من جهاز تاني قبل ما تغييرك يوصل، فرجع زي ما اتعمل هناك";
+
 /**
  * A short human-readable summary of one sync_review row, for the
  * needs-review list. Money is never displaced silently: a displaced row that
@@ -131,9 +134,11 @@ export const QUEUE_REORDER_REFUSED_LABEL = "ترتيب الدور — اتغيّ
  * says how to put them back, since none of them will reach the server.
  */
 export function describeSyncReview(review: SyncReview): string {
-  // A refused queue reorder (sync/syncGroups.ts): one line for the whole change.
+  // A refused group (sync/syncGroups.ts): one line for the whole change —
+  // a mode switch when it changed a schedule row, else a queue move.
   if (isRefusedGroupReview(review)) {
-    return QUEUE_REORDER_REFUSED_LABEL;
+    const group = (review.payload as RefusedGroupPayload).group;
+    return group.some((op) => op.entity === "schedules") ? MODE_SWITCH_REFUSED_LABEL : QUEUE_REORDER_REFUSED_LABEL;
   }
   const entityLabel =
     ENTITY_LABELS[review.entity] ?? (review.reason === "unknown_entity" ? UNKNOWN_ENTITY_LABEL : review.entity);

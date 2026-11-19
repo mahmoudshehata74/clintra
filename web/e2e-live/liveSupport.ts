@@ -1,6 +1,6 @@
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { registrationStrings } from "../src/auth/registrationStrings";
-import { todayInCairo, weekdayOf } from "../src/domain/time";
+import { cairoInstant, todayInCairo, weekdayOf, type ClinicDay } from "../src/domain/time";
 import { login, putRows, readStore, rowFor, S, sidebar, SIDEBAR } from "../e2e/support";
 import { mintCode, type LiveOrg } from "./liveServer";
 
@@ -212,4 +212,71 @@ export async function walkIn(device: Device, name: string): Promise<void> {
 export async function queueOrderOf(device: Device, names: readonly string[]): Promise<string[]> {
   const rows = await device.page.locator("li[data-visit-row-id]").allInnerTexts();
   return rows.map((text) => names.find((name) => text.includes(name))).filter((name): name is string => name !== undefined);
+}
+
+/**
+ * Books visits on `date` for today's doctor straight into `device`'s store,
+ * one create op each, in the order given — so their positions follow that
+ * order, not their times, as slot bookings made one after another do — and
+ * reloads so its screens read them. Each copies one of today's visits (its
+ * patient, doctor, service and location); every other device receives them
+ * by pull. Resolves to the new visits' ids, in the order given.
+ */
+export async function bookDirect(device: Device, org: LiveOrg, date: ClinicDay, times: readonly string[]): Promise<string[]> {
+  const [deviceRow] = await readStore<{ id: string }>(device.page, "device");
+  const visits = await readStore<Record<string, unknown> & { id: string; visit_date: string; practitioner_id: string; position: number }>(device.page, "visits");
+  const template = visits.find((visit) => visit.visit_date === todayInCairo());
+  expect(template, "a visit today to copy").toBeDefined();
+  const taken = visits.filter((visit) => visit.visit_date === date && visit.practitioner_id === template!.practitioner_id);
+  const firstPosition = taken.reduce((max, visit) => Math.max(max, visit.position), 0) + 1;
+  const now = Date.now();
+  const created = times.map((time, index) => {
+    const id = crypto.randomUUID();
+    const scheduledAt = cairoInstant(date, time);
+    const value = {
+      ...template,
+      id,
+      visit_date: date,
+      position: firstPosition + index,
+      scheduled_at: scheduledAt,
+      unique_scheduled_at: scheduledAt,
+      status: "booked",
+      is_overbooked: false,
+      source: "phone",
+      arrived_at: null,
+      started_at: null,
+      ended_at: null,
+      cancel_reason: null,
+      rescheduled_from: null,
+      care_plan_item_id: null,
+      created_at: new Date(now).toISOString(),
+      rev: 1,
+    };
+    return { id, value, index };
+  });
+  await putRows(
+    device.page,
+    created.flatMap(({ id, value, index }) => [
+      { store: "visits", value },
+      {
+        store: "sync_ops",
+        value: {
+          op_id: crypto.randomUUID(),
+          entity: "visits",
+          entity_id: id,
+          action: "create",
+          payload: value,
+          device_id: deviceRow.id,
+          created_at: new Date(now + index).toISOString(),
+          synced_at: null,
+          base_rev: null,
+          failure_count: 0,
+          next_retry_at: null,
+        },
+      },
+    ]),
+  );
+  await device.page.reload();
+  await login(device.page, { name: org.ownerName, pin: org.ownerPin });
+  return created.map(({ id }) => id);
 }

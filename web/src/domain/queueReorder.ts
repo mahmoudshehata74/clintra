@@ -92,29 +92,38 @@ export function parkingPosition(from: number): number {
  * The writes that carry out `moves` one at a time without two visits ever
  * holding one position (the unique [practitioner, day, position] key, on
  * the device and on the server, where each write is its own statement).
- * Each cycle of the permutation parks its first visit, moves every other
- * visit of the cycle into the position the one before it left free, then
- * brings the parked visit to its place.
+ * `occupied` is every position the day's visits hold now — the moving ones
+ * and the ones that stay — and defaults to the moves' own, for a
+ * permutation. A visit goes straight to its place as soon as that place is
+ * free; when none can (what is left is cycles), the remaining visit with
+ * the lowest position is parked first and the others move up behind it.
+ * Moves that are not a permutation of their positions (a day with gaps, or
+ * new positions 1..n) are carried out the same way. Throws when a visit's
+ * place is held by a visit that does not move.
  */
-export function orderedWrites(moves: readonly QueueMove[]): QueueWrite[] {
-  const done = new Set<string>();
+export function orderedWrites(moves: readonly QueueMove[], occupied: readonly number[] = moves.map((move) => move.from)): QueueWrite[] {
+  const held = new Set(occupied);
+  const at = new Map(moves.map((move) => [move.visitId, move.from]));
+  let pending = moves.filter((move) => move.from !== move.to).sort((a, b) => a.from - b.from);
   const writes: QueueWrite[] = [];
-  for (const head of [...moves].sort((a, b) => a.from - b.from)) {
-    if (done.has(head.visitId)) {
+  const write = (visitId: string, position: number) => {
+    held.delete(at.get(visitId)!);
+    held.add(position);
+    at.set(visitId, position);
+    writes.push({ visitId, position });
+  };
+  while (pending.length > 0) {
+    const ready = pending.find((move) => !held.has(move.to));
+    if (ready) {
+      write(ready.visitId, ready.to);
+      pending = pending.filter((move) => move !== ready);
       continue;
     }
-    writes.push({ visitId: head.visitId, position: parkingPosition(head.from) });
-    done.add(head.visitId);
-    // The position the head left is free: whoever moves into it goes next.
-    let free = head.from;
-    let next = moves.find((move) => move.to === free && !done.has(move.visitId));
-    while (next) {
-      writes.push({ visitId: next.visitId, position: next.to });
-      done.add(next.visitId);
-      free = next.from;
-      next = moves.find((move) => move.to === free && !done.has(move.visitId));
+    const head = pending.find((move) => at.get(move.visitId) === move.from);
+    if (!head) {
+      throw new Error("queue_position_held");
     }
-    writes.push({ visitId: head.visitId, position: head.to });
+    write(head.visitId, parkingPosition(head.from));
   }
   return writes;
 }
