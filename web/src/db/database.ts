@@ -591,6 +591,21 @@ export class ClintraDatabase extends Dexie {
             row.rev ??= 1;
           });
       });
+
+    // A closure's reason (docs/schema.md's v27 additions):
+    // schedule_exceptions gain reason, not indexed, so no store changes.
+    // Every exception stored before it is given null, as the server's
+    // existing rows read — a raw modify, so no sync op and no audit row.
+    this.version(27)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx
+          .table("schedule_exceptions")
+          .toCollection()
+          .modify((row: { reason?: string | null }) => {
+            row.reason ??= null;
+          });
+      });
   }
 }
 

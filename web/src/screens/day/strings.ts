@@ -217,6 +217,10 @@ export const dayScreenStrings = {
   // closed date, or new hours for the date): kept, never cancelled.
   outsideHoursRowBadge: "خارج مواعيد العمل",
   dayClosedByException: "اليوم ده إجازة للدكتور",
+  // A closure's optional reason, after the closed-day line on the day
+  // screen and tomorrow's sheet and under the closure in settings, e.g.
+  // "السبب: سفر".
+  closureReasonPrefix: "السبب:",
 
   // The slots-list card (prototype `.c-card`/`.c-head`, #s2) and its rows.
   slotsCardBadge: "اليوم",
@@ -487,6 +491,9 @@ export const dayScreenStrings = {
   daySheetButtonLabel: "ورقة الغد",
   daySheetTitle: "جدول زيارات الغد",
   daySheetEmpty: "مفيش حجوزات للغد",
+  // Above the list when tomorrow is closed for the doctor (a schedule
+  // exception), followed by its reason when it has one.
+  daySheetClosedLine: "بكرة إجازة للدكتور",
   daySheetNoPhone: "بدون رقم",
   printDaySheetAction: "طباعة ورقة الغد",
   // `.print-day`'s own trailing count, e.g. "— 7 مرضى".
@@ -579,6 +586,9 @@ export const dayScreenStrings = {
   exceptionKindLabel: "النوع",
   exceptionKindClosed: "إجازة",
   exceptionKindHours: "مواعيد مختلفة",
+  exceptionReasonLabel: "سبب الإجازة",
+  exceptionReasonHint: "اختياري",
+  exceptionReasonTooLongError: "السبب طويل، خليه 200 حرف أو أقل",
   exceptionClosedLabel: "الدكتور مش شغال اليوم ده",
   exceptionHoursLabel: "مواعيد اليوم ده",
   exceptionHoursBadge: "استثنائي",

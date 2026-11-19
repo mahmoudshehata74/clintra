@@ -30,6 +30,8 @@ interface PractitionerColumnProps {
   hasAnySchedule: boolean;
   /** Today is closed for this practitioner by a schedule exception (domain/scheduleExceptions.ts). */
   isClosedDate?: boolean;
+  /** That closure's optional reason ("سبب الإجازة"), shown on the closed day's line. */
+  closedReason?: string | null;
   /** The weekday's own row, before any exception — on a closed date, which mode its visits were booked in. */
   weeklySchedule?: Schedule;
   visits: readonly Visit[];
@@ -78,6 +80,7 @@ export default function PractitionerColumn({
   todaysSchedule,
   hasAnySchedule,
   isClosedDate = false,
+  closedReason = null,
   weeklySchedule,
   visits,
   patientsById,
@@ -128,6 +131,11 @@ export default function PractitionerColumn({
       <div className="rounded-panel border border-rule p-6 text-center">
         {showLabel && <h3 className="text-lg font-medium">{practitionerName}</h3>}
         <p className="mt-2 text-muted">{message}</p>
+        {isClosedDate && closedReason && (
+          <p className="mt-1 text-sm text-muted">
+            {dayScreenStrings.closureReasonPrefix} {closedReason}
+          </p>
+        )}
         {scheduleState.kind === "not_configured" && (
           <p className="mt-1 text-sm text-muted">{dayScreenStrings.scheduleNotConfiguredHint}</p>
         )}
@@ -139,6 +147,7 @@ export default function PractitionerColumn({
     return (
       <QueueColumn
         isClosedDate={isClosedQueueDay}
+        closedReason={closedReason}
         practitionerName={practitionerName}
         showLabel={showLabel}
         visits={visits}
@@ -207,6 +216,7 @@ export default function PractitionerColumn({
           )
         }
       />
+      {schedule === null && isClosedDate && <ClosedDayNote reason={closedReason} />}
       <ul>
         {rows.map((row) => {
           const { time, visit, isExtraAtTime, isOutsideHours } = row;
@@ -292,6 +302,25 @@ export default function PractitionerColumn({
 // Mirrors SlotRow.tsx's own "visually empty" rule (statusVisual returns null
 // only for rescheduled) without importing its full StatusVisual shape here —
 // this component only needs the yes/no answer, not the styling it implies.
+/**
+ * The closed date's line above a list it still shows (its visits stay,
+ * flagged outside working hours): "اليوم ده إجازة للدكتور", then the
+ * closure's reason when it has one.
+ */
+function ClosedDayNote({ reason }: { reason: string | null }) {
+  return (
+    <p data-closed-day-note="" className="border-b border-rule bg-warning-wash px-4 py-2.5 text-[12.5px] font-semibold text-text">
+      {dayScreenStrings.dayClosedByException}
+      {reason && (
+        <>
+          {" — "}
+          {dayScreenStrings.closureReasonPrefix} {reason}
+        </>
+      )}
+    </p>
+  );
+}
+
 function statusIsVisuallyEmpty(status: Visit["status"]): boolean {
   return status === VisitStatus.Rescheduled;
 }
@@ -299,6 +328,8 @@ function statusIsVisuallyEmpty(status: Visit["status"]): boolean {
 interface QueueColumnProps {
   /** The date is closed (a schedule exception): every still-active row is flagged outside working hours. */
   isClosedDate?: boolean;
+  /** That closure's optional reason. */
+  closedReason?: string | null;
   practitionerName: string;
   showLabel: boolean;
   visits: readonly Visit[];
@@ -361,6 +392,7 @@ function QueueColumn({
   onWalkIn,
   today,
   isClosedDate = false,
+  closedReason = null,
 }: QueueColumnProps) {
   const now = new Date();
   const sortedVisits = [...visits].sort((a, b) => a.position - b.position);
@@ -376,6 +408,7 @@ function QueueColumn({
         title={showLabel ? practitionerName : dayScreenStrings.queueCardTitle}
         subtitle={dayScreenStrings.queueCardSubtitle}
       />
+      {isClosedDate && <ClosedDayNote reason={closedReason} />}
       <ul>
         {sortedVisits.map((visit) => {
           const patient = patientsById.get(visit.patient_id);

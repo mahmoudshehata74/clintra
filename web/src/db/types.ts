@@ -175,6 +175,13 @@ export interface ScheduleException {
   start_time: ClockTime | null;
   end_time: ClockTime | null;
   shift_minutes: number | null;
+  /**
+   * A closure's optional reason ("سبب الإجازة"), at most 200 characters;
+   * null when none was given and on a date's own hours (docs/schema.md's
+   * v27 additions). Optional: a row stored or pulled before it reads as
+   * having none.
+   */
+  reason?: string | null;
   /** Server-assigned; see docs/schema.md's v26 additions. */
   rev: number;
 }

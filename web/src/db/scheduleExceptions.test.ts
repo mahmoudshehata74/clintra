@@ -58,6 +58,28 @@ describe("addScheduleException", () => {
     expect(await db.schedule_exceptions.count()).toBe(1);
   });
 
+  it("stores a closure's reason trimmed, an empty one as null, and none on a date's own hours", async () => {
+    await addScheduleException(db, { practitionerId, date: LATER, kind: "closed", reason: "  سفر مؤتمر  " }, NOW);
+    await addScheduleException(db, { practitionerId, date: addDaysToClinicDay(LATER, 1), kind: "closed", reason: "   " }, NOW);
+    await addScheduleException(db, { practitionerId, date: addDaysToClinicDay(LATER, 2), kind: "closed" }, NOW);
+    await addScheduleException(db, { practitionerId, date: addDaysToClinicDay(LATER, 3), kind: "hours", startTime: "10:00", endTime: "11:00" }, NOW);
+
+    const rows = await db.schedule_exceptions.orderBy("[practitioner_id+date]").toArray();
+    expect(rows.map((row) => row.reason)).toEqual(["سفر مؤتمر", null, null, null]);
+    const [created] = (await db.sync_ops.toCollection().sortBy("created_at")).map((op) => op.payload as ScheduleException);
+    expect(created.reason).toBe("سفر مؤتمر");
+  });
+
+  it("takes a reason of 200 characters and refuses one of 201, writing nothing", async () => {
+    // Counted in characters: an emoji is one character but two UTF-16 units.
+    expect(await addScheduleException(db, { practitionerId, date: LATER, kind: "closed", reason: "🙂".repeat(200) }, NOW)).toMatchObject({ ok: true });
+    expect(
+      await addScheduleException(db, { practitionerId, date: addDaysToClinicDay(LATER, 1), kind: "closed", reason: "س".repeat(201) }, NOW),
+    ).toEqual({ ok: false, reason: "reason_too_long" });
+    expect(await db.schedule_exceptions.count()).toBe(1);
+    expect(await db.sync_ops.count()).toBe(1);
+  });
+
   it("never touches the visits booked on a closed date", async () => {
     const booked = await bookOn(LATER, "10:00");
     const arrived = await bookOn(LATER, "11:00", VisitStatus.Arrived);
@@ -97,5 +119,15 @@ describe("an exception through the sync engine", () => {
     expect(await db.sync_review.count()).toBe(0);
     const onServer: ScheduleException[] = await new ClintraDatabase(serverName).schedule_exceptions.toArray();
     expect(onServer.map((row) => [row.date, row.start_time, row.end_time])).toEqual([[LATER, "10:00", "12:00"]]);
+  });
+
+  it("carries a closure's reason to the server", async () => {
+    await addScheduleException(db, { practitionerId, date: LATER, kind: "closed", reason: "إجازة سنوية" }, NOW);
+    const serverName = `clintra-schedule-exceptions-server-${crypto.randomUUID()}`;
+
+    await runSyncCycle(db, new FakeTransport(serverName));
+
+    const onServer: ScheduleException[] = await new ClintraDatabase(serverName).schedule_exceptions.toArray();
+    expect(onServer.map((row) => [row.date, row.type, row.reason])).toEqual([[LATER, ScheduleExceptionType.Closed, "إجازة سنوية"]]);
   });
 });

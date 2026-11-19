@@ -5,7 +5,7 @@ import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import type { ClinicDay, Patient, Schedule, Service, Visit } from "../../db/types";
 import { formatEgyptianPhoneForDisplay } from "../../domain/phone";
-import { scheduleOnDate } from "../../domain/scheduleExceptions";
+import { closureOn, scheduleOnDate } from "../../domain/scheduleExceptions";
 import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
 import { formatWeekdayFullDate } from "../../domain/displayDate";
 import { clockTimeInCairo } from "../../domain/time";
@@ -27,6 +27,8 @@ interface DaySheetProps {
 
 interface DaySheetData {
   isQueueMode: boolean;
+  /** Tomorrow is closed for the doctor (a schedule exception), with its optional reason. */
+  closure: { reason: string | null } | null;
   visits: Visit[];
   patientsById: Map<string, Patient>;
   servicesById: Map<string, Service>;
@@ -34,6 +36,7 @@ interface DaySheetData {
 
 const EMPTY_DATA: DaySheetData = {
   isQueueMode: false,
+  closure: null,
   visits: [],
   patientsById: new Map(),
   servicesById: new Map(),
@@ -47,7 +50,9 @@ const EMPTY_DATA: DaySheetData = {
  * (print:block, outside it) render the exact same PrintPage content, so what
  * staff see before printing is what comes out of the printer — only the
  * header note's own text differs (placeholder vs. warning), per its existing
- * rule.
+ * rule. When tomorrow is closed for the doctor, a line under the day says
+ * so, with the closure's reason when it has one; the visits still booked
+ * on it stay listed.
  */
 export default function DaySheet({ practitionerId, locationId, tomorrow, onDismiss }: DaySheetProps) {
   const [printRequested, setPrintRequested] = useState(false);
@@ -75,6 +80,7 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
         tomorrow,
       );
       const isQueueMode = schedule !== undefined && effectiveScheduleMode(schedule, tomorrow) === ScheduleMode.Queue;
+      const closure = closureOn(exceptions, practitionerId, tomorrow);
 
       const allVisits = await db.visits
         .where("[practitioner_id+visit_date]")
@@ -93,6 +99,7 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
 
       return {
         isQueueMode,
+        closure: closure ? { reason: closure.reason ?? null } : null,
         visits,
         patientsById: new Map(patients.filter((p): p is Patient => p != null).map((p) => [p.id, p])),
         servicesById: new Map(services.filter((s): s is Service => s != null).map((s) => [s.id, s])),
@@ -108,6 +115,17 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
     </>
   );
   const printedAt = formatPrintedAt(new Date().toISOString());
+  const closedLine = data.closure && (
+    <>
+      {dayScreenStrings.daySheetClosedLine}
+      {data.closure.reason && (
+        <>
+          {" — "}
+          {dayScreenStrings.closureReasonPrefix} {data.closure.reason}
+        </>
+      )}
+    </>
+  );
 
   const pageBodyProps = {
     rows,
@@ -116,6 +134,7 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
     isQueueMode: data.isQueueMode,
     clinic,
     dayLine,
+    closedLine,
     printedAt,
   };
 
@@ -163,6 +182,8 @@ interface PageBodyProps {
   isQueueMode: boolean;
   clinic: ReturnType<typeof usePrintClinic>;
   dayLine: ReactNode;
+  /** Tomorrow's closure line, under the day line; null when tomorrow is not closed. */
+  closedLine: ReactNode;
   printedAt: string;
 }
 
@@ -174,6 +195,7 @@ function PageBody({
   isQueueMode,
   clinic,
   dayLine,
+  closedLine,
   printedAt,
 }: PageBodyProps) {
   return (
@@ -181,6 +203,11 @@ function PageBody({
       <PrintHeaderNote>{headerNote}</PrintHeaderNote>
       <PrintClinicBlock {...clinic} />
       <PrintDayLine>{dayLine}</PrintDayLine>
+      {closedLine && (
+        <p data-closed-day-note="" className="mb-3.5 text-center text-[13.5px] font-semibold text-print-ink">
+          {closedLine}
+        </p>
+      )}
       <PrintTable>
         <thead>
           <tr>

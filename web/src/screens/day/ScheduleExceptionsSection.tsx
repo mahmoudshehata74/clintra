@@ -11,6 +11,7 @@ import { db } from "../../db/database";
 import { activeVisitsOn, addScheduleException, deleteScheduleException, type AddExceptionResult } from "../../db/scheduleExceptions";
 import { ScheduleExceptionType, type ScheduleException } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
+import { CLOSURE_REASON_MAX_LENGTH } from "../../domain/scheduleExceptions";
 import { clockTimeInCairo, todayInCairo, type ClinicDay, type ClockTime } from "../../domain/time";
 import { SetList, SetRow } from "./SettingsLayout";
 import { dayScreenStrings as S } from "./strings";
@@ -22,6 +23,7 @@ const REFUSAL_MESSAGE: Record<Exclude<AddExceptionResult, { ok: true }>["reason"
   past_date: S.exceptionPastDateError,
   already_has_exception: S.exceptionExistsError,
   end_before_start: S.hoursEndBeforeStartError,
+  reason_too_long: S.exceptionReasonTooLongError,
   practitioner_not_found: S.exceptionExistsError,
 };
 
@@ -36,7 +38,8 @@ interface AffectedVisit {
  * "إجازات ومواعيد استثنائية" under the doctor's week in settings → working
  * hours (owner only, as the whole settings sheet): the doctor's exceptions
  * from today on, each with "حذف", and a form to add a closed date or that
- * date's own hours (db/scheduleExceptions.ts). Closing a date that has
+ * date's own hours (db/scheduleExceptions.ts), a closure with its optional
+ * "سبب الإجازة" shown under it in the list. Closing a date that has
  * bookings first lists them and asks to confirm; the bookings stay, flagged
  * on the day screen as outside working hours — a closure never cancels one.
  * No prototype counterpart: built from the settings rows and shared ui/.
@@ -53,15 +56,18 @@ export default function ScheduleExceptionsSection({ practitionerId }: { practiti
 
   const [date, setDate] = useState("");
   const [kind, setKind] = useState<Kind>("closed");
+  const [reason, setReason] = useState("");
   const [startTime, setStartTime] = useState("10:00");
   const [endTime, setEndTime] = useState("14:00");
   const [error, setError] = useState<string | null>(null);
+  const [reasonError, setReasonError] = useState<string | null>(null);
   const [affected, setAffected] = useState<AffectedVisit[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
 
   async function add(confirmed: boolean) {
     setError(null);
+    setReasonError(null);
     const day = date.trim() as ClinicDay;
     if (kind === "closed" && !confirmed) {
       const visits = await activeVisitsOn(db, practitionerId, day);
@@ -82,14 +88,19 @@ export default function ScheduleExceptionsSection({ practitionerId }: { practiti
     try {
       const result =
         kind === "closed"
-          ? await addScheduleException(db, { practitionerId, date: day, kind: "closed" })
+          ? await addScheduleException(db, { practitionerId, date: day, kind: "closed", reason })
           : await addScheduleException(db, { practitionerId, date: day, kind: "hours", startTime: startTime as ClockTime, endTime: endTime as ClockTime });
       if (!result.ok) {
-        setError(REFUSAL_MESSAGE[result.reason]);
+        if (result.reason === "reason_too_long") {
+          setReasonError(REFUSAL_MESSAGE[result.reason]);
+        } else {
+          setError(REFUSAL_MESSAGE[result.reason]);
+        }
         setAffected(null);
         return;
       }
       setDate("");
+      setReason("");
       setAffected(null);
     } catch {
       setError(S.exceptionSaveFailedError);
@@ -115,7 +126,14 @@ export default function ScheduleExceptionsSection({ practitionerId }: { practiti
               <Ltr className="text-[12.5px] font-bold text-text">{exception.date}</Ltr>
               <span className="text-[13px] text-text">
                 {exception.type === ScheduleExceptionType.Closed ? (
-                  S.exceptionClosedLabel
+                  <>
+                    {S.exceptionClosedLabel}
+                    {exception.reason && (
+                      <span className="mt-0.5 block text-[12px] text-muted">
+                        {S.closureReasonPrefix} {exception.reason}
+                      </span>
+                    )}
+                  </>
                 ) : (
                   <>
                     {S.exceptionHoursLabel}{" "}
@@ -169,6 +187,18 @@ export default function ScheduleExceptionsSection({ practitionerId }: { practiti
             />
           </div>
         </div>
+        {kind === "closed" && (
+          <Field label={S.exceptionReasonLabel} id="exception-reason" hint={S.exceptionReasonHint} error={reasonError ?? undefined}>
+            <TextInput
+              maxLength={CLOSURE_REASON_MAX_LENGTH}
+              value={reason}
+              onChange={(event) => {
+                setReason(event.target.value);
+                setReasonError(null);
+              }}
+            />
+          </Field>
+        )}
         {kind === "hours" && (
           <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
             <Field label={S.hoursStartLabel} id="exception-start">

@@ -33,8 +33,7 @@ import type {
   User,
   Visit,
 } from "../../db/types";
-import { ScheduleExceptionType } from "../../db/types";
-import { exceptionOn, scheduleOnDate } from "../../domain/scheduleExceptions";
+import { closureOn, scheduleOnDate } from "../../domain/scheduleExceptions";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitArrived, markVisitCompleted, markVisitInRoom } from "../../db/visitAttendance";
 import { cancelVisit, markVisitNoShow, type VisitCancelReason } from "../../db/visitCancel";
@@ -1066,7 +1065,7 @@ export default function DayScreen({
             (schedule) => schedule.practitioner_id === practitioner.id,
           );
           const todaysSchedule = scheduleOnDate(practitionerSchedules, scheduleExceptions, practitioner.id, today);
-          const isClosedDate = exceptionOn(scheduleExceptions, practitioner.id, today)?.type === ScheduleExceptionType.Closed;
+          const closure = closureOn(scheduleExceptions, practitioner.id, today);
           const visitsForPractitioner = dynamicData.visits.filter(
             (visit) => visit.practitioner_id === practitioner.id,
           );
@@ -1078,7 +1077,8 @@ export default function DayScreen({
               showLabel={showPractitionerLabel}
               todaysSchedule={todaysSchedule}
               hasAnySchedule={hasAnySchedule}
-              isClosedDate={isClosedDate}
+              isClosedDate={closure !== undefined}
+              closedReason={closure?.reason ?? null}
               weeklySchedule={scheduleOnDate(practitionerSchedules, NO_EXCEPTIONS, practitioner.id, today)}
               visits={visitsForPractitioner}
               patientsById={dynamicData.patientsById}
