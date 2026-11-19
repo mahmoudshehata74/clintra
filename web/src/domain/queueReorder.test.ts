@@ -115,4 +115,39 @@ describe("orderedWrites", () => {
     // One parking write per cycle.
     expect(writes).toHaveLength(moves.length + 2);
   });
+
+  it("carries out moves over a day with gaps, the visits that stay holding their places", () => {
+    const visits: QueuedVisit[] = [1, 2, 4, 5, 7].map((position) => ({ id: `v${position}`, status: VisitStatus.Arrived, position }));
+    // v2 to the end; every later visit one place earlier — not a permutation of the positions they hold.
+    const moves: QueueMove[] = [
+      { visitId: "v4", from: 4, to: 3 },
+      { visitId: "v5", from: 5, to: 4 },
+      { visitId: "v7", from: 7, to: 6 },
+      { visitId: "v2", from: 2, to: 7 },
+    ];
+    const after = replay(visits, orderedWrites(moves, visits.map((visit) => visit.position)));
+    expect(["v1", "v4", "v5", "v7", "v2"].map((visitId) => after.get(visitId))).toEqual([1, 3, 4, 6, 7]);
+  });
+
+  it("renumbers a day onto 1..n from any positions, parking only what must wait", () => {
+    const visits: QueuedVisit[] = [
+      { id: "late", status: VisitStatus.Booked, position: 1 },
+      { id: "early", status: VisitStatus.Booked, position: 2 },
+      { id: "middle", status: VisitStatus.Booked, position: 5 },
+    ];
+    const moves: QueueMove[] = [
+      { visitId: "early", from: 2, to: 1 },
+      { visitId: "middle", from: 5, to: 2 },
+      { visitId: "late", from: 1, to: 3 },
+    ];
+    const writes = orderedWrites(moves, [1, 2, 5]);
+    const after = replay(visits, writes);
+    expect(["early", "middle", "late"].map((visitId) => after.get(visitId))).toEqual([1, 2, 3]);
+    // late goes straight to the free 3, then early and middle follow: nothing waits.
+    expect(writes).toHaveLength(3);
+  });
+
+  it("refuses a move onto a place a visit that does not move holds", () => {
+    expect(() => orderedWrites([{ visitId: "a", from: 1, to: 2 }], [1, 2])).toThrow("queue_position_held");
+  });
 });

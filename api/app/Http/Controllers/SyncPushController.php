@@ -24,7 +24,9 @@ use Illuminate\Support\Facades\DB;
  * unaffected.
  *
  * Ops that carry the same group_id, one after another, are one write: a
- * queue reorder's position moves (web/src/db/visitQueue.ts), which only
+ * queue reorder's or "send to end"'s position moves
+ * (web/src/db/visitQueue.ts), or a switch between slots and queue with
+ * the visits it renumbers (web/src/db/scheduleModeSwitch.ts), which only
  * make sense together. They apply in one savepoint; if any of them is not
  * accepted (or a duplicate), the savepoint is rolled back so none of the
  * group's writes, ledger rows or audit rows stay, that op returns its own

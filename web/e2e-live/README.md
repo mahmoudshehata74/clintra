@@ -56,7 +56,19 @@ path the ordinary e2e suite never takes (it runs on the in-browser
 16. Both offline reorder the same queue (A moves a visit up, B moves it
     down); A reconnects first. B's reorder is refused whole: B is asked to
     review once ("ترتيب الدور — …", only "تمام") and shows A's order.
-17. A closes the day with an opening float: B shows the same opening and
+17. A sends the first of the queue to the end: the server applies the
+    move whole (one group), and B shows A's order.
+18. Both offline send a different visit to the end; A reconnects first.
+    B's move is refused whole: B is asked to review once ("ترتيب الدور —
+    …") and shows A's order.
+19. A switches the doctor back to slots, books two visits tomorrow out of
+    time order (straight into its store, one create op each —
+    `bookDirect`), then switches to queue: the switch renumbers them by
+    time and is applied whole, and B gets them in that order.
+20. Both offline switch the doctor to slots; A reconnects first. B's switch
+    is refused whole: B is asked to review once ("نظام الحجز …") and shows
+    A's day.
+21. A closes the day with an opening float: B shows the same opening and
     the same expected cash. Last, since a closed day refuses later edits.
 
 Every wait nudges the sync engine (as returning to the tab does) and polls;

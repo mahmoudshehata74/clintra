@@ -1319,11 +1319,16 @@ derived from what `web/src/db/mutate.ts` callers actually pass as
 for the same reason: no single owning org.
 
 **A group applies whole or not at all.** An op may carry `group_id` (a
-uuid). Consecutive ops sharing one are a single change — today only a
-queue reorder's position moves (`web/src/db/visitQueue.ts`), which park
-one visit below zero so no two visits ever share a position, statement by
+uuid). Consecutive ops sharing one are a single change: a queue
+reorder's, "send to end of queue"'s and its undo's position moves
+(`web/src/db/visitQueue.ts`), and a doctor's switch between slots and
+queue — every visit it renumbers and every schedule row it changes
+(`web/src/db/scheduleModeSwitch.ts`). The device parks a visit below zero
+where needed so no two visits ever share a position, statement by
 statement, under `visits`' unique `[practitioner_id, visit_date,
-position]`. `SyncPushController::applyGroup` applies them inside one
+position]`; written in any other order, a move hits that key and comes
+back `failed`, which the device only retries
+(`tests/Feature/Rls/QueuePositionGroupsPushTest.php`). `SyncPushController::applyGroup` applies them inside one
 savepoint of the request's transaction, each still through
 `SyncOpApplier::apply`. If any op is not `accepted` or `duplicate`, the
 savepoint is rolled back (`SyncGroupRefused`): none of the group's rows,

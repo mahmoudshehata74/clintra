@@ -16,9 +16,9 @@ import {
   sidebar,
   SIDEBAR,
 } from "../e2e/support";
-import { addDaysToClinicDay, todayInCairo, weekdayOf } from "../src/domain/time";
-import { bookNew, eventually, firstEmptySlotTime, firstPullLanded, nudge, queueOrderOf, queueToday, walkIn, openDevice, pushed, rowCount, rowStatus, seriesLetter, setUpClinic, type Device } from "./liveSupport";
-import { QUEUE_REORDER_REFUSED_LABEL } from "../src/sync/reviewSummary";
+import { addDaysToClinicDay, cairoInstant, todayInCairo, weekdayOf } from "../src/domain/time";
+import { bookDirect, bookNew, eventually, firstEmptySlotTime, firstPullLanded, nudge, queueOrderOf, queueToday, walkIn, openDevice, pushed, rowCount, rowStatus, seriesLetter, setUpClinic, type Device } from "./liveSupport";
+import { MODE_SWITCH_REFUSED_LABEL, QUEUE_REORDER_REFUSED_LABEL } from "../src/sync/reviewSummary";
 import { provisionOrg, removeLiveOrgs, startApi, stopApi, type LiveOrg } from "./liveServer";
 
 // Two devices of one freshly provisioned organization, each its own browser
@@ -530,6 +530,135 @@ test("both offline reorder the same queue: the later one is put back, asked to r
 
   await eventually([a, b], () => queueOrderOf(b, REORDER), onA, "B shows A's order");
   expect(await queueOrderOf(a, REORDER)).toEqual(onA);
+  await closeAll(a, b);
+});
+
+/** Sends `name`'s waiting visit to the end of the queue, from its row's menu. */
+async function sendToEnd(device: Device, name: string) {
+  await rowFor(device.page, name).getByRole("button", { name: S.menuOpenAriaLabel, exact: true }).click();
+  await device.page.getByRole("menuitem", { name: S.sendToEndOfQueueMenuLabel, exact: true }).click();
+}
+
+test("today in queue: sending a visit to the end on A is applied whole and shows on B", async ({ browser }) => {
+  const [a, b] = await twoDevices(browser);
+  // The previous scenario left the queue as 1, 2, 3.
+  await eventually([a, b], async () => (await queueOrderOf(a, REORDER)).join() === REORDER.join() && (await queueOrderOf(b, REORDER)).join() === REORDER.join(), true);
+
+  await sendToEnd(a, REORDER[0]);
+  const moved = [REORDER[1], REORDER[2], REORDER[0]];
+  await expect.poll(() => queueOrderOf(a, REORDER)).toEqual(moved);
+  await eventually([a], () => pushed(a), true, "the server accepts A's move");
+  await eventually([a, b], () => queueOrderOf(b, moved), moved, "B shows A's order");
+  await expect(a.page.getByRole("button", { name: S.syncNeedsReview, exact: true })).toHaveCount(0);
+  await closeAll(a, b);
+});
+
+test("both offline send a different visit to the end: the later one is put back, asked to review once, and shows the first one's order", async ({ browser }) => {
+  const [a, b] = await twoDevices(browser);
+  const start = [REORDER[1], REORDER[2], REORDER[0]];
+  await eventually([a, b], async () => (await queueOrderOf(a, REORDER)).join() === start.join() && (await queueOrderOf(b, REORDER)).join() === start.join(), true);
+  // The whole day on both, not only these three: a move shifts every visit after the one moved.
+  const visitRows = async (device: Device) =>
+    (await readStore<{ id: string; rev: number }>(device.page, "visits")).map((row) => `${row.id}@${row.rev}`).sort().join();
+  await eventually([a, b], async () => (await visitRows(a)) === (await visitRows(b)), true, "both devices hold the same visits");
+
+  await a.context.setOffline(true);
+  await b.context.setOffline(true);
+  await sendToEnd(a, REORDER[1]);
+  const onA = [REORDER[2], REORDER[0], REORDER[1]];
+  await expect.poll(() => queueOrderOf(a, REORDER)).toEqual(onA);
+  await sendToEnd(b, REORDER[2]);
+  await expect.poll(() => queueOrderOf(b, REORDER)).toEqual([REORDER[1], REORDER[0], REORDER[2]]);
+
+  await a.context.setOffline(false);
+  await eventually([a], () => pushed(a), true, "A's move reaches the server first");
+  await b.context.setOffline(false);
+  await eventually([a, b], async () => b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).count(), 1, "B is asked to review");
+  await b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  const review = b.page.getByRole("dialog");
+  await expect(review.getByText(QUEUE_REORDER_REFUSED_LABEL)).toHaveCount(1);
+  await review.getByRole("button", { name: S.syncReviewAcknowledgeAction, exact: true }).click();
+  await expect(review).toBeHidden();
+
+  await eventually([a, b], () => queueOrderOf(b, REORDER), onA, "B shows A's order");
+  expect(await queueOrderOf(a, REORDER)).toEqual(onA);
+  await closeAll(a, b);
+});
+
+/** Switches today's doctor to `mode` from tomorrow in the working-hours editor. */
+async function switchMode(device: Device, mode: string) {
+  const settings = await openHours(device);
+  const control = settings.getByRole("group", { name: S.hoursModeSwitchLabel, exact: true }).getByRole("button", { name: mode, exact: true });
+  await control.click();
+  await expect(control).toHaveAttribute("aria-pressed", "true");
+  await device.page.keyboard.press("Escape");
+  await expect(settings).toBeHidden();
+}
+
+/** The given visits on `device`, as "position scheduled_at" each, in the order given. */
+async function visitsOn(device: Device, ids: readonly string[]): Promise<string[]> {
+  const visits = await readStore<{ id: string; position: number; scheduled_at: string | null }>(device.page, "visits");
+  return ids.map((visitId) => {
+    const visit = visits.find((candidate) => candidate.id === visitId);
+    return visit ? `${visit.position} ${visit.scheduled_at}` : "missing";
+  });
+}
+
+let tomorrowVisits: { late: string; early: string };
+
+test("a switch to queue renumbers tomorrow's visits by time and is applied whole: B gets A's order", async ({ browser }) => {
+  const tomorrow = addDaysToClinicDay(todayInCairo(), 1);
+  const [a, b] = await twoDevices(browser);
+  await eventually([a], () => firstPullLanded(a), true, "A's first pull lands");
+  // Scenario 11 left the doctor in queue from tomorrow: back to slots first, so tomorrow's bookings have times.
+  await switchMode(a, S.hoursModeSlots);
+  await eventually([a], () => pushed(a), true);
+  // Booked 10:00 first, then 09:00: their positions follow the booking, not the time.
+  const [late, early] = await bookDirect(a, org, tomorrow, ["10:00", "09:00"]);
+  tomorrowVisits = { late, early };
+  await eventually([a], () => pushed(a), true, "tomorrow's bookings reach the server");
+  expect(await visitsOn(a, [early, late])).toEqual([`2 ${cairoInstant(tomorrow, "09:00")}`, `1 ${cairoInstant(tomorrow, "10:00")}`]);
+
+  await switchMode(a, S.hoursModeQueue);
+  expect(await visitsOn(a, [early, late])).toEqual(["1 null", "2 null"]);
+  await eventually([a], () => pushed(a), true, "the server accepts A's switch whole");
+  await eventually([a, b], () => visitsOn(b, [early, late]), ["1 null", "2 null"], "B gets tomorrow in queue order");
+  await expect(a.page.getByRole("button", { name: S.syncNeedsReview, exact: true })).toHaveCount(0);
+  await closeAll(a, b);
+});
+
+test("both offline switch the doctor: the later one is put back whole, asked to review once, and shows the first one's day", async ({ browser }) => {
+  const tomorrow = addDaysToClinicDay(todayInCairo(), 1);
+  const { late, early } = tomorrowVisits;
+  const [a, b] = await twoDevices(browser);
+  await eventually([a, b], async () => (await visitsOn(a, [early, late])).join() === "1 null,2 null" && (await visitsOn(b, [early, late])).join() === "1 null,2 null", true);
+  // A fresh device's backfill pages in after the bootstrap's visits: both must hold the doctor's rows before going offline.
+  const scheduleRows = async (device: Device) =>
+    (await readStore<{ id: string; rev: number }>(device.page, "schedules")).map((row) => `${row.id}@${row.rev}`).sort().join();
+  await eventually([a, b], async () => {
+    const onA = await scheduleRows(a);
+    return onA !== "" && onA === (await scheduleRows(b));
+  }, true, "both devices hold the same schedule rows");
+
+  await a.context.setOffline(true);
+  await b.context.setOffline(true);
+  await switchMode(a, S.hoursModeSlots);
+  await switchMode(b, S.hoursModeSlots);
+  const slotted = [`1 ${cairoInstant(tomorrow, "09:00")}`, `2 ${cairoInstant(tomorrow, "09:30")}`];
+  expect(await visitsOn(b, [early, late])).toEqual(slotted);
+
+  await a.context.setOffline(false);
+  await eventually([a], () => pushed(a), true, "A's switch reaches the server first");
+  await b.context.setOffline(false);
+  await eventually([a, b], async () => b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).count(), 1, "B is asked to review");
+  await b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  const review = b.page.getByRole("dialog");
+  await expect(review.getByText(MODE_SWITCH_REFUSED_LABEL)).toHaveCount(1);
+  await review.getByRole("button", { name: S.syncReviewAcknowledgeAction, exact: true }).click();
+  await expect(review).toBeHidden();
+
+  await eventually([a, b], () => visitsOn(b, [early, late]), await visitsOn(a, [early, late]), "B shows A's day");
+  await eventually([a, b], () => pushed(b), true, "nothing of B's switch is left to send");
   await closeAll(a, b);
 });
 
