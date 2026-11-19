@@ -2,7 +2,7 @@ import { sidebarStrings } from "../components/strings";
 import { Role } from "./role";
 
 export interface NavItem {
-  key: "day" | "patients" | "doctor" | "visit" | "messages" | "audit" | "settings";
+  key: "day" | "patients" | "doctor" | "visit" | "messages" | "audit" | "reports" | "settings";
   label: string;
 }
 
@@ -16,7 +16,9 @@ export interface NavItem {
  * nothing to show there), then "messages" — the message templates and the
  * recent messages (reference screen 19) — for every role, then "audit" (every role — the audit log was
  * always open to whoever is signed in, from the day card's head before it
- * moved here), then "settings" (owner only — v1's owner==practitioner, see
+ * moved here), then "reports" — the reports page — for the owner and any
+ * membership tied to a practitioner (screens/reports/reportsModel.ts's
+ * canSeeReports: that doctor's own login, whatever its role), then "settings" (owner only — v1's owner==practitioner, see
  * docs/design-audit.md). AppShell.tsx renders whatever this returns, given
  * an icon for each key.
  */
@@ -31,6 +33,9 @@ export function navItemsFor(role: Role, hasPractitioner: boolean): NavItem[] {
   }
   items.push({ key: "messages", label: sidebarStrings.navMessages });
   items.push({ key: "audit", label: sidebarStrings.navAudit });
+  if (role === Role.Owner || hasPractitioner) {
+    items.push({ key: "reports", label: sidebarStrings.navReports });
+  }
   if (role === Role.Owner) {
     items.push({ key: "settings", label: sidebarStrings.navSettings });
   }

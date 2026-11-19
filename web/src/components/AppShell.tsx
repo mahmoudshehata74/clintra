@@ -101,6 +101,15 @@ const ICON_PATHS: Record<NavItem["key"], ReactNode> = {
       <line x1="11" y1="17" x2="20" y2="17" />
     </>
   ),
+  // A bar chart on its baseline: figures over a period.
+  reports: (
+    <>
+      <line x1="4" y1="20" x2="20" y2="20" />
+      <rect x="6" y="11" width="3" height="9" />
+      <rect x="11" y="6" width="3" height="14" />
+      <rect x="16" y="14" width="3" height="6" />
+    </>
+  ),
   settings: (
     <>
       <line x1="4" y1="6" x2="20" y2="6" />
@@ -147,9 +156,12 @@ const ITEM_ACTIVE = "border-copper bg-glass/[0.14] text-on-dark";
  * deviation from it, per docs/design-rule.md).
  *
  * Items come from navItemsFor(role, hasPractitioner) — today "day",
- * "messages" and "audit" (every role), "doctor" and "visit" (a membership tied to a practitioner) and
- * "settings" (owner only, the same gate the day screen's own
- * settings entry always used). Rendering is generic over whatever that returns, so a later
+ * "patients", "messages" and "audit" (every role), "doctor" and "visit" (a
+ * membership tied to a practitioner), "reports" (the owner and a membership
+ * tied to a practitioner) and "settings" (owner only, the same gate the day
+ * screen's own settings entry always used). When the items outgrow the bar
+ * (a narrow phone) or the rail (a short window), it scrolls, so the last one
+ * stays reachable. Rendering is generic over whatever that returns, so a later
  * task that appends an item needs no change here, only an icon entry above.
  *
  * Below the `sm` breakpoint the rail becomes a fixed bottom bar instead of a
@@ -252,7 +264,7 @@ export default function AppShell({
     <div className="flex min-h-screen flex-col-reverse sm:flex-row">
       <nav
         aria-label={sidebarStrings.navAriaLabel}
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-1 border-t-2 border-copper bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-2 py-1.5 shadow-m print:hidden sm:sticky sm:top-0 sm:h-screen sm:w-56 sm:flex-col sm:items-stretch sm:gap-1 sm:border-e-2 sm:border-t-0 sm:p-3"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-1 overflow-x-auto border-t-2 border-copper bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-2 py-1.5 shadow-m print:hidden sm:sticky sm:top-0 sm:h-screen sm:w-56 sm:flex-col sm:overflow-y-auto sm:items-stretch sm:gap-1 sm:border-e-2 sm:border-t-0 sm:p-3"
       >
         <div className="hidden items-center gap-[10px] px-1 pb-4 sm:flex">
           <BrandLogo />

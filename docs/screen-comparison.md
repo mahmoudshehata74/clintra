@@ -406,3 +406,14 @@ No difference beyond the light comparison's: each capture is the sheet alone, wi
 | 19. Messages | 1 | 0 | 0 | 0 | matches |
 | **Total** | **13** | **0** | **0** | **0** | |
 
+## Screens with no prototype counterpart
+
+- **Reports ("التقارير", `feat/reports`).** The prototype has no reports
+  screen; the page is built only from the design tokens and the shared
+  `ui/` components (Card, CardHead, Field/TextInput, ToggleGroup, Button),
+  with its table in the invoice sheet's table styling. Checked at desktop
+  (1280) and mobile (390), light and dark: no horizontal page scroll; below
+  768px the figures sit two to a row and the table scrolls sideways inside
+  its card. Adding the item made the owner's rail eight items long: the side
+  rail now scrolls on a short window and the mobile bottom bar scrolls
+  sideways, so the last item ("الإعدادات") stays reachable.

@@ -9,6 +9,7 @@ const DOCTOR = { key: "doctor", label: sidebarStrings.navDoctor };
 const VISIT = { key: "visit", label: sidebarStrings.navVisit };
 const MESSAGES = { key: "messages", label: sidebarStrings.navMessages };
 const AUDIT = { key: "audit", label: sidebarStrings.navAudit };
+const REPORTS = { key: "reports", label: sidebarStrings.navReports };
 const SETTINGS = { key: "settings", label: sidebarStrings.navSettings };
 
 describe("navItemsFor", () => {
@@ -24,14 +25,14 @@ describe("navItemsFor", () => {
     expect(navItemsFor(Role.Manager, false)).toEqual([DAY, PATIENTS, MESSAGES, AUDIT]);
   });
 
-  it("shows day, patients, messages, the audit log, then settings to an owner", () => {
-    expect(navItemsFor(Role.Owner, false)).toEqual([DAY, PATIENTS, MESSAGES, AUDIT, SETTINGS]);
+  it("shows day, patients, messages, the audit log, reports, then settings to an owner", () => {
+    expect(navItemsFor(Role.Owner, false)).toEqual([DAY, PATIENTS, MESSAGES, AUDIT, REPORTS, SETTINGS]);
   });
 
-  it("adds the doctor's day, then the current visit, right after patients for any role tied to a practitioner, with messages after them", () => {
-    expect(navItemsFor(Role.Assistant, true)).toEqual([DAY, PATIENTS, DOCTOR, VISIT, MESSAGES, AUDIT]);
-    expect(navItemsFor(Role.Practitioner, true)).toEqual([DAY, PATIENTS, DOCTOR, VISIT, MESSAGES, AUDIT]);
-    expect(navItemsFor(Role.Manager, true)).toEqual([DAY, PATIENTS, DOCTOR, VISIT, MESSAGES, AUDIT]);
-    expect(navItemsFor(Role.Owner, true)).toEqual([DAY, PATIENTS, DOCTOR, VISIT, MESSAGES, AUDIT, SETTINGS]);
+  it("adds the doctor's day, then the current visit, right after patients for any role tied to a practitioner, with messages after them, and reports after the audit log", () => {
+    expect(navItemsFor(Role.Assistant, true)).toEqual([DAY, PATIENTS, DOCTOR, VISIT, MESSAGES, AUDIT, REPORTS]);
+    expect(navItemsFor(Role.Practitioner, true)).toEqual([DAY, PATIENTS, DOCTOR, VISIT, MESSAGES, AUDIT, REPORTS]);
+    expect(navItemsFor(Role.Manager, true)).toEqual([DAY, PATIENTS, DOCTOR, VISIT, MESSAGES, AUDIT, REPORTS]);
+    expect(navItemsFor(Role.Owner, true)).toEqual([DAY, PATIENTS, DOCTOR, VISIT, MESSAGES, AUDIT, REPORTS, SETTINGS]);
   });
 });

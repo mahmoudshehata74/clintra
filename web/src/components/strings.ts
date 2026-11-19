@@ -16,6 +16,7 @@ export const sidebarStrings = {
   navVisit: "الزيارة الحالية",
   navMessages: "الرسائل",
   navAudit: "السجل",
+  navReports: "التقارير",
   navSettings: "الإعدادات",
 } as const;
 
