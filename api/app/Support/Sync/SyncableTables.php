@@ -22,7 +22,7 @@ class SyncableTables
         'care_plan_items', 'care_plans', 'cash_close', 'day_state', 'invoice_items', 'invoices',
         'membership_locations', 'membership_practitioners', 'memberships',
         'message_templates', 'messages', 'patients', 'payments',
-        'practitioners', 'prescription_items', 'prescriptions', 'schedules',
+        'practitioners', 'prescription_items', 'prescriptions', 'schedule_exceptions', 'schedules',
         'service_price_overrides', 'services', 'visit_form_data', 'visits',
     ];
 

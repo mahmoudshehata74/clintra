@@ -662,6 +662,40 @@ test("both offline switch the doctor: the later one is put back whole, asked to 
   await closeAll(a, b);
 });
 
+/** Settings → working hours → "إجازات ومواعيد استثنائية" on `device`. */
+async function openExceptions(device: Device) {
+  const settings = await openHours(device);
+  return settings.getByRole("region", { name: S.exceptionsHeading, exact: true });
+}
+
+test("A closes today: B gets the closure, its queue stays flagged and it can add no one; A removes it and B can again", async ({ browser }) => {
+  const today = todayInCairo();
+  const [a, b] = await twoDevices(browser);
+  await eventually([a, b], async () => b.page.getByRole("button", { name: S.walkInButtonLabel, exact: true }).count(), 1, "B can add to today's queue");
+
+  const section = await openExceptions(a);
+  await section.getByLabel(S.exceptionDateLabel, { exact: true }).fill(today);
+  await section.getByRole("button", { name: S.exceptionAddAction, exact: true }).click();
+  // Today's queue has bookings: A is shown them and confirms; none is cancelled.
+  await expect(section.getByRole("alert")).toContainText(REORDER[0]);
+  await section.getByRole("button", { name: S.exceptionConfirmClosure, exact: true }).click();
+  await expect(section.getByRole("listitem").filter({ hasText: today })).toContainText(S.exceptionClosedLabel);
+  await a.page.keyboard.press("Escape");
+  await eventually([a], () => pushed(a), true, "the server accepts A's closure");
+
+  await eventually([a, b], async () => b.page.getByRole("button", { name: S.walkInButtonLabel, exact: true }).count(), 0, "B can add no one on the closed day");
+  await expect(rowFor(b.page, REORDER[0])).toContainText(S.outsideHoursRowBadge);
+  expect(await rowStatus(b, REORDER[0], STATUSES)).toBe(S.statusArrived);
+
+  const again = await openExceptions(a);
+  await again.getByRole("listitem").filter({ hasText: today }).getByRole("button", { name: S.exceptionDeleteAction, exact: true }).click();
+  await expect(again.getByText(S.exceptionsEmpty)).toBeVisible();
+  await a.page.keyboard.press("Escape");
+  await eventually([a, b], async () => b.page.getByRole("button", { name: S.walkInButtonLabel, exact: true }).count(), 1, "B can add to the queue again");
+  await expect(rowFor(b.page, REORDER[0])).not.toContainText(S.outsideHoursRowBadge);
+  await closeAll(a, b);
+});
+
 /** The closed day's figure under `label`, read from a freshly opened cash close sheet. */
 async function closedFigure(device: Device, label: string): Promise<string | null> {
   await device.page.getByRole("button", { name: S.cashCloseButtonLabel, exact: true }).click();

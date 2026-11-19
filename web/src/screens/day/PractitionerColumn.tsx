@@ -9,7 +9,8 @@ import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
 import { clockTimeInCairo, type ClinicDay, type ClockTime } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import type { Patient, Schedule, Service, Visit } from "../../db/types";
-import { computeGridRows } from "./dayGrid";
+import { ACTIVE_VISIT_STATUSES } from "../../domain/scheduleExceptions";
+import { closedDayRows, computeGridRows } from "./dayGrid";
 import { computeEmptySlots } from "./emptySlots";
 import { queueInRoomMeta } from "./queueInRoomMeta";
 import { computeExpectedCallTime, computeQueueSummary } from "./queueSummary";
@@ -27,6 +28,10 @@ interface PractitionerColumnProps {
   todaysSchedule: Schedule | undefined;
   /** Whether this practitioner has any schedule row at all, for any weekday. */
   hasAnySchedule: boolean;
+  /** Today is closed for this practitioner by a schedule exception (domain/scheduleExceptions.ts). */
+  isClosedDate?: boolean;
+  /** The weekday's own row, before any exception — on a closed date, which mode its visits were booked in. */
+  weeklySchedule?: Schedule;
   visits: readonly Visit[];
   patientsById: ReadonlyMap<string, Patient>;
   servicesById: ReadonlyMap<string, Service>;
@@ -72,6 +77,8 @@ export default function PractitionerColumn({
   showLabel,
   todaysSchedule,
   hasAnySchedule,
+  isClosedDate = false,
+  weeklySchedule,
   visits,
   patientsById,
   servicesById,
@@ -100,10 +107,20 @@ export default function PractitionerColumn({
   onOpenDaySheet,
 }: PractitionerColumnProps) {
   const scheduleState = resolveDayScheduleState(todaysSchedule, hasAnySchedule);
+  // A closed date still lists the visits booked on it, each flagged — a
+  // closure never cancels them.
+  const closedRows = isClosedDate && scheduleState.kind !== "scheduled" ? closedDayRows(visits) : [];
+  const isClosedQueueDay =
+    isClosedDate &&
+    scheduleState.kind !== "scheduled" &&
+    weeklySchedule !== undefined &&
+    effectiveScheduleMode(weeklySchedule, today) === ScheduleMode.Queue &&
+    visits.some((visit) => ACTIVE_VISIT_STATUSES.has(visit.status));
 
-  if (scheduleState.kind !== "scheduled") {
-    const message =
-      scheduleState.kind === "day_off"
+  if (scheduleState.kind !== "scheduled" && closedRows.length === 0 && !isClosedQueueDay) {
+    const message = isClosedDate
+      ? dayScreenStrings.dayClosedByException
+      : scheduleState.kind === "day_off"
         ? dayScreenStrings.noScheduleToday
         : dayScreenStrings.scheduleNotConfigured;
 
@@ -118,9 +135,10 @@ export default function PractitionerColumn({
     );
   }
 
-  if (effectiveScheduleMode(scheduleState.schedule, today) === ScheduleMode.Queue) {
+  if (isClosedQueueDay || (scheduleState.kind === "scheduled" && effectiveScheduleMode(scheduleState.schedule, today) === ScheduleMode.Queue)) {
     return (
       <QueueColumn
+        isClosedDate={isClosedQueueDay}
         practitionerName={practitionerName}
         showLabel={showLabel}
         visits={visits}
@@ -143,20 +161,20 @@ export default function PractitionerColumn({
         onSendToEnd={onSendToEnd}
         onMoveWaiting={onMoveWaiting}
         onOpenVisitForm={onOpenVisitForm}
-        onOpenBooking={onOpenBooking}
-        onWalkIn={onWalkIn}
+        onOpenBooking={isClosedQueueDay ? undefined : onOpenBooking}
+        onWalkIn={isClosedQueueDay ? undefined : onWalkIn}
         today={today}
       />
     );
   }
 
-  const schedule = scheduleState.schedule;
-  const rows = computeGridRows(schedule, visits);
+  const schedule = scheduleState.kind === "scheduled" ? scheduleState.schedule : null;
+  const rows = schedule ? computeGridRows(schedule, visits) : closedRows;
   // Only computed when booking is actually possible, since it's the one
   // extra piece of work this component would otherwise do on every render
   // for no reason — see emptySlots.ts, the exact same source of truth
   // BookingSheet's own slot list reads from.
-  const emptySlotTimes = onTapEmptySlot
+  const emptySlotTimes = onTapEmptySlot && schedule
     ? new Set(computeEmptySlots(schedule, visits).map((slot) => slot.time))
     : null;
 
@@ -173,7 +191,7 @@ export default function PractitionerColumn({
             <Ltr>{bookedCount}</Ltr> {dayScreenStrings.slotsCardSubtitleBookedSuffix}
             {" · "}
             <Ltr>{freeCount}</Ltr> {dayScreenStrings.slotsCardSubtitleFreeSuffix}
-            {schedule.slot_minutes != null && (
+            {schedule?.slot_minutes != null && (
               <>
                 {" · "}
                 <Ltr>{schedule.slot_minutes}</Ltr> {dayScreenStrings.delayMinutesSuffix}
@@ -191,7 +209,7 @@ export default function PractitionerColumn({
       />
       <ul>
         {rows.map((row) => {
-          const { time, visit, isExtraAtTime } = row;
+          const { time, visit, isExtraAtTime, isOutsideHours } = row;
           const patient = visit ? patientsById.get(visit.patient_id) : undefined;
           const service = visit?.service_id ? servicesById.get(visit.service_id) : undefined;
           const advanceTarget = visit ? primaryAdvanceTarget(visit.status) : null;
@@ -212,6 +230,7 @@ export default function PractitionerColumn({
               patient={patient}
               service={service}
               isExtraAtTime={isExtraAtTime}
+              isOutsideHours={isOutsideHours === true}
               actorLabel={visit ? actorLabelByVisitId.get(visit.id) : undefined}
               today={today}
               onPrimaryAction={
@@ -278,6 +297,8 @@ function statusIsVisuallyEmpty(status: Visit["status"]): boolean {
 }
 
 interface QueueColumnProps {
+  /** The date is closed (a schedule exception): every still-active row is flagged outside working hours. */
+  isClosedDate?: boolean;
   practitionerName: string;
   showLabel: boolean;
   visits: readonly Visit[];
@@ -339,6 +360,7 @@ function QueueColumn({
   onOpenBooking,
   onWalkIn,
   today,
+  isClosedDate = false,
 }: QueueColumnProps) {
   const now = new Date();
   const sortedVisits = [...visits].sort((a, b) => a.position - b.position);
@@ -467,6 +489,7 @@ function QueueColumn({
               disablePrimaryAction={advancingVisitIds.has(visit.id)}
               onOpenVisitForm={showVisitFormPill ? openVisitForm : undefined}
               showEmptyFormHint={isCompleted && !formDataVisitIds.has(visit.id)}
+              isOutsideHours={isClosedDate && ACTIVE_VISIT_STATUSES.has(visit.status)}
               reorder={
                 onMoveWaiting && waitingIds.includes(visit.id)
                   ? {

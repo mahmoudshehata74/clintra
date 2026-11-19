@@ -417,3 +417,11 @@ No difference beyond the light comparison's: each capture is the sheet alone, wi
   its card. Adding the item made the owner's rail eight items long: the side
   rail now scrolls on a short window and the mobile bottom bar scrolls
   sideways, so the last item ("الإعدادات") stays reachable.
+- **Settings → working hours → "إجازات ومواعيد استثنائية"
+  (`feat/schedule-exceptions`).** Not in the prototype's #s12: a section
+  under the week built from the settings rows (`SetList`/`SetRow`) and the
+  shared `ui/` components (Field/TextInput, ToggleGroup, TimeField, Badge,
+  Button); the closure confirmation uses the warning tokens. The day
+  screen's "خارج مواعيد العمل" is a warning Badge in the row's meta line,
+  beside the existing "فوق السعة". Checked at desktop and mobile, light and
+  dark: no horizontal page scroll.

@@ -13,6 +13,7 @@ import type { Schedule } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
 import { todayInCairo } from "../../domain/time";
+import ScheduleExceptionsSection from "./ScheduleExceptionsSection";
 import { SetBody, SetList, SetRow } from "./SettingsLayout";
 import { dayScreenStrings } from "./strings";
 import {
@@ -286,6 +287,7 @@ export default function WorkingHoursPanel({
           );
         })}
       </SetList>
+      <ScheduleExceptionsSection practitionerId={practitionerId} />
     </SetBody>
   );
 }

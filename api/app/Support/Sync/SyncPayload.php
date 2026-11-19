@@ -21,6 +21,7 @@ final class SyncPayload
     /** table => its `time` columns. */
     private const TIME_COLUMNS = [
         'schedules' => ['start_time', 'end_time'],
+        'schedule_exceptions' => ['start_time', 'end_time'],
     ];
 
     /** table => its jsonb columns. */

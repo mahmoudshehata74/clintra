@@ -232,6 +232,7 @@ const CREATE_VERBS: Partial<Record<string, string>> = {
   services: "أضاف خدمة",
   service_price_overrides: "أضاف سعر خاص",
   schedules: "أضاف مواعيد العمل",
+  schedule_exceptions: "أضاف إجازة أو مواعيد استثنائية",
   // A staff member added before the server took over adding staff wrote a
   // users row and its membership; one added since writes the membership
   // alone (db/staffSettings.ts's addStaffMember) — either reads as the add.
@@ -250,6 +251,7 @@ const DELETE_VERBS: Partial<Record<string, string>> = {
   services: "حذف خدمة",
   service_price_overrides: "شال سعر خاص",
   schedules: "شال مواعيد العمل",
+  schedule_exceptions: "شال إجازة أو مواعيد استثنائية",
   membership_locations: "شال فرع من نطاق الموظف",
   membership_practitioners: "شال طبيب من نطاق الموظف",
 };

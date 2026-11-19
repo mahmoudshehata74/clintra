@@ -23,6 +23,7 @@ export const SYNCABLE_TABLES = [
   "practitioners",
   "prescription_items",
   "prescriptions",
+  "schedule_exceptions",
   "schedules",
   "service_price_overrides",
   "services",

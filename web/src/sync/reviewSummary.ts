@@ -32,6 +32,7 @@ const ENTITY_LABELS: Record<string, string> = {
   practitioners: "بيانات طبيب",
   prescription_items: "دواء في وصفة",
   prescriptions: "وصفة",
+  schedule_exceptions: "إجازة أو مواعيد استثنائية",
   schedules: "مواعيد العمل",
   service_price_overrides: "سعر خاص لخدمة",
   services: "خدمة",

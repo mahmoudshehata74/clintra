@@ -68,7 +68,12 @@ path the ordinary e2e suite never takes (it runs on the in-browser
 20. Both offline switch the doctor to slots; A reconnects first. B's switch
     is refused whole: B is asked to review once ("نظام الحجز …") and shows
     A's day.
-21. A closes the day with an opening float: B shows the same opening and
+21. A closes today in settings ("إجازات ومواعيد استثنائية"), confirming
+    over today's queue: B receives the closure, keeps the queue flagged
+    "خارج مواعيد العمل" (still arrived) and offers no walk-in; A removes
+    the closure and B can add to the queue again (docs/schema.md's v26
+    additions).
+22. A closes the day with an opening float: B shows the same opening and
     the same expected cash. Last, since a closed day refuses later edits.
 
 Every wait nudges the sync engine (as returning to the tab does) and polls;

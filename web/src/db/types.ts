@@ -175,6 +175,8 @@ export interface ScheduleException {
   start_time: ClockTime | null;
   end_time: ClockTime | null;
   shift_minutes: number | null;
+  /** Server-assigned; see docs/schema.md's v26 additions. */
+  rev: number;
 }
 
 export interface Patient {
