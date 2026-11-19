@@ -458,6 +458,10 @@ export const dayScreenStrings = {
   // The overflow menu's send-to-end-of-queue entry, and its toast.
   sendToEndOfQueueMenuLabel: "أجّله لآخر الدور",
   sendToEndOfQueueToastMessage: "اتنقل لآخر الدور",
+  // Queue reordering (domain/queueReorder.ts): a waiting row's two icon buttons, named for its patient.
+  queueMoveUpLabel: (name: string) => `قدّم ${name} في الدور`,
+  queueMoveDownLabel: (name: string) => `أخّر ${name} في الدور`,
+  queueMoveFailed: "معرفناش نغيّر الترتيب. جرّب تاني.",
 
   // The queue-list card (prototype `.q-list`/`.qrow`, #s3) and its rows.
   queueCardBadge: "الطابور",

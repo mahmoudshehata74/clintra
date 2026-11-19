@@ -319,6 +319,50 @@ async function displace(db: ClintraDatabase, entity: string, row: Row, now: stri
 }
 
 /**
+ * Where a visit waits after a pulled visit took its queue position (see
+ * isParkableQueueBlocker): far below any real position (positions start at
+ * 1, and a reorder parks at most at minus a real one), and free.
+ */
+const PULL_PARK_BASE = -1_000_000;
+
+/**
+ * A pulled visit collides with an accepted local one on
+ * [practitioner, day, position] only: the server moved both (a reorder
+ * made on another device — db/visitQueue.ts — pulled as each row's current
+ * state, one row at a time), and the local one's own pulled change, later
+ * in this pull, puts it where it is now. Parked meanwhile, not reviewed: no
+ * accepted write conflicts here, the device has just not caught up yet.
+ * The same holds when the local visit has a queued op of its own (this
+ * device's own reorder, not pushed yet): if the server accepts it, its
+ * ledger row comes back by pull with the visit's real position; if it
+ * refuses it, sync/syncGroups.ts puts the visit back.
+ */
+function isParkableQueueBlocker(entity: string, blocker: Row, pulled: Row): boolean {
+  if (entity !== "visits") {
+    return false;
+  }
+  const samePosition =
+    blocker.practitioner_id === pulled.practitioner_id && blocker.visit_date === pulled.visit_date && blocker.position === pulled.position;
+  // A missing or null key is no scheduled time at all (a queue visit), never a collision on one.
+  const sameScheduledAt = blocker.unique_scheduled_at != null && blocker.unique_scheduled_at === pulled.unique_scheduled_at;
+  return samePosition && !sameScheduledAt;
+}
+
+/** Moves a visit to the first free parking position (PULL_PARK_BASE − its position, then lower). A raw write: no op, no audit row. */
+async function parkVisit(table: Table<Row, string>, visit: Row): Promise<void> {
+  let position = PULL_PARK_BASE - (visit.position as number);
+  while (
+    (await table
+      .where("[practitioner_id+visit_date+position]")
+      .equals([visit.practitioner_id as string, visit.visit_date as string, position])
+      .count()) > 0
+  ) {
+    position--;
+  }
+  await table.put({ ...visit, position });
+}
+
+/**
  * Writes one pulled or bootstrapped row to its table — a plain upsert, unless
  * a local row with a different id already holds one of the table's unique
  * keys (docs/sync-plan.md's "Local unique collisions on pull"). Then, in one
@@ -327,7 +371,10 @@ async function displace(db: ClintraDatabase, entity: string, row: Row, now: stri
  * - every such local row the server never accepted is displaced (see
  *   displace) and the pulled row is written: the server already decided
  *   which of the two exists;
- * - if any of them *was* accepted, nothing is written or removed: one
+ * - a visit the server accepted that only holds the pulled visit's queue
+ *   position is parked (see
+ *   isParkableQueueBlocker) — docs/sync-plan.md's "key-safe order";
+ * - otherwise, if any of them *was* accepted, nothing is written or removed: one
  *   server_unique_conflict review row is left (at most one open per pulled
  *   entity_id), the conflict is logged, and the pulled row is skipped, so
  *   the pull cycle still completes and its cursor still advances.
@@ -351,7 +398,19 @@ export async function applyPulledRow(db: ClintraDatabase, entity: string, payloa
     const ops = await db.sync_ops.toArray();
     const reviews = await db.sync_review.toArray();
 
-    if (blockers.some((blocker) => !isNeverAccepted(blocker.id, ops, reviews))) {
+    const accepted = blockers.filter((blocker) => !isNeverAccepted(blocker.id, ops, reviews));
+    if (accepted.length > 0 && accepted.every((blocker) => isParkableQueueBlocker(entity, blocker, row))) {
+      for (const blocker of accepted) {
+        await parkVisit(table, blocker);
+      }
+      for (const blocker of blockers.filter((candidate) => !accepted.includes(candidate))) {
+        await displace(db, entity, blocker, now);
+      }
+      await table.put(row);
+      return;
+    }
+
+    if (accepted.length > 0) {
       console.error(
         `sync_engine_server_unique_conflict: pulled ${entity} ${row.id} collides with accepted local ${blockers.map((blocker) => blocker.id).join(", ")}`,
       );

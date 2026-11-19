@@ -1,4 +1,5 @@
 import { PaymentMethod, type Payment, type SyncReview } from "../db/types";
+import { isRefusedGroupReview } from "./syncGroups";
 import { findMessageTemplate } from "../domain/messageTemplates";
 import { formatPiastresForDisplay, type Piastres } from "../domain/money";
 import { clockTimeInCairo } from "../domain/time";
@@ -120,6 +121,9 @@ function describePayment(payment: Payment): string {
   return `${formatPiastresForDisplay(payment.amount)} ${method} (${formatReceiptNumber(payment)})`;
 }
 
+/** A queue reorder another device's reorder beat to the server (sync/syncGroups.ts): put back, the other order kept. */
+export const QUEUE_REORDER_REFUSED_LABEL = "ترتيب الدور — اتغيّر من جهاز تاني قبل ما ترتيبك يوصل، فرجع زي ما اتعمل هناك";
+
 /**
  * A short human-readable summary of one sync_review row, for the
  * needs-review list. Money is never displaced silently: a displaced row that
@@ -127,6 +131,10 @@ function describePayment(payment: Payment): string {
  * says how to put them back, since none of them will reach the server.
  */
 export function describeSyncReview(review: SyncReview): string {
+  // A refused queue reorder (sync/syncGroups.ts): one line for the whole change.
+  if (isRefusedGroupReview(review)) {
+    return QUEUE_REORDER_REFUSED_LABEL;
+  }
   const entityLabel =
     ENTITY_LABELS[review.entity] ?? (review.reason === "unknown_entity" ? UNKNOWN_ENTITY_LABEL : review.entity);
   const payments = displacedPayments(review);

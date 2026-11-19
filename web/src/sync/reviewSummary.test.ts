@@ -21,6 +21,11 @@ function makeReview(overrides: Partial<SyncReview> = {}): SyncReview {
 }
 
 describe("describeSyncReview", () => {
+  it("reads a refused queue reorder as one line for the whole change", () => {
+    const review = makeReview({ entity: "visits", reason: "conflict_stale_rev", payload: { group: [{ entity: "visits", entity_id: "v-1", payload: {} }] } });
+    expect(describeSyncReview(review)).toBe("ترتيب الدور — اتغيّر من جهاز تاني قبل ما ترتيبك يوصل، فرجع زي ما اتعمل هناك");
+  });
+
   it("labels a known entity and reason in Arabic", () => {
     expect(describeSyncReview(makeReview())).toBe("زيارة — الميعاد ده اتحجز من جهاز تاني");
   });

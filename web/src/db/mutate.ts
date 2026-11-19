@@ -25,6 +25,8 @@ export interface MutationInput<T> {
   after: T | null;
   actorMembershipId: string;
   orgId: string;
+  /** Ops of one all-or-nothing change share this id (SyncOp.group_id); omitted otherwise. */
+  groupId?: string;
 }
 
 let lastQueuedAtMs = 0;
@@ -138,6 +140,7 @@ async function applyEntityWrite<T>(db: ClintraDatabase, input: MutationInput<T>)
     base_rev: input.action === AuditAction.Create ? null : ((input.before as { rev?: number } | null)?.rev ?? null),
     failure_count: 0,
     next_retry_at: null,
+    ...(input.groupId === undefined ? {} : { group_id: input.groupId, group_before: input.before }),
   });
 
   return auditLogId;

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { waitingVisits } from "../../domain/queueReorder";
 import Ltr from "../../components/Ltr";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
@@ -59,6 +60,8 @@ interface PractitionerColumnProps {
   /** The overflow menu's "ملف المريض", offered on any visit whose patient exists (PatientProfileSheet). */
   onOpenProfile: (visit: Visit) => void;
   onSendToEnd: (visit: Visit) => void;
+  /** Queue mode's reorder buttons on the waiting rows; undefined when the signed-in role may not reorder (domain/queueReorder.ts). */
+  onMoveWaiting?: (visit: Visit, direction: "up" | "down") => void;
   onOpenVisitForm: (visit: Visit) => void;
   /** The slots card's trailing action ("ورقة الغد") — slots mode only. The audit log ("السجل") moved to AppShell's rail. */
   onOpenDaySheet?: () => void;
@@ -92,6 +95,7 @@ export default function PractitionerColumn({
   onSendMessage,
   onOpenProfile,
   onSendToEnd,
+  onMoveWaiting,
   onOpenVisitForm,
   onOpenDaySheet,
 }: PractitionerColumnProps) {
@@ -137,6 +141,7 @@ export default function PractitionerColumn({
         onSendMessage={onSendMessage}
         onOpenProfile={onOpenProfile}
         onSendToEnd={onSendToEnd}
+        onMoveWaiting={onMoveWaiting}
         onOpenVisitForm={onOpenVisitForm}
         onOpenBooking={onOpenBooking}
         onWalkIn={onWalkIn}
@@ -296,6 +301,8 @@ interface QueueColumnProps {
   /** The overflow menu's "ملف المريض", offered on any visit whose patient exists (PatientProfileSheet). */
   onOpenProfile: (visit: Visit) => void;
   onSendToEnd: (visit: Visit) => void;
+  /** Queue mode's reorder buttons on the waiting rows; undefined when the signed-in role may not reorder (domain/queueReorder.ts). */
+  onMoveWaiting?: (visit: Visit, direction: "up" | "down") => void;
   onOpenVisitForm: (visit: Visit) => void;
   onOpenBooking?: () => void;
   onWalkIn?: () => void;
@@ -327,6 +334,7 @@ function QueueColumn({
   onSendMessage,
   onOpenProfile,
   onSendToEnd,
+  onMoveWaiting,
   onOpenVisitForm,
   onOpenBooking,
   onWalkIn,
@@ -337,6 +345,7 @@ function QueueColumn({
   const summary = computeQueueSummary(sortedVisits);
   const hasEnoughDataForEstimate = countCompletedConsultations(sortedVisits) >= MINIMUM_COMPLETED_FOR_ESTIMATE;
   const completedCount = sortedVisits.filter((visit) => visit.status === VisitStatus.Completed).length;
+  const waitingIds = waitingVisits(sortedVisits).map((visit) => visit.id);
 
   return (
     <Card>
@@ -458,6 +467,15 @@ function QueueColumn({
               disablePrimaryAction={advancingVisitIds.has(visit.id)}
               onOpenVisitForm={showVisitFormPill ? openVisitForm : undefined}
               showEmptyFormHint={isCompleted && !formDataVisitIds.has(visit.id)}
+              reorder={
+                onMoveWaiting && waitingIds.includes(visit.id)
+                  ? {
+                      onMoveUp: waitingIds.indexOf(visit.id) > 0 ? () => onMoveWaiting(visit, "up") : undefined,
+                      onMoveDown:
+                        waitingIds.indexOf(visit.id) < waitingIds.length - 1 ? () => onMoveWaiting(visit, "down") : undefined,
+                    }
+                  : undefined
+              }
               menu={
                 menuEligible
                   ? {

@@ -93,8 +93,43 @@ export class FakeTransport implements SyncTransport, AuditTransport {
 
   async pushOps(ops: readonly SyncOp[]): Promise<PushOpResult[]> {
     const results: PushOpResult[] = [];
-    for (const op of ops) {
-      results.push(await this.pushOne(op));
+    for (let index = 0; index < ops.length; ) {
+      const groupId = ops[index].group_id;
+      let end = index + 1;
+      while (groupId !== undefined && end < ops.length && ops[end].group_id === groupId) {
+        end++;
+      }
+      const run = ops.slice(index, end);
+      results.push(...(groupId === undefined ? [await this.pushOne(run[0])] : await this.pushGroup(run)));
+      index = end;
+    }
+    return results;
+  }
+
+  /**
+   * The real server's group rule (SyncPushController::applyGroup): the ops
+   * apply in one transaction, and if any is not accepted none of them
+   * stays — that op returns its own result, the others `group_rejected`.
+   */
+  private async pushGroup(group: readonly SyncOp[]): Promise<PushOpResult[]> {
+    const tables = [...new Set(group.map((op) => op.entity))].map((entity) => tableForEntity(this.db, entity));
+    const results: PushOpResult[] = [];
+    try {
+      await this.db.transaction("rw", [...tables, this.db.sync_ops], async () => {
+        for (const op of group) {
+          const result = await this.pushOne(op);
+          results.push(result);
+          if (result.status !== "accepted" && result.status !== "duplicate") {
+            throw new GroupRefused();
+          }
+        }
+      });
+    } catch (error) {
+      if (!(error instanceof GroupRefused)) {
+        throw error;
+      }
+      const refused = results[results.length - 1];
+      return group.map((op) => (op.op_id === refused.op_id ? refused : { op_id: op.op_id, status: "rejected", reason: "group_rejected" }));
     }
     return results;
   }
@@ -315,3 +350,6 @@ export class FakeTransport implements SyncTransport, AuditTransport {
     return { cursor: "3:", hasMore: false, changes: [] };
   }
 }
+
+/** Thrown inside a group's transaction to roll the whole group back. */
+class GroupRefused extends Error {}

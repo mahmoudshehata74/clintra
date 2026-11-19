@@ -36,6 +36,7 @@ function toWireOp(op: SyncOp) {
     payload: op.payload,
     created_at: op.created_at,
     ...(op.base_rev === null ? {} : { base_rev: op.base_rev }),
+    ...(op.group_id === undefined ? {} : { group_id: op.group_id }),
   };
 }
 

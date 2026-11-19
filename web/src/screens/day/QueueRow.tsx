@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Ltr from "../../components/Ltr";
+import Button from "../../components/ui/Button";
 import type { Patient, Service, Visit } from "../../db/types";
 import { dayScreenStrings } from "./strings";
 import VisitMenu, { type VisitMenuActions } from "./VisitMenu";
@@ -25,6 +26,21 @@ interface QueueRowProps {
   onOpenVisitForm?: () => void;
   /** True for a completed visit with no visit_form_data row at all — a passive note, never a warning. */
   showEmptyFormHint?: boolean;
+  /**
+   * A waiting row's two reorder buttons (domain/queueReorder.ts), shown when
+   * present: each moves the visit one place among the waiting visits, and is
+   * disabled where there is no place to move to (left undefined).
+   */
+  reorder?: { onMoveUp?: () => void; onMoveDown?: () => void };
+}
+
+/** A chevron pointing up (`up`) or down; decorative — its button carries the name. */
+function Chevron({ direction }: { direction: "up" | "down" }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d={direction === "up" ? "M4 10l4-4 4 4" : "M4 6l4 4 4-4"} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 const QNUM_LOOK: Record<QueueRowKind, string> = {
@@ -55,6 +71,7 @@ export default function QueueRow({
   actorLabel,
   onOpenVisitForm,
   showEmptyFormHint = false,
+  reorder,
 }: QueueRowProps) {
   const isTappable = Boolean(onPrimaryAction);
 
@@ -122,6 +139,28 @@ export default function QueueRow({
         >
           {dayScreenStrings.visitFormPillLabel}
         </button>
+      )}
+      {reorder && (
+        <span className="flex shrink-0 gap-1">
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-label={dayScreenStrings.queueMoveUpLabel(patient?.full_name ?? "")}
+            disabled={!reorder.onMoveUp}
+            onClick={reorder.onMoveUp}
+          >
+            <Chevron direction="up" />
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-label={dayScreenStrings.queueMoveDownLabel(patient?.full_name ?? "")}
+            disabled={!reorder.onMoveDown}
+            onClick={reorder.onMoveDown}
+          >
+            <Chevron direction="down" />
+          </Button>
+        </span>
       )}
       {menu && <VisitMenu actions={menu} />}
     </li>

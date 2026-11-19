@@ -17,7 +17,8 @@ import {
   SIDEBAR,
 } from "../e2e/support";
 import { addDaysToClinicDay, todayInCairo, weekdayOf } from "../src/domain/time";
-import { bookNew, eventually, firstEmptySlotTime, firstPullLanded, nudge, openDevice, pushed, rowCount, rowStatus, seriesLetter, setUpClinic, type Device } from "./liveSupport";
+import { bookNew, eventually, firstEmptySlotTime, firstPullLanded, nudge, queueOrderOf, queueToday, walkIn, openDevice, pushed, rowCount, rowStatus, seriesLetter, setUpClinic, type Device } from "./liveSupport";
+import { QUEUE_REORDER_REFUSED_LABEL } from "../src/sync/reviewSummary";
 import { provisionOrg, removeLiveOrgs, startApi, stopApi, type LiveOrg } from "./liveServer";
 
 // Two devices of one freshly provisioned organization, each its own browser
@@ -472,6 +473,63 @@ test("a patient archived on A is hidden on B, and shows there with the archived 
   await eventually([a, b], () => b.page.getByText(PROFILE.searchNoMatch, { exact: true }).count(), 1, "B hides the archived patient");
   await b.page.getByRole("switch", { name: PROFILE.showArchivedLabel, exact: true }).click();
   await expect(resultsOnB).toContainText(PROFILE.archivedBadge);
+  await closeAll(a, b);
+});
+
+const REORDER = ["مريض دور 1", "مريض دور 2", "مريض دور 3"];
+const moveButton = (device: Device, direction: "up" | "down", name: string) =>
+  device.page.getByRole("button", {
+    name: direction === "up" ? S.queueMoveUpLabel(name) : S.queueMoveDownLabel(name),
+    exact: true,
+  });
+
+test("today in queue: a reorder on A shows on B", async ({ browser }) => {
+  const [a, b] = await twoDevices(browser);
+  await eventually([a], () => firstPullLanded(a), true, "A's first pull lands");
+  await queueToday(a, org);
+  await eventually([a, b], async () => b.page.getByText(S.queueSummaryCurrentTurnLabel).count(), 1, "B's day turns to queue");
+
+  for (const name of REORDER) {
+    await walkIn(a, name);
+  }
+  await eventually([a, b], () => queueOrderOf(b, REORDER), REORDER, "B has the three waiting in A's order");
+
+  await moveButton(a, "up", REORDER[1]).click();
+  const moved = [REORDER[1], REORDER[0], REORDER[2]];
+  await expect.poll(() => queueOrderOf(a, REORDER)).toEqual(moved);
+  await eventually([a, b], () => queueOrderOf(b, moved), moved, "B shows A's new order");
+  await eventually([a, b], () => pushed(a), true);
+  await closeAll(a, b);
+});
+
+test("both offline reorder the same queue: the later one is put back, asked to review once, and shows the first one's order", async ({ browser }) => {
+  const [a, b] = await twoDevices(browser);
+  // The previous scenario left the queue as 2, 1, 3.
+  const start = [REORDER[1], REORDER[0], REORDER[2]];
+  await eventually([a, b], async () => (await queueOrderOf(a, REORDER)).join() === start.join() && (await queueOrderOf(b, REORDER)).join() === start.join(), true);
+
+  await a.context.setOffline(true);
+  await b.context.setOffline(true);
+  // A moves the middle one up; B moves it down.
+  await moveButton(a, "up", REORDER[0]).click();
+  const onA = [REORDER[0], REORDER[1], REORDER[2]];
+  await expect.poll(() => queueOrderOf(a, REORDER)).toEqual(onA);
+  await moveButton(b, "down", REORDER[0]).click();
+  await expect.poll(() => queueOrderOf(b, REORDER)).toEqual([REORDER[1], REORDER[2], REORDER[0]]);
+
+  await a.context.setOffline(false);
+  await eventually([a], () => pushed(a), true, "A's reorder reaches the server first");
+  await b.context.setOffline(false);
+  await eventually([a, b], async () => b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).count(), 1, "B is asked to review");
+  await b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  const review = b.page.getByRole("dialog");
+  await expect(review.getByText(QUEUE_REORDER_REFUSED_LABEL)).toHaveCount(1);
+  await expect(review.getByRole("button", { name: S.syncReviewAcknowledgeAction, exact: true })).toHaveCount(1);
+  await review.getByRole("button", { name: S.syncReviewAcknowledgeAction, exact: true }).click();
+  await expect(review).toBeHidden();
+
+  await eventually([a, b], () => queueOrderOf(b, REORDER), onA, "B shows A's order");
+  expect(await queueOrderOf(a, REORDER)).toEqual(onA);
   await closeAll(a, b);
 });
 
