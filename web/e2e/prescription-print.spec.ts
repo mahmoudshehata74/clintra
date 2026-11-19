@@ -300,7 +300,7 @@ test("the printed prescription alone is on paper, on an A5 page", async ({ page 
   expect(pdf.pages).toBe(1);
 });
 
-test("a long prescription goes on to a second A5 page, a drug never split", async ({ page }) => {
+test("a long prescription goes on to a second A5 page, a drug never split, the tail kept with the last drug", async ({ page }) => {
   await karimInRoom(page);
   const workspace = await openVisitSheet(page);
   for (let n = 1; n <= 12; n += 1) {
@@ -318,21 +318,135 @@ test("a long prescription goes on to a second A5 page, a drug never split", asyn
   await expect(drugs).toHaveCount(12);
   const breaks = await drugs.evaluateAll((items) => items.map((item) => getComputedStyle(item).breakInside));
   expect(breaks).toEqual(Array(12).fill("avoid"));
-  const lastDrugWithSignature = await paper(page).evaluate((root, stamp) => {
-    const items = root.querySelectorAll("li");
-    const signature = [...root.querySelectorAll("p")].find((p) => p.textContent === stamp);
-    let block = items[items.length - 1]?.parentElement ?? null;
-    while (block && signature && !block.contains(signature)) {
-      block = block.parentElement;
-    }
-    return block && block !== root ? getComputedStyle(block).breakInside : null;
-  }, RX.stamp);
-  expect(lastDrugWithSignature).toBe("avoid");
+  // The last drug shares one unbreakable block with the follow-up line, the
+  // signature row and the footer, so all of them land on the last page.
+  const lastDrugBlock = await paper(page).evaluate(
+    (root, texts) => {
+      const items = root.querySelectorAll("li");
+      const tail = texts.map((text) => [...root.querySelectorAll("p")].find((p) => p.textContent === text) ?? null);
+      let block = items[items.length - 1]?.parentElement ?? null;
+      while (block && tail.every((p) => p !== null) && !tail.every((p) => block!.contains(p))) {
+        block = block.parentElement;
+      }
+      return {
+        found: tail.map((p) => p !== null),
+        breakInside: block && block !== root ? getComputedStyle(block).breakInside : null,
+      };
+    },
+    [RX.stamp, RX.followUpLabel, RX.footer],
+  );
+  expect(lastDrugBlock).toEqual({ found: [true, true, true], breakInside: "avoid" });
   await page.emulateMedia({ media: null });
 
   const pdf = await printedPdf(page);
   expectA5(pdf);
   expect(pdf.pages).toBe(2);
+});
+
+const LONG_DRUG = (n: number): Drug => ({
+  name: `Drug ${n} 100mg`,
+  form: "Tablet",
+  instructions: "قرص مرتين يوميًا بعد الأكل",
+  duration: "7 أيام",
+});
+// The seed schedules the slots doctor 09:00–14:00 on every weekday.
+const SEED_HOURS_LINE = `${RX.hoursLabel} السبت – الجمعة 09:00–14:00`;
+
+async function fillDiagnosis(workspace: Locator, text: string): Promise<void> {
+  const diagnosis = workspace.getByPlaceholder(S.visitFormDiagnosisPlaceholder);
+  await diagnosis.fill(text);
+  await diagnosis.blur();
+  await expect(workspace.getByText(S.visitFormSavedIndicator)).toBeVisible();
+}
+
+const diagnosisSwitch = (sheet: Locator) => sheet.getByRole("switch", { name: RX.diagnosisSwitchLabel, exact: true });
+
+async function confirmFirstPrint(page: Page, sheet: Locator, expectedCalls = 1): Promise<void> {
+  await sheet.getByRole("button", { name: RX.printAction, exact: true }).click();
+  await sheet.getByRole("button", { name: RX.confirmPrint, exact: true }).click();
+  await expect.poll(() => printCalls(page)).toBe(expectedCalls);
+}
+
+test("the official layout: the clinic's hours, the follow-up line and the footer, on one A5 page with 3 drugs", async ({
+  page,
+}) => {
+  await karimInRoom(page);
+  const workspace = await openVisitSheet(page);
+  await fillDiagnosis(workspace, "التهاب في الحلق");
+  for (let n = 1; n <= 3; n += 1) {
+    await addDrug(workspace, LONG_DRUG(n));
+  }
+  const sheet = await openPrintSheet(page, workspace, RX.printButton);
+  await expect(sheet.getByText(SEED_HOURS_LINE, { exact: true })).toBeVisible();
+  await expect(sheet.getByText(RX.followUpLabel, { exact: true })).toBeVisible();
+  await expect(sheet.getByText(RX.footer, { exact: true })).toBeVisible();
+  // The diagnosis is printed by default.
+  await expect(diagnosisSwitch(sheet)).toHaveAttribute("aria-checked", "true");
+  await expect(sheet).toContainText(`${RX.diagnosisLabel} التهاب في الحلق`);
+
+  await confirmFirstPrint(page, sheet);
+  // Once printed there is nothing left to choose.
+  await expect(diagnosisSwitch(sheet)).toHaveCount(0);
+  await expect(paper(page)).toContainText(`${RX.diagnosisLabel} التهاب في الحلق`);
+  await expect(paper(page)).toContainText(SEED_HOURS_LINE);
+  await expect(paper(page)).toContainText(RX.footer);
+
+  const pdf = await printedPdf(page);
+  expectA5(pdf);
+  expect(pdf.pages).toBe(1);
+});
+
+test("switched off, the diagnosis is on neither the preview nor paper, and every reprint repeats that", async ({ page }) => {
+  await karimInRoom(page);
+  let workspace = await openVisitSheet(page);
+  await fillDiagnosis(workspace, "التهاب في الحلق");
+  for (let n = 1; n <= 3; n += 1) {
+    await addDrug(workspace, LONG_DRUG(n));
+  }
+  let sheet = await openPrintSheet(page, workspace, RX.printButton);
+  await diagnosisSwitch(sheet).click();
+  await expect(diagnosisSwitch(sheet)).toHaveAttribute("aria-checked", "false");
+  await expect(sheet.getByText(RX.diagnosisLabel)).toHaveCount(0);
+  // Back on and off again: the preview follows the switch.
+  await diagnosisSwitch(sheet).click();
+  await expect(sheet).toContainText(`${RX.diagnosisLabel} التهاب في الحلق`);
+  await diagnosisSwitch(sheet).click();
+  await expect(sheet.getByText(RX.diagnosisLabel)).toHaveCount(0);
+
+  await confirmFirstPrint(page, sheet);
+  await expect(paper(page)).toContainText(RX.followUpLabel);
+  await expect(paper(page).getByText(RX.diagnosisLabel)).toHaveCount(0);
+  await expect(diagnosisSwitch(sheet)).toHaveCount(0);
+  await closeSheet(sheet);
+  await closeSheet(workspace);
+
+  // A reprint, by the assistant, still leaves it off.
+  await switchUser(page, { name: ASSISTANT_NAME, pin: DEV_SEED_PINS.assistant });
+  workspace = await openVisitSheet(page);
+  sheet = await openPrintSheet(page, workspace, RX.reprintButton);
+  await expect(diagnosisSwitch(sheet)).toHaveCount(0);
+  await expect(sheet.getByText(RX.diagnosisLabel)).toHaveCount(0);
+  await sheet.getByRole("button", { name: RX.printAction, exact: true }).click();
+  await expect.poll(() => printCalls(page)).toBe(2);
+  await expect(paper(page).getByText(RX.diagnosisLabel)).toHaveCount(0);
+});
+
+// A note adds a line to its drug, so 8 drugs that each carry one go on to a second page.
+test("8 drugs with the diagnosis and the hours line still fit one A5 page", async ({ page }) => {
+  await karimInRoom(page);
+  const workspace = await openVisitSheet(page);
+  await fillDiagnosis(workspace, "التهاب في الحلق");
+  for (let n = 1; n <= 8; n += 1) {
+    await addDrug(workspace, LONG_DRUG(n));
+  }
+  const sheet = await openPrintSheet(page, workspace, RX.printButton);
+  await expect(sheet.getByRole("listitem")).toHaveCount(8);
+  await confirmFirstPrint(page, sheet);
+  await expect(paper(page)).toContainText(`${RX.diagnosisLabel} التهاب في الحلق`);
+
+  const pdf = await printedPdf(page);
+  expectA5(pdf);
+  expect(pdf.pages).toBe(1);
 });
 
 test.describe("the existing printed pages keep their page size", () => {

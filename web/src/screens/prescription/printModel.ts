@@ -1,11 +1,12 @@
 import { PrescriptionError } from "../../db/prescriptions";
-import type { Patient, Practitioner, Prescription, PrescriptionItem, Visit } from "../../db/types";
+import type { Patient, Practitioner, Prescription, PrescriptionItem, Schedule, Visit } from "../../db/types";
 import type { VisitFormFieldValues } from "../../db/visitForm";
 import { formatPrescriptionNumber } from "../../domain/numberSeries";
 import { practitionerTitleOf, syndicateNumberOf } from "../../domain/practitionerProfile";
 import { formatSlashDate } from "../../domain/slashDate";
 import { todayInCairo } from "../../domain/time";
 import type { PrintClinicLines } from "../day/printClinic";
+import { dayScreenStrings } from "../day/strings";
 import { computeAge } from "../doctor/doctorDay";
 import { rxDoseLine, sortRxItems, type RxDoseLine } from "../visit/workspace";
 import { prescriptionPrintStrings as T } from "./strings";
@@ -36,6 +37,17 @@ export interface RxDoctorSpec {
   syndicateNumber: string | null;
 }
 
+/**
+ * One group of the hours line: weekdays in a row (the clinic's week reads
+ * Saturday to Friday) that keep the same hours, e.g. "السبت – الأربعاء"
+ * with ["17:00–21:00"]. A split day lists each of its ranges, earliest
+ * first; each range renders as its own left-to-right run.
+ */
+export interface RxHoursGroup {
+  days: string;
+  ranges: string[];
+}
+
 export interface RxPrintModel {
   /** `.doc-name`: "د. {full_name}". */
   doctorName: string;
@@ -43,6 +55,8 @@ export interface RxPrintModel {
   doctorSpec: RxDoctorSpec | null;
   /** The second `.doc-spec` line: the same clinic lines as every other printed page. */
   clinic: PrintClinicLines;
+  /** "مواعيد العيادة: …" under the clinic line; empty (the line omitted) when the doctor has no weekly schedule here. */
+  hours: RxHoursGroup[];
   /** `.rx-num`: "RX-2026-0287". */
   number: string;
   /** `.rx-num`: "30 / 9 / 2026" — the print's Cairo date once printed, today's before. */
@@ -50,7 +64,10 @@ export interface RxPrintModel {
   patientName: string;
   /** Null when the birth year is unknown — the "العمر" part is omitted. */
   age: number | null;
-  /** The snapshot once printed, the visit's current diagnosis before; null when empty. */
+  /**
+   * The snapshot once printed; before that the visit's current diagnosis
+   * while "اطبع التشخيص" is on, null while it is off. Null when empty.
+   */
   diagnosis: string | null;
   drugs: RxPrintDrug[];
 }
@@ -63,6 +80,10 @@ export interface RxPrintInput {
   patient: Pick<Patient, "full_name" | "birth_year"> | undefined;
   practitioner: Pick<Practitioner, "full_name" | "title" | "syndicate_number"> | undefined;
   clinic: PrintClinicLines;
+  /** The prescribing practitioner's weekly schedule at the prescription's location. */
+  schedules: readonly Pick<Schedule, "weekday" | "start_time" | "end_time">[];
+  /** "اطبع التشخيص" before the first print; ignored once printed, when paper repeats the snapshot. */
+  printDiagnosis: boolean;
   now: Date;
 }
 
@@ -83,18 +104,75 @@ export function buildRxPrintModel(input: RxPrintInput): RxPrintModel {
     doctorName: `${T.doctorPrefix} ${practitioner?.full_name ?? ""}`,
     doctorSpec: doctorSpec.title === null && doctorSpec.syndicateNumber === null ? null : doctorSpec,
     clinic: input.clinic,
+    hours: buildRxHoursGroups(input.schedules),
     number: formatPrescriptionNumber(prescription),
     date: formatSlashDate(todayInCairo(issuedAt)),
     patientName: patient?.full_name ?? "",
     age: computeAge(patient?.birth_year ?? null, issuedAt),
     diagnosis:
-      prescription.printed_at !== null ? nonEmpty(prescription.diagnosis) : nonEmpty(input.visitForm.diagnosis),
+      prescription.printed_at !== null
+        ? nonEmpty(prescription.diagnosis)
+        : input.printDiagnosis
+          ? nonEmpty(input.visitForm.diagnosis)
+          : null,
     drugs: sortRxItems(input.items).map((item, index) => {
       const dose = rxDoseLine(item);
       const form = nonEmpty(item.form);
       return { number: index + 1, name: form ? `${item.name} — ${form}` : item.name, dose, note: dose.note };
     }),
   };
+}
+
+// Weekday numbers (0 = Sunday .. 6 = Saturday, as Schedule.weekday) in the
+// order the clinic's week reads on paper: Saturday first.
+const PAPER_WEEK = [6, 0, 1, 2, 3, 4, 5] as const;
+
+/**
+ * The hours line's groups, from the weekly schedule: each working weekday's
+ * ranges ("17:00–21:00", a split day's earliest first), and weekdays next to
+ * each other in PAPER_WEEK with the same ranges merged — two as "السبت
+ * والأحد", three or more as "السبت – الأربعاء". Days off are left out, and
+ * so is the whole line when there is no schedule (an empty list).
+ */
+export function buildRxHoursGroups(
+  schedules: readonly Pick<Schedule, "weekday" | "start_time" | "end_time">[],
+): RxHoursGroup[] {
+  const runs: { weekdays: number[]; ranges: string[] }[] = [];
+  let previousKey: string | null = null;
+  for (const weekday of PAPER_WEEK) {
+    const ranges = schedules
+      .filter((schedule) => schedule.weekday === weekday)
+      .sort((a, b) => a.start_time.localeCompare(b.start_time))
+      .map((schedule) => `${schedule.start_time}–${schedule.end_time}`);
+    const key = ranges.length === 0 ? null : ranges.join(" ");
+    const last = runs.at(-1);
+    if (key !== null && key === previousKey && last) {
+      last.weekdays.push(weekday);
+    } else if (key !== null) {
+      runs.push({ weekdays: [weekday], ranges });
+    }
+    previousKey = key;
+  }
+  return runs.map(({ weekdays, ranges }) => {
+    const first = dayScreenStrings.weekdayNames[weekdays[0]!];
+    const last = dayScreenStrings.weekdayNames[weekdays.at(-1)!];
+    const days =
+      weekdays.length === 1 ? first : weekdays.length === 2 ? `${first} و${last}` : `${first} – ${last}`;
+    return { days, ranges };
+  });
+}
+
+/**
+ * "اطبع التشخيص" in the print sheet: offered only before the first print
+ * and only when the visit has a diagnosis to leave off. Once printed, the
+ * snapshot already records the choice (null when it was off), so every
+ * reprint repeats it and there is nothing to choose.
+ */
+export function isDiagnosisSwitchShown(
+  prescription: Pick<Prescription, "printed_at">,
+  visitForm: Pick<VisitFormFieldValues, "diagnosis">,
+): boolean {
+  return prescription.printed_at === null && nonEmpty(visitForm.diagnosis) !== null;
 }
 
 /** What pressing "طباعة / حفظ PDF" does. */

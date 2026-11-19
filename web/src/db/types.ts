@@ -347,7 +347,11 @@ export interface Prescription {
   issued_year: number;
   /** Sequential per location per calendar year within one device's series. */
   number: number;
-  /** The visit's diagnosis as it stood at the first print; null until then, or when the visit had none. */
+  /**
+   * The diagnosis as the first print put it on paper: the visit's as it
+   * stood then, or null until then, when the visit had none, or when that
+   * print left it off ("اطبع التشخيص" off) — so reprints repeat the choice.
+   */
   diagnosis: string | null;
   /** Set once, by the first print; null while the prescription is still editable. */
   printed_at: Instant | null;

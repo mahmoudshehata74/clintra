@@ -19,8 +19,9 @@ import { prescriptionPrintStrings as T } from "./strings";
  * border, shadow and width), so the preview is the shared PrintPage. On
  * paper it is plain paper: no border, radius, shadow, card background,
  * width cap or padding — the margin is `@page prescription`'s (index.css).
- * A drug never splits across two pages, and `.rx-sig` stays on the page of
- * the last drug: the two share one unbreakable block. Colours on paper are
+ * A drug never splits across two pages, and the follow-up line ("ميعاد
+ * الإعادة"), `.rx-sig` and the footer stay on the page of the last drug:
+ * they share one unbreakable block. Up to 8 drugs fit one A5 page. Colours on paper are
  * the print-paper and print-ink tokens (white and black, with opacity for
  * the greys); the screen-only `.rx-print-header` uses the `print-note` tokens.
  */
@@ -35,11 +36,12 @@ export default function RxPrintPage({ model, preview }: { model: RxPrintModel; p
       )}
 
       {/* `.rx-doc` */}
-      <div className="mb-4 flex items-start justify-between gap-4 border-b-2 border-print-ink pb-3.5">
+      <div className="mb-3 flex items-start justify-between gap-4 border-b-2 border-print-ink pb-3">
         <div>
           <p className="text-[17px] font-bold tracking-[-0.01em] text-print-ink">{model.doctorName}</p>
           {model.doctorSpec && <DoctorSpec spec={model.doctorSpec} />}
           <ClinicSpec clinic={model.clinic} />
+          <ClinicHours groups={model.hours} />
         </div>
         <div className="flex-none text-end font-mono text-xs text-print-ink/60 tabular-nums">
           <p>
@@ -52,7 +54,7 @@ export default function RxPrintPage({ model, preview }: { model: RxPrintModel; p
       </div>
 
       {/* `.rx-pt` */}
-      <div className="mb-4 flex flex-wrap justify-between gap-2 rounded-control bg-print-ink/2 px-3.5 py-2.5 text-[12.5px] text-print-ink">
+      <div className="mb-3 flex flex-wrap justify-between gap-2 rounded-control bg-print-ink/2 px-3.5 py-2 text-[12.5px] text-print-ink">
         <p>
           <b className="font-semibold">{T.patientLabel}</b> {model.patientName}
         </p>
@@ -69,7 +71,7 @@ export default function RxPrintPage({ model, preview }: { model: RxPrintModel; p
       </div>
 
       {/* `.rx-title`, its `::after` rule drawn as a span: "Rx" on the right, the rule running left. */}
-      <div className="mb-2.5 flex items-baseline gap-2 text-[15px] font-bold text-print-ink">
+      <div className="mb-1.5 flex items-baseline gap-2 text-[15px] font-bold text-print-ink">
         Rx
         <span aria-hidden="true" className="flex-1 border-b-[1.5px] border-print-ink" />
       </div>
@@ -82,7 +84,7 @@ export default function RxPrintPage({ model, preview }: { model: RxPrintModel; p
         </ol>
       )}
 
-      {/* The last `.rx-drug` and `.rx-sig`, kept together on one page. */}
+      {/* The last `.rx-drug`, the follow-up line, `.rx-sig` and the footer, kept together on one page. */}
       <div className="break-inside-avoid">
         {lastDrug && (
           <ol start={lastDrug.number}>
@@ -90,13 +92,21 @@ export default function RxPrintPage({ model, preview }: { model: RxPrintModel; p
           </ol>
         )}
 
+        {/* "ميعاد الإعادة": a blank line to write on. */}
+        <p className="mt-2.5 flex items-end gap-2 text-[12.5px] font-semibold text-print-ink">
+          {T.followUpLabel}
+          <span aria-hidden="true" className="w-40 border-b border-print-ink/60" />
+        </p>
+
         {/* `.rx-sig` */}
-        <div className="mt-[22px] flex justify-between border-t border-dashed border-print-ink/20 pt-3.5 text-[11px] text-print-ink/60">
+        <div className="mt-3.5 flex justify-between border-t border-dashed border-print-ink/20 pt-2.5 text-[11px] text-print-ink/60">
           <p>
             <span className="font-bold text-print-ink">{T.signature}</span> · {model.doctorName}
           </p>
           <p>{T.stamp}</p>
         </div>
+
+        <p className="mt-2.5 text-center text-[10px] leading-snug text-print-ink/60">{T.footer}</p>
       </div>
     </RxPaper>
   );
@@ -111,19 +121,19 @@ function RxPaper({ preview, children }: { preview: boolean; children: ReactNode 
 function RxDrug({ drug, isLast }: { drug: RxPrintDrug; isLast: boolean }) {
   return (
     <li
-      className={`flex break-inside-avoid items-start gap-3.5 py-3 ${isLast ? "" : "border-b border-dashed border-print-ink/20"}`}
+      className={`flex break-inside-avoid items-start gap-3.5 py-1.5 ${isLast ? "" : "border-b border-dashed border-print-ink/20"}`}
     >
-      <span className="flex h-7 w-7 flex-none items-center justify-center rounded-chip bg-print-ink text-[13px] font-bold text-print-paper">
+      <span className="flex h-6 w-6 flex-none items-center justify-center rounded-chip bg-print-ink text-[12px] font-bold text-print-paper">
         <Ltr>{drug.number}</Ltr>
       </span>
       <div>
-        <p className="text-[14.5px] font-bold tracking-[-0.005em] text-print-ink">
+        <p className="text-[14px] leading-snug font-bold tracking-[-0.005em] text-print-ink">
           <Ltr>{drug.name}</Ltr>
         </p>
-        <p className="mt-[3px] text-xs text-print-ink/80 tabular-nums">
+        <p className="mt-0.5 text-xs leading-snug text-print-ink/80 tabular-nums">
           <RxDoseText line={drug.dose} strongClassName="font-semibold text-print-ink" />
         </p>
-        {drug.note && <p className="mt-0.5 text-[11.5px] text-print-ink/60 italic">{drug.note}</p>}
+        {drug.note && <p className="mt-0.5 text-[11.5px] leading-snug text-print-ink/60 italic">{drug.note}</p>}
       </div>
     </li>
   );
@@ -172,6 +182,34 @@ function ClinicSpec({ clinic }: { clinic: RxPrintModel["clinic"] }) {
           ) : (
             part
           )}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+/**
+ * "مواعيد العيادة: …" under the clinic line, from the doctor's weekly
+ * schedule at this location (buildRxHoursGroups); nothing when there is none.
+ * Each range is its own left-to-right run, kept whole.
+ */
+function ClinicHours({ groups }: { groups: RxPrintModel["hours"] }) {
+  if (groups.length === 0) {
+    return null;
+  }
+  return (
+    <p className="mt-0.5 text-[11px] text-print-ink/65">
+      {T.hoursLabel}{" "}
+      {groups.map((group, index) => (
+        <span key={index}>
+          {index > 0 && T.hoursSeparator}
+          {group.days}{" "}
+          {group.ranges.map((range, rangeIndex) => (
+            <span key={rangeIndex}>
+              {rangeIndex > 0 && ` ${T.hoursRangeJoiner}`}
+              <Ltr className="whitespace-nowrap tabular-nums">{range}</Ltr>
+            </span>
+          ))}
         </span>
       ))}
     </p>

@@ -17,6 +17,11 @@ export const prescriptionPrintStrings = {
   clinicPhonePrefix: "هاتف:",
   // `.doc-spec`'s first line: "{title} · رقم النقابة {n}".
   syndicatePrefix: "رقم النقابة",
+  // Under the clinic line: "مواعيد العيادة: السبت – الأربعاء 17:00–21:00 · الخميس 10:00–14:00".
+  hoursLabel: "مواعيد العيادة:",
+  hoursSeparator: " · ",
+  // Between a split day's ranges.
+  hoursRangeJoiner: "و",
 
   // `.rx-pt`
   patientLabel: "المريض:",
@@ -24,9 +29,18 @@ export const prescriptionPrintStrings = {
   ageUnit: "سنة",
   diagnosisLabel: "التشخيص:",
 
+  // Under the last drug, a blank line to write the next visit on.
+  followUpLabel: "ميعاد الإعادة:",
+
   // `.rx-sig`
   signature: "التوقيع",
   stamp: "الختم الرسمي",
+
+  // The small centred footer at the foot of the last page.
+  footer: "لا تغيّر الجرعة أو توقف الدواء منغير استشارة الطبيب · يُحفظ الدواء بعيدًا عن متناول الأطفال",
+
+  // The print sheet's switch, before the first print: on by default; off prints no diagnosis.
+  diagnosisSwitchLabel: "اطبع التشخيص",
 
   // `.split` — one action: the browser's print dialog both prints and saves a PDF.
   printAction: "طباعة / حفظ PDF",
