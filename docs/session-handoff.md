@@ -355,6 +355,35 @@ restatement; no prototype value changed.
 
 Screen 10's decision h ("dark mode stays off") is superseded.
 
+## Reports (feat/reports)
+The reports page ("التقارير", rail item after "السجل") computes
+`docs/backend-harvest.md` section 3's ten reports on the device
+(`web/src/screens/reports/reportsModel.ts`), for a typed range of clinic
+days (YYYY-MM-DD, both ends included, at most 366 days, this month so far
+by default). Decisions taken while building it:
+- Who: the owner (every doctor, with a doctor filter) and any membership
+  tied to a practitioner, whatever its role — that doctor's rows only, no
+  filter (`domain/clinicalAccess.ts`'s rule; the staff form creates a
+  doctor's login as an assistant or manager tied to that doctor). An
+  assistant or manager tied to no doctor gets no entry.
+- A doctor's rows: visits by `practitioner_id`; invoices by their own
+  `practitioner_id`; payments through their invoice. Patient activity for
+  one doctor lists only patients with a visit to that doctor.
+- Cash close is the whole clinic's drawer, so it lists rows only for "كل
+  الدكاترة"; one doctor's view shows none, with a line saying why.
+- There is no cancel time on a visit (it is in the audit log), so the visit
+  reports carry the cancel reason instead of `cancelled_at`.
+- Service usage: "محجوز" counts booked/confirmed/arrived/in-room visits by
+  their service; "اتعمل" adds the invoice lines of completed visits (void
+  invoices left out), by service and line description.
+- CSV ("تنزيل CSV", `web/src/domain/csv.ts`): UTF-8 BOM, CRLF, Arabic
+  column labels, days as YYYY-MM-DD and times as ISO UTC, money as pounds
+  with 2 decimals in a column labelled "(ج.م)", flags as 1/0, empty for
+  null, and a leading apostrophe on any text cell starting with = + - @ or a
+  control character (numbers, negatives included, stay numeric).
+- Reports read what the device holds; once the 60-day retention lands,
+  older ranges would need a server read (`docs/backend-harvest.md`).
+
 ## Settled deviations / decisions — prototype alignment
 
 The owner's answers to `docs/screen-comparison.md`'s questions (applied on

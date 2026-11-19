@@ -65,14 +65,17 @@ test("the active rail item's colour and border actually differ from an inactive 
   expect(activeBorder).not.toBe(inactiveBorder);
 });
 
-test("the placeholder sections are gone; المرضى is a real page beside اليوم, السجل and الإعدادات", async ({ page }) => {
+test("the placeholder sections are gone; المرضى and التقارير are real pages beside اليوم, السجل and الإعدادات", async ({ page }) => {
   const nav = sidebar(page);
   await expect(nav.getByRole("button", { name: SIDEBAR.navDay, exact: true })).toBeVisible();
   await expect(nav.getByRole("button", { name: SIDEBAR.navAudit, exact: true })).toBeVisible();
   await expect(nav.getByRole("button", { name: SIDEBAR.navSettings, exact: true })).toBeVisible();
 
+  // "التقارير" came back as the reports page, not a placeholder.
+  await expect(nav.getByRole("button", { name: SIDEBAR.navReports, exact: true })).toBeVisible();
+
   // Removed from the nav model entirely — not disabled, not present as text.
-  for (const label of ["الطابور", "الفواتير", "التقارير"]) {
+  for (const label of ["الطابور", "الفواتير"]) {
     await expect(nav.getByText(label, { exact: true })).toHaveCount(0);
   }
   await expect(nav.getByText("جاي قريب")).toHaveCount(0);

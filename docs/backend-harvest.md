@@ -139,7 +139,8 @@ than 60 days would need a server read.
 1. **On-device reports screen** from his ten definitions (visits, bookings,
    cancellations/no-shows, patient activity, service usage, invoicing,
    collections, unpaid, cash close, staff collections) with his CSV rules —
-   M–L; no schema/RLS approval needed.
+   M–L; no schema/RLS approval needed. Done in `feat/reports`
+   (`docs/session-handoff.md`, "Reports").
 2. **Invoice item editing while unpaid** (retire lines, recompute total,
    re-check slot duration, reject once a payment exists) — M; no new column,
    but a new sync rejection reason needs your approval.
