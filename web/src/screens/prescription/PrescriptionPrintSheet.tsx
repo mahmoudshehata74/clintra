@@ -2,10 +2,19 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useGuardedActingMembership } from "../../auth/useActingMembership";
 import Button from "../../components/ui/Button";
+import Switch from "../../components/ui/Switch";
 import { SheetPanelBody, SheetPanelFoot } from "../../components/ui/SheetPanel";
 import { db } from "../../db/database";
 import { markPrescriptionPrinted } from "../../db/prescriptions";
-import { MessageChannel, type Patient, type Practitioner, type Prescription, type PrescriptionItem, type Visit } from "../../db/types";
+import {
+  MessageChannel,
+  type Patient,
+  type Practitioner,
+  type Prescription,
+  type PrescriptionItem,
+  type Schedule,
+  type Visit,
+} from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { findGeneralFormDefinition, findVisitFormData, readVisitFormValues, type VisitFormFieldValues } from "../../db/visitForm";
 import Sheet from "../day/Sheet";
@@ -15,7 +24,7 @@ import { prescriptionMessageText } from "../messages/messagesModel";
 import SendMessageSheet from "../messages/SendMessageSheet";
 import { messagesStrings } from "../messages/strings";
 import { MessageTemplateKey } from "../../domain/messageTemplates";
-import { buildRxPrintModel, computeRxPrintState, rxPrintErrorMessage } from "./printModel";
+import { buildRxPrintModel, computeRxPrintState, isDiagnosisSwitchShown, rxPrintErrorMessage } from "./printModel";
 import RxPrintPage from "./RxPrintPage";
 import { prescriptionPrintStrings as T } from "./strings";
 
@@ -31,6 +40,8 @@ interface PrintData {
   visitForm: VisitFormFieldValues;
   patient: Patient | undefined;
   practitioner: Practitioner | undefined;
+  /** The practitioner's weekly schedule at the prescription's location, for the hours line. */
+  schedules: Schedule[];
 }
 
 /**
@@ -55,6 +66,10 @@ interface PrintData {
  * `print:hidden` and the flat target `hidden print:block`, mounted only
  * while a print is under way.
  *
+ * Before the first print, "اطبع التشخيص" (on by default) decides whether
+ * the diagnosis goes on paper; off, the first print snapshots none, so
+ * every reprint repeats the choice (markPrescriptionPrinted).
+ *
  * Once printed — and only then — "واتساب" and "SMS" open the send sheet
  * over this one with the custom template preselected and the prescription
  * as its text (messagesModel.ts's prescriptionMessageText), on that channel.
@@ -68,6 +83,7 @@ export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: Pr
   // once the browser reports the dialog closed.
   const [printRun, setPrintRun] = useState<number | null>(null);
   const [sendChannel, setSendChannel] = useState<MessageChannel | null>(null);
+  const [printDiagnosis, setPrintDiagnosis] = useState(true);
 
   const data = useLiveQuery<PrintData | null>(async () => {
     const prescription = await db.prescriptions.get(prescriptionId);
@@ -75,14 +91,19 @@ export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: Pr
     if (!prescription || !visit) {
       return null;
     }
-    const [items, formDefinition, patient, practitioner] = await Promise.all([
+    const [items, formDefinition, patient, practitioner, allSchedules] = await Promise.all([
       db.prescription_items.where("prescription_id").equals(prescriptionId).toArray(),
       findGeneralFormDefinition(db),
       db.patients.get(prescription.patient_id),
       db.practitioners.get(prescription.practitioner_id),
+      db.schedules.toArray(),
     ]);
     const visitForm = readVisitFormValues(await findVisitFormData(db, visit.id, formDefinition.id));
-    return { prescription, items, visit, visitForm, patient, practitioner };
+    const schedules = allSchedules.filter(
+      (schedule) =>
+        schedule.practitioner_id === prescription.practitioner_id && schedule.location_id === prescription.location_id,
+    );
+    return { prescription, items, visit, visitForm, patient, practitioner, schedules };
   }, [prescriptionId]);
 
   const clinic = usePrintClinic(data?.prescription.location_id ?? "");
@@ -114,7 +135,8 @@ export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: Pr
     );
   }
 
-  const model = buildRxPrintModel({ ...data, clinic, now: new Date() });
+  const model = buildRxPrintModel({ ...data, clinic, printDiagnosis, now: new Date() });
+  const isSwitchShown = isDiagnosisSwitchShown(data.prescription, data.visitForm);
   const state = computeRxPrintState(actingPractitionerId, data.visit, data.prescription, data.items.length);
 
   function requestPrint() {
@@ -138,7 +160,7 @@ export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: Pr
   async function handleConfirm() {
     setIsWriting(true);
     try {
-      await markPrescriptionPrinted(db, prescriptionId);
+      await markPrescriptionPrinted(db, prescriptionId, { printDiagnosis });
       setIsConfirming(false);
       requestPrint();
     } catch (caught) {
@@ -160,6 +182,17 @@ export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: Pr
           {/* `.split` */}
           <SheetPanelFoot>
             <div className="flex flex-1 flex-wrap items-center gap-2">
+              {isSwitchShown && (
+                <div className="flex basis-full items-center justify-between gap-3">
+                  <span className="text-[13px] font-semibold text-text">{T.diagnosisSwitchLabel}</span>
+                  <Switch
+                    checked={printDiagnosis}
+                    onCheckedChange={setPrintDiagnosis}
+                    label={T.diagnosisSwitchLabel}
+                    disabled={isWriting}
+                  />
+                </div>
+              )}
               {isPrinted && !isConfirming && (
                 <>
                   <Button variant="secondary" onClick={() => setSendChannel(MessageChannel.WhatsApp)}>

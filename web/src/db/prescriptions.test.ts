@@ -428,6 +428,20 @@ describe("markPrescriptionPrinted", () => {
     expect(printed.diagnosis).toBeNull();
   });
 
+  it("a first print with the diagnosis left off snapshots null, and a later print keeps it off", async () => {
+    const visit = await makeVisit();
+    await saveVisitFormField(db, visit.id, "diagnosis", "التهاب وتر الرضفة");
+    const { prescription } = await addPrescriptionItem(db, visit.id, DICLOFENAC);
+
+    const { prescription: printed } = await markPrescriptionPrinted(db, prescription.id, { printDiagnosis: false });
+
+    expect(printed).toEqual({ ...prescription, printed_at: printed.printed_at, diagnosis: null });
+    expect(printed.printed_at).not.toBeNull();
+    expect(await db.prescriptions.get(prescription.id)).toEqual(printed);
+    const again = await markPrescriptionPrinted(db, prescription.id, { printDiagnosis: true });
+    expect(again).toEqual({ prescription: printed, auditLogId: null });
+  });
+
   it("a later print writes nothing — no change, no audit row, no op — and returns the prescription as printed", async () => {
     const visit = await makeVisit();
     await saveVisitFormField(db, visit.id, "diagnosis", "التهاب وتر الرضفة");

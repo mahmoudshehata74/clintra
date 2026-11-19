@@ -309,10 +309,21 @@ export interface MarkPrescriptionPrintedResult {
   auditLogId: string | null;
 }
 
+export interface MarkPrescriptionPrintedOptions {
+  /**
+   * The print sheet's "اطبع التشخيص" (default on). Off, the first print
+   * snapshots no diagnosis, so paper — this print and every reprint —
+   * carries none. The snapshot is what was printed, so the choice needs no
+   * column of its own. Ignored by every later print.
+   */
+  printDiagnosis?: boolean;
+}
+
 /**
  * Records a print. The first one sets printed_at and snapshots the visit's
  * diagnosis, as the general visit form holds it right now
- * (readVisitFormValues; a blank diagnosis is stored as null), into the
+ * (readVisitFormValues; a blank diagnosis, or one the print left off, is
+ * stored as null), into the
  * prescription — from then on the prescription and its items are locked
  * (prescription_printed), here and on the server. Every later print changes
  * nothing: no write, no audit_log row, no sync op; it returns the
@@ -322,6 +333,7 @@ export interface MarkPrescriptionPrintedResult {
 export async function markPrescriptionPrinted(
   db: ClintraDatabase,
   prescriptionId: string,
+  options: MarkPrescriptionPrintedOptions = {},
 ): Promise<MarkPrescriptionPrintedResult> {
   const actor = await resolveActingMembership(db);
 
@@ -343,7 +355,7 @@ export async function markPrescriptionPrinted(
       const after: Prescription = {
         ...prescription,
         printed_at: new Date().toISOString(),
-        diagnosis: optionalText(diagnosis),
+        diagnosis: options.printDiagnosis === false ? null : optionalText(diagnosis),
       };
 
       const auditLogId = await write({
