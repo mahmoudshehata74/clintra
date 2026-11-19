@@ -14,6 +14,16 @@ export const patientProfileStrings = {
   lastVisitPrefix: "آخر زيارة",
   noVisits: "مفيش زيارات",
   backToSearch: "رجوع للبحث",
+  showArchivedLabel: "إظهار المؤرشفين",
+  archivedBadge: "مؤرشف",
+
+  // Archiving (db/patientArchive.ts), under the hero.
+  archiveAction: "أرشفة المريض",
+  restoreAction: "إرجاع من الأرشيف",
+  archivedLine: "المريض ده في الأرشيف: مش بيظهر في البحث ولا في الحجز، وتاريخه وفواتيره زي ما هي",
+  archiveBlockedUpcoming: "مينفعش تأرشف المريض وعنده حجز جاي. الغي الحجز الأول أو استنى لما يخلص.",
+  archiveFailed: "معرفناش نأرشف المريض. جرّب تاني.",
+  restoreFailed: "معرفناش نرجّع المريض. جرّب تاني.",
 
   // `.pt-hero`
   ageUnit: "سنة",

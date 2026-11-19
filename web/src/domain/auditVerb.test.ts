@@ -130,6 +130,16 @@ describe("describeAuditVerb", () => {
     expect(verb).toBe("عدّل بيانات المريض");
   });
 
+  it("reads a patient archived or brought back from the archive as that, and any other edit to an archived one as an edit", () => {
+    const patient = (archivedAt: string | null | undefined, name = "مريض") => ({ id: "patient-1", full_name: name, archived_at: archivedAt });
+    const verb = (before: object, after: object) => describeAuditVerb({ entity: "patients", action: AuditAction.Update, before, after });
+    expect(verb(patient(null), patient("2026-11-18T10:00:00.000Z"))).toBe("أرشف المريض");
+    // A row written before archiving existed has no field: read as not archived.
+    expect(verb({ id: "patient-1", full_name: "مريض" }, patient("2026-11-18T10:00:00.000Z"))).toBe("أرشف المريض");
+    expect(verb(patient("2026-11-18T10:00:00.000Z"), patient(null))).toBe("رجّع المريض من الأرشيف");
+    expect(verb(patient("2026-11-18T10:00:00.000Z", "قديم"), patient("2026-11-18T10:00:00.000Z", "جديد"))).toBe("عدّل بيانات المريض");
+  });
+
   it.each([
     [InvoiceStatus.Unpaid, InvoiceStatus.Partial, "سجّل دفعة جزئية"],
     [InvoiceStatus.Unpaid, InvoiceStatus.Paid, "سجّل السداد الكامل"],

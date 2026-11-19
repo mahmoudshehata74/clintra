@@ -45,6 +45,7 @@ export async function createPatient(
     birth_year: null,
     note: null,
     created_at: new Date().toISOString(),
+    archived_at: null,
     rev: 1,
   };
 

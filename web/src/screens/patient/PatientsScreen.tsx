@@ -4,10 +4,13 @@ import Ltr from "../../components/Ltr";
 import SlashDate from "../../components/SlashDate";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
+import Badge from "../../components/ui/Badge";
 import Field, { TextInput } from "../../components/ui/Field";
+import Switch from "../../components/ui/Switch";
 import { db } from "../../db/database";
 import { searchPatients } from "../../db/patientSearch";
 import { useLiveQuery } from "../../db/useLiveQuery";
+import { isArchived } from "../../domain/patientArchive";
 import { formatEgyptianPhoneForDisplay } from "../../domain/phone";
 import PatientProfile from "./PatientProfile";
 import { lastVisitLine } from "./profileModel";
@@ -18,12 +21,15 @@ import { patientProfileStrings as T } from "./strings";
  * so tokens and shared components only — a TextInput searching by name or
  * phone (db/patientSearch.ts), the matches as rows (name, local phone, last
  * visit), and the chosen patient's profile (reference screen 18) on the
- * same page with a way back to the results.
+ * same page with a way back to the results. Archived patients
+ * (db/patientArchive.ts) are left out unless "إظهار المؤرشفين" is on, and
+ * then read "مؤرشف".
  */
 export default function PatientsScreen() {
   const [query, setQuery] = useState("");
   const [patientId, setPatientId] = useState<string | null>(null);
-  const results = useLiveQuery(() => searchPatients(db, query), [query]);
+  const [showArchived, setShowArchived] = useState(false);
+  const results = useLiveQuery(() => searchPatients(db, query, { includeArchived: showArchived }), [query, showArchived]);
 
   if (patientId !== null) {
     return (
@@ -52,6 +58,12 @@ export default function PatientsScreen() {
               onChange={(event) => setQuery(event.target.value)}
             />
           </Field>
+          <div className="mt-3 flex items-center gap-2.5">
+            <Switch checked={showArchived} onCheckedChange={setShowArchived} label={T.showArchivedLabel} />
+            <span aria-hidden="true" className="text-xs text-muted">
+              {T.showArchivedLabel}
+            </span>
+          </div>
         </div>
         {!hasQuery ? (
           <p className="border-t border-hair px-[18px] py-6 text-center text-xs text-muted">{T.searchPrompt}</p>
@@ -70,6 +82,11 @@ export default function PatientsScreen() {
                       className="flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-0.5 bg-card px-[18px] py-3 text-start font-[inherit] transition-colors duration-150 hover:bg-field focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green"
                     >
                       <span className="text-sm font-semibold text-text">{patient.full_name}</span>
+                      {isArchived(patient) && (
+                        <Badge appearance="soft" tone="neutral">
+                          {T.archivedBadge}
+                        </Badge>
+                      )}
                       {patient.phone && (
                         <span className="font-mono text-xs text-muted">
                           <Ltr>{formatEgyptianPhoneForDisplay(patient.phone)}</Ltr>

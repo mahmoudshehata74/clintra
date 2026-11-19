@@ -43,6 +43,15 @@ path the ordinary e2e suite never takes (it runs on the in-browser
     from tomorrow (`next_mode_from`), B's grid today is unchanged, and B's
     working hours show the switch on queue and tomorrow's weekday in queue
     (docs/bug-hunt.md's A-03).
+12. An invoice's first line repriced on A: B shows the new total.
+13. B, offline, edits an invoice's items after A recorded a payment on it:
+    once B reconnects it is asked to review ("الفاتورة دي اتدفع فيها،
+    مينفعش تتعدّل"), and A never gets B's edit.
+14. A archives a patient whose one visit is cancelled: B's patients screen
+    stops finding them, and shows them marked "مؤرشف" with "إظهار
+    المؤرشفين" on (docs/schema.md's v25 additions).
+15. A closes the day with an opening float: B shows the same opening and
+    the same expected cash. Last, since a closed day refuses later edits.
 
 Every wait nudges the sync engine (as returning to the tab does) and polls;
 nothing sleeps.

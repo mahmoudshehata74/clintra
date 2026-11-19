@@ -114,6 +114,9 @@ const VISIT_NOTE_VERB = "عدّل ملاحظة الزيارة";
 // The first print of a prescription (db/prescriptions.ts's
 // markPrescriptionPrinted): the one update that sets printed_at.
 const PRESCRIPTION_PRINT_VERB = "طبع الوصفة";
+// A patient archived or brought back (db/patientArchive.ts).
+const PATIENT_ARCHIVE_VERB = "أرشف المريض";
+const PATIENT_RESTORE_VERB = "رجّع المريض من الأرشيف";
 
 // Messages and template overrides (db/messages.ts). Verb only: a message's
 // body and phone, and a template's body, never appear in the audit line.
@@ -344,6 +347,17 @@ export function describeAuditVerb(row: AuditVerbRow): string {
     const sessionVerb = describeCarePlanItemUpdate(row);
     if (sessionVerb) {
       return sessionVerb;
+    }
+  }
+
+  if (row.entity === "patients") {
+    const beforeArchived = fieldOf(row.before, "archived_at") ?? null;
+    const afterArchived = fieldOf(row.after, "archived_at") ?? null;
+    if (beforeArchived === null && afterArchived !== null) {
+      return PATIENT_ARCHIVE_VERB;
+    }
+    if (beforeArchived !== null && afterArchived === null) {
+      return PATIENT_RESTORE_VERB;
     }
   }
 
