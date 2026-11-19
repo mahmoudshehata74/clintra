@@ -365,6 +365,7 @@ export const dayScreenStrings = {
   // `.c-head h3`'s own prefix, combined with displayDate.ts's
   // formatWeekdayDayMonth(date) — e.g. "إقفال يوم الاثنين 7 سبتمبر".
   cashCloseHeadTitlePrefix: "إقفال يوم",
+  cashCloseLoading: "بيحمّل…",
   cashCloseSummaryHeading: "ملخّص اليوم",
   // `.close-grid`'s four cells.
   cashCloseExpectedLabel: "إجمالي المتوقع",

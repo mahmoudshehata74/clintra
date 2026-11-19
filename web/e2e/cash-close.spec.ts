@@ -436,3 +436,35 @@ test("the printed summary and the CSV carry the opening float", async ({ page })
     expect(row.split(",")[column]).toBe("300");
   }
 });
+
+test("the sheet shows neither the close form nor a summary until the day's rows are read", async ({ page }) => {
+  // Hold a read-write transaction on cash_close, as a pulled page does
+  // (sync/engine.ts's applyPage), so the sheet's read has to wait.
+  await page.evaluate(() => {
+    const holder = window as unknown as { releaseCashClose?: () => void };
+    let released = false;
+    holder.releaseCashClose = () => {
+      released = true;
+    };
+    const request = indexedDB.open("clintra");
+    request.onsuccess = () => {
+      const store = request.result.transaction("cash_close", "readwrite").objectStore("cash_close");
+      const keepAlive = () => {
+        if (!released) {
+          store.count().onsuccess = keepAlive;
+        }
+      };
+      keepAlive();
+    };
+  });
+
+  await openCashClose(page);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText(S.cashCloseLoading)).toBeVisible();
+  await expect(confirmButton(dialog)).toHaveCount(0);
+  await expect(dialog.getByText(S.cashCloseSummaryHeading)).toHaveCount(0);
+
+  await page.evaluate(() => (window as unknown as { releaseCashClose: () => void }).releaseCashClose());
+  await expect(confirmButton(dialog)).toBeVisible();
+  await expect(dialog.getByText(S.cashCloseLoading)).toHaveCount(0);
+});

@@ -162,39 +162,39 @@ export default function CashCloseSheet({
     URL.revokeObjectURL(url);
   }
 
-  const data =
-    useLiveQuery<SheetData>(async () => {
-      const [visits, schedules, existingClose] = await Promise.all([
-        db.visits
-          .where("[org_id+location_id+visit_date+status]")
-          .between([orgId, locationId, date, Dexie.minKey], [orgId, locationId, date, Dexie.maxKey])
-          .toArray(),
-        db.schedules.toArray(),
-        db.cash_close.where("[location_id+date]").equals([locationId, date]).first(),
-      ]);
-      const patientIds = [...new Set(visits.map((visit) => visit.patient_id))];
-      const serviceIds = [...new Set(visits.map((visit) => visit.service_id).filter((id): id is string => id != null))];
-      const [patients, services] = await Promise.all([
-        db.patients.bulkGet(patientIds),
-        db.services.bulkGet(serviceIds),
-      ]);
+  const loadedData = useLiveQuery<SheetData>(async () => {
+    const [visits, schedules, existingClose] = await Promise.all([
+      db.visits
+        .where("[org_id+location_id+visit_date+status]")
+        .between([orgId, locationId, date, Dexie.minKey], [orgId, locationId, date, Dexie.maxKey])
+        .toArray(),
+      db.schedules.toArray(),
+      db.cash_close.where("[location_id+date]").equals([locationId, date]).first(),
+    ]);
+    const patientIds = [...new Set(visits.map((visit) => visit.patient_id))];
+    const serviceIds = [...new Set(visits.map((visit) => visit.service_id).filter((id): id is string => id != null))];
+    const [patients, services] = await Promise.all([
+      db.patients.bulkGet(patientIds),
+      db.services.bulkGet(serviceIds),
+    ]);
 
-      let closedByName: string | null = null;
-      if (existingClose) {
-        const closedByMembership = await db.memberships.get(existingClose.closed_by);
-        const closedByUser = closedByMembership ? await db.users.get(closedByMembership.user_id) : undefined;
-        closedByName = closedByMembership ? staffName(closedByMembership, closedByUser) : null;
-      }
+    let closedByName: string | null = null;
+    if (existingClose) {
+      const closedByMembership = await db.memberships.get(existingClose.closed_by);
+      const closedByUser = closedByMembership ? await db.users.get(closedByMembership.user_id) : undefined;
+      closedByName = closedByMembership ? staffName(closedByMembership, closedByUser) : null;
+    }
 
-      return {
-        visits,
-        schedules: schedules.filter((schedule) => schedule.location_id === locationId),
-        patientsById: new Map(patients.filter((p): p is Patient => p != null).map((p) => [p.id, p])),
-        servicesById: new Map(services.filter((s): s is Service => s != null).map((s) => [s.id, s])),
-        existingClose,
-        closedByName,
-      };
-    }, [orgId, locationId, date]) ?? EMPTY_SHEET_DATA;
+    return {
+      visits,
+      schedules: schedules.filter((schedule) => schedule.location_id === locationId),
+      patientsById: new Map(patients.filter((p): p is Patient => p != null).map((p) => [p.id, p])),
+      servicesById: new Map(services.filter((s): s is Service => s != null).map((s) => [s.id, s])),
+      existingClose,
+      closedByName,
+    };
+  }, [orgId, locationId, date]);
+  const data = loadedData ?? EMPTY_SHEET_DATA;
 
   const noShowCountToday = data.visits.filter((visit) => visit.status === VisitStatus.NoShow).length;
   const pastDueVisits = computePastDueVisits(data.visits, data.schedules, date, new Date());
@@ -274,6 +274,22 @@ export default function CashCloseSheet({
       onDismiss={onDismiss}
     />
   );
+
+  // Until the day's rows are read, neither state is drawn: read as empty, a
+  // day already closed would show its close form for a moment — long enough
+  // to be read, or tapped, while a pulled page holds the store.
+  if (loadedData === undefined) {
+    return (
+      <div className="print:hidden">
+        <Sheet onDismiss={onDismiss}>
+          {head}
+          <SheetPanelBody>
+            <p className="text-[12.5px] text-muted">{dayScreenStrings.cashCloseLoading}</p>
+          </SheetPanelBody>
+        </Sheet>
+      </div>
+    );
+  }
 
   if (data.existingClose) {
     const closedClose = data.existingClose;
