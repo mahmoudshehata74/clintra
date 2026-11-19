@@ -404,7 +404,10 @@ building it:
 - Honoured by the day screen and its booking sheet and empty slots, the move
   sheet, tomorrow's sheet and a care plan's booking. The doctor's own day
   screen and the past-due check still read the weekly row.
-- The optional closure reason is not stored (backlog above).
+- A closure's optional reason is stored since `feat/closure-reason`
+  (`docs/schema.md`'s v27 additions): "سبب الإجازة" in the form, shown as
+  "السبب: …" in the list, on the day screen's closed date and on tomorrow's
+  sheet. Only a closure carries one; a date's own hours do not.
 
 ## Settled deviations / decisions — prototype alignment
 
@@ -537,7 +540,6 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
 - A-03 — done in `feat/schedule-mode-from-tomorrow`: schedules carry `next_mode` and `next_mode_from` (`docs/schema.md`'s v23 additions), and the working-hours switch takes effect from tomorrow (screen 12's notes above). Hardening scenario 24 runs on it. (`docs/bug-hunt.md`, A-03.)
 - Server-side per-person identity: the acting membership sent and verified per request (e.g. a PIN-derived proof). Today the server knows only the membership the device token was issued to (the owner who registered the device), so it cannot tell who is signed in; this would close the staff owner check's gap and the other settings-write gaps, and turn the claimed actor (device audit rows and the actor columns, `api/docs/rls.md`'s "Actor attribution") into a check.
 - Members added locally on a device that was stuck before the staff-identity fix stay local-only — none exist today. If one appears, re-add the person online and deactivate the local row.
-- Schedule exceptions: a closure's optional reason is not stored — `schedule_exceptions` has no column for it, and `feat/schedule-exceptions` was authorised to add only `rev`. Adding it needs a schema approval (a nullable text column, synced like the rest).
 
 ## Data decisions for the rebuild
 - `visits.note text NULL` — the doctor's quick note.

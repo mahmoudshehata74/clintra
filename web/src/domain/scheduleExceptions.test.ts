@@ -3,7 +3,7 @@ import { ScheduleExceptionType, type Schedule, type ScheduleException, type Visi
 import { computeGridRows, closedDayRows } from "../screens/day/dayGrid";
 import { computeEmptySlots } from "../screens/day/emptySlots";
 import { computeMoveTargets } from "../screens/day/moveTargets";
-import { isOutsideWorkingHours, scheduleOnDate } from "./scheduleExceptions";
+import { closureOn, isClosureReasonTooLong, isOutsideWorkingHours, normalizeClosureReason, scheduleOnDate } from "./scheduleExceptions";
 import { ScheduleMode } from "./scheduleMode";
 import { cairoInstant, type ClinicDay } from "./time";
 import { VisitSource } from "./visitSource";
@@ -139,5 +139,41 @@ describe("visits left outside working hours", () => {
       ["09:00", "early", true],
       ["11:00", "late", true],
     ]);
+  });
+});
+
+describe("a closure's reason", () => {
+  const closed: ScheduleException = {
+    id: "closed",
+    practitioner_id: "dr",
+    date: MONDAY,
+    type: ScheduleExceptionType.Closed,
+    start_time: null,
+    end_time: null,
+    shift_minutes: null,
+    reason: "سفر",
+    rev: 1,
+  };
+  const hours: ScheduleException = { ...closed, id: "hours", date: WEDNESDAY, type: ScheduleExceptionType.Shifted, start_time: "10:00", end_time: "11:00", reason: null };
+
+  it("is trimmed, and nothing left reads as none", () => {
+    expect(normalizeClosureReason("  سفر  ")).toBe("سفر");
+    expect(normalizeClosureReason("   ")).toBeNull();
+    expect(normalizeClosureReason("")).toBeNull();
+    expect(normalizeClosureReason(null)).toBeNull();
+    expect(normalizeClosureReason(undefined)).toBeNull();
+  });
+
+  it("is too long past 200 characters, counted as characters, not UTF-16 units", () => {
+    expect(isClosureReasonTooLong("س".repeat(200))).toBe(false);
+    expect(isClosureReasonTooLong("س".repeat(201))).toBe(true);
+    expect(isClosureReasonTooLong("🙂".repeat(200))).toBe(false);
+  });
+
+  it("belongs to the doctor's closure on the date, never to a date's own hours or another doctor", () => {
+    expect(closureOn([closed, hours], "dr", MONDAY)?.reason).toBe("سفر");
+    expect(closureOn([closed, hours], "dr", WEDNESDAY)).toBeUndefined();
+    expect(closureOn([closed, hours], "other", MONDAY)).toBeUndefined();
+    expect(closureOn([closed, hours], "dr", NEXT_MONDAY)).toBeUndefined();
   });
 });

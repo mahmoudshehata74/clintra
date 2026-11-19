@@ -1,5 +1,5 @@
 import { id } from "../domain/id";
-import { ACTIVE_VISIT_STATUSES, exceptionOn } from "../domain/scheduleExceptions";
+import { ACTIVE_VISIT_STATUSES, exceptionOn, isClosureReasonTooLong, normalizeClosureReason } from "../domain/scheduleExceptions";
 import { todayInCairo, type ClinicDay, type ClockTime } from "../domain/time";
 import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
@@ -13,15 +13,18 @@ import { AuditAction, ScheduleExceptionType, type ScheduleException, type Visit 
  * only, as every settings write: the settings sheet is the owner's.
  * Neither write touches a visit: a closure on a date with bookings leaves
  * them where they are, flagged on the day screen as outside working hours.
+ * A closure may carry an optional reason ("سبب الإجازة", docs/schema.md's
+ * v27 additions), trimmed, null when empty, at most 200 characters; a
+ * date's own hours carry none.
  */
 
 export type AddExceptionInput =
-  | { practitionerId: string; date: ClinicDay; kind: "closed" }
+  | { practitionerId: string; date: ClinicDay; kind: "closed"; reason?: string | null }
   | { practitionerId: string; date: ClinicDay; kind: "hours"; startTime: ClockTime; endTime: ClockTime };
 
 export type AddExceptionResult =
   | { ok: true; exceptionId: string }
-  | { ok: false; reason: "invalid_date" | "past_date" | "already_has_exception" | "end_before_start" | "practitioner_not_found" };
+  | { ok: false; reason: "invalid_date" | "past_date" | "already_has_exception" | "end_before_start" | "reason_too_long" | "practitioner_not_found" };
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -48,6 +51,10 @@ export async function addScheduleException(
   if (input.kind === "hours" && input.startTime >= input.endTime) {
     return { ok: false, reason: "end_before_start" };
   }
+  const closureReason = input.kind === "closed" ? normalizeClosureReason(input.reason) : null;
+  if (closureReason !== null && isClosureReasonTooLong(closureReason)) {
+    return { ok: false, reason: "reason_too_long" };
+  }
   const actor = await resolveActingMembership(db);
 
   return db.transaction("rw", [db.schedule_exceptions, db.practitioners, db.audit_log, db.sync_ops], async () => {
@@ -67,6 +74,7 @@ export async function addScheduleException(
       start_time: input.kind === "hours" ? input.startTime : null,
       end_time: input.kind === "hours" ? input.endTime : null,
       shift_minutes: null,
+      reason: closureReason,
       rev: 1,
     };
     await mutate(db, {

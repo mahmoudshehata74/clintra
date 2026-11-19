@@ -662,19 +662,23 @@ test("both offline switch the doctor: the later one is put back whole, asked to 
   await closeAll(a, b);
 });
 
+/** The closure's reason A types, read back on B. */
+const CLOSURE_REASON = "مؤتمر طبي";
+
 /** Settings → working hours → "إجازات ومواعيد استثنائية" on `device`. */
 async function openExceptions(device: Device) {
   const settings = await openHours(device);
   return settings.getByRole("region", { name: S.exceptionsHeading, exact: true });
 }
 
-test("A closes today: B gets the closure, its queue stays flagged and it can add no one; A removes it and B can again", async ({ browser }) => {
+test("A closes today with a reason: B gets the closure and its reason, its queue stays flagged and it can add no one; A removes it and B can again", async ({ browser }) => {
   const today = todayInCairo();
   const [a, b] = await twoDevices(browser);
   await eventually([a, b], async () => b.page.getByRole("button", { name: S.walkInButtonLabel, exact: true }).count(), 1, "B can add to today's queue");
 
   const section = await openExceptions(a);
   await section.getByLabel(S.exceptionDateLabel, { exact: true }).fill(today);
+  await section.getByLabel(S.exceptionReasonLabel, { exact: true }).fill(CLOSURE_REASON);
   await section.getByRole("button", { name: S.exceptionAddAction, exact: true }).click();
   // Today's queue has bookings: A is shown them and confirms; none is cancelled.
   await expect(section.getByRole("alert")).toContainText(REORDER[0]);
@@ -686,6 +690,8 @@ test("A closes today: B gets the closure, its queue stays flagged and it can add
   await eventually([a, b], async () => b.page.getByRole("button", { name: S.walkInButtonLabel, exact: true }).count(), 0, "B can add no one on the closed day");
   await expect(rowFor(b.page, REORDER[0])).toContainText(S.outsideHoursRowBadge);
   expect(await rowStatus(b, REORDER[0], STATUSES)).toBe(S.statusArrived);
+  // The reason travelled with the row (docs/schema.md's v27 additions).
+  await expect(b.page.locator("[data-closed-day-note]")).toContainText(`${S.closureReasonPrefix} ${CLOSURE_REASON}`);
 
   const again = await openExceptions(a);
   await again.getByRole("listitem").filter({ hasText: today }).getByRole("button", { name: S.exceptionDeleteAction, exact: true }).click();

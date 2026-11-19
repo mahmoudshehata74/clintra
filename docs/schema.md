@@ -1301,8 +1301,8 @@ How the app uses the existing columns, one exception per doctor per date:
   this one interval instead of the weekday's; on a usual day off the date
   takes its mode and slot length from the doctor's first row at the
   location (`domain/scheduleExceptions.ts`'s `scheduleOnDate`).
-- `extra` and `shift_minutes` are not written. A closure's reason has no
-  column and is not stored (adding one was not part of this change).
+- `extra` and `shift_minutes` are not written. A closure's optional reason
+  is `reason`, added in v27.
 
 The owner adds and deletes them in settings → working hours ("إجازات ومواعيد
 استثنائية", `db/scheduleExceptions.ts`), through the ordinary audited,
@@ -1324,3 +1324,40 @@ Local: database version 26. `schedule_exceptions` gains the
 `[practitioner_id+date]` index; any row stored before gets `rev` 1 (a raw
 modify: no sync op, no audit row).
 
+## v27 additions
+
+### schedule_exceptions.reason
+
+A closure's optional reason ("سبب الإجازة"); null when none was given. No
+policy or grant change.
+
+| Column | Type | Null | Meaning |
+|---|---|---|---|
+| `reason` | varchar(200), no default | yes | why the doctor is off that date, as the owner typed it; null on a date's own hours (`shifted`) and on a closure given none |
+
+The owner types it in settings → working hours → "إجازات ومواعيد
+استثنائية" when adding a closure (the field shows only for "إجازة"), and
+`db/scheduleExceptions.ts`'s `addScheduleException` stores it trimmed, null
+when empty, refusing one over 200 characters ("السبب طويل، خليه 200 حرف أو
+أقل"; counted in code points, as Postgres counts varchar). It is shown as
+"السبب: …" under the closure in that list, after "اليوم ده إجازة للدكتور"
+on the day screen's closed date (the column's line, or the line above the
+visits it still lists), and after "بكرة إجازة للدكتور" on tomorrow's sheet,
+on screen and on paper. It never changes after the closure is added: there
+is no edit, only delete and add again.
+
+Every exception stored before this reads null: on the server the column is
+added with no default and no UPDATE, so no row is rewritten, and the
+`schedule_exceptions_scope` policy filters rows, not columns, with
+clintra_app's grant table-level. The column travels in the sync payload like
+every other field of the row (push, pull, bootstrap); a write pushed without
+it (a device not yet updated) leaves it as it is. A pushed value over 200
+characters is refused by Postgres and the op fails (`internal_error`); the
+device never sends one.
+
+Server: `2026_09_12_000039_add_reason_to_schedule_exceptions.php`.
+
+Local: database version 27. No store changes (`reason` is not indexed); its
+upgrade gives every stored exception `reason: null`, a raw modify with no
+sync op or audit row. The field is optional on `ScheduleException`: a row
+without it reads as having no reason. Versions 1-26 are unchanged.
