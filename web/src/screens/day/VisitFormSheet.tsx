@@ -18,9 +18,9 @@ interface VisitFormSheetProps {
 /**
  * The visit workspace (reference screen 10, see screens/visit/VisitWorkspace.tsx)
  * in a sheet. Opened deliberately from a pill on an in_room or completed row,
- * or from the doctor's day — never automatically — and just as writable
- * after completion as before it, since filling the visit form is decoupled
- * from completing the visit (see db/visitForm.ts, db/visitCompletion.ts).
+ * or from the doctor's day — never automatically. Its form autosaves until
+ * the visit is completed and is corrected with a reason after that
+ * (screens/visit/VisitCorrection.tsx, db/visitCorrections.ts).
  * Titled by its purpose; the patient is named once, in `.pt-summary` below.
  */
 export default function VisitFormSheet({ visitId, onDismiss, completion }: VisitFormSheetProps) {

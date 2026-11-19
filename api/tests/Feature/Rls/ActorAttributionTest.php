@@ -191,7 +191,11 @@ test('an owner-token push of a visit booked by the assistant is stored with the 
     });
 });
 
-dataset('actor columns', array_keys(SyncableTables::ACTOR_COLUMNS));
+// Every actor column but visit_form_revisions.corrected_by: these cases claim
+// the assistant, and only the visit's doctor or an owner may correct a visit
+// (correction_not_allowed). VisitFormRevisionsTest.php holds that column to
+// the same three cases with a claim the correction rule allows.
+dataset('actor columns', array_values(array_diff(array_keys(SyncableTables::ACTOR_COLUMNS), ['visit_form_revisions'])));
 
 test('a same-org claim is kept in the actor column; the ledger and audit_log keep the token\'s membership', function (string $table) {
     withActorFixture(function (array $fixture) use ($table) {

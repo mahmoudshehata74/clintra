@@ -139,10 +139,14 @@ class SyncPushController extends Controller
 
         $results = [];
 
+        // The whole group goes to every op's rules: a correction is checked
+        // as one group (SyncOpApplier::applyCorrectionRule).
+        $normalized = array_map(fn (array $op) => $this->normalizeOp($op), $group);
+
         try {
-            DB::transaction(function () use ($group, $membershipId, $deviceId, &$results): void {
-                foreach ($group as $op) {
-                    $result = $this->applier->apply($this->normalizeOp($op), $membershipId, $deviceId);
+            DB::transaction(function () use ($normalized, $membershipId, $deviceId, &$results): void {
+                foreach ($normalized as $op) {
+                    $result = $this->applier->apply($op, $membershipId, $deviceId, $normalized);
                     $results[] = $result;
 
                     if (! in_array($result['status'], ['accepted', 'duplicate'], true)) {

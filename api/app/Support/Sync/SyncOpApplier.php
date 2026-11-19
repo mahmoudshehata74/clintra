@@ -25,10 +25,15 @@ use Throwable;
 class SyncOpApplier
 {
     /**
+     * $group is every op of the group $op belongs to, in push order, $op
+     * included; empty for an op outside a group. Only the correction rule
+     * reads it (applyCorrectionRule).
+     *
      * @param  array{op_id: string, entity: string, entity_id: string, action: string, payload: ?array, created_at: string, base_rev: ?int}  $op
+     * @param  list<array{op_id: string, entity: string, entity_id: string, action: string, payload: ?array, created_at: string, base_rev: ?int}>  $group
      * @return array{op_id: string, status: string, rev?: int, reason?: string}
      */
-    public function apply(array $op, string $membershipId, string $deviceId): array
+    public function apply(array $op, string $membershipId, string $deviceId, array $group = []): array
     {
         // An entity the server does not sync (a stuck device's `users` op,
         // say) is refused here, for this op alone — never by the request's
@@ -40,7 +45,7 @@ class SyncOpApplier
         }
 
         try {
-            return DB::transaction(fn () => $this->applyInTransaction($op, $membershipId, $deviceId));
+            return DB::transaction(fn () => $this->applyInTransaction($op, $membershipId, $deviceId, $group === [] ? [$op] : $group));
         } catch (Throwable $e) {
             report($e);
 
@@ -51,7 +56,7 @@ class SyncOpApplier
     /**
      * @param  array{op_id: string, entity: string, entity_id: string, action: string, payload: ?array, created_at: string, base_rev: ?int}  $op
      */
-    private function applyInTransaction(array $op, string $membershipId, string $deviceId): array
+    private function applyInTransaction(array $op, string $membershipId, string $deviceId, array $group): array
     {
         $applied = DB::table('sync_ledger')->where('op_id', $op['op_id'])->first();
 
@@ -126,6 +131,12 @@ class SyncOpApplier
             return $printedLock;
         }
 
+        $correctionRule = $this->applyCorrectionRule($op, $table, $group, $membershipId);
+
+        if ($correctionRule !== null) {
+            return $correctionRule;
+        }
+
         try {
             return match ($op['action']) {
                 'create' => $this->applyCreate($op, $table, $membershipId, $deviceId, $currentOrgId),
@@ -176,7 +187,7 @@ class SyncOpApplier
 
     private function applyCreate(array $op, string $table, string $membershipId, string $deviceId, string $orgId): array
     {
-        $attributes = $this->buildAttributes($op, $table, $membershipId);
+        $attributes = $this->buildAttributes($op, $table, $membershipId, $deviceId);
 
         try {
             // A caught QueryException leaves Postgres refusing every
@@ -189,6 +200,12 @@ class SyncOpApplier
             // usable afterward instead of staying aborted.
             DB::transaction(fn () => DB::table($table)->insert($attributes));
         } catch (QueryException $e) {
+            $stateReason = $this->stateViolationReason($e);
+
+            if ($stateReason !== null) {
+                return $this->rejected($op, $stateReason);
+            }
+
             if (! $this->isUniqueViolation($e)) {
                 throw $e;
             }
@@ -236,17 +253,21 @@ class SyncOpApplier
             return $this->rejected($op, 'number_immutable');
         }
 
-        $attributes = $this->buildAttributes($op, $table, $membershipId);
+        $attributes = $this->buildAttributes($op, $table, $membershipId, $deviceId);
         unset($attributes['id']);
 
         try {
-            $updated = DB::table($table)
+            // In its own savepoint, as applyCreate's insert: a trigger's
+            // refusal rolls back to it and leaves the transaction usable.
+            $updated = DB::transaction(fn () => DB::table($table)
                 ->where('id', $op['entity_id'])
                 ->where('rev', $op['base_rev'])
-                ->update($attributes);
+                ->update($attributes));
         } catch (QueryException $e) {
-            if ($this->isClosedDayViolation($e)) {
-                return $this->rejected($op, 'conflict_day_closed');
+            $stateReason = $this->stateViolationReason($e);
+
+            if ($stateReason !== null) {
+                return $this->rejected($op, $stateReason);
             }
 
             throw $e;
@@ -273,13 +294,15 @@ class SyncOpApplier
         $before = DB::table($table)->where('id', $op['entity_id'])->first();
 
         try {
-            $deleted = DB::table($table)
+            $deleted = DB::transaction(fn () => DB::table($table)
                 ->where('id', $op['entity_id'])
                 ->where('rev', $op['base_rev'])
-                ->delete();
+                ->delete());
         } catch (QueryException $e) {
-            if ($this->isClosedDayViolation($e)) {
-                return $this->rejected($op, 'conflict_day_closed');
+            $stateReason = $this->stateViolationReason($e);
+
+            if ($stateReason !== null) {
+                return $this->rejected($op, $stateReason);
             }
 
             throw $e;
@@ -441,6 +464,227 @@ class SyncOpApplier
         }
 
         return null;
+    }
+
+    /**
+     * The clinical correction rule (docs/design-clinical-corrections.md,
+     * section 3.2): once a visit is completed, its form changes only through
+     * a correction — one group of [an empty visit_form_data create, when the
+     * visit had no form row], a visit_form_revisions create, and the
+     * visit_form_data update it describes — applied whole or not at all
+     * (SyncPushController::applyGroup).
+     *
+     * - visit_form_revisions: create only; an update or delete is
+     *   `revision_immutable`. A create is `correction_invalid` unless its
+     *   group is exactly that shape — the update of the same row next, with
+     *   base_rev = replaced_rev and data = new_data, and before it at most
+     *   the empty create of that row — so a correction never carries an
+     *   invoice, a payment, a visit status or anything else. It is
+     *   `conflict_stale_rev` when the stored row's rev is no longer
+     *   replaced_rev (another device's correction got there first), and
+     *   `correction_invalid` when the visit is not completed, the previous
+     *   data is not the stored row's, the number is not the next one, or the
+     *   reason is not 3 to 500 characters. `corrected_by` (or, without it,
+     *   the token's membership) must be an active owner of the organization
+     *   or the visit's own practitioner's membership, else
+     *   `correction_not_allowed`.
+     * - visit_form_data on a completed visit, only while
+     *   visit_form_data_completed_guard is installed (the design's decision
+     *   7: until then an older device still saves a late edit): a delete is
+     *   `correction_required`; so is a create carrying any non-empty value,
+     *   and an update that changes data without its revision just before it
+     *   in the group.
+     *
+     * The triggers hold the same rules for every writer
+     * (stateViolationReason maps their messages); this rule gives the
+     * reasons first, before anything is written. Every read goes through the
+     * table's own RLS policy: a row or visit the caller cannot see reads as
+     * absent, which refuses a revision (`correction_invalid`) and leaves a
+     * form write to the write itself.
+     *
+     * @return array{op_id: string, status: string, reason: string}|null null means the op passes the rule.
+     */
+    private function applyCorrectionRule(array $op, string $table, array $group, string $membershipId): ?array
+    {
+        if ($table === 'visit_form_revisions') {
+            return $this->applyRevisionRule($op, $group, $membershipId);
+        }
+
+        if ($table === 'visit_form_data' && $this->isCompletedGuardInstalled()) {
+            return $this->applyCompletedFormRule($op, $group);
+        }
+
+        return null;
+    }
+
+    /** @return array{op_id: string, status: string, reason: string}|null */
+    private function applyRevisionRule(array $op, array $group, string $membershipId): ?array
+    {
+        if ($op['action'] !== 'create') {
+            return $this->rejected($op, 'revision_immutable');
+        }
+
+        $payload = $op['payload'] ?? [];
+        $formId = $payload['visit_form_data_id'] ?? null;
+        $replacedRev = $payload['replaced_rev'] ?? null;
+
+        if (! is_string($formId) || ! Str::isUuid($formId) || ! is_int($replacedRev)
+            || ! is_array($payload['previous_data'] ?? null) || ! is_array($payload['new_data'] ?? null)
+            || ! $this->isCorrectionReason($payload['reason'] ?? null)
+            || ! $this->isCorrectionGroup($op, $group, $formId, $replacedRev, $payload['new_data'])) {
+            return $this->rejected($op, 'correction_invalid');
+        }
+
+        $form = DB::table('visit_form_data')->where('id', $formId)->lockForUpdate()->first();
+
+        if ($form === null) {
+            return $this->rejected($op, 'correction_invalid');
+        }
+
+        if ((int) $form->rev !== $replacedRev) {
+            return $this->rejected($op, 'conflict_stale_rev');
+        }
+
+        $visit = DB::table('visits')->where('id', $form->visit_id)->first();
+        $lastNumber = (int) DB::table('visit_form_revisions')->where('visit_form_data_id', $formId)->max('revision_no');
+
+        if ($visit === null || $visit->status !== 'completed'
+            || strtolower((string) ($payload['visit_id'] ?? '')) !== strtolower($visit->id)
+            || ! $this->sameJson($payload['previous_data'], $form->data)
+            || ($payload['revision_no'] ?? null) !== $lastNumber + 1) {
+            return $this->rejected($op, 'correction_invalid');
+        }
+
+        $correctedBy = $payload['corrected_by'] ?? $membershipId;
+        $actor = is_string($correctedBy) && Str::isUuid($correctedBy)
+            ? DB::table('memberships')->where('id', $correctedBy)->where('is_active', true)->first()
+            : null;
+
+        if ($actor === null || ! ($actor->role === 'owner' || $actor->practitioner_id === $visit->practitioner_id)) {
+            return $this->rejected($op, 'correction_not_allowed');
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether a revision's group is a correction and nothing else: at most
+     * the empty create of its form row before it, then itself, then the
+     * update of that row naming replaced_rev as base_rev and new_data as
+     * data, and no other op.
+     */
+    private function isCorrectionGroup(array $op, array $group, string $formId, int $replacedRev, array $newData): bool
+    {
+        $index = array_search($op['op_id'], array_column($group, 'op_id'), true);
+
+        if ($index === false || $index > 1 || count($group) !== $index + 2) {
+            return false;
+        }
+
+        if ($index === 1) {
+            $create = $group[0];
+
+            if ($create['entity'] !== 'visit_form_data' || $create['action'] !== 'create'
+                || strtolower($create['entity_id']) !== strtolower($formId)
+                || $this->hasFilledValue($create['payload']['data'] ?? null)) {
+                return false;
+            }
+        }
+
+        $next = $group[$index + 1];
+        $data = $next['payload']['data'] ?? null;
+
+        return $next['entity'] === 'visit_form_data' && $next['action'] === 'update'
+            && strtolower($next['entity_id']) === strtolower($formId)
+            && $next['base_rev'] === $replacedRev
+            && is_array($data) && $this->sameJson($data, $newData);
+    }
+
+    /** @return array{op_id: string, status: string, reason: string}|null */
+    private function applyCompletedFormRule(array $op, array $group): ?array
+    {
+        $payload = $op['payload'] ?? [];
+        $stored = $op['action'] === 'create' ? null : DB::table('visit_form_data')->where('id', $op['entity_id'])->first();
+        $visitIds = array_values(array_filter(
+            [$op['action'] === 'delete' ? null : ($payload['visit_id'] ?? null), $stored?->visit_id],
+            fn ($id) => is_string($id) && Str::isUuid($id),
+        ));
+
+        if ($visitIds === [] || ! DB::table('visits')->whereIn('id', $visitIds)->where('status', 'completed')->exists()) {
+            return null;
+        }
+
+        if ($op['action'] === 'delete') {
+            return $this->rejected($op, 'correction_required');
+        }
+
+        if ($op['action'] === 'create') {
+            return $this->hasFilledValue($payload['data'] ?? null) ? $this->rejected($op, 'correction_required') : null;
+        }
+
+        if ($stored === null || ! array_key_exists('data', $payload) || $this->sameJson($payload['data'], $stored->data)) {
+            return null;
+        }
+
+        $index = array_search($op['op_id'], array_column($group, 'op_id'), true);
+        $revision = $index === false || $index === 0 ? null : $group[$index - 1];
+        $revisionPayload = $revision['payload'] ?? [];
+
+        $isCorrected = $revision !== null
+            && $revision['entity'] === 'visit_form_revisions' && $revision['action'] === 'create'
+            && strtolower((string) ($revisionPayload['visit_form_data_id'] ?? '')) === strtolower($op['entity_id'])
+            && ($revisionPayload['replaced_rev'] ?? null) === $op['base_rev']
+            && is_array($payload['data']) && is_array($revisionPayload['new_data'] ?? null)
+            && $this->sameJson($payload['data'], $revisionPayload['new_data']);
+
+        return $isCorrected ? null : $this->rejected($op, 'correction_required');
+    }
+
+    /** A correction's reason: a string of 3 to 500 characters, as stored (trimmed). */
+    private function isCorrectionReason(mixed $reason): bool
+    {
+        return is_string($reason) && $reason === trim($reason)
+            && mb_strlen($reason) >= 3 && mb_strlen($reason) <= 500;
+    }
+
+    /**
+     * Whether a form's values hold any text, as the guard trigger reads them
+     * (a value other than ''). A pushed "" arrives as null
+     * (ConvertEmptyStringsToNull), which is as empty as "".
+     */
+    private function hasFilledValue(mixed $data): bool
+    {
+        if (! is_array($data)) {
+            return $data !== null;
+        }
+
+        foreach ($data as $value) {
+            if ($value !== null && $value !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Two jsonb values compared as Postgres compares them (key order and spacing aside). */
+    private function sameJson(mixed $incoming, mixed $stored): bool
+    {
+        $encode = fn (mixed $value) => is_string($value) ? $value : json_encode($value);
+
+        return (bool) DB::selectOne('select ?::jsonb = ?::jsonb as same', [$encode($incoming), $encode($stored)])->same;
+    }
+
+    /** Read for each visit_form_data op, never cached: the second migration can land between two requests. */
+    private function isCompletedGuardInstalled(): bool
+    {
+        return (bool) DB::selectOne(<<<'SQL'
+            select exists (
+                select 1 from pg_trigger
+                where tgname = 'visit_form_data_completed_guard'
+                  and tgrelid = 'visit_form_data'::regclass and not tgisinternal
+            ) as installed
+            SQL)->installed;
     }
 
     /**
@@ -934,9 +1178,24 @@ class SyncOpApplier
     /**
      * @return array<string, mixed>
      */
-    private function buildAttributes(array $op, string $table, string $membershipId): array
+    private function buildAttributes(array $op, string $table, string $membershipId, string $deviceId): array
     {
         $attributes = array_merge($op['payload'] ?? [], ['id' => $op['entity_id']]);
+
+        // A revision's device is the token's, whatever the payload says (as
+        // for device audit rows).
+        if ($table === 'visit_form_revisions') {
+            $attributes['device_id'] = $deviceId;
+        }
+
+        // A jsonb column arrives decoded (a visit form's data, a revision's
+        // previous_data and new_data); the query builder binds only scalars,
+        // so it goes to Postgres as JSON text.
+        foreach ($attributes as $column => $value) {
+            if (is_array($value)) {
+                $attributes[$column] = json_encode($value, JSON_THROW_ON_ERROR);
+            }
+        }
 
         // "Who did this" is the device's claim, already held to the token's
         // organization (claimsActorInOrg); without one, the token's
@@ -1071,17 +1330,41 @@ class SyncOpApplier
     }
 
     /**
-     * SQLSTATE 55000 (object_not_in_prerequisite_state) is what
-     * prevent_closed_day_state_mutation() raises
-     * (2026_09_12_000018_lock_closed_day_state.php) — a real Postgres
-     * error class matching this case: the operation itself is otherwise
-     * valid, the object's current state just doesn't allow it. Distinct
-     * from a generic `internal_error`, since this is a genuine business
-     * conflict a client's own assumptions could reasonably have avoided,
-     * not a bug.
+     * SQLSTATE 55000 (object_not_in_prerequisite_state) is what the state
+     * triggers raise — a real Postgres error class matching these cases: the
+     * operation itself is otherwise valid, the object's current state just
+     * doesn't allow it. Distinct from a generic `internal_error`, since each
+     * is a genuine business conflict a client's own assumptions could
+     * reasonably have avoided, not a bug. Each trigger's own message maps to
+     * its own reason; a 55000 with any other message stays unexpected:
+     *
+     * - prevent_closed_day_state_mutation()
+     *   (2026_09_12_000018_lock_closed_day_state.php): `conflict_day_closed`;
+     * - visit_form_revision_check()
+     *   (2026_09_12_000040_create_visit_form_revisions_table.php):
+     *   `correction_invalid`, `correction_not_allowed`;
+     * - visit_form_data_completed_guard()
+     *   (2026_09_12_000041_add_visit_form_data_completed_guard.php):
+     *   `correction_required`.
      */
-    private function isClosedDayViolation(QueryException $e): bool
+    private function stateViolationReason(QueryException $e): ?string
     {
-        return $e->getCode() === '55000';
+        if ($e->getCode() !== '55000') {
+            return null;
+        }
+
+        $message = $e->getMessage();
+
+        if (str_contains($message, 'day_state: a closed day cannot be modified or deleted')) {
+            return 'conflict_day_closed';
+        }
+
+        foreach (['correction_not_allowed', 'correction_required', 'correction_invalid'] as $reason) {
+            if (str_contains($message, $reason)) {
+                return $reason;
+            }
+        }
+
+        return null;
     }
 }

@@ -1361,3 +1361,57 @@ Local: database version 27. No store changes (`reason` is not indexed); its
 upgrade gives every stored exception `reason: null`, a raw modify with no
 sync op or audit row. The field is optional on `ScheduleException`: a row
 without it reads as having no reason. Versions 1-26 are unchanged.
+
+## v28 additions
+
+### visit_form_revisions (clinical corrections after completion)
+
+`docs/design-clinical-corrections.md`, with its owner decisions. Once a visit
+is completed its form (complaint, diagnosis) no longer autosaves:
+`saveVisitFormField` refuses (`visit_completed`). The visit's own doctor or an
+owner changes it by "تعديل" with a reason, and the version replaced is kept
+here, append-only and synced.
+
+| Column | Type | Null | Meaning |
+|---|---|---|---|
+| `id` | uuid | no | client-generated |
+| `org_id` | uuid → organizations | no | the visit's organization |
+| `visit_id` | uuid → visits | no | the corrected visit |
+| `visit_form_data_id` | uuid → visit_form_data | no | the corrected form row |
+| `revision_no` | integer ≥ 1 | no | 1, 2, 3… per form row; unique with `visit_form_data_id` |
+| `replaced_rev` | integer ≥ 1 | no | the form row's rev the correction replaced |
+| `previous_data` | jsonb | no | the form as it stood |
+| `new_data` | jsonb | no | the form as corrected; must differ from `previous_data` |
+| `reason` | varchar(500) | no | trimmed, at least 3 characters |
+| `corrected_by` | uuid → memberships | no | the visit's doctor or an owner (a claim until the identity design) |
+| `corrected_at` | timestamptz | no | when, on the device |
+| `device_id` | uuid → device | no | the pushing token's device, whatever the payload says |
+| `rev` | integer, default 1 | no | the shared `enforce_row_rev()`; a revision is never updated |
+
+A correction is one sync group, written in one Dexie transaction by
+`db/visitCorrections.ts`'s `correctVisitForm`: the form's empty create when
+the completed visit has none, the revision, then the form's update to the
+corrected text (base_rev = `replaced_rev`). The server applies it whole or
+not at all and refuses a group carrying anything else (`correction_invalid`);
+a group whose `replaced_rev` is no longer the row's rev (another device's
+correction got there first) is `conflict_stale_rev`, refused whole and listed
+in the sync review with its lost text. Rejection reasons: `correction_required`,
+`correction_not_allowed`, `correction_invalid`, `revision_immutable`
+(`sync/reviewSummary.ts` holds their Arabic lines). A late autosave refused
+`correction_required` puts the form back as the server holds it and keeps the
+latest local text in the review (`sync/correctionReview.ts`).
+
+Who sees "تم التعديل" and "سجل التعديلات": whoever reads clinical text
+(`domain/clinicalAccess.ts`). The audit log reads "عدّل نموذج زيارة مكتملة",
+named by the patient and scoped by the visit.
+
+Server: `2026_09_12_000040_create_visit_form_revisions_table.php` (table,
+policies, grants, `visit_form_revision_check()`) and, deployed once every
+device runs this release, `2026_09_12_000041_add_visit_form_data_completed_guard.php`
+(`visit_form_data_completed_guard()`); the applier enforces
+`correction_required` only while that trigger is installed. Pull carries the
+rows (jsonb decoded in `SyncPayload`); the bootstrap windows them through
+their visit's date (stage 11). `api/docs/rls.md`'s "Clinical corrections".
+
+Local: database version 28, a new store `visit_form_revisions: "id, visit_id,
+visit_form_data_id"`; nothing to backfill. Versions 1-27 are unchanged.

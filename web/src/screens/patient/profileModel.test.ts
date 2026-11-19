@@ -408,6 +408,20 @@ describe("buildProfileEvents", () => {
   });
 });
 
+describe("a visit corrected after completion", () => {
+  const corrected = source({ revisionCountByVisitId: new Map([["v-today", 2]]) });
+
+  it("is marked for whoever reads clinical text, and only that visit", () => {
+    const events = buildProfileEvents(corrected);
+    expect(byKey(events, "visit:v-today").corrected).toBe(true);
+    expect(events.filter((event) => event.corrected).map((event) => event.key)).toEqual(["visit:v-today"]);
+  });
+
+  it("is not marked for the front desk", () => {
+    expect(buildProfileEvents(corrected, false).some((event) => event.corrected)).toBe(false);
+  });
+});
+
 describe("buildProfileEvents for the front desk (an assistant or manager)", () => {
   const events = buildProfileEvents(source(), false);
   const clinicalWords = ["خشونة بسيطة", "التهاب وتر الرضفة", "ألم في الركبة", "شكوى", "Diclofenac", "Paracetamol", "دوائين", "تحسن ملحوظ"];

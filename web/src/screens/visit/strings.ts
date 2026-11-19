@@ -70,3 +70,38 @@ export const visitWorkspaceStrings = {
   currentVisitEmpty: "مفيش زيارة مفتوحة دلوقتي",
   currentVisitOpenDoctorDay: "افتح شاشة الطبيب",
 } as const;
+
+// Corrections after completion (docs/design-clinical-corrections.md): the
+// workspace's "تعديل" form, the "تم التعديل" chip and "سجل التعديلات".
+export const visitCorrectionStrings = {
+  correctAction: "تعديل",
+  correctedChip: "تم التعديل",
+  historyAction: "سجل التعديلات",
+  formTitle: "تعديل نموذج الزيارة",
+  reasonLabel: "سبب التعديل",
+  reasonPlaceholder: "ليه بتعدّل نموذج الزيارة بعد ما اتقفلت؟",
+  save: "حفظ التعديل",
+  cancel: "إلغاء",
+
+  // The writer's refusals (db/visitCorrections.ts), as the doctor reads them.
+  errorNotAllowed: "تعديل الزيارة بعد ما تتقفل لدكتور الزيارة أو صاحب العيادة بس",
+  errorReasonRequired: "اكتب سبب التعديل (3 حروف على الأقل)",
+  errorReasonTooLong: "السبب طويل، خليه 500 حرف أو أقل",
+  errorUnchanged: "مفيش تغيير عن النسخة الحالية",
+  errorFailed: "التعديل ما اتحفظش، جرّب تاني",
+
+  // "سجل التعديلات": newest first.
+  historyTitle: "سجل التعديلات",
+  historyEmpty: "مفيش تعديلات",
+  // "عدّلها {name}".
+  correctedByPrefix: "عدّلها",
+  unknownStaff: "غير معروف",
+  // "السبب: {reason}".
+  reasonPrefix: "السبب:",
+  // Each field that changed, with its text "قبل" and "بعد".
+  fieldComplaint: "الشكوى",
+  fieldDiagnosis: "التشخيص",
+  before: "قبل",
+  after: "بعد",
+  emptyValue: "—",
+} as const;

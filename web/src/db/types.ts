@@ -705,6 +705,35 @@ export interface VisitFormData {
   rev: number;
 }
 
+/**
+ * One correction of a completed visit's form (docs/schema.md's v28
+ * additions, docs/design-clinical-corrections.md): the form as it stood
+ * (`previous_data`, at `replaced_rev`) and as the correction left it
+ * (`new_data`), with the reason. Written once by db/visitCorrections.ts,
+ * never updated or deleted, here or on the server.
+ */
+export interface VisitFormRevision {
+  id: string;
+  org_id: string;
+  visit_id: string;
+  visit_form_data_id: string;
+  /** 1, 2, 3… per form row, in correction order. */
+  revision_no: number;
+  /** The form row's rev this correction replaced. */
+  replaced_rev: number;
+  previous_data: unknown;
+  new_data: unknown;
+  /** Trimmed, 3 to 500 characters. */
+  reason: string;
+  /** Membership id: the visit's doctor or an owner. */
+  corrected_by: string;
+  corrected_at: Instant;
+  /** The correcting device; the server stores its token's device whatever this says. */
+  device_id: string;
+  /** Server-assigned; always 1, since a revision is never updated. */
+  rev: number;
+}
+
 /** A care plan's stored status (docs/schema.md's v20 additions); completed and stalled are derived, never stored (domain/carePlan.ts). */
 export const CarePlanStatus = {
   Active: "active",

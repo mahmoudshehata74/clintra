@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { AuditAction, type SyncReview } from "../db/types";
 import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type DisplacedPayload } from "./pullCollisions";
-import { describeDisplacedContent, describeLostBooking, describeReviewFieldDiffs, describeSupersededReviews, describeSyncReview, displacedPayments } from "./reviewSummary";
+import {
+  CORRECTION_STALE_LABEL,
+  describeDisplacedContent,
+  describeLostBooking,
+  describeReviewFieldDiffs,
+  describeSupersededReviews,
+  describeSyncReview,
+  displacedPayments,
+  lostCorrectionOf,
+} from "./reviewSummary";
 import { SYNCABLE_TABLES } from "./syncableTables";
 
 function makeReview(overrides: Partial<SyncReview> = {}): SyncReview {
@@ -67,6 +76,44 @@ describe("describeSyncReview", () => {
     expect(description).toContain("كود المرجع");
     // The reference code is derived from the review's own id, stable and reproducible.
     expect(description).toContain("REVIEW-1");
+  });
+});
+
+describe("clinical corrections", () => {
+  const group = (reason: string) =>
+    makeReview({
+      entity: "visit_form_revisions",
+      entity_id: "revision-1",
+      reason,
+      payload: {
+        group: [
+          { entity: "visit_form_revisions", entity_id: "revision-1", payload: { visit_id: "visit-1", new_data: { complaint: "ألم", diagnosis: "التهاب" }, reason: "خطأ في الكتابة" } },
+          { entity: "visit_form_data", entity_id: "form-1", payload: { visit_id: "visit-1", data: { complaint: "ألم", diagnosis: "التهاب" } } },
+        ],
+      },
+    });
+
+  it.each([
+    ["conflict_stale_rev", CORRECTION_STALE_LABEL],
+    ["correction_not_allowed", "تعديل الزيارة بعد ما تتقفل لدكتور الزيارة أو صاحب العيادة بس"],
+    ["correction_invalid", "التعديل ده مش مطابق لآخر نسخة من نموذج الزيارة، أو معاه تغييرات تانية، فماتحفظش"],
+    ["revision_immutable", "سجل التعديلات مينفعش يتغيّر أو يتمسح"],
+  ])("reads a refused correction group (%s) as one line", (reason, line) => {
+    expect(describeSyncReview(group(reason))).toBe(`تعديل نموذج زيارة — ${line}`);
+  });
+
+  it("reads a refused late write of a completed visit's form as correction_required", () => {
+    expect(describeSyncReview(makeReview({ entity: "visit_form_data", reason: "correction_required", action: AuditAction.Update }))).toBe(
+      "نموذج الزيارة — الزيارة دي اتقفلت قبل ما التعديل ده يوصل، والتعديل بعد القفل محتاج سبب. افتح الزيارة واعمل «تعديل»",
+    );
+  });
+
+  it("names the visit and the lost text of a correction review, and of nothing else", () => {
+    expect(lostCorrectionOf(group("conflict_stale_rev"))).toEqual({ visitId: "visit-1", complaint: "ألم", diagnosis: "التهاب", reason: "خطأ في الكتابة" });
+    const late = makeReview({ entity: "visit_form_data", reason: "correction_required", payload: { visit_id: "visit-2", data: { complaint: null, diagnosis: "نص" } } });
+    expect(lostCorrectionOf(late)).toEqual({ visitId: "visit-2", complaint: "", diagnosis: "نص", reason: null });
+    expect(lostCorrectionOf(makeReview())).toBeNull();
+    expect(lostCorrectionOf(makeReview({ payload: { group: [{ entity: "visits", entity_id: "visit-1", payload: {} }] } }))).toBeNull();
   });
 });
 

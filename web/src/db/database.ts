@@ -35,6 +35,7 @@ import type {
   User,
   Visit,
   VisitFormData,
+  VisitFormRevision,
 } from "./types";
 import { dropStrandedStaffOps } from "./staffOpsRecovery";
 
@@ -63,6 +64,7 @@ export class ClintraDatabase extends Dexie {
   specialty_templates!: EntityTable<SpecialtyTemplate, "id">;
   form_definitions!: EntityTable<FormDefinition, "id">;
   visit_form_data!: EntityTable<VisitFormData, "id">;
+  visit_form_revisions!: EntityTable<VisitFormRevision, "id">;
   care_plans!: EntityTable<CarePlan, "id">;
   care_plan_items!: EntityTable<CarePlanItem, "id">;
   prescriptions!: EntityTable<Prescription, "id">;
@@ -606,6 +608,15 @@ export class ClintraDatabase extends Dexie {
             row.reason ??= null;
           });
       });
+
+    // Clinical corrections (docs/schema.md's v28 additions): a completed
+    // visit's form changes only with a reason, and each correction keeps the
+    // version it replaced (db/visitCorrections.ts). visit_id serves the
+    // timeline's "تم التعديل" and the history; visit_form_data_id the next
+    // revision number. A new store: nothing to backfill.
+    this.version(28).stores({
+      visit_form_revisions: "id, visit_id, visit_form_data_id",
+    });
   }
 }
 

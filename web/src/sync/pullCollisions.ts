@@ -44,6 +44,7 @@ const CHILD_LINKS: Readonly<Record<string, readonly ChildLink[]>> = {
     { entity: "invoices", column: "visit_id" },
     { entity: "messages", column: "visit_id" },
   ],
+  visit_form_data: [{ entity: "visit_form_revisions", column: "visit_form_data_id" }],
   prescriptions: [{ entity: "prescription_items", column: "prescription_id" }],
   care_plans: [{ entity: "care_plan_items", column: "care_plan_id" }],
   invoices: [

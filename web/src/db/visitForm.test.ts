@@ -3,7 +3,13 @@ import { VisitStatus } from "../domain/visitStatus";
 import { AuditAction } from "./types";
 import { ClintraDatabase } from "./database";
 import { seedDatabase } from "./seed";
-import { findGeneralFormDefinition, findVisitFormData, saveVisitFormField, type VisitFormFieldValues } from "./visitForm";
+import {
+  findGeneralFormDefinition,
+  findVisitFormData,
+  saveVisitFormField,
+  VISIT_COMPLETED_ERROR,
+  type VisitFormFieldValues,
+} from "./visitForm";
 
 let db: ClintraDatabase;
 
@@ -80,16 +86,17 @@ describe("saveVisitFormField", () => {
     expect(await db.visit_form_data.count()).toBe(1);
   });
 
-  it("writes and is readable even after the visit is completed — form-filling and completion are decoupled", async () => {
+  it("refuses once the visit is completed, writing nothing: a late change goes through a correction with a reason", async () => {
     await seedDatabase(db);
     const completedVisit = findByPosition(await db.visits.toArray(), 3);
     expect(completedVisit.status).toBe(VisitStatus.Completed);
 
-    await saveVisitFormField(db, completedVisit.id, "diagnosis", "متابعة بعد الشفاء");
+    await expect(saveVisitFormField(db, completedVisit.id, "diagnosis", "متابعة بعد الشفاء")).rejects.toThrow(VISIT_COMPLETED_ERROR);
 
     const definition = await findGeneralFormDefinition(db);
-    const row = await findVisitFormData(db, completedVisit.id, definition.id);
-    expect(row?.data).toEqual({ complaint: "", diagnosis: "متابعة بعد الشفاء" });
+    expect(await findVisitFormData(db, completedVisit.id, definition.id)).toBeUndefined();
+    expect(await db.audit_log.count()).toBe(0);
+    expect(await db.sync_ops.count()).toBe(0);
   });
 
   it("throws for a visit that does not exist, writing nothing", async () => {

@@ -7,6 +7,7 @@ import { AuditAction, type SyncOp } from "../db/types";
 import { chainBaseRevs, rebaseUnsent } from "./baseRevChain";
 import { applyPulledRow, familyTables, foldChildOpsOfRejectedCreate } from "./pullCollisions";
 import { backOffGroup, GROUP_REJECTED_REASON, recordRefusedGroup } from "./syncGroups";
+import { CorrectionReason, settleRefusedLateEdit } from "./correctionReview";
 import { pruneRemoteAuditRows, runAuditPull, runAuditPush, type AuditSyncOutcome } from "./auditSync";
 import { hasAuditEndpoints, SyncAuthError, type PulledChange, type SyncTransport } from "./transport";
 
@@ -140,7 +141,10 @@ export function describeFailedOpEscalation(op: SyncOp): { referenceCode: string 
  *   children's queued ops out of the queue and into that review row's
  *   payload (sync/pullCollisions.ts's foldChildOpsOfRejectedCreate): on the
  *   server each would only fail on its foreign key, and a failed op is
- *   retried indefinitely.
+ *   retried indefinitely. A late autosave of a form whose visit was
+ *   completed meanwhile (`correction_required`) puts the row back as the
+ *   server holds it and keeps the latest local text in the review
+ *   (sync/correctionReview.ts's settleRefusedLateEdit).
  * - failed (a server bug, never a business conflict — docs/sync-plan.md's
  *   Q11) never enters sync_review; it increments the op's own failure
  *   counter and sets next_retry_at per backoffMsFor, so it is retried
@@ -231,8 +235,13 @@ export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport
       }
       continue;
     }
-    await db.transaction("rw", [...familyTables(db, op.entity), db.sync_ops, db.sync_review], async () => {
-      const payload = op.action === AuditAction.Create ? await foldChildOpsOfRejectedCreate(db, op) : op.payload;
+    const isRefusedLateEdit = op.entity === "visit_form_data" && reason === CorrectionReason.Required;
+    await db.transaction("rw", [...familyTables(db, op.entity), db.audit_log, db.sync_ops, db.sync_review], async () => {
+      const payload = isRefusedLateEdit
+        ? await settleRefusedLateEdit(db, op)
+        : op.action === AuditAction.Create
+          ? await foldChildOpsOfRejectedCreate(db, op)
+          : op.payload;
       await db.sync_review.add({
         id: id(),
         op_id: op.op_id,

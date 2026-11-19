@@ -20,6 +20,8 @@ import PaymentSheet from "../day/PaymentSheet";
 import VisitFormSheet from "../day/VisitFormSheet";
 import { useVisitAdvance } from "../doctor/useVisitAdvance";
 import PrescriptionPrintSheet from "../prescription/PrescriptionPrintSheet";
+import CorrectionHistorySheet from "../visit/CorrectionHistorySheet";
+import { visitCorrectionStrings } from "../visit/strings";
 import {
   buildProfileEvents,
   buildProfileHero,
@@ -67,14 +69,19 @@ async function loadProfile(patientId: string): Promise<PatientProfileSource | nu
     ]);
   const visits: Visit[] = allVisits.filter((visit) => visit.patient_id === patientId);
   const invoices: Invoice[] = allInvoices.filter((invoice) => invoice.patient_id === patientId);
-  const [formRows, planItems, prescriptionItems, payments] = await Promise.all([
+  const [formRows, planItems, prescriptionItems, payments, revisions] = await Promise.all([
     visits.length === 0 ? [] : db.visit_form_data.where("visit_id").anyOf(visits.map((visit) => visit.id)).toArray(),
     plans.length === 0 ? [] : db.care_plan_items.where("care_plan_id").anyOf(plans.map((plan) => plan.id)).toArray(),
     prescriptions.length === 0
       ? ([] as PrescriptionItem[])
       : db.prescription_items.where("prescription_id").anyOf(prescriptions.map((rx) => rx.id)).toArray(),
     invoices.length === 0 ? [] : db.payments.where("invoice_id").anyOf(invoices.map((invoice) => invoice.id)).toArray(),
+    visits.length === 0 ? [] : db.visit_form_revisions.where("visit_id").anyOf(visits.map((visit) => visit.id)).toArray(),
   ]);
+  const revisionCountByVisitId = new Map<string, number>();
+  for (const revision of revisions) {
+    revisionCountByVisitId.set(revision.visit_id, (revisionCountByVisitId.get(revision.visit_id) ?? 0) + 1);
+  }
 
   const formValuesByVisitId = new Map<string, VisitFormFieldValues>();
   for (const row of formRows) {
@@ -104,12 +111,15 @@ async function loadProfile(patientId: string): Promise<PatientProfileSource | nu
     invoices,
     payments,
     staffNames,
+    revisionCountByVisitId,
   };
 }
 
 /** What is open over the profile: one sheet at a time. */
 type OpenSheet =
   | ProfileEventTarget
+  // "سجل التعديلات" of a corrected visit, from its "تم التعديل" chip.
+  | { kind: "history"; visitId: string }
   | { kind: "payment"; invoiceId: string }
   // The invoice again after a payment, printing that payment's receipt once.
   | { kind: "invoice_after_payment"; invoiceId: string; paymentId: string }
@@ -196,6 +206,7 @@ export default function PatientProfile({ patientId, initialTab = "all" }: Patien
                 {day.events.map((event) => (
                   <li key={event.key}>
                     <EventRow event={event} onOpen={event.target ? () => setOpenSheet(event.target) : undefined} />
+                    <CorrectedChip event={event} onOpen={(visitId) => setOpenSheet({ kind: "history", visitId })} />
                   </li>
                 ))}
               </ul>
@@ -431,6 +442,21 @@ function EventRow({ event, onOpen }: { event: ProfileEvent; onOpen?: () => void 
   );
 }
 
+/** "تم التعديل" under a corrected visit's row: opens "سجل التعديلات" (screens/visit/CorrectionHistorySheet.tsx). */
+function CorrectedChip({ event, onOpen }: { event: ProfileEvent; onOpen: (visitId: string) => void }) {
+  const target = event.target;
+  if (!event.corrected || target?.kind !== "visit") {
+    return null;
+  }
+  return (
+    <div className="mt-1 flex justify-end">
+      <Button variant="secondary" size="sm" onClick={() => onOpen(target.visitId)}>
+        {visitCorrectionStrings.correctedChip}
+      </Button>
+    </div>
+  );
+}
+
 // ── What an event opens ──────────────────────────────────────────────────
 
 /**
@@ -460,6 +486,8 @@ function ProfileSheets({ openSheet, onChange }: { openSheet: OpenSheet; onChange
       );
     case "rx":
       return <PrescriptionPrintSheet prescriptionId={openSheet.prescriptionId} onDismiss={close} />;
+    case "history":
+      return <CorrectionHistorySheet visitId={openSheet.visitId} onDismiss={close} />;
     case "invoice":
       return createPortal(
         <InvoiceSheet

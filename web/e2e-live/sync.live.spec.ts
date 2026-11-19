@@ -2,6 +2,8 @@ import { expect, test, type Browser } from "@playwright/test";
 import {
   advanceRowTo,
   AUTH,
+  correctVisit,
+  CORRECTION,
   invoiceHead,
   invoiceTotals,
   labeledRowValue,
@@ -18,7 +20,7 @@ import {
 } from "../e2e/support";
 import { addDaysToClinicDay, cairoInstant, todayInCairo, weekdayOf } from "../src/domain/time";
 import { bookDirect, bookNew, eventually, firstEmptySlotTime, firstPullLanded, nudge, queueOrderOf, queueToday, walkIn, openDevice, pushed, rowCount, rowStatus, seriesLetter, setUpClinic, type Device } from "./liveSupport";
-import { MODE_SWITCH_REFUSED_LABEL, QUEUE_REORDER_REFUSED_LABEL } from "../src/sync/reviewSummary";
+import { CORRECTION_STALE_LABEL, MODE_SWITCH_REFUSED_LABEL, QUEUE_REORDER_REFUSED_LABEL } from "../src/sync/reviewSummary";
 import { provisionOrg, removeLiveOrgs, startApi, stopApi, type LiveOrg } from "./liveServer";
 
 // Two devices of one freshly provisioned organization, each its own browser
@@ -325,6 +327,84 @@ test("the assistant's booking on A reads as the assistant's on B", async ({ brow
   await eventually([a, b], () => recordedBy(b, "مريض بتوقيع"), assistant.name, "B's byline names the assistant, not the token's owner");
   await eventually([a, b], () => pushed(a), true);
   await eventually([a, b], () => recordedBy(a, "مريض بتوقيع"), assistant.name, "A keeps the assistant after its own pull");
+  await closeAll(a, b);
+});
+
+// Corrections after completion (docs/design-clinical-corrections.md): the
+// correction group against the real server, and two devices correcting one
+// form.
+const CORRECTED_PATIENT = "مريض بتعديل";
+const FIRST_REASON = "نسيت أكتب التشخيص";
+
+/** Opens `name`'s visit sheet from its row and waits for the workspace. */
+async function openVisitOn(device: Device, name: string) {
+  await rowFor(device.page, name).first().getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
+  const sheet = device.page.getByRole("dialog");
+  await expect(sheet.getByPlaceholder(S.visitFormDiagnosisPlaceholder)).toBeVisible();
+  return sheet;
+}
+
+/** The diagnosis `name`'s visit sheet shows on `device`, read with the sheet open and closed again. */
+async function diagnosisOn(device: Device, name: string): Promise<string> {
+  const sheet = await openVisitOn(device, name);
+  const value = await sheet.getByPlaceholder(S.visitFormDiagnosisPlaceholder).inputValue();
+  await sheet.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
+  await expect(sheet).toBeHidden();
+  return value;
+}
+
+test("A corrects a completed visit's form: B shows تم التعديل and the history with A's reason", async ({ browser }) => {
+  const [a, b] = await twoDevices(browser);
+  await bookNew(a, CORRECTED_PATIENT);
+  await completeVisit(a, CORRECTED_PATIENT);
+
+  // Its form was never filled: the correction starts it (three ops, one group).
+  const onA = await openVisitOn(a, CORRECTED_PATIENT);
+  await correctVisit(onA, { complaint: "صداع", diagnosis: "صداع نصفي" }, FIRST_REASON);
+  await onA.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
+  await eventually([a], () => pushed(a), true, "A's correction is accepted");
+
+  await eventually([a, b], () => rowStatus(b, CORRECTED_PATIENT, STATUSES), S.statusCompleted, "B has the completed visit");
+  await eventually([a, b], () => diagnosisOn(b, CORRECTED_PATIENT), "صداع نصفي", "B shows the corrected text");
+  const onB = await openVisitOn(b, CORRECTED_PATIENT);
+  await expect(onB.getByText(CORRECTION.correctedChip, { exact: true })).toBeVisible();
+  await onB.getByRole("button", { name: `${CORRECTION.historyAction} (1)`, exact: true }).click();
+  const history = b.page.getByRole("dialog").filter({ has: b.page.getByRole("heading", { name: CORRECTION.historyTitle, exact: true }) });
+  await expect(history.getByRole("listitem")).toContainText(`${CORRECTION.reasonPrefix} ${FIRST_REASON}`);
+  await expect(history.getByRole("listitem")).toContainText(`${CORRECTION.after}: صداع نصفي`);
+  await closeAll(a, b);
+});
+
+test("both offline correct the same visit: A's arrives first, B is asked to review once with its text kept, and shows A's version", async ({ browser }) => {
+  const [a, b] = await twoDevices(browser);
+  await eventually([a, b], () => diagnosisOn(b, CORRECTED_PATIENT), "صداع نصفي", "B has the first correction");
+  await eventually([a, b], () => diagnosisOn(a, CORRECTED_PATIENT), "صداع نصفي", "A has the first correction");
+
+  await a.context.setOffline(true);
+  await b.context.setOffline(true);
+  const onA = await openVisitOn(a, CORRECTED_PATIENT);
+  await correctVisit(onA, { diagnosis: "صداع توتري" }, "التشخيص اتراجع");
+  await onA.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
+  const onB = await openVisitOn(b, CORRECTED_PATIENT);
+  await correctVisit(onB, { diagnosis: "صداع عنقودي" }, "رأي استشاري تاني");
+  await onB.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
+
+  await a.context.setOffline(false);
+  await eventually([a], () => pushed(a), true, "A's correction reaches the server first");
+  await b.context.setOffline(false);
+  await eventually([a, b], async () => b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).count(), 1, "B is asked to review");
+  await b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+  const review = b.page.getByRole("dialog");
+  await expect(review.getByText(`تعديل نموذج زيارة — ${CORRECTION_STALE_LABEL}`)).toHaveCount(1);
+  await expect(review).toContainText(`${CORRECTION.fieldDiagnosis}: صداع عنقودي`);
+  await expect(review).toContainText(`${CORRECTION.reasonPrefix} رأي استشاري تاني`);
+  await expect(review.getByRole("button", { name: S.syncReviewOpenVisit, exact: true })).toHaveCount(1);
+  await review.getByRole("button", { name: S.syncReviewAcknowledgeAction, exact: true }).click();
+  await expect(review).toBeHidden();
+
+  await eventually([a, b], () => diagnosisOn(b, CORRECTED_PATIENT), "صداع توتري", "B shows A's version");
+  expect(await readStore<{ id: string }>(b.page, "visit_form_revisions")).toHaveLength(2);
+  await eventually([a, b], () => pushed(b), true, "nothing of B's correction is left to send");
   await closeAll(a, b);
 });
 

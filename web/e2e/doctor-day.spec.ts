@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { cairoInstant, todayInCairo, type ClockTime } from "../src/domain/time";
 import {
+  correctVisit,
   advanceRowTo,
   AUTH,
   bookFirstOpenSlot,
@@ -184,9 +185,8 @@ test("a completed visit with no diagnosis is in the attention card, and its butt
   await expect(dialog.getByPlaceholder(S.visitFormDiagnosisPlaceholder)).toBeVisible();
   await expect(dialog).toContainText(PATIENTS.mona);
 
-  await dialog.getByPlaceholder(S.visitFormDiagnosisPlaceholder).fill("نزلة برد");
-  await dialog.getByPlaceholder(S.visitFormDiagnosisPlaceholder).blur();
-  await expect(dialog.getByText(S.visitFormSavedIndicator)).toBeVisible();
+  // The visit is completed: its diagnosis goes in by correction, with a reason.
+  await correctVisit(dialog, { diagnosis: "نزلة برد" }, "نسيت أكتب التشخيص");
   await dialog.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
   // The diagnosis is in; only the unpaid invoice remains, with no button.
   await expect(attention(page).getByRole("listitem").filter({ hasText: DOCTOR.attentionMissingDiagnosisTitle })).toHaveCount(0);

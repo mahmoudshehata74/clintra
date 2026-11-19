@@ -229,6 +229,9 @@ const CREATE_VERBS: Partial<Record<string, string>> = {
   prescription_items: "أضاف دواء",
   care_plans: "بدأ خطة رعاية",
   care_plan_items: "أضاف جلسات للخطة",
+  // A correction of a completed visit's form (db/visitCorrections.ts); its
+  // line names the patient, never the text or the reason.
+  visit_form_revisions: "عدّل نموذج زيارة مكتملة",
   services: "أضاف خدمة",
   service_price_overrides: "أضاف سعر خاص",
   schedules: "أضاف مواعيد العمل",

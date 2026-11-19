@@ -61,7 +61,10 @@ class SyncBootstrapPuller
      * same patients stage 2 returns — or when it is still active, so a
      * stalled patient's plan reaches a fresh device too; care_plan_items
      * come with their plans. schedule_exceptions are windowed by their own
-     * date, so a fresh device books around a closure from its first pull. Each stage was appended after the existing
+     * date, so a fresh device books around a closure from its first pull.
+     * visit_form_revisions are windowed through their visit's date, like
+     * prescriptions, so a fresh device shows "تم التعديل" and the history of
+     * a corrected visit in the window. Each stage was appended after the existing
      * ones, so a cursor minted before it existed keeps its meaning.
      */
     private const STAGE_DAY_STATE = 0;
@@ -86,7 +89,9 @@ class SyncBootstrapPuller
 
     private const STAGE_SCHEDULE_EXCEPTIONS = 10;
 
-    private const STAGE_DONE = 11;
+    private const STAGE_VISIT_FORM_REVISIONS = 11;
+
+    private const STAGE_DONE = 12;
 
     /**
      * @return array{cursor: string, has_more: bool, rows: list<array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}>}
@@ -206,6 +211,15 @@ class SyncBootstrapPuller
                 ->orderBy('id')
                 ->limit(self::PAGE_SIZE + 1)
                 ->get(),
+            // A correction of a visit form: windowed through its visit's date, like prescriptions.
+            self::STAGE_VISIT_FORM_REVISIONS => DB::table('visit_form_revisions')
+                ->whereIn('visit_id', function ($q) use ($from, $to) {
+                    $q->select('id')->from('visits')->whereBetween('visit_date', [$from, $to]);
+                })
+                ->when($afterId !== null, fn ($q) => $q->where('id', '>', $afterId))
+                ->orderBy('id')
+                ->limit(self::PAGE_SIZE + 1)
+                ->get(),
             default => throw new InvalidArgumentException("unknown bootstrap stage: {$stage}"),
         };
     }
@@ -245,6 +259,7 @@ class SyncBootstrapPuller
             self::STAGE_CARE_PLANS => 'care_plans',
             self::STAGE_CARE_PLAN_ITEMS => 'care_plan_items',
             self::STAGE_SCHEDULE_EXCEPTIONS => 'schedule_exceptions',
+            self::STAGE_VISIT_FORM_REVISIONS => 'visit_form_revisions',
         };
 
         return [
@@ -264,7 +279,7 @@ class SyncBootstrapPuller
             return [self::STAGE_DAY_STATE, null];
         }
 
-        if (! preg_match('/^([0-9]|10):([0-9a-fA-F-]*)$/', $cursor, $matches)) {
+        if (! preg_match('/^([0-9]|1[01]):([0-9a-fA-F-]*)$/', $cursor, $matches)) {
             throw new InvalidArgumentException("malformed bootstrap cursor: {$cursor}");
         }
 

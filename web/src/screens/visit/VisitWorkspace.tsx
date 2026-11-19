@@ -25,6 +25,8 @@ import {
   type VisitFormFieldKey,
   type VisitFormFieldValues,
 } from "../../db/visitForm";
+import { canCorrectVisit } from "../../db/visitCorrections";
+import { readsClinicalText } from "../../domain/clinicalAccess";
 import { VisitStatus } from "../../domain/visitStatus";
 import CarePlanEntry from "../carePlan/CarePlanEntry";
 import { dayScreenStrings } from "../day/strings";
@@ -34,6 +36,7 @@ import { patientProfileStrings } from "../patient/strings";
 import PrescriptionPrintSheet from "../prescription/PrescriptionPrintSheet";
 import { computeRxPrintState } from "../prescription/printModel";
 import { visitWorkspaceStrings as T } from "./strings";
+import CompletedVisitFields from "./VisitCorrection";
 import {
   buildVisitHistory,
   computeRxAccess,
@@ -77,6 +80,8 @@ interface WorkspaceData {
   drugNamesByVisitId: Map<string, string[]>;
   prescription: Prescription | undefined;
   items: PrescriptionItem[];
+  /** How many corrections the visit's form has had (visit_form_revisions). */
+  revisionCount: number;
 }
 
 /** How long the muted "اتحفظ" hint stays under a field after its autosave commits. */
@@ -106,13 +111,16 @@ const FIELD_CONFIG: readonly { key: VisitFormFieldKey; label: string; placeholde
  * Hosted by VisitFormSheet and by the "الزيارة الحالية" page.
  *
  * Reads everything itself via liveQuery; the host only names the visit and
- * how it closes. Complaint and diagnosis autosave per field on blur, as the
- * visit form always has; every prescription write goes through
+ * how it closes. Complaint and diagnosis autosave per field on blur until
+ * the visit is completed; after that they read only, and the visit's doctor
+ * or the owner changes them by "تعديل", with a reason (VisitCorrection.tsx,
+ * db/visitCorrections.ts). Every prescription write goes through
  * db/prescriptions.ts, whose own rules the controls mirror (computeRxAccess,
  * and computeRxPrintState for the print button).
  */
 export default function VisitWorkspace({ visitId, layout, onClose, completion }: VisitWorkspaceProps) {
-  const actingPractitionerId = useGuardedActingMembership()?.practitioner_id ?? null;
+  const actingMembership = useGuardedActingMembership();
+  const actingPractitionerId = actingMembership?.practitioner_id ?? null;
   // Saves still in flight, so "حفظ ومتابعة لاحقًا" can wait for them; one
   // Set for the component's lifetime, mutated only from event handlers.
   const [pendingSaves] = useState(() => new Set<Promise<boolean>>());
@@ -143,7 +151,7 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
     );
     const shownVisitIds = [visit.id, ...prior.slice(0, VISIT_HISTORY_LIMIT).map((candidate) => candidate.id)];
     const shownPrescriptions = patientPrescriptions.filter((rx) => shownVisitIds.includes(rx.visit_id));
-    const [formRows, itemRows] = await Promise.all([
+    const [formRows, itemRows, revisionCount] = await Promise.all([
       db.visit_form_data.where("visit_id").anyOf(shownVisitIds).toArray(),
       shownPrescriptions.length > 0
         ? db.prescription_items
@@ -151,6 +159,7 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
             .anyOf(shownPrescriptions.map((rx) => rx.id))
             .toArray()
         : Promise.resolve([]),
+      db.visit_form_revisions.where("visit_id").equals(visit.id).count(),
     ]);
 
     const formValuesByVisitId = new Map<string, VisitFormFieldValues>();
@@ -181,6 +190,7 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
       drugNamesByVisitId,
       prescription,
       items: prescription ? sortRxItems(itemsByPrescriptionId.get(prescription.id) ?? []) : [],
+      revisionCount,
     };
   }, [visitId]);
 
@@ -211,6 +221,15 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
     }
   }
 
+  // A field blurred by this very tap saves first: once the visit is
+  // completed its form no longer autosaves (db/visitForm.ts).
+  async function completeAfterSaves() {
+    const saved = await Promise.all(pendingSaves);
+    if (saved.every(Boolean)) {
+      completion.onComplete(visit);
+    }
+  }
+
   const runRow = (
     <CardFooter
       count={
@@ -225,7 +244,7 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
         <Button
           variant="primary"
           disabled={completion.isCoolingDown(visit.id)}
-          onClick={() => completion.onComplete(visit)}
+          onClick={() => void completeAfterSaves()}
         >
           {T.closeVisit}
         </Button>
@@ -313,7 +332,18 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
           </section>
         )}
 
-        <VisitFields key={visit.id} visitId={visit.id} stored={data.values} pendingSaves={pendingSaves} />
+        {visit.status === VisitStatus.Completed ? (
+          <CompletedVisitFields
+            key={visit.id}
+            visitId={visit.id}
+            stored={data.values}
+            revisionCount={data.revisionCount}
+            canCorrect={canCorrectVisit(actingMembership, visit)}
+            showsHistory={readsClinicalText(actingMembership)}
+          />
+        ) : (
+          <VisitFields key={visit.id} visitId={visit.id} stored={data.values} pendingSaves={pendingSaves} />
+        )}
 
         {access.isShown && (
           <RxSection

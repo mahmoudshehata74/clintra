@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { cairoInstant, todayInCairo, type ClockTime } from "../src/domain/time";
 import { prescriptionPrintStrings as RX } from "../src/screens/prescription/strings";
 import {
+  correctVisit,
   advanceRowTo,
   ASSISTANT_NAME,
   AUTH,
@@ -267,10 +268,8 @@ test("the visit history shows the previous visit's diagnosis and drugs", async (
   await gotoSeededDay(page, { name: OWNER_NAME, pin: OWNER_PIN });
   await selectPractitioner(page, SLOTS_DR);
   let sheet = await openVisitSheet(page, PATIENTS.yasmin);
-  const diagnosis = sheet.getByPlaceholder(S.visitFormDiagnosisPlaceholder);
-  await diagnosis.fill("شد عضلي حاد");
-  await diagnosis.blur();
-  await expect(sheet.getByText(S.visitFormSavedIndicator)).toBeVisible();
+  // Her visit is completed: the diagnosis goes in by correction, with a reason.
+  await correctVisit(sheet, { diagnosis: "شد عضلي حاد" });
   await addDrug(sheet, IBUPROFEN);
   await addDrug(sheet, { name: "Omeprazole 20mg", instructions: "كبسولة قبل الفطار" });
   await addDrug(sheet, { name: "Vitamin D3", instructions: "قرص يوميًا" });

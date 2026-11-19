@@ -1786,6 +1786,39 @@ here by construction.
 Full test coverage in `tests/Feature/Rls/SyncPushTest.php` and
 `tests/Feature/Rls/ClosedDayStateTest.php`.
 
+## Clinical corrections
+
+`visit_form_revisions` (`2026_09_12_000040_create_visit_form_revisions_table.php`,
+docs/design-clinical-corrections.md): append-only like `device_audit_log` —
+clintra_app holds SELECT and INSERT only, PUBLIC nothing, and there is no
+UPDATE or DELETE policy, so either is refused on the grant (`42501`). The
+SELECT policy and the INSERT policy's visit test are the visits scope
+(`org_id = current_org()` and the visit within `allowed_locations()` and
+`allowed_practitioners()`); the INSERT policy also holds `corrected_by` and
+`device_id` to the organization. Each `IN` sits inside an `AND` with
+`org_id = current_org()`.
+
+`visit_form_revision_check()` (BEFORE INSERT, as the invoker, so its reads go
+through the caller's RLS) refuses, with `55000`, a revision that does not
+describe the stored row of a completed visit at its current rev with the next
+number (`correction_invalid`), or whose `corrected_by` is not an active owner
+or the visit's own practitioner's membership (`correction_not_allowed`). It
+runs before the policy's WITH CHECK: a writer who cannot see the form gets
+`correction_invalid`.
+
+`visit_form_data_completed_guard()` (`2026_09_12_000041`, a separate deploy)
+refuses, with `55000` / `correction_required`, an insert with text on a
+completed visit and an update of its data without a matching revision. No
+trigger blocks deletes (clintra_fixtures deletes through for cleanup); the
+applier refuses them.
+
+`SyncOpApplier`'s correction rule gives the same reasons before writing, sees
+the whole group (`SyncPushController` passes it), and maps the triggers'
+messages (`stateViolationReason`; `conflict_day_closed` matches only its own
+message now). `corrected_by` is an actor column (`actor_not_in_org`), a claim
+until the identity design pins it to `current_membership()` (the design's
+6.2). A revision's `device_id` is the token's.
+
 ## clintra_fixtures — test-only, never production
 
 A fourth role exists purely for the RLS test suite (`tests/Feature/Rls`) to

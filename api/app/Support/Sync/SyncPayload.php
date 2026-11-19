@@ -27,6 +27,7 @@ final class SyncPayload
     /** table => its jsonb columns. */
     private const JSON_COLUMNS = [
         'visit_form_data' => ['data'],
+        'visit_form_revisions' => ['previous_data', 'new_data'],
         'device_audit_log' => ['before', 'after'],
     ];
 

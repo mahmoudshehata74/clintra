@@ -21,11 +21,12 @@ import { doctorDayStrings } from "../src/screens/doctor/strings";
 import { messagesStrings } from "../src/screens/messages/strings";
 import { patientProfileStrings } from "../src/screens/patient/strings";
 import { prescriptionPrintStrings } from "../src/screens/prescription/strings";
-import { visitWorkspaceStrings } from "../src/screens/visit/strings";
+import { visitCorrectionStrings, visitWorkspaceStrings } from "../src/screens/visit/strings";
 
 export const S = dayScreenStrings;
 export const DOCTOR = doctorDayStrings;
 export const VISIT = visitWorkspaceStrings;
+export const CORRECTION = visitCorrectionStrings;
 export const RX = prescriptionPrintStrings;
 export const MSG = messagesStrings;
 export const PLAN = carePlanStrings;
@@ -790,9 +791,49 @@ export async function recordHalfPayment(page: Page, dialog: ReturnType<Page["get
 }
 
 /** Opens a day-grid row's visit form, fills both fields (each autosaves on blur), and closes it. */
+/** The reason the fixtures give when they set a completed visit's form. */
+export const FIXTURE_CORRECTION_REASON = "استكمال بيانات الزيارة";
+
+/**
+ * Corrects a completed visit's form from its open workspace (`scope`):
+ * "تعديل", the given fields, the reason, "حفظ التعديل" — then waits for the
+ * form to read only again with "تم التعديل".
+ */
+export async function correctVisit(
+  scope: Locator,
+  values: { complaint?: string; diagnosis?: string },
+  reason: string = FIXTURE_CORRECTION_REASON,
+): Promise<void> {
+  await scope.getByRole("button", { name: CORRECTION.correctAction, exact: true }).click();
+  const form = scope.getByRole("form", { name: CORRECTION.formTitle });
+  if (values.complaint !== undefined) {
+    await form.getByPlaceholder(S.visitFormComplaintPlaceholder).fill(values.complaint);
+  }
+  if (values.diagnosis !== undefined) {
+    await form.getByPlaceholder(S.visitFormDiagnosisPlaceholder).fill(values.diagnosis);
+  }
+  await form.getByLabel(CORRECTION.reasonLabel, { exact: true }).fill(reason);
+  await form.getByRole("button", { name: CORRECTION.save, exact: true }).click();
+  await expect(form).toBeHidden();
+  await expect(scope.getByText(CORRECTION.correctedChip, { exact: true })).toBeVisible();
+}
+
+/**
+ * Sets a visit's complaint and diagnosis from its row's visit form: by
+ * autosave before completion, and — since a completed visit's form changes
+ * only by correction (docs/design-clinical-corrections.md) — by "تعديل"
+ * with a reason after it.
+ */
 export async function fillVisitForm(page: Page, patientName: string, complaint: string, diagnosis: string): Promise<void> {
   await rowFor(page, patientName).getByRole("button", { name: S.visitFormPillLabel, exact: true }).click();
   const form = page.getByRole("dialog");
+  await expect(form.getByPlaceholder(S.visitFormDiagnosisPlaceholder)).toBeVisible();
+  if ((await form.getByRole("button", { name: CORRECTION.correctAction, exact: true }).count()) > 0) {
+    await correctVisit(form, { complaint, diagnosis });
+    await form.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
+    await expect(form).toBeHidden();
+    return;
+  }
   for (const [label, placeholder, value] of [
     [S.visitFormComplaintLabel, S.visitFormComplaintPlaceholder, complaint],
     [S.visitFormDiagnosisLabel, S.visitFormDiagnosisPlaceholder, diagnosis],
