@@ -1,4 +1,5 @@
 import { id } from "../domain/id";
+import { moveOnePlace, orderedWrites, type QueueMove } from "../domain/queueReorder";
 import { VisitSource } from "../domain/visitSource";
 import { VisitStatus } from "../domain/visitStatus";
 import type { ClinicDay } from "../domain/time";
@@ -258,5 +259,57 @@ export async function undoSendVisitToEndOfQueue(
     }
 
     return { ok: true };
+  });
+}
+
+export type MoveWaitingVisitResult =
+  | { ok: true; moves: QueueMove[] }
+  | { ok: false; reason: "visit_not_found" | "cannot_move" };
+
+/**
+ * Moves a waiting (arrived) visit one place up or down its queue
+ * (domain/queueReorder.ts's moveOnePlace): it trades positions with the
+ * neighbouring waiting visit; nobody else moves. Written as one group of
+ * ops (SyncOp.group_id) in the order orderedWrites gives — the first visit
+ * of each cycle parked below zero, so no two visits ever share a position
+ * on the device or, op by op, on the server — and each op carries its
+ * visit's rev as this device saw it. The server applies the group whole or
+ * not at all: a reorder made on positions another device already moved is
+ * refused as conflict_stale_rev, put back here, and left as one review
+ * (sync/syncGroups.ts).
+ */
+export async function moveWaitingVisit(db: ClintraDatabase, visitId: string, direction: "up" | "down"): Promise<MoveWaitingVisitResult> {
+  const actor = await resolveActingMembership(db);
+  const groupId = id();
+
+  return runAtomicMutations(db, [db.visits], async (write) => {
+    const visit = await db.visits.get(visitId);
+    if (!visit) {
+      return { ok: false, reason: "visit_not_found" };
+    }
+    const day = await db.visits.where("[practitioner_id+visit_date]").equals([visit.practitioner_id, visit.visit_date]).toArray();
+    const moves = moveOnePlace(day, visitId, direction);
+    if (!moves || moves.length === 0) {
+      return { ok: false, reason: "cannot_move" };
+    }
+
+    const current = new Map(day.map((row) => [row.id, row]));
+    for (const step of orderedWrites(moves)) {
+      const before = current.get(step.visitId)!;
+      const after: Visit = { ...before, position: step.position };
+      await write({
+        table: db.visits,
+        entity: "visits",
+        entityId: before.id,
+        action: AuditAction.Update,
+        before,
+        after,
+        actorMembershipId: actor.id,
+        orgId: before.org_id,
+        groupId,
+      });
+      current.set(after.id, after);
+    }
+    return { ok: true, moves };
   });
 }

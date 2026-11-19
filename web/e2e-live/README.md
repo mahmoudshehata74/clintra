@@ -50,7 +50,13 @@ path the ordinary e2e suite never takes (it runs on the in-browser
 14. A archives a patient whose one visit is cancelled: B's patients screen
     stops finding them, and shows them marked "مؤرشف" with "إظهار
     المؤرشفين" on (docs/schema.md's v25 additions).
-15. A closes the day with an opening float: B shows the same opening and
+15. Today goes to queue mode through a schedule write A pushes
+    (`queueToday`: the settings switch only takes effect tomorrow), A
+    adds three walk-ins and moves the second up: B shows A's order.
+16. Both offline reorder the same queue (A moves a visit up, B moves it
+    down); A reconnects first. B's reorder is refused whole: B is asked to
+    review once ("ترتيب الدور — …", only "تمام") and shows A's order.
+17. A closes the day with an opening float: B shows the same opening and
     the same expected cash. Last, since a closed day refuses later edits.
 
 Every wait nudges the sync engine (as returning to the tab does) and polls;

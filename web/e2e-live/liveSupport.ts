@@ -1,7 +1,7 @@
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { registrationStrings } from "../src/auth/registrationStrings";
 import { todayInCairo, weekdayOf } from "../src/domain/time";
-import { login, readStore, rowFor, S, sidebar, SIDEBAR } from "../e2e/support";
+import { login, putRows, readStore, rowFor, S, sidebar, SIDEBAR } from "../e2e/support";
 import { mintCode, type LiveOrg } from "./liveServer";
 
 export interface Device {
@@ -143,4 +143,73 @@ export async function firstEmptySlotTime(device: Device): Promise<string> {
     throw new Error("no empty slot left");
   }
   return time;
+}
+
+/**
+ * Today's working day goes to queue mode now, through the real protocol:
+ * the settings switch only takes effect from tomorrow (docs/bug-hunt.md's
+ * A-03), so `device` writes today's schedule rows in queue mode straight
+ * into its store with one sync op each (an ordinary owner write the
+ * server accepts and ledgers), and reloads so its screens read them.
+ * Every other device receives them by pull.
+ */
+export async function queueToday(device: Device, org: LiveOrg): Promise<void> {
+  const weekday = weekdayOf(todayInCairo());
+  const [deviceRow] = await readStore<{ id: string }>(device.page, "device");
+  const schedules = (await readStore<Record<string, unknown> & { id: string; weekday: number; rev: number }>(device.page, "schedules")).filter(
+    (row) => row.weekday === weekday,
+  );
+  expect(schedules.length, "today is a working day").toBeGreaterThan(0);
+  const now = Date.now();
+  await putRows(
+    device.page,
+    schedules.flatMap((row, index) => {
+      const after = { ...row, mode: "queue", next_mode: null, next_mode_from: null };
+      return [
+        { store: "schedules", value: after },
+        {
+          store: "sync_ops",
+          value: {
+            op_id: crypto.randomUUID(),
+            entity: "schedules",
+            entity_id: row.id,
+            action: "update",
+            payload: after,
+            device_id: deviceRow.id,
+            created_at: new Date(now + index).toISOString(),
+            synced_at: null,
+            base_rev: row.rev,
+            failure_count: 0,
+            next_retry_at: null,
+          },
+        },
+      ];
+    }),
+  );
+  await device.page.reload();
+  await login(device.page, { name: org.ownerName, pin: org.ownerPin });
+  await expect(device.page.getByText(S.queueSummaryCurrentTurnLabel)).toBeVisible();
+}
+
+/** Adds a new patient to today's queue as a walk-in ("مريض جه دلوقتي"): already arrived. */
+export async function walkIn(device: Device, name: string): Promise<void> {
+  const { page } = device;
+  await page.getByRole("button", { name: S.walkInButtonLabel, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder(S.bookingSearchPlaceholder).fill(name);
+  await dialog.getByRole("button", { name: S.newPatientButtonPrefix }).click();
+  await dialog.getByRole("button", { name: S.newPatientSubmitButton, exact: true }).click();
+  const service = dialog.getByRole("button", { name: /^كشف عام ·/ });
+  if (await service.count()) {
+    await service.click();
+  }
+  await dialog.getByRole("button", { name: S.addToQueueConfirmButton, exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(rowFor(page, name)).toHaveAttribute("data-visit-status", "arrived");
+}
+
+/** The queue's rows on `device`, top to bottom, as the names among `names` they show. */
+export async function queueOrderOf(device: Device, names: readonly string[]): Promise<string[]> {
+  const rows = await device.page.locator("li[data-visit-row-id]").allInnerTexts();
+  return rows.map((text) => names.find((name) => text.includes(name))).filter((name): name is string => name !== undefined);
 }

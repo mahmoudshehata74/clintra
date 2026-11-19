@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { canReorderQueue } from "../../domain/queueReorder";
 import PageMain from "../../components/PageMain";
 import Ltr from "../../components/Ltr";
 import Button from "../../components/ui/Button";
@@ -34,7 +35,7 @@ import type {
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitArrived, markVisitCompleted, markVisitInRoom } from "../../db/visitAttendance";
 import { cancelVisit, markVisitNoShow, type VisitCancelReason } from "../../db/visitCancel";
-import { sendVisitToEndOfQueue, undoSendVisitToEndOfQueue } from "../../db/visitQueue";
+import { moveWaitingVisit, sendVisitToEndOfQueue, undoSendVisitToEndOfQueue } from "../../db/visitQueue";
 import { undoMostRecentVisitMutation } from "../../db/visitUndo";
 import type { Piastres } from "../../domain/money";
 import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
@@ -680,6 +681,15 @@ export default function DayScreen({
     }
   }
 
+  async function handleMoveWaiting(visit: Visit, direction: "up" | "down") {
+    try {
+      await moveWaitingVisit(db, visit.id, direction);
+    } catch (error) {
+      console.error(error);
+      setToastState({ message: dayScreenStrings.queueMoveFailed, undo: null });
+    }
+  }
+
   async function handleSendToEnd(visit: Visit) {
     setOpenMenuVisitId(null);
     try {
@@ -1085,6 +1095,7 @@ export default function DayScreen({
               onSendMessage={handleSendMessage}
               onOpenProfile={handleOpenProfile}
               onSendToEnd={handleSendToEnd}
+              onMoveWaiting={canReorderQueue(actingMembership?.role) ? handleMoveWaiting : undefined}
               onOpenVisitForm={handleOpenVisitForm}
               onOpenDaySheet={practitioner.id === currentPractitionerId ? () => setIsDaySheetOpen(true) : undefined}
             />

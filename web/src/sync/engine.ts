@@ -6,6 +6,7 @@ import { MUTATION_EVENT_NAME } from "../db/mutate";
 import { AuditAction, type SyncOp } from "../db/types";
 import { chainBaseRevs, rebaseUnsent } from "./baseRevChain";
 import { applyPulledRow, familyTables, foldChildOpsOfRejectedCreate } from "./pullCollisions";
+import { backOffGroup, GROUP_REJECTED_REASON, recordRefusedGroup } from "./syncGroups";
 import { pruneRemoteAuditRows, runAuditPull, runAuditPush, type AuditSyncOutcome } from "./auditSync";
 import { hasAuditEndpoints, SyncAuthError, type SyncTransport } from "./transport";
 
@@ -147,6 +148,12 @@ export function describeFailedOpEscalation(op: SyncOp): { referenceCode: string 
  * - blocked (an earlier op in the same batch, same entity_id, already
  *   failed or was rejected — Q2) is left exactly as it was, to be resent
  *   next cycle once whatever blocked it has resolved.
+ *
+ * An op of a group (SyncOp.group_id, sync/syncGroups.ts) is settled with
+ * its group: a refused group leaves one review for the whole change and
+ * puts its rows back (recordRefusedGroup) — its `group_rejected` ops add
+ * nothing of their own — and a failed one backs the whole group off, so a
+ * group is never resent in part.
  */
 export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport): Promise<void> {
   const allOps = await db.sync_ops.toArray();
@@ -207,15 +214,23 @@ export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport
 
     if (result.status === "failed") {
       const failureCount = op.failure_count + 1;
-      await db.sync_ops.update(op.op_id, {
-        failure_count: failureCount,
-        next_retry_at: new Date(Date.now() + backoffMsFor(failureCount)).toISOString(),
-      });
+      const nextRetryAt = new Date(Date.now() + backoffMsFor(failureCount)).toISOString();
+      if (op.group_id !== undefined) {
+        await backOffGroup(db, op.group_id, failureCount, nextRetryAt);
+        continue;
+      }
+      await db.sync_ops.update(op.op_id, { failure_count: failureCount, next_retry_at: nextRetryAt });
       continue;
     }
 
     // rejected
     const reason = result.reason;
+    if (op.group_id !== undefined) {
+      if (reason !== GROUP_REJECTED_REASON) {
+        await recordRefusedGroup(db, op, reason, now);
+      }
+      continue;
+    }
     await db.transaction("rw", [...familyTables(db, op.entity), db.sync_ops, db.sync_review], async () => {
       const payload = op.action === AuditAction.Create ? await foldChildOpsOfRejectedCreate(db, op) : op.payload;
       await db.sync_review.add({

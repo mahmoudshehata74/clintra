@@ -11,7 +11,9 @@ use Illuminate\Foundation\Http\FormRequest;
  * for update/delete — docs/sync-plan.md's Q5 edit-conflict mechanism —
  * and absent for create, since "an insert carries no base_rev").
  * Anything that fails here is a malformed batch (422), never mistaken for
- * a business conflict or a credential problem. Whether the entity is one
+ * a business conflict or a credential problem. group_id is optional: ops
+ * that share one are applied together or not at all (SyncPushController).
+ * Whether the entity is one
  * the server syncs is not shape: SyncOpApplier refuses an unknown one for
  * that op alone.
  */
@@ -37,6 +39,7 @@ class PushSyncOpsRequest extends FormRequest
             'ops.*.payload' => ['required_unless:ops.*.action,delete', 'nullable', 'array'],
             'ops.*.created_at' => ['required', 'date'],
             'ops.*.base_rev' => ['prohibited_if:ops.*.action,create', 'required_if:ops.*.action,update,delete', 'integer', 'min:1'],
+            'ops.*.group_id' => ['nullable', 'uuid'],
         ];
     }
 }

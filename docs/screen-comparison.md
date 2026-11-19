@@ -76,7 +76,7 @@ App capture: the whole page — the seeded Monday for the queue doctor.
 - [decided] The one shared page width (`docs/session-handoff.md:352-357`).
 - [data] Practitioner switcher pills: two practitioners in the demo.
 - [decided] The card head's title is the practitioner's name ("سلمى إبراهيم"), with no "استدعاء التالي" (the slab's "التالي" covers it) (`docs/session-handoff.md:367-374`, `:380-383`).
-- [decided] `.slab-act` has no "إعادة ترتيب" (backlog) and adds "تسجيل تأخير الطبيب" and "إغلاق الصندوق" (`docs/session-handoff.md:380-383`, `:447-448`).
+- [decided] `.slab-act` has no "إعادة ترتيب" and adds "تسجيل تأخير الطبيب" and "إغلاق الصندوق" (`docs/session-handoff.md:380-383`, `:447-448`). Reordering is per row instead (`feat/queue-reorder`): each waiting (arrived) row carries two icon buttons, "قدّم {name} في الدور" / "أخّر {name} في الدور", for the owner and the assistant; each moves the visit one place among the waiting visits, the first's "up" and the last's "down" disabled (`domain/queueReorder.ts`). No drag. The prototype has no such buttons: tokens and the shared Button only.
 - [decided] "يتوقع خلاص 10:33" and each waiting row's `.qwait` "متوقع 10:11" use the 24-hour clock (`docs/session-handoff.md:185`, `:380-383`).
 - [decided] Each row carries the "…" visit-menu trigger (`docs/session-handoff.md:514-515`).
 - [decided] The "التسجيل" chip, the "الزيارة اتقفلت من غير تسجيل" line and the "مريض جه دلوقتي" pill (`docs/session-handoff.md:367-374`).

@@ -515,6 +515,16 @@ export interface SyncOp {
   failure_count: number;
   /** Set after a `failed` result; this op is not resent before this instant. Null means eligible now. */
   next_retry_at: Instant | null;
+  /**
+   * Ops written as one change that only makes sense whole (a queue
+   * reorder's position moves — db/visitQueue.ts) share one id: the server
+   * applies them together or not at all, and a refused group leaves one
+   * review (sync/engine.ts). Absent on every other op. Not indexed, so no
+   * database version.
+   */
+  group_id?: string;
+  /** For an op in a group: the row as it was before this op, so a refused group can put its rows back. Never sent. */
+  group_before?: unknown;
 }
 
 /**

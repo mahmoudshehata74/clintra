@@ -855,10 +855,28 @@ entity's *current* state (`SyncPuller::currentPayload`), not its state as
 of that ledger entry. So when accepted rows trade keys on the server (a
 swap of two queue positions, done through a third value), an earlier
 entry in a page can carry a key that a local row still holds until a
-later entry in the same page moves it. No accepted write does that today:
-a queue reorder's first op collides on the server itself and comes back
-`failed`. If one ever does, applying the page in key-safe order is the
-fix. Recording a review is not.
+later entry in the same page moves it. A queue reorder does exactly that
+(`feat/queue-reorder`, `web/src/db/visitQueue.ts`): its position moves
+reach the server as one group (api/docs/rls.md, "A group applies whole or
+not at all"), and another device pulls them one row at a time. So a pulled
+visit that takes the [practitioner, day, position] of an accepted local
+visit with no queued op of its own — and does not share its scheduled
+time — parks that local visit (`isParkableQueueBlocker`, `parkVisit`: a
+raw write to a free position from −1,000,000 down) instead of recording a
+review; the parked visit's own pulled change, later in the same pull,
+puts it where the server has it. A collision on any other key, or with a
+visit that has its own queued op, is still case b.
+
+**A refused group.** When the server refuses a group, one op carries
+the reason and the rest come back `group_rejected`
+(`web/src/sync/syncGroups.ts`). The device takes every op of the group
+out of the queue, puts each row back as it was before the group's first
+write of it (keeping the rev it last saw, through the pull's own key-safe
+write), and leaves one review whose payload is the whole group. The sheet
+reads "ترتيب الدور — اتغيّر من جهاز تاني قبل ما ترتيبك يوصل، فرجع زي ما اتعمل
+هناك" and offers only "تمام": the other device's order is already kept,
+and arrives by pull. A `failed` op of a group backs off the whole group,
+so a group is never resent in part.
 
 **c. Children of a rejected create.** On the server, a child create whose
 parent does not exist fails on its foreign key (or on the child table's

@@ -1318,6 +1318,23 @@ derived from what `web/src/db/mutate.ts` callers actually pass as
 `entity:`, not the full v1 table list. `users` stays excluded here too,
 for the same reason: no single owning org.
 
+**A group applies whole or not at all.** An op may carry `group_id` (a
+uuid). Consecutive ops sharing one are a single change — today only a
+queue reorder's position moves (`web/src/db/visitQueue.ts`), which park
+one visit below zero so no two visits ever share a position, statement by
+statement, under `visits`' unique `[practitioner_id, visit_date,
+position]`. `SyncPushController::applyGroup` applies them inside one
+savepoint of the request's transaction, each still through
+`SyncOpApplier::apply`. If any op is not `accepted` or `duplicate`, the
+savepoint is rolled back (`SyncGroupRefused`): none of the group's rows,
+ledger rows or audit rows stay, that op returns its own result (e.g.
+`conflict_stale_rev` when another device moved one of the visits first),
+every other op of the group returns `rejected` / `group_rejected`, and
+every entity the group named is `blocked` for the rest of the batch. A
+group that would otherwise have been half applied — its first visit
+parked, the rest refused — cannot happen. No schema, RLS or grant change:
+the savepoint runs on the same RLS-bound connection as any other op.
+
 **An unknown entity is refused per op, not per batch.** `PushSyncOpsRequest`
 checks only that `entity` is a string; `SyncOpApplier::apply` refuses an
 entity outside `SyncableTables::NAMES` as `rejected` / `unknown_entity`,

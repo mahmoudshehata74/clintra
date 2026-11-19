@@ -484,7 +484,6 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
 
 ## Backlog
 - A-03 — done in `feat/schedule-mode-from-tomorrow`: schedules carry `next_mode` and `next_mode_from` (`docs/schema.md`'s v23 additions), and the working-hours switch takes effect from tomorrow (screen 12's notes above). Hardening scenario 24 runs on it. (`docs/bug-hunt.md`, A-03.)
-- Queue reordering (screen 3's "إعادة ترتيب") — owner decision of the prototype alignment: recorded, not built.
 - Server-side per-person identity: the acting membership sent and verified per request (e.g. a PIN-derived proof). Today the server knows only the membership the device token was issued to (the owner who registered the device), so it cannot tell who is signed in; this would close the staff owner check's gap and the other settings-write gaps, and turn the claimed actor (device audit rows and the actor columns, `api/docs/rls.md`'s "Actor attribution") into a check.
 - Members added locally on a device that was stuck before the staff-identity fix stay local-only — none exist today. If one appears, re-add the person online and deactivate the local row.
 

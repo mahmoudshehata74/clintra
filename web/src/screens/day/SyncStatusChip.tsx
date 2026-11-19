@@ -4,6 +4,7 @@ import SaveFailedLine from "../../components/ui/SaveFailedLine";
 import { db, type ClintraDatabase } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type DisplacedPayload } from "../../sync/pullCollisions";
+import { isRefusedGroupReview } from "../../sync/syncGroups";
 import { acknowledgeReview, discardMine, getReviewComparison, keepMine, type ReviewComparison } from "../../sync/reviewActions";
 import {
   describeDisplacedContent,
@@ -76,6 +77,8 @@ function displacedPatientId(review: SyncReview): string | null {
  * payments it removed (in its description) and the reviews it closed for
  * the same rows; a create conflict whose local row is already gone offers
  * only "تمام", never keep/discard (sync/reviewActions.ts's REVIEW_ROW_GONE).
+ * A refused queue reorder (sync/syncGroups.ts) is already put back and the
+ * other device's order already kept, so it offers only "تمام" too.
  */
 export default function SyncStatusChip() {
   const isOnline = useOnlineStatus();
@@ -147,7 +150,17 @@ export default function SyncStatusChip() {
                 <p className="text-sm">{describeSyncReview(review)}</p>
                 {lostBooking && <p className="rounded-control bg-field p-2 text-xs">{lostBooking}</p>}
 
-                {review.reason === DISPLACED_BY_SERVER_REASON ? (
+                {isRefusedGroupReview(review) ? (
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void resolve(review.id, acknowledgeReview)}
+                      className="rounded-control border border-rule px-2 py-1 text-sm"
+                    >
+                      {dayScreenStrings.syncReviewAcknowledgeAction}
+                    </button>
+                  </div>
+                ) : review.reason === DISPLACED_BY_SERVER_REASON ? (
                   <>
                     {displacedContent && (
                       <p className="rounded-control bg-field p-2 text-xs">{displacedContent}</p>
