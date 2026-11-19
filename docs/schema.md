@@ -1278,3 +1278,49 @@ reads as not archived. Versions 1-24 are unchanged.
 - A user's `phone` is unique (see v4 additions); a patient's `phone` is
   deliberately not (see the patients table note) — these are different
   entities with different rules, not an inconsistency.
+
+## v26 additions
+
+### schedule_exceptions becomes syncable
+
+The table existed since v1 with no writer. It gains `rev` and the
+`schedule_exceptions_enforce_rev` trigger, exactly as every other syncable
+table (`enforce_row_rev()`, `DEFAULT 1`), and joins the syncable tables on
+both sides (`SyncableTables::NAMES`, `web/src/sync/syncableTables.ts`). No
+policy or grant change: `schedule_exceptions_scope` stays the `schedules`
+expression (`practitioner_id IN (SELECT id FROM practitioners WHERE org_id =
+current_org())`, USING and WITH CHECK).
+
+| Column | Type | Null | Meaning |
+|---|---|---|---|
+| `rev` | integer, default 1 | no | server-assigned, as on every syncable table |
+
+How the app uses the existing columns, one exception per doctor per date:
+- `type = closed` (start/end null): the doctor does not work that date.
+- `type = shifted` with `start_time` and `end_time`: that date's hours are
+  this one interval instead of the weekday's; on a usual day off the date
+  takes its mode and slot length from the doctor's first row at the
+  location (`domain/scheduleExceptions.ts`'s `scheduleOnDate`).
+- `extra` and `shift_minutes` are not written. A closure's reason has no
+  column and is not stored (adding one was not part of this change).
+
+The owner adds and deletes them in settings → working hours ("إجازات ومواعيد
+استثنائية", `db/scheduleExceptions.ts`), through the ordinary audited,
+synced create and delete; the audit log reads "أضاف إجازة أو مواعيد
+استثنائية" / "شال إجازة أو مواعيد استثنائية" with the date. The day screen
+and its booking, empty slots, the move sheet, tomorrow's sheet and a care
+plan's booking all work from `scheduleOnDate`. A closure never cancels a
+visit: closing a date with bookings lists them and asks to confirm, and the
+day screen keeps each still-active visit outside the day's hours — on a
+closed date, or outside its new interval — flagged "خارج مواعيد العمل".
+
+Pull and bootstrap carry the rows like any syncable table; the bootstrap
+windows them by `date` (a stage after care plan items), and the pull payload
+gives `start_time`/`end_time` as "HH:MM" (`SyncPayload`).
+
+Server: `2026_09_12_000038_make_schedule_exceptions_syncable.php`.
+
+Local: database version 26. `schedule_exceptions` gains the
+`[practitioner_id+date]` index; any row stored before gets `rev` 1 (a raw
+modify: no sync op, no audit row).
+

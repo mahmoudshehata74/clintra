@@ -28,10 +28,13 @@ import type {
   Payment,
   Practitioner,
   Schedule,
+  ScheduleException,
   Service,
   User,
   Visit,
 } from "../../db/types";
+import { ScheduleExceptionType } from "../../db/types";
+import { exceptionOn, scheduleOnDate } from "../../domain/scheduleExceptions";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { markVisitArrived, markVisitCompleted, markVisitInRoom } from "../../db/visitAttendance";
 import { cancelVisit, markVisitNoShow, type VisitCancelReason } from "../../db/visitCancel";
@@ -39,7 +42,7 @@ import { moveWaitingVisit, sendVisitToEndOfQueue, undoSendVisitToEndOfQueue } fr
 import { undoMostRecentVisitMutation } from "../../db/visitUndo";
 import type { Piastres } from "../../domain/money";
 import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
-import { addDaysToClinicDay, clockTimeInCairo, todayInCairo, weekdayOf, type ClockTime } from "../../domain/time";
+import { addDaysToClinicDay, clockTimeInCairo, todayInCairo, type ClockTime } from "../../domain/time";
 import { VisitStatus } from "../../domain/visitStatus";
 import { formatActorName } from "./actorLabel";
 import {
@@ -105,6 +108,8 @@ interface DynamicData {
   /** Today's non-void invoices at the selected location — the slab's money tiles, scoped exactly as cash-close's own total is. */
   invoicesAtLocationToday: Invoice[];
 }
+
+const NO_EXCEPTIONS: ScheduleException[] = [];
 
 const EMPTY_DYNAMIC_DATA: DynamicData = {
   visits: [],
@@ -185,6 +190,9 @@ export default function DayScreen({
   const liveLocations = useLiveQuery(() => db.locations.toArray(), []);
   const livePractitioners = useLiveQuery(() => db.practitioners.toArray(), []);
   const liveSchedules = useLiveQuery(() => db.schedules.toArray(), []);
+  // A doctor's closed dates and one-day hours (domain/scheduleExceptions.ts),
+  // live as the schedules are: another device's closure shows at once.
+  const scheduleExceptions = useLiveQuery(() => db.schedule_exceptions.toArray(), []) ?? NO_EXCEPTIONS;
   const staticData = useMemo<StaticData | null>(
     () =>
       bootData && {
@@ -228,7 +236,6 @@ export default function DayScreen({
 
   const isSeedDayPinned = new URLSearchParams(window.location.search).get(SEED_DAY_QUERY_PARAM) === "1";
   const today = isSeedDayPinned && staticData?.seededDay ? staticData.seededDay : todayInCairo();
-  const weekday = weekdayOf(today);
 
   // Hoisted above the loading guard below (with null-safe fallbacks) so the
   // title effect — which must run unconditionally, like every hook — can
@@ -249,9 +256,9 @@ export default function DayScreen({
   );
   const currentPractitioner =
     staticData?.practitioners.find((practitioner) => practitioner.id === currentPractitionerId) ?? null;
-  const currentPractitionerSchedule = schedulesForSelectedLocation.find(
-    (schedule) => schedule.practitioner_id === currentPractitionerId && schedule.weekday === weekday,
-  );
+  const currentPractitionerSchedule = currentPractitionerId
+    ? scheduleOnDate(schedulesForSelectedLocation, scheduleExceptions, currentPractitionerId, today)
+    : undefined;
   const currentPractitionerHasAnySchedule = (staticData?.schedules ?? []).some(
     (schedule) => schedule.practitioner_id === currentPractitionerId,
   );
@@ -1058,7 +1065,8 @@ export default function DayScreen({
           const hasAnySchedule = staticData.schedules.some(
             (schedule) => schedule.practitioner_id === practitioner.id,
           );
-          const todaysSchedule = practitionerSchedules.find((schedule) => schedule.weekday === weekday);
+          const todaysSchedule = scheduleOnDate(practitionerSchedules, scheduleExceptions, practitioner.id, today);
+          const isClosedDate = exceptionOn(scheduleExceptions, practitioner.id, today)?.type === ScheduleExceptionType.Closed;
           const visitsForPractitioner = dynamicData.visits.filter(
             (visit) => visit.practitioner_id === practitioner.id,
           );
@@ -1070,6 +1078,8 @@ export default function DayScreen({
               showLabel={showPractitionerLabel}
               todaysSchedule={todaysSchedule}
               hasAnySchedule={hasAnySchedule}
+              isClosedDate={isClosedDate}
+              weeklySchedule={scheduleOnDate(practitionerSchedules, NO_EXCEPTIONS, practitioner.id, today)}
               visits={visitsForPractitioner}
               patientsById={dynamicData.patientsById}
               servicesById={dynamicData.servicesById}

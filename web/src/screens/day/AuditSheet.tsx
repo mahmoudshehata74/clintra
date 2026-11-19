@@ -71,6 +71,7 @@ const AUDITED_ENTITIES = new Set([
   "services",
   "service_price_overrides",
   "schedules",
+  "schedule_exceptions",
   "users",
   "memberships",
   "membership_locations",
@@ -328,6 +329,9 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         if (row.entity === "schedules") {
           const weekday = payload.weekday;
           return typeof weekday === "number" ? (dayScreenStrings.weekdayNames[weekday] ?? "") : "";
+        }
+        if (row.entity === "schedule_exceptions") {
+          return typeof payload.date === "string" ? payload.date : "";
         }
         return "";
       }

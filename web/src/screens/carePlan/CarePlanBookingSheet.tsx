@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { db } from "../../db/database";
-import type { CarePlan, Patient, Practitioner, Schedule, Service, Visit } from "../../db/types";
+import type { CarePlan, Patient, Practitioner, Schedule, ScheduleException, Service, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
-import { todayInCairo, weekdayOf, type ClinicDay } from "../../domain/time";
+import { scheduleOnDate } from "../../domain/scheduleExceptions";
+import { todayInCairo, type ClinicDay } from "../../domain/time";
 import BookingSheet from "../day/BookingSheet";
 import { resolveDayScheduleState } from "../day/scheduleState";
 import type { BookNextState } from "./carePlanModel";
@@ -20,6 +21,7 @@ interface BookingData {
   practitioner: Practitioner;
   schedules: Schedule[];
   services: Service[];
+  exceptions: ScheduleException[];
 }
 
 /**
@@ -40,7 +42,8 @@ export default function CarePlanBookingSheet({ plan, book, onDismiss }: CarePlan
       db.schedules.toArray(),
       db.services.toArray(),
     ]);
-    return patient && practitioner ? { patient, practitioner, schedules, services } : null;
+    const exceptions = await db.schedule_exceptions.toArray();
+    return patient && practitioner ? { patient, practitioner, schedules, services, exceptions } : null;
   }, [plan.patient_id, plan.practitioner_id]);
   const visits =
     useLiveQuery<Visit[]>(
@@ -53,8 +56,14 @@ export default function CarePlanBookingSheet({ plan, book, onDismiss }: CarePlan
   }
 
   const practitionerSchedules = data.schedules.filter((schedule) => schedule.practitioner_id === plan.practitioner_id);
+  // The date's exception applies: a closed date books nothing (domain/scheduleExceptions.ts).
   const scheduleState = resolveDayScheduleState(
-    practitionerSchedules.find((schedule) => schedule.location_id === plan.location_id && schedule.weekday === weekdayOf(visitDate)),
+    scheduleOnDate(
+      practitionerSchedules.filter((schedule) => schedule.location_id === plan.location_id),
+      data.exceptions,
+      plan.practitioner_id,
+      visitDate,
+    ),
     practitionerSchedules.length > 0,
   );
 

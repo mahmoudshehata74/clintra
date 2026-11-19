@@ -5,6 +5,7 @@ import { db } from "../../db/database";
 import type { Schedule, Visit } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { moveVisit } from "../../db/visitMove";
+import { scheduleOnDate } from "../../domain/scheduleExceptions";
 import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
 import { addDaysToClinicDay, formatCairoDisplayDateParts, type ClinicDay } from "../../domain/time";
 import { computeMoveTargets } from "./moveTargets";
@@ -37,6 +38,7 @@ export default function MoveVisitSheet({
   onCollision,
 }: MoveVisitSheetProps) {
   const [isMoving, setIsMoving] = useState(false);
+  const exceptions = useLiveQuery(() => db.schedule_exceptions.toArray(), []);
 
   const dates = useMemo(
     () => Array.from({ length: MOVE_TARGET_DAY_COUNT }, (_, i) => addDaysToClinicDay(startDate, i)),
@@ -53,15 +55,13 @@ export default function MoveVisitSheet({
       return new Map(dates.map((date, index) => [date, perDate[index]]));
     }, [visit.practitioner_id, startDate]) ?? new Map<ClinicDay, Visit[]>();
 
-  // A slots row only: a day in queue mode on that date has no slot to move to.
-  function scheduleForDay(weekday: number, date: ClinicDay): Schedule | undefined {
-    return schedules.find(
-      (schedule) =>
-        schedule.practitioner_id === visit.practitioner_id &&
-        schedule.location_id === locationId &&
-        schedule.weekday === weekday &&
-        effectiveScheduleMode(schedule, date) === ScheduleMode.Slots,
-    );
+  // A slots row only: a day in queue mode on that date has no slot to move
+  // to. The date's exception applies: a closed date offers nothing, one with
+  // its own hours offers those (domain/scheduleExceptions.ts).
+  function scheduleForDay(_weekday: number, date: ClinicDay): Schedule | undefined {
+    const rows = schedules.filter((schedule) => schedule.practitioner_id === visit.practitioner_id && schedule.location_id === locationId);
+    const schedule = scheduleOnDate(rows, exceptions ?? [], visit.practitioner_id, date);
+    return schedule && effectiveScheduleMode(schedule, date) === ScheduleMode.Slots ? schedule : undefined;
   }
 
   const groups = computeMoveTargets(

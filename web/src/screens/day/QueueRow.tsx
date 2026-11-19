@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Badge from "../../components/ui/Badge";
 import Ltr from "../../components/Ltr";
 import Button from "../../components/ui/Button";
 import type { Patient, Service, Visit } from "../../db/types";
@@ -32,6 +33,8 @@ interface QueueRowProps {
    * disabled where there is no place to move to (left undefined).
    */
   reorder?: { onMoveUp?: () => void; onMoveDown?: () => void };
+  /** A still-active visit on a date the doctor closed (domain/scheduleExceptions.ts): kept, flagged. */
+  isOutsideHours?: boolean;
 }
 
 /** A chevron pointing up (`up`) or down; decorative — its button carries the name. */
@@ -72,6 +75,7 @@ export default function QueueRow({
   onOpenVisitForm,
   showEmptyFormHint = false,
   reorder,
+  isOutsideHours = false,
 }: QueueRowProps) {
   const isTappable = Boolean(onPrimaryAction);
 
@@ -96,6 +100,13 @@ export default function QueueRow({
         )}
         {actorLabel && <span className="mt-0.5 text-[10px] text-muted">{dayScreenStrings.recordedByPrefix} {actorLabel}</span>}
         {showEmptyFormHint && <span className="text-[10px] text-muted">{dayScreenStrings.visitFormEmptyHint}</span>}
+        {isOutsideHours && (
+          <span className="mt-0.5">
+            <Badge appearance="soft" tone="warning">
+              {dayScreenStrings.outsideHoursRowBadge}
+            </Badge>
+          </span>
+        )}
       </span>
       <span className={`flex flex-none flex-col items-end gap-0.5 text-end text-[11px] tabular-nums text-muted [&>b]:text-[13.5px] [&>b]:font-bold [&>b]:tracking-[-0.01em] [&>b]:text-text ${kind === "current" ? "[&>b]:text-copper-ink" : ""}`}>
         {waitNode}

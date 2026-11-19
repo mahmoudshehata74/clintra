@@ -573,6 +573,24 @@ export class ClintraDatabase extends Dexie {
             row.archived_at ??= null;
           });
       });
+
+    // Schedule exceptions sync (docs/schema.md's v26 additions): a doctor's
+    // closed dates and one-day hours, written from settings and pulled by
+    // every device. [practitioner_id+date] finds a doctor's exception on a
+    // date. Any row stored before gets rev 1, as the server's DEFAULT gives
+    // its rows — a raw modify, so no sync op and no audit row.
+    this.version(26)
+      .stores({
+        schedule_exceptions: "id, [practitioner_id+date]",
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table("schedule_exceptions")
+          .toCollection()
+          .modify((row: { rev?: number }) => {
+            row.rev ??= 1;
+          });
+      });
   }
 }
 

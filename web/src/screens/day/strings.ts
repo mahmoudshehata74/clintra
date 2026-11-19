@@ -213,6 +213,10 @@ export const dayScreenStrings = {
   // Shown on every row after the first at a clock time two or more visits
   // share — only reachable through the overbook flow.
   overbookedRowBadge: "فوق السعة",
+  // A visit left outside the doctor's hours by a schedule exception (a
+  // closed date, or new hours for the date): kept, never cancelled.
+  outsideHoursRowBadge: "خارج مواعيد العمل",
+  dayClosedByException: "اليوم ده إجازة للدكتور",
 
   // The slots-list card (prototype `.c-card`/`.c-head`, #s2) and its rows.
   slotsCardBadge: "اليوم",
@@ -564,6 +568,28 @@ export const dayScreenStrings = {
   // can turn it into a day off.
   hoursAddWorkingDayAction: "خليه يوم شغل",
   hoursMakeDayOffAction: "خليه إجازة",
+
+  // Settings → working hours, under the week: a doctor's closed dates and
+  // one-day hours (ScheduleExceptionsSection.tsx).
+  exceptionsHeading: "إجازات ومواعيد استثنائية",
+  exceptionsEmpty: "مفيش إجازات أو مواعيد استثنائية جاية",
+  exceptionDateLabel: "التاريخ",
+  exceptionDatePlaceholder: "2026-12-31",
+  exceptionKindLabel: "النوع",
+  exceptionKindClosed: "إجازة",
+  exceptionKindHours: "مواعيد مختلفة",
+  exceptionClosedLabel: "الدكتور مش شغال اليوم ده",
+  exceptionHoursLabel: "مواعيد اليوم ده",
+  exceptionHoursBadge: "استثنائي",
+  exceptionAddAction: "إضافة",
+  exceptionDeleteAction: "حذف",
+  exceptionInvalidDateError: "اكتب التاريخ كده: سنة-شهر-يوم",
+  exceptionPastDateError: "التاريخ ده عدّى",
+  exceptionExistsError: "اليوم ده عليه إجازة أو مواعيد استثنائية بالفعل",
+  exceptionSaveFailedError: "ماتحفظش، جرّب تاني",
+  exceptionClosureHasVisits: (count: number) => `اليوم ده فيه ${count} حجز:`,
+  exceptionClosureKeepsVisits: "الحجوزات دي هتفضل زي ما هي، ويظهر عليها «خارج مواعيد العمل» — مفيش حاجة هتتلغي.",
+  exceptionConfirmClosure: "أكّد الإجازة",
   hoursUpcomingVisitsError: "فيه حجوزات جاية في اليوم ده، انقلها أو الغيها الأول",
   // The doctor's slots/queue switch above the week (A-03): it takes effect
   // from tomorrow, and the line under it says so.

@@ -20,6 +20,8 @@ interface SlotRowProps {
   service?: Service;
   /** True for every visit after the first sharing this clock time (only reachable through the overbook flow). */
   isExtraAtTime?: boolean;
+  /** A still-active visit outside the day's hours (a closed date, or new hours for the date) — db/scheduleExceptions.ts. */
+  isOutsideHours?: boolean;
   /** Present only when a single tap on this row does something (see visitActions.ts). */
   onPrimaryAction?: () => void;
   /** True while this row's visit is in its post-tap cooldown — see advanceCooldown.ts. Never affects the empty-slot action, which never advances a visit. */
@@ -59,6 +61,7 @@ export default function SlotRow({
   patient,
   service,
   isExtraAtTime = false,
+  isOutsideHours = false,
   onPrimaryAction,
   disablePrimaryAction = false,
   menu,
@@ -129,6 +132,11 @@ export default function SlotRow({
         {isExtraAtTime && (
           <Badge appearance="soft" tone="neutral">
             {dayScreenStrings.overbookedRowBadge}
+          </Badge>
+        )}
+        {isOutsideHours && (
+          <Badge appearance="soft" tone="warning">
+            {dayScreenStrings.outsideHoursRowBadge}
           </Badge>
         )}
         {service && <span>{service.name}</span>}

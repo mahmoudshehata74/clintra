@@ -60,7 +60,8 @@ class SyncBootstrapPuller
      * months): a plan comes when its patient has a visit in the window — the
      * same patients stage 2 returns — or when it is still active, so a
      * stalled patient's plan reaches a fresh device too; care_plan_items
-     * come with their plans. Each stage was appended after the existing
+     * come with their plans. schedule_exceptions are windowed by their own
+     * date, so a fresh device books around a closure from its first pull. Each stage was appended after the existing
      * ones, so a cursor minted before it existed keeps its meaning.
      */
     private const STAGE_DAY_STATE = 0;
@@ -83,7 +84,9 @@ class SyncBootstrapPuller
 
     private const STAGE_CARE_PLAN_ITEMS = 9;
 
-    private const STAGE_DONE = 10;
+    private const STAGE_SCHEDULE_EXCEPTIONS = 10;
+
+    private const STAGE_DONE = 11;
 
     /**
      * @return array{cursor: string, has_more: bool, rows: list<array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}>}
@@ -196,6 +199,13 @@ class SyncBootstrapPuller
                 ->orderBy('id')
                 ->limit(self::PAGE_SIZE + 1)
                 ->get(),
+            // A closed date or a day's own hours: windowed by its own date, like day_state.
+            self::STAGE_SCHEDULE_EXCEPTIONS => DB::table('schedule_exceptions')
+                ->whereBetween('date', [$from, $to])
+                ->when($afterId !== null, fn ($q) => $q->where('id', '>', $afterId))
+                ->orderBy('id')
+                ->limit(self::PAGE_SIZE + 1)
+                ->get(),
             default => throw new InvalidArgumentException("unknown bootstrap stage: {$stage}"),
         };
     }
@@ -234,6 +244,7 @@ class SyncBootstrapPuller
             self::STAGE_MESSAGE_TEMPLATES => 'message_templates',
             self::STAGE_CARE_PLANS => 'care_plans',
             self::STAGE_CARE_PLAN_ITEMS => 'care_plan_items',
+            self::STAGE_SCHEDULE_EXCEPTIONS => 'schedule_exceptions',
         };
 
         return [

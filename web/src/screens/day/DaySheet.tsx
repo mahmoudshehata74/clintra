@@ -5,9 +5,10 @@ import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import type { ClinicDay, Patient, Schedule, Service, Visit } from "../../db/types";
 import { formatEgyptianPhoneForDisplay } from "../../domain/phone";
+import { scheduleOnDate } from "../../domain/scheduleExceptions";
 import { effectiveScheduleMode, ScheduleMode } from "../../domain/scheduleMode";
 import { formatWeekdayFullDate } from "../../domain/displayDate";
-import { clockTimeInCairo, weekdayOf } from "../../domain/time";
+import { clockTimeInCairo } from "../../domain/time";
 import { SheetPanelBody } from "../../components/ui/SheetPanel";
 import { selectDaySheetVisits } from "./daySheetVisits";
 import { formatPrintedAt } from "./printedAt";
@@ -65,13 +66,13 @@ export default function DaySheet({ practitionerId, locationId, tomorrow, onDismi
 
   const data =
     useLiveQuery<DaySheetData>(async () => {
-      const weekday = weekdayOf(tomorrow);
-      const schedules = await db.schedules.toArray();
-      const schedule: Schedule | undefined = schedules.find(
-        (candidate) =>
-          candidate.practitioner_id === practitionerId &&
-          candidate.location_id === locationId &&
-          candidate.weekday === weekday,
+      const [schedules, exceptions] = await Promise.all([db.schedules.toArray(), db.schedule_exceptions.toArray()]);
+      // Tomorrow's own hours, or none when it is closed (domain/scheduleExceptions.ts).
+      const schedule: Schedule | undefined = scheduleOnDate(
+        schedules.filter((candidate) => candidate.location_id === locationId),
+        exceptions,
+        practitionerId,
+        tomorrow,
       );
       const isQueueMode = schedule !== undefined && effectiveScheduleMode(schedule, tomorrow) === ScheduleMode.Queue;
 
