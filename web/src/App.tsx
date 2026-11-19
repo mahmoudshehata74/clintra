@@ -1,3 +1,4 @@
+import { ensureContractReferenceData } from "./db/contractReferenceData";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import LockScreen from "./auth/LockScreen";
 import RegistrationScreen from "./auth/RegistrationScreen";
@@ -106,13 +107,17 @@ export default function App() {
     }
     window.addEventListener(SYNC_AUTH_ERROR_EVENT_NAME, onAuthError);
 
-    void db.device.toArray().then((rows) => {
-      if (cancelled) {
-        return;
-      }
-      const token = rows.find((row) => row.token !== null)?.token ?? null;
-      handle = startSyncEngine(db, selectSyncTransport(token, new FakeTransport()), undefined, deviceReadiness);
-    });
+    // The contract's reference rows first (db/contractReferenceData.ts):
+    // a registered device never receives them by sync.
+    void ensureContractReferenceData(db)
+      .then(() => db.device.toArray())
+      .then((rows) => {
+        if (cancelled) {
+          return;
+        }
+        const token = rows.find((row) => row.token !== null)?.token ?? null;
+        handle = startSyncEngine(db, selectSyncTransport(token, new FakeTransport()), undefined, deviceReadiness);
+      });
 
     return () => {
       cancelled = true;
