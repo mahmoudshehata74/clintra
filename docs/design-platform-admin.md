@@ -841,3 +841,39 @@ on the identity design for "owner only" to be proven rather than claimed
     in 6.4 allow. The owner's contact details stay in the team's own records,
     outside this database, so no panel role ever needs `users` or
     `memberships.display_name`.
+
+## Decisions (owner, 2026-11-19)
+
+Every open question in section 12 takes its recommended answer, except
+questions 3 and 9:
+
+1. A separate Laravel 13 + Filament 4 app in `admin/`, with its own
+   deployment, domain and login role.
+2. Admin passwords and TOTP are verified in Postgres (pgcrypto, bcrypt).
+3. **Changed:** a second admin's approval for minting a code (device or
+   owner-recovery) for an existing clinic is required only while two or more
+   active admin accounts exist. With one active admin, that admin mints
+   alone, and the clinic's devices still show the notice. A single admin may
+   still provision a brand-new clinic.
+4. A disabled clinic's devices keep working locally with sync paused and a
+   banner; the queue goes up when the clinic is enabled.
+5. Support access to clinical text is off by default, the owner's tick per
+   code.
+6. Support lasts 1, 24 or 72 hours, 24 preselected; one live support
+   device per clinic at a time.
+7. The panel is Arabic and right-to-left, with Latin digits.
+8. Admin accounts are created and deactivated only by the CLI on the API
+   host; no sign-up, no invitations from the panel.
+9. **Changed:** the IP allowlist is optional configuration, off by default;
+   two-factor sign-in stays mandatory for every admin.
+10. The CLI commands write the admin log through `platform.admin_log_cli`,
+    with `admin_user_id` null and the host user in `detail`.
+11. No provisioning from the panel before the identity design; it stays on
+    the CLI until then.
+12. The panel shows the figures and the clinic's and its locations' names
+    only; the owner's contact details stay outside this database.
+
+Implementation order: C, then A, then B. Every function named in a design is
+written out in full SQL in its migration PR, which the owner's reviewer reads
+before merge. (A: `docs/design-identity-permissions.md`; B:
+`docs/design-platform-admin.md`; C: `docs/design-clinical-corrections.md`.)

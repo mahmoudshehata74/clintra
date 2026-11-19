@@ -916,3 +916,38 @@ clinical corrections policy.
     the migration is written; the owner adjusts after.
 12. **Device-proof window?** Recommended: ±5 minutes on the server-adjusted
     clock, nonces kept 10 minutes per device.
+
+## Decisions (owner, 2026-11-19)
+
+Every open question in section 12 takes its recommended answer:
+
+1. Keys are non-extractable; they are not wrapped with a PIN-derived key.
+2. Reads stay scoped by device (the registration membership's scope).
+3. A deactivated person's queued ops are refused (`actor_deactivated`),
+   listed on the device, and adoptable with "اعتمده باسمي" by a holder of the
+   needed permission.
+4. A password reset revokes all of that person's credentials, on every
+   device.
+5. The first owner password is set with a CLI-minted owner-recovery code,
+   never with the legacy owner token.
+6. A person's PIN hash is sent only to devices where they signed in.
+7. Usernames are Latin only, `^[a-z0-9][a-z0-9._-]{2,31}$`; display names
+   stay Arabic.
+8. Passwords: 10-128 characters, any script, NFC, the 10 000 most common
+   blocked, not equal to the username, no composition rules, no expiry.
+9. The owner switches enforcement on with "تفعيل للكل", and it switches on
+   by itself 30 days after the first owner password, with a banner from
+   day 23.
+10. Step-up (the caller's password again) for password reset, credential
+    and device revoke, and every change of usernames, permissions and
+    scopes; all online endpoints, none carried by sync.
+11. The permissions backfill mirrors today's device behaviour per role,
+    confirmed against the code when the migration is written; the owner
+    adjusts after.
+12. The device-proof window is ±5 minutes on the server-adjusted clock,
+    with nonces kept 10 minutes per device.
+
+Implementation order: C, then A, then B. Every function named in a design is
+written out in full SQL in its migration PR, which the owner's reviewer reads
+before merge. (A: `docs/design-identity-permissions.md`; B:
+`docs/design-platform-admin.md`; C: `docs/design-clinical-corrections.md`.)

@@ -445,3 +445,35 @@ tests as above, including rewriting the existing late-edit cases.
 10. **Concurrent corrections?** Recommended: the first to reach the server
     wins; the other is refused whole, shown in the review with its text, and
     never merged automatically.
+
+## Decisions (owner, 2026-11-19)
+
+Every open question in section 12 takes its recommended answer:
+
+1. No grace window after completion: every change to a completed visit's
+   form is a correction with a reason.
+2. The reason is required, 3 to 500 characters, trimmed.
+3. The visit's own doctor and the owner may correct; not another doctor, an
+   assistant or a manager.
+4. A correction covers the visit form only (complaint, diagnosis); the
+   doctor's note and unprinted prescriptions keep today's rules, and a
+   printed prescription stays locked.
+5. "تم التعديل" and the history show to whoever sees the clinical text
+   today (the doctor and the owner; with the identity design, holders of
+   `clinical.view`), not to assistants or managers.
+6. Corrections on an archived patient's visit are allowed.
+7. The web release ships first; the `visit_form_data_completed_guard`
+   trigger comes in a separate, second migration once every device has
+   updated.
+8. Ship before the identity design, with `corrected_by` held to the visit's
+   doctor or an owner of the organization (a claim, the known gap); the
+   insert policy tightens to `current_membership()` when the identity design
+   lands.
+9. No limit on the number of corrections; each is kept and shown.
+10. Concurrent corrections: the first to reach the server wins; the other is
+    refused whole, shown in the review with its text, and never merged.
+
+Implementation order: C, then A, then B. Every function named in a design is
+written out in full SQL in its migration PR, which the owner's reviewer reads
+before merge. (A: `docs/design-identity-permissions.md`; B:
+`docs/design-platform-admin.md`; C: `docs/design-clinical-corrections.md`.)
