@@ -183,3 +183,46 @@ describe("a pulled reorder made on another device", () => {
     expect(await db.sync_review.count()).toBe(0);
   });
 });
+
+describe("a pulled reorder arriving while this device's own reorder is still queued", () => {
+  it("parks rather than reviews, and the later refusal leaves the server's order in place: one review in all", async () => {
+    const day = await queueDay();
+    const [first, second] = day.filter((visit) => visit.status === VisitStatus.Arrived);
+    await db.device.put({
+      id: getDeviceId(),
+      org_id: first.org_id,
+      location_id: first.location_id,
+      registered_at: new Date().toISOString(),
+      pull_cursor: "0",
+      membership_id: null,
+      token: null,
+      series: 1,
+    });
+    // This device moves the second one up (queued, not pushed yet)...
+    await moveWaitingVisit(db, second.id, "up");
+    // ...while another device's identical swap reached the server first, as two pulled changes.
+    const pulledSecond = { ...second, position: first.position, rev: second.rev + 1 };
+    const pulledFirst = { ...first, position: second.position, rev: first.rev + 2 };
+    const transport = new ScriptedTransport((ops) =>
+      ops.map((op, index) =>
+        index === 0
+          ? { op_id: op.op_id, status: "rejected", reason: "conflict_stale_rev" }
+          : { op_id: op.op_id, status: "rejected", reason: GROUP_REJECTED_REASON },
+      ),
+    );
+    transport.pages = (cursor) =>
+      cursor === "0"
+        ? { cursor: "1", hasMore: true, changes: [{ entity: "visits", entity_id: first.id, rev: pulledFirst.rev, payload: pulledFirst }] }
+        : { cursor: "2", hasMore: false, changes: [{ entity: "visits", entity_id: second.id, rev: pulledSecond.rev, payload: pulledSecond }] };
+
+    await runPullCycle(db, transport);
+    expect(await db.sync_review.count()).toBe(0);
+    await runSyncCycle(db, transport);
+
+    expect(await positions([first, second])).toEqual({ [first.id]: second.position, [second.id]: first.position });
+    const reviews = await db.sync_review.toArray();
+    expect(reviews).toHaveLength(1);
+    expect(isRefusedGroupReview(reviews[0])).toBe(true);
+    expect(await db.sync_ops.count()).toBe(0);
+  });
+});

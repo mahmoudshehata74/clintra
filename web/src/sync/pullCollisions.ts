@@ -327,14 +327,17 @@ const PULL_PARK_BASE = -1_000_000;
 
 /**
  * A pulled visit collides with an accepted local one on
- * [practitioner, day, position] only, and the local one has no queued op
- * of its own: the server moved both (a reorder made on another device —
- * db/visitQueue.ts — pulled as each row's current state, one row at a
- * time), and the local one's own pulled change, later in this pull, puts
- * it where it is now. Parked meanwhile, not reviewed: no accepted write
- * conflicts here, the device has just not caught up yet.
+ * [practitioner, day, position] only: the server moved both (a reorder
+ * made on another device — db/visitQueue.ts — pulled as each row's current
+ * state, one row at a time), and the local one's own pulled change, later
+ * in this pull, puts it where it is now. Parked meanwhile, not reviewed: no
+ * accepted write conflicts here, the device has just not caught up yet.
+ * The same holds when the local visit has a queued op of its own (this
+ * device's own reorder, not pushed yet): if the server accepts it, its
+ * ledger row comes back by pull with the visit's real position; if it
+ * refuses it, sync/syncGroups.ts puts the visit back.
  */
-function isParkableQueueBlocker(entity: string, blocker: Row, pulled: Row, ops: readonly SyncOp[]): boolean {
+function isParkableQueueBlocker(entity: string, blocker: Row, pulled: Row): boolean {
   if (entity !== "visits") {
     return false;
   }
@@ -342,8 +345,7 @@ function isParkableQueueBlocker(entity: string, blocker: Row, pulled: Row, ops: 
     blocker.practitioner_id === pulled.practitioner_id && blocker.visit_date === pulled.visit_date && blocker.position === pulled.position;
   // A missing or null key is no scheduled time at all (a queue visit), never a collision on one.
   const sameScheduledAt = blocker.unique_scheduled_at != null && blocker.unique_scheduled_at === pulled.unique_scheduled_at;
-  const hasQueuedOp = ops.some((op) => op.entity_id === blocker.id && op.synced_at === null);
-  return samePosition && !sameScheduledAt && !hasQueuedOp;
+  return samePosition && !sameScheduledAt;
 }
 
 /** Moves a visit to the first free parking position (PULL_PARK_BASE − its position, then lower). A raw write: no op, no audit row. */
@@ -370,7 +372,7 @@ async function parkVisit(table: Table<Row, string>, visit: Row): Promise<void> {
  *   displace) and the pulled row is written: the server already decided
  *   which of the two exists;
  * - a visit the server accepted that only holds the pulled visit's queue
- *   position, with nothing of its own queued, is parked (see
+ *   position is parked (see
  *   isParkableQueueBlocker) — docs/sync-plan.md's "key-safe order";
  * - otherwise, if any of them *was* accepted, nothing is written or removed: one
  *   server_unique_conflict review row is left (at most one open per pulled
@@ -397,7 +399,7 @@ export async function applyPulledRow(db: ClintraDatabase, entity: string, payloa
     const reviews = await db.sync_review.toArray();
 
     const accepted = blockers.filter((blocker) => !isNeverAccepted(blocker.id, ops, reviews));
-    if (accepted.length > 0 && accepted.every((blocker) => isParkableQueueBlocker(entity, blocker, row, ops))) {
+    if (accepted.length > 0 && accepted.every((blocker) => isParkableQueueBlocker(entity, blocker, row))) {
       for (const blocker of accepted) {
         await parkVisit(table, blocker);
       }

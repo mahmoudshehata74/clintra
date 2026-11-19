@@ -860,19 +860,20 @@ later entry in the same page moves it. A queue reorder does exactly that
 reach the server as one group (api/docs/rls.md, "A group applies whole or
 not at all"), and another device pulls them one row at a time. So a pulled
 visit that takes the [practitioner, day, position] of an accepted local
-visit with no queued op of its own — and does not share its scheduled
-time — parks that local visit (`isParkableQueueBlocker`, `parkVisit`: a
+visit — and does not share its scheduled time — parks that local visit (`isParkableQueueBlocker`, `parkVisit`: a
 raw write to a free position from −1,000,000 down) instead of recording a
 review; the parked visit's own pulled change, later in the same pull,
-puts it where the server has it. A collision on any other key, or with a
-visit that has its own queued op, is still case b.
+puts it where the server has it. That holds when the local visit has a
+queued op of its own (this device's own reorder, not pushed yet) too: an
+accepted op's ledger row comes back by pull, and a refused group puts its
+rows back. A collision on any other key is still case b.
 
 **A refused group.** When the server refuses a group, one op carries
 the reason and the rest come back `group_rejected`
 (`web/src/sync/syncGroups.ts`). The device takes every op of the group
 out of the queue, puts each row back as it was before the group's first
-write of it (keeping the rev it last saw, through the pull's own key-safe
-write), and leaves one review whose payload is the whole group. The sheet
+write of it (through the pull's own key-safe write) unless a pull has
+already brought a newer version of it, and leaves one review whose payload is the whole group. The sheet
 reads "ترتيب الدور — اتغيّر من جهاز تاني قبل ما ترتيبك يوصل، فرجع زي ما اتعمل
 هناك" and offers only "تمام": the other device's order is already kept,
 and arrives by pull. A `failed` op of a group backs off the whole group,

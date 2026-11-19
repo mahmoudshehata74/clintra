@@ -36,9 +36,9 @@ type Row = { id: string; rev?: number } & Record<string, unknown>;
 /**
  * Settles a refused group in one transaction: every op of the group leaves
  * the queue, each row the group wrote is put back as it was before the
- * group's first write of it (keeping the rev this device last saw, so the
- * pull that brings the server's version still applies over it), and one
- * review is left — `head`'s reason, the whole group in its payload. The
+ * group's first write of it — unless a pull has since brought a newer
+ * version of it (a higher rev than that pre-image's), which is the
+ * server's and stays — and one review is left — `head`'s reason, the whole group in its payload. The
  * other device's change, which won, arrives by pull like any other.
  *
  * The rows go back through applyPulledRow, the pull's own key-safe write:
@@ -61,14 +61,18 @@ export async function recordRefusedGroup(db: ClintraDatabase, head: SyncOp, reas
       }
     }
 
-    const current = new Map<string, Row | undefined>();
-    for (const [entityId, { entity }] of preImages) {
-      const table = db.table(entity) as Table<Row, string>;
-      current.set(entityId, await table.get(entityId));
-      await table.delete(entityId);
-    }
+    const toRestore: { entity: string; row: Row }[] = [];
     for (const [entityId, { entity, row }] of preImages) {
-      await applyPulledRow(db, entity, { ...row, rev: current.get(entityId)?.rev ?? row.rev });
+      const table = db.table(entity) as Table<Row, string>;
+      const current = await table.get(entityId);
+      if (current !== undefined && (current.rev ?? 0) > (row.rev ?? 0)) {
+        continue;
+      }
+      await table.delete(entityId);
+      toRestore.push({ entity, row });
+    }
+    for (const { entity, row } of toRestore) {
+      await applyPulledRow(db, entity, row);
     }
 
     await db.sync_ops.bulkDelete(groupOps.map((op) => op.op_id));
