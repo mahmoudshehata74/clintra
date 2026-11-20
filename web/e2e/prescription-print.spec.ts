@@ -336,6 +336,11 @@ test("a long prescription goes on to a second A5 page, a drug never split, the t
     [RX.stamp, RX.followUpLabel, RX.footer],
   );
   expect(lastDrugBlock).toEqual({ found: [true, true, true], breakInside: "avoid" });
+  // Every page after the first carries "تابع روشتة {patient} · {number} · صفحة n من m" in its top margin.
+  const continuation = await page.locator(".rx-print-target > style").textContent();
+  expect(continuation).toContain(`"${RX.continuationPrefix} ${PATIENTS.karim} · \u2066RX-`);
+  expect(continuation).toContain(`counter(page) "\u2069 ${RX.continuationOf} \u2066" counter(pages)`);
+  expect(continuation).toMatch(/@page prescription:first \{\s*@top-center \{\s*content: none;/);
   await page.emulateMedia({ media: null });
 
   const pdf = await printedPdf(page);

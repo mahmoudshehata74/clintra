@@ -39,6 +39,12 @@ export const prescriptionPrintStrings = {
   // The small centred footer at the foot of the last page.
   footer: "لا تغيّر الجرعة أو توقف الدواء منغير استشارة الطبيب · يُحفظ الدواء بعيدًا عن متناول الأطفال",
 
+  // The one-line header of every printed page after the first:
+  // "تابع روشتة {patient} · {RX number} · صفحة {n} من {m}".
+  continuationPrefix: "تابع روشتة",
+  continuationPage: "صفحة",
+  continuationOf: "من",
+
   // The print sheet's switch, before the first print: on by default; off prints no diagnosis.
   diagnosisSwitchLabel: "اطبع التشخيص",
 
