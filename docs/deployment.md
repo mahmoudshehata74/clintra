@@ -170,6 +170,11 @@ split; the specific mechanism depends on whichever host is chosen, but
 the shape — migrate once, with owner creds, from a process the public
 internet never talks to — doesn't.
 
+**Clinical corrections (000040, 000041).** 000041 (completed-form guard)
+may ship together with 000040 for the first production deploy; on a live
+system, deploy it only after every device runs a web build with
+corrections.
+
 ## Environment variables
 
 **Application:**
