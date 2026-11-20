@@ -76,3 +76,36 @@ implementation's test suite is a case both are proven against.
 
 Adding a new accepted or rejected phone shape: add it here once, not to
 either test file directly.
+
+## jcs-cases.json
+
+RFC 8785 (JSON Canonicalization Scheme) vectors: each `input` is JSON text,
+each `canonical` the exact bytes a canonicalizer must produce from it. A
+signed op's payload and a signed device audit row's before/after are hashed
+over their JCS form (`docs/design-identity-permissions.md`, 3.5), so the
+device and the server must agree on every byte. The API's
+`App\Support\Sync\Jcs` is held to this file by `api/tests/Unit/JcsTest.php`;
+the web client's implementation will be held to the same file. The first two
+cases are RFC 8785's own examples.
+
+## common-passwords.txt
+
+The passwords refused when a staff password is set
+(`docs/design-identity-permissions.md`, 3.7; `App\Support\Identity\Password`),
+one per line, lowercase, no duplicates; the check is case-insensitive.
+
+- Source: `Passwords/Common-Credentials/10k-most-common.txt` from
+  https://github.com/danielmiessler/SecLists at commit
+  `1a89b46c204032247592a1626e29f841cb0fe2a5`, 10 001 lines, sha256 of the
+  file as stored in that commit
+  `68782d6a4a19a4768d5f15dd66bd534e7a33055cc755411e33f16d18c50fdcce`.
+  SecLists is MIT licensed: Copyright (c) 2018 Daniel Miessler.
+- Lowercased and deduplicated (the upstream list has no duplicates either
+  way), then 49 common Egyptian patterns appended that the list did not
+  already hold (names, clubs, cities, phone-number shapes, religious
+  phrases, "clinic"/"doctor"/"عيادة" in Latin letters), lowercase.
+- 10 050 lines in all, sha256
+  `d263ea4db4f07f2ee98e76c6e851feead2d455daadd89f42c13703aaea6979bc`.
+
+To refresh it, take the file from a newer SecLists commit, apply the same
+steps, and update the commit, line counts and hashes above.

@@ -1,0 +1,264 @@
+{
+    "pull": {
+        "cursor": 7,
+        "has_more": false,
+        "rows": [
+            {
+                "seq": 1,
+                "entity": "memberships",
+                "entity_id": "0a1d0000-0000-4000-8000-000000000006",
+                "rev": 1,
+                "device_id": "0a1d0000-0000-4000-8000-00000000000a",
+                "payload": {
+                    "id": "0a1d0000-0000-4000-8000-000000000006",
+                    "user_id": "0a1d0000-0000-4000-8000-000000000005",
+                    "org_id": "0a1d0000-0000-4000-8000-000000000001",
+                    "role": "owner",
+                    "location_scope": "all",
+                    "practitioner_scope": "all",
+                    "practitioner_id": null,
+                    "pin_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "pin_salt": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "is_active": true,
+                    "rev": 1,
+                    "display_name": "د. سامي"
+                }
+            },
+            {
+                "seq": 2,
+                "entity": "memberships",
+                "entity_id": "0a1d0000-0000-4000-8000-000000000008",
+                "rev": 1,
+                "device_id": "0a1d0000-0000-4000-8000-00000000000a",
+                "payload": {
+                    "id": "0a1d0000-0000-4000-8000-000000000008",
+                    "user_id": "0a1d0000-0000-4000-8000-000000000007",
+                    "org_id": "0a1d0000-0000-4000-8000-000000000001",
+                    "role": "assistant",
+                    "location_scope": "listed",
+                    "practitioner_scope": "all",
+                    "practitioner_id": null,
+                    "pin_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    "pin_salt": "dddddddddddddddddddddddddddddddd",
+                    "is_active": true,
+                    "rev": 1,
+                    "display_name": "منى"
+                }
+            },
+            {
+                "seq": 3,
+                "entity": "membership_locations",
+                "entity_id": "0a1d0000-0000-4000-8000-000000000009",
+                "rev": 1,
+                "device_id": "0a1d0000-0000-4000-8000-00000000000a",
+                "payload": {
+                    "id": "0a1d0000-0000-4000-8000-000000000009",
+                    "membership_id": "0a1d0000-0000-4000-8000-000000000008",
+                    "location_id": "0a1d0000-0000-4000-8000-000000000002",
+                    "rev": 1
+                }
+            },
+            {
+                "seq": 4,
+                "entity": "practitioners",
+                "entity_id": "0a1d0000-0000-4000-8000-000000000004",
+                "rev": 1,
+                "device_id": "0a1d0000-0000-4000-8000-00000000000a",
+                "payload": {
+                    "id": "0a1d0000-0000-4000-8000-000000000004",
+                    "org_id": "0a1d0000-0000-4000-8000-000000000001",
+                    "user_id": null,
+                    "full_name": "د. سامي",
+                    "specialty_id": "0a1d0000-0000-4000-8000-000000000003",
+                    "title": "Dr.",
+                    "is_active": true,
+                    "syndicate_number": "12345",
+                    "rev": 1
+                }
+            },
+            {
+                "seq": 5,
+                "entity": "patients",
+                "entity_id": "0a1d0000-0000-4000-8000-00000000000b",
+                "rev": 1,
+                "device_id": "0a1d0000-0000-4000-8000-00000000000a",
+                "payload": {
+                    "id": "0a1d0000-0000-4000-8000-00000000000b",
+                    "org_id": "0a1d0000-0000-4000-8000-000000000001",
+                    "full_name": "مريض اللقطة",
+                    "phone": "01000000903",
+                    "gender": "female",
+                    "birth_year": 1990,
+                    "note": null,
+                    "created_at": "2026-11-19T08:00:00.000Z",
+                    "rev": 1,
+                    "archived_at": null
+                }
+            },
+            {
+                "seq": 6,
+                "entity": "visits",
+                "entity_id": "0a1d0000-0000-4000-8000-00000000000c",
+                "rev": 1,
+                "device_id": "0a1d0000-0000-4000-8000-00000000000a",
+                "payload": {
+                    "id": "0a1d0000-0000-4000-8000-00000000000c",
+                    "org_id": "0a1d0000-0000-4000-8000-000000000001",
+                    "location_id": "0a1d0000-0000-4000-8000-000000000002",
+                    "practitioner_id": "0a1d0000-0000-4000-8000-000000000004",
+                    "patient_id": "0a1d0000-0000-4000-8000-00000000000b",
+                    "service_id": null,
+                    "care_plan_item_id": null,
+                    "visit_date": "2026-11-19",
+                    "position": 1,
+                    "scheduled_at": "2026-11-19T09:30:00.000Z",
+                    "unique_scheduled_at": "2026-11-19T09:30:00.000Z",
+                    "status": "booked",
+                    "is_overbooked": false,
+                    "source": "walkin",
+                    "arrived_at": null,
+                    "started_at": null,
+                    "ended_at": null,
+                    "cancel_reason": null,
+                    "rescheduled_from": null,
+                    "created_by": "0a1d0000-0000-4000-8000-000000000008",
+                    "created_at": "2026-11-19T08:00:00.000Z",
+                    "rev": 1,
+                    "note": null
+                }
+            },
+            {
+                "seq": 7,
+                "entity": "day_state",
+                "entity_id": "0a1d0000-0000-4000-8000-00000000000d",
+                "rev": 1,
+                "device_id": "0a1d0000-0000-4000-8000-00000000000a",
+                "payload": {
+                    "id": "0a1d0000-0000-4000-8000-00000000000d",
+                    "practitioner_id": "0a1d0000-0000-4000-8000-000000000004",
+                    "location_id": "0a1d0000-0000-4000-8000-000000000002",
+                    "date": "2026-11-19",
+                    "delay_minutes": 5,
+                    "is_closed": false,
+                    "avg_consult_minutes": 12,
+                    "rev": 1
+                }
+            }
+        ],
+        "device_series": 1
+    },
+    "bootstrap": [
+        {
+            "cursor": "1:",
+            "has_more": true,
+            "rows": [
+                {
+                    "entity": "day_state",
+                    "entity_id": "0a1d0000-0000-4000-8000-00000000000d",
+                    "rev": 1,
+                    "payload": {
+                        "id": "0a1d0000-0000-4000-8000-00000000000d",
+                        "practitioner_id": "0a1d0000-0000-4000-8000-000000000004",
+                        "location_id": "0a1d0000-0000-4000-8000-000000000002",
+                        "date": "2026-11-19",
+                        "delay_minutes": 5,
+                        "is_closed": false,
+                        "avg_consult_minutes": 12,
+                        "rev": 1
+                    }
+                }
+            ],
+            "device_series": 1
+        },
+        {
+            "cursor": "2:",
+            "has_more": true,
+            "rows": [
+                {
+                    "entity": "visits",
+                    "entity_id": "0a1d0000-0000-4000-8000-00000000000c",
+                    "rev": 1,
+                    "payload": {
+                        "id": "0a1d0000-0000-4000-8000-00000000000c",
+                        "org_id": "0a1d0000-0000-4000-8000-000000000001",
+                        "location_id": "0a1d0000-0000-4000-8000-000000000002",
+                        "practitioner_id": "0a1d0000-0000-4000-8000-000000000004",
+                        "patient_id": "0a1d0000-0000-4000-8000-00000000000b",
+                        "service_id": null,
+                        "care_plan_item_id": null,
+                        "visit_date": "2026-11-19",
+                        "position": 1,
+                        "scheduled_at": "2026-11-19T09:30:00.000Z",
+                        "unique_scheduled_at": "2026-11-19T09:30:00.000Z",
+                        "status": "booked",
+                        "is_overbooked": false,
+                        "source": "walkin",
+                        "arrived_at": null,
+                        "started_at": null,
+                        "ended_at": null,
+                        "cancel_reason": null,
+                        "rescheduled_from": null,
+                        "created_by": "0a1d0000-0000-4000-8000-000000000008",
+                        "created_at": "2026-11-19T08:00:00.000Z",
+                        "rev": 1,
+                        "note": null
+                    }
+                }
+            ],
+            "device_series": 1
+        },
+        {
+            "cursor": "3:",
+            "has_more": true,
+            "rows": [
+                {
+                    "entity": "patients",
+                    "entity_id": "0a1d0000-0000-4000-8000-00000000000b",
+                    "rev": 1,
+                    "payload": {
+                        "id": "0a1d0000-0000-4000-8000-00000000000b",
+                        "org_id": "0a1d0000-0000-4000-8000-000000000001",
+                        "full_name": "مريض اللقطة",
+                        "phone": "01000000903",
+                        "gender": "female",
+                        "birth_year": 1990,
+                        "note": null,
+                        "created_at": "2026-11-19T08:00:00.000Z",
+                        "rev": 1,
+                        "archived_at": null
+                    }
+                }
+            ],
+            "device_series": 1
+        },
+        {
+            "cursor": "6:",
+            "has_more": true,
+            "rows": [
+                {
+                    "entity": "practitioners",
+                    "entity_id": "0a1d0000-0000-4000-8000-000000000004",
+                    "rev": 1,
+                    "payload": {
+                        "id": "0a1d0000-0000-4000-8000-000000000004",
+                        "org_id": "0a1d0000-0000-4000-8000-000000000001",
+                        "user_id": null,
+                        "full_name": "د. سامي",
+                        "specialty_id": "0a1d0000-0000-4000-8000-000000000003",
+                        "title": "Dr.",
+                        "is_active": true,
+                        "syndicate_number": "12345",
+                        "rev": 1
+                    }
+                }
+            ],
+            "device_series": 1
+        },
+        {
+            "cursor": "12:",
+            "has_more": false,
+            "rows": [],
+            "device_series": 1
+        }
+    ]
+}

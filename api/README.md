@@ -75,6 +75,21 @@ GRANT clintra_staff TO clintra_owner;
 GRANT CREATE ON SCHEMA public TO clintra_staff;
 ```
 
+And `clintra_auth`, same pattern again: it owns the `auth_*` functions and
+the membership permission guard (`docs/design-identity-permissions.md`,
+sections 6.1 to 6.4). `clintra_app` calls the functions from the identity
+endpoints (signing in, passwords, owner recovery, usernames); the role holds
+only the column-exact privileges their bodies use, and nothing on clinical
+or financial tables (`ProvisioningRoleGrantsTest`). Needed in every
+environment including production.
+
+```sql
+CREATE ROLE clintra_auth NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
+GRANT clintra_auth TO clintra_owner;
+\c clintra
+GRANT CREATE ON SCHEMA public TO clintra_auth;
+```
+
 A fourth role, **local and CI only**: the RLS isolation suite
 (`tests/Feature/Rls`) needs to insert fixture data (an organization, a
 membership, ...) without a membership already in place to grant RLS scope —
@@ -123,6 +138,7 @@ GRANT CREATE ON SCHEMA public TO clintra_provision;
 GRANT CREATE ON SCHEMA public TO clintra_mint;
 GRANT CREATE ON SCHEMA public TO clintra_register;
 GRANT CREATE ON SCHEMA public TO clintra_staff;
+GRANT CREATE ON SCHEMA public TO clintra_auth;
 GRANT CONNECT ON DATABASE clintra_test TO clintra_app;
 GRANT CONNECT ON DATABASE clintra_test TO clintra_fixtures;
 GRANT USAGE ON SCHEMA public TO clintra_fixtures;
@@ -147,15 +163,15 @@ second.
    - `CREATE ROLE` for every role CI creates, with the same attributes:
      `clintra_owner` and `clintra_app` (`LOGIN`), `clintra_rls`,
      `clintra_provision`, `clintra_mint`, `clintra_register`,
-     `clintra_staff` (`NOLOGIN BYPASSRLS`), and the local-only
+     `clintra_staff`, `clintra_auth` (`NOLOGIN BYPASSRLS`), and the local-only
      `clintra_fixtures` (`LOGIN BYPASSRLS`) — all `NOSUPERUSER NOCREATEDB
      NOCREATEROLE`. The `LOGIN` roles take the passwords already in `.env`
      (`DB_OWNER_PASSWORD`, `DB_APP_PASSWORD`, `DB_FIXTURES_PASSWORD`).
-   - `GRANT` each of the five `NOLOGIN` roles `TO clintra_owner`.
+   - `GRANT` each of the six `NOLOGIN` roles `TO clintra_owner`.
    - For `clintra` and then `clintra_test`: `CREATE DATABASE … OWNER
      clintra_owner`, `\connect` to it, then the same per-database lines as
      CI — schema owner, `USAGE` for `clintra_app`, `CREATE ON SCHEMA public`
-     for each of the five `NOLOGIN` roles, `CONNECT` for `clintra_app` and
+     for each of the six `NOLOGIN` roles, `CONNECT` for `clintra_app` and
      `clintra_fixtures`, `USAGE` for `clintra_fixtures`, and the default
      privileges for `clintra_fixtures`.
    No `BEGIN`/`COMMIT` around it: `CREATE DATABASE` cannot run in a
@@ -164,7 +180,7 @@ second.
    `psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -f <file>`
 3. Delete the file.
 4. Check, as `clintra_owner` (no superuser needed): every role exists with
-   its attributes, `clintra_owner` is a member of the five `NOLOGIN` roles,
+   its attributes, `clintra_owner` is a member of the six `NOLOGIN` roles,
    both databases exist.
 5. Migrate and test:
 

@@ -2,9 +2,13 @@
 
 namespace App\Support\Sync;
 
+use App\Support\Identity\Es256;
+use App\Support\Identity\Identity;
+use App\Support\Identity\ProofMessage;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use stdClass;
 use Throwable;
 
 /**
@@ -24,6 +28,16 @@ use Throwable;
  * and device); the actor is the device's claim, limited to the
  * organization's members (api/docs/rls.md's "Device audit rows"). No
  * sync_ledger row and no audit_log row is written for an audit row.
+ *
+ * Once the organization is enforced (identity A1,
+ * docs/design-identity-permissions.md, 3.6), a row is also proven by a
+ * person's credential on the pushing device, signed over the row as sent:
+ * no proof is `proof_missing`, a credential that is not a live one of this
+ * device or a signature that does not verify `proof_invalid`, a deactivated
+ * person `actor_deactivated`, and an actor other than the credential's
+ * person `actor_mismatch`. The credential and the proof are stored beside
+ * the row. pushed_by_membership_id stays the token's, as
+ * device_audit_log_insert requires.
  */
 class DeviceAuditPusher
 {
@@ -36,12 +50,24 @@ class DeviceAuditPusher
     private const ACTIONS = ['create', 'update', 'delete'];
 
     /**
+     * $raw is the row exactly as sent for an enforced organization (null when
+     * the body had none at that place), false for one that is not enforced.
+     *
      * @param  array<string, mixed>  $row
      * @return array{id: mixed, status: string, reason?: string}
      */
-    public function push(array $row, string $membershipId, string $deviceId): array
+    public function push(array $row, string $membershipId, string $deviceId, stdClass|false|null $raw = false): array
     {
         $id = $row['id'] ?? null;
+        $evidence = [];
+
+        if ($raw !== false) {
+            $proven = $this->proof($row, $raw, $deviceId);
+            if (is_string($proven)) {
+                return ['id' => $id, 'status' => 'rejected', 'reason' => $proven];
+            }
+            $evidence = $proven;
+        }
 
         $reason = $this->refusal($row);
         if ($reason !== null) {
@@ -49,12 +75,49 @@ class DeviceAuditPusher
         }
 
         try {
-            return DB::transaction(fn () => $this->store($row, $membershipId, $deviceId));
+            return DB::transaction(fn () => $this->store($row, $membershipId, $deviceId, $evidence));
         } catch (Throwable $e) {
             report($e);
 
             return ['id' => $id, 'status' => 'failed', 'reason' => 'internal_error'];
         }
+    }
+
+    /**
+     * The row's proof: the evidence to store with it, or the reason it is
+     * refused.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array{credential_id: string, proof: string}|string
+     */
+    private function proof(array $row, ?stdClass $raw, string $deviceId): array|string
+    {
+        $credentialId = $raw->credential_id ?? null;
+        $proof = $raw->proof ?? null;
+
+        if ($raw === null || ! is_string($credentialId) || ! is_string($proof) || $proof === '') {
+            return 'proof_missing';
+        }
+
+        $credential = Identity::liveCredential($credentialId, $deviceId);
+
+        if ($credential === null || ! Es256::verify($credential->public_key, ProofMessage::audit($raw, $deviceId, $credentialId), $proof)) {
+            return 'proof_invalid';
+        }
+
+        $person = Identity::person($credential->membership_id);
+
+        if ($person === null || ! $person['is_active']) {
+            return 'actor_deactivated';
+        }
+
+        $actor = $row['actor_membership_id'] ?? null;
+
+        if (! is_string($actor) || strtolower($actor) !== strtolower($person['membership_id'])) {
+            return 'actor_mismatch';
+        }
+
+        return ['credential_id' => strtolower($credential->id), 'proof' => $proof];
     }
 
     /**
@@ -216,9 +279,10 @@ class DeviceAuditPusher
 
     /**
      * @param  array<string, mixed>  $row
+     * @param  array{credential_id?: string, proof?: string}  $evidence
      * @return array{id: string, status: string, reason?: string}
      */
-    private function store(array $row, string $membershipId, string $deviceId): array
+    private function store(array $row, string $membershipId, string $deviceId, array $evidence = []): array
     {
         $values = [
             $row['id'], $row['org_id'], $row['location_id'] ?? null, $row['practitioner_id'] ?? null,
@@ -226,14 +290,23 @@ class DeviceAuditPusher
             $this->json($row['before'] ?? null), $this->json($row['after'] ?? null), $row['at'],
         ];
 
-        $inserted = DB::select(<<<'SQL'
-            INSERT INTO device_audit_log
-                (id, org_id, location_id, practitioner_id, actor_membership_id, entity, entity_id, action,
-                 before, after, at, pushed_by_membership_id, device_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::timestamptz, ?, ?)
-            ON CONFLICT (id) DO NOTHING
-            RETURNING id
-            SQL, [...$values, $membershipId, $deviceId]);
+        $inserted = $evidence === []
+            ? DB::select(<<<'SQL'
+                INSERT INTO device_audit_log
+                    (id, org_id, location_id, practitioner_id, actor_membership_id, entity, entity_id, action,
+                     before, after, at, pushed_by_membership_id, device_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::timestamptz, ?, ?)
+                ON CONFLICT (id) DO NOTHING
+                RETURNING id
+                SQL, [...$values, $membershipId, $deviceId])
+            : DB::select(<<<'SQL'
+                INSERT INTO device_audit_log
+                    (id, org_id, location_id, practitioner_id, actor_membership_id, entity, entity_id, action,
+                     before, after, at, pushed_by_membership_id, device_id, credential_id, proof)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::timestamptz, ?, ?, ?, ?)
+                ON CONFLICT (id) DO NOTHING
+                RETURNING id
+                SQL, [...$values, $membershipId, $deviceId, $evidence['credential_id'], $evidence['proof']]);
 
         if ($inserted !== []) {
             return ['id' => $row['id'], 'status' => 'accepted'];

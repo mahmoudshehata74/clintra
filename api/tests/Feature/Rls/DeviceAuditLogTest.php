@@ -122,6 +122,7 @@ test('seq is an identity the writers never supply, and every key and index is in
 
     expect($foreignKeys)->toBe([
         ['actor_membership_id', 'memberships', 'r'],
+        ['credential_id', 'member_credentials', 'r'],
         ['device_id', 'device', 'r'],
         ['location_id', 'locations', 'r'],
         ['org_id', 'organizations', 'r'],

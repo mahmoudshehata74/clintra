@@ -3,6 +3,8 @@
 namespace App\Http\Middleware;
 
 use App\Support\DatabaseSession;
+use App\Support\Identity\Identity;
+use App\Support\Identity\RequestProof;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -73,6 +75,23 @@ class ApplyMembership
 
                 if (! $device->exists) {
                     return $this->unauthenticated();
+                }
+
+                // Identity A1 (docs/design-identity-permissions.md, 3.4): once
+                // the organization is enforced, every request carries the
+                // device key's proof. Until then nothing here changes: the
+                // header is not read at all.
+                $enforced = Identity::enforcedForCurrentOrg();
+                $request->attributes->set('identity_enforced', $enforced);
+
+                if ($enforced) {
+                    $publicKey = Identity::devicePublicKey($credential['device_id']);
+
+                    if ($publicKey === null || ! RequestProof::verifyDevice($request, $credential['device_id'], $publicKey)) {
+                        return $this->unauthenticated();
+                    }
+
+                    $request->attributes->set('device_proof_verified', true);
                 }
             }
 

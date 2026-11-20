@@ -23,4 +23,18 @@ class DatabaseSession
         // as SET LOCAL — see the CLI brief's own SET_CONFIG example.
         DB::select("SELECT set_config('app.membership_id', ?, true)", [$membershipId]);
     }
+
+    /**
+     * Acts as another membership of the same organization for what follows —
+     * the person who proved an op or a request
+     * (docs/design-identity-permissions.md, 3.6) — with the same
+     * transaction-scoped set_config as applyMembership. Every RLS policy,
+     * current_membership() and current_org() then evaluate for that person.
+     * The caller restores the device's own membership (in a finally) when the
+     * person's work is done.
+     */
+    public function actAs(string $membershipId): void
+    {
+        $this->applyMembership($membershipId);
+    }
 }

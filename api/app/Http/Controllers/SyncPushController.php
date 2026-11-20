@@ -3,11 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\PushSyncOpsRequest;
+use App\Support\DatabaseSession;
+use App\Support\Identity\Es256;
+use App\Support\Identity\Identity;
+use App\Support\Identity\ProofMessage;
 use App\Support\Sync\SyncGroupRefused;
 use App\Support\Sync\SyncOpApplier;
 use App\Support\Sync\SyncSeqLock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use stdClass;
 
 /**
  * POST /api/sync/push — matches SyncTransport.pushOps exactly (an array
@@ -33,6 +38,18 @@ use Illuminate\Support\Facades\DB;
  * result, and every other op of the group returns `rejected` with reason
  * `group_rejected` — never `accepted`, since nothing of it was kept. Every
  * entity the group named is then blocked for the rest of the batch.
+ *
+ * Once the organization is enforced (identity A1,
+ * docs/design-identity-permissions.md, 3.6), every op carries
+ * `credential_id` and `proof`, read from the raw body: no proof is
+ * `proof_missing`; a credential that is not a live one of this device, or a
+ * signature that does not verify, `proof_invalid`; a deactivated person
+ * `actor_deactivated`. The op is then applied as that person
+ * (DatabaseSession::actAs, restored to the device's membership after it),
+ * and the applier checks the actor and the person's permissions. A group is
+ * proven by one credential: the first op proven by another, or not proven,
+ * is refused with its own reason and the rest `group_rejected`. Until the
+ * organization is enforced none of this runs and the fields are not read.
  */
 class SyncPushController extends Controller
 {
@@ -56,6 +73,15 @@ class SyncPushController extends Controller
         $membershipId = DB::selectOne('select current_membership() as id')->id;
         $ops = $request->validated()['ops'];
 
+        if (Identity::enforced($request)) {
+            // The ops exactly as sent, beside the validated ones (same order):
+            // what the proofs were signed over.
+            $raw = json_decode($request->getContent(), associative: false)->ops ?? [];
+            foreach ($ops as $index => $op) {
+                $ops[$index]['__raw'] = $raw[$index] ?? null;
+            }
+        }
+
         // Before any op writes: this push holds its organization's sync
         // lock until the request commits (SyncSeqLock).
         SyncSeqLock::acquire();
@@ -78,7 +104,9 @@ class SyncPushController extends Controller
                 continue;
             }
 
-            $result = $this->applier->apply($this->normalizeOp($op), $membershipId, $deviceId);
+            $result = $this->applyProven([$op], $membershipId, $deviceId, fn (?array $identity) => [$this->applier->apply(
+                $this->normalizeOp($op), $identity['membership_id'] ?? $membershipId, $deviceId, [], $identity,
+            )])[0];
             $results[] = $result;
 
             if (in_array($result['status'], ['rejected', 'failed'], true)) {
@@ -137,36 +165,126 @@ class SyncPushController extends Controller
             return array_map(fn (array $op) => ['op_id' => $op['op_id'], 'status' => 'blocked'], $group);
         }
 
-        $results = [];
-
         // The whole group goes to every op's rules: a correction is checked
         // as one group (SyncOpApplier::applyCorrectionRule).
         $normalized = array_map(fn (array $op) => $this->normalizeOp($op), $group);
 
-        try {
-            DB::transaction(function () use ($normalized, $membershipId, $deviceId, &$results): void {
-                foreach ($normalized as $op) {
-                    $result = $this->applier->apply($op, $membershipId, $deviceId, $normalized);
-                    $results[] = $result;
+        $results = $this->applyProven($group, $membershipId, $deviceId, function (?array $identity) use ($normalized, $membershipId, $deviceId): array {
+            $results = [];
 
-                    if (! in_array($result['status'], ['accepted', 'duplicate'], true)) {
-                        throw new SyncGroupRefused;
+            try {
+                DB::transaction(function () use ($normalized, $membershipId, $deviceId, $identity, &$results): void {
+                    foreach ($normalized as $op) {
+                        $result = $this->applier->apply($op, $identity['membership_id'] ?? $membershipId, $deviceId, $normalized, $identity === null ? null : [
+                            ...$identity, 'proof' => $identity['proofs'][$op['op_id']],
+                        ]);
+                        $results[] = $result;
+
+                        if (! in_array($result['status'], ['accepted', 'duplicate'], true)) {
+                            throw new SyncGroupRefused;
+                        }
                     }
-                }
-            });
-        } catch (SyncGroupRefused) {
-            $refused = end($results);
-            $blockEntities();
+                });
+            } catch (SyncGroupRefused) {
+                return [end($results)];
+            }
 
-            return array_map(
-                fn (array $op) => $op['op_id'] === $refused['op_id']
-                    ? $refused
-                    : ['op_id' => $op['op_id'], 'status' => 'rejected', 'reason' => 'group_rejected'],
-                $group,
-            );
+            return $results;
+        });
+
+        $refused = collect($results)->first(fn (array $result) => ! in_array($result['status'], ['accepted', 'duplicate'], true));
+
+        if ($refused === null) {
+            return $results;
         }
 
-        return $results;
+        $blockEntities();
+
+        return array_map(
+            fn (array $op) => $op['op_id'] === $refused['op_id']
+                ? $refused
+                : ['op_id' => $op['op_id'], 'status' => 'rejected', 'reason' => 'group_rejected'],
+            $group,
+        );
+    }
+
+    /**
+     * Runs $apply as the person who proved $ops — every op of a run by one
+     * credential — or, for an organization that is not enforced, exactly as
+     * before ($apply(null)). Returns $apply's results, or a single refusal
+     * of the first op that is not proven (the caller blocks and group-rejects
+     * as for any refusal).
+     *
+     * @param  list<array<string, mixed>>  $ops
+     * @param  callable(?array): list<array<string, mixed>>  $apply
+     * @return list<array<string, mixed>>
+     */
+    private function applyProven(array $ops, string $membershipId, string $deviceId, callable $apply): array
+    {
+        if (! array_key_exists('__raw', $ops[0])) {
+            return $apply(null);
+        }
+
+        $identity = null;
+        $proofs = [];
+
+        foreach ($ops as $op) {
+            $raw = $op['__raw'];
+            $credentialId = $raw->credential_id ?? null;
+            $proof = $raw->proof ?? null;
+
+            if (! $raw instanceof stdClass || ! is_string($credentialId) || ! is_string($proof) || $proof === '') {
+                return [$this->refused($op, 'proof_missing')];
+            }
+
+            if ($identity !== null && strtolower($credentialId) !== $identity['credential_id']) {
+                return [$this->refused($op, 'proof_invalid')];
+            }
+
+            if ($identity === null) {
+                $credential = Identity::liveCredential($credentialId, $deviceId);
+                $person = $credential === null ? null : Identity::person($credential->membership_id);
+
+                if ($person === null) {
+                    return [$this->refused($op, 'proof_invalid')];
+                }
+
+                $identity = [
+                    'membership_id' => $person['membership_id'], 'role' => $person['role'],
+                    'permissions' => $person['permissions'], 'credential_id' => strtolower($credential->id),
+                    'is_active' => $person['is_active'], 'public_key' => $credential->public_key,
+                ];
+            }
+
+            if (! Es256::verify($identity['public_key'], ProofMessage::op($raw, $deviceId, $credentialId), $proof)) {
+                return [$this->refused($op, 'proof_invalid')];
+            }
+
+            if (! $identity['is_active']) {
+                return [$this->refused($op, 'actor_deactivated')];
+            }
+
+            $proofs[$op['op_id']] = $proof;
+        }
+
+        $session = app(DatabaseSession::class);
+        $session->actAs($identity['membership_id']);
+
+        try {
+            return $apply([
+                'membership_id' => $identity['membership_id'], 'role' => $identity['role'],
+                'permissions' => $identity['permissions'], 'credential_id' => $identity['credential_id'],
+                'proof' => $proofs[$ops[0]['op_id']], 'proofs' => $proofs,
+            ]);
+        } finally {
+            $session->actAs($membershipId);
+        }
+    }
+
+    /** @param  array<string, mixed>  $op */
+    private function refused(array $op, string $reason): array
+    {
+        return ['op_id' => $op['op_id'], 'status' => 'rejected', 'reason' => $reason];
     }
 
     /**
