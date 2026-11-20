@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\PullDeviceAuditRequest;
 use App\Http\Requests\PushDeviceAuditRequest;
+use App\Support\Identity\Identity;
 use App\Support\Sync\DeviceAuditPuller;
 use App\Support\Sync\DeviceAuditPusher;
 use App\Support\Sync\SyncSeqLock;
@@ -37,9 +38,13 @@ class DeviceAuditController extends Controller
         // Before the first insert: seq order is commit order (SyncSeqLock).
         SyncSeqLock::acquire();
 
+        // Once the organization is enforced (identity A1), each row is proven
+        // by a person's credential on this device, over the row as sent.
+        $raw = Identity::enforced($request) ? (json_decode($request->getContent(), associative: false)->rows ?? []) : null;
+
         $results = [];
-        foreach ($request->input('rows') as $row) {
-            $results[] = $this->pusher->push($row, $membershipId, $deviceId);
+        foreach ($request->input('rows') as $index => $row) {
+            $results[] = $this->pusher->push($row, $membershipId, $deviceId, $raw === null ? false : ($raw[$index] ?? null));
         }
 
         return response()->json(['results' => $results]);

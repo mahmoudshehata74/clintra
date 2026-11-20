@@ -206,9 +206,11 @@ test('clintra_staff holds exactly add_staff_member\'s column-exact footprint and
     // in role_column_grants.
     expect(tableGrants('clintra_staff')->all())->toBe(['audit_log' => ['INSERT']]);
 
-    expect(columnGrants('clintra_staff', 'memberships', 'SELECT'))->toBe(['id', 'is_active', 'org_id', 'role', 'user_id']);
+    // permissions: the caller's (SELECT) and the new member's (INSERT) —
+    // 2026_09_12_000047_add_permissions_to_add_staff_member.php.
+    expect(columnGrants('clintra_staff', 'memberships', 'SELECT'))->toBe(['id', 'is_active', 'org_id', 'permissions', 'role', 'user_id']);
     expect(columnGrants('clintra_staff', 'memberships', 'INSERT'))->toBe([
-        'display_name', 'id', 'is_active', 'location_scope', 'org_id', 'pin_hash', 'pin_salt',
+        'display_name', 'id', 'is_active', 'location_scope', 'org_id', 'permissions', 'pin_hash', 'pin_salt',
         'practitioner_id', 'practitioner_scope', 'role', 'user_id',
     ]);
     expect(columnGrants('clintra_staff', 'users', 'SELECT'))->toBe(['id', 'phone']);
@@ -281,6 +283,80 @@ test('clintra_staff owns add_staff_member, and only clintra_app can call it', fu
     $role = $this->asOwner()->selectOne(<<<'SQL'
         SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls
         FROM pg_roles WHERE rolname = 'clintra_staff'
+    SQL);
+    expect((array) $role)->toBe([
+        'rolcanlogin' => false, 'rolsuper' => false, 'rolcreatedb' => false, 'rolcreaterole' => false, 'rolbypassrls' => true,
+    ]);
+});
+
+test('clintra_auth holds exactly the auth functions\' column-exact footprint and nothing on clinical or financial data', function () {
+    // Whole-table privileges: the two tables only its functions read and
+    // write, member_credentials' INSERT, and the audit_log INSERT every
+    // function-owning role holds. Everything else is column-restricted.
+    expect(tableGrants('clintra_auth')->all())->toBe([
+        'audit_log' => ['INSERT'],
+        'login_attempts' => ['INSERT', 'SELECT'],
+        'member_credentials' => ['INSERT'],
+        'member_passwords' => ['INSERT', 'SELECT'],
+    ]);
+
+    expect(columnGrants('clintra_auth', 'memberships', 'SELECT'))->toBe([
+        'display_name', 'id', 'is_active', 'org_id', 'permissions', 'pin_hash', 'pin_salt', 'rev', 'role', 'user_id', 'username',
+    ]);
+    expect(columnGrants('clintra_auth', 'memberships', 'UPDATE'))->toBe(['username']);
+    expect(columnGrants('clintra_auth', 'member_passwords', 'UPDATE'))->toBe(['must_change', 'password_hash', 'set_at', 'set_by_membership_id']);
+    expect(columnGrants('clintra_auth', 'member_credentials', 'SELECT'))->toBe(['created_at', 'device_id', 'id', 'membership_id', 'org_id', 'revoked_at']);
+    expect(columnGrants('clintra_auth', 'member_credentials', 'UPDATE'))->toBe(['last_used_at', 'revoke_reason', 'revoked_at', 'revoked_by_membership_id']);
+    expect(columnGrants('clintra_auth', 'device', 'SELECT'))->toBe(['id', 'org_id', 'public_key', 'revoked_at']);
+    expect(columnGrants('clintra_auth', 'device', 'UPDATE'))->toBe(['public_key', 'public_key_bound_at']);
+    expect(columnGrants('clintra_auth', 'login_attempts', 'UPDATE'))->toBe(['consumed_at', 'succeeded']);
+    expect(columnGrants('clintra_auth', 'activation_codes', 'SELECT'))->toBe(['code_hash', 'expires_at', 'id', 'org_id', 'purpose', 'used_at']);
+    expect(columnGrants('clintra_auth', 'activation_codes', 'UPDATE'))->toBe(['used_at', 'used_by_device_id']);
+    expect(columnGrants('clintra_auth', 'users', 'SELECT'))->toBe(['id', 'phone']);
+    expect(columnGrants('clintra_auth', 'organizations', 'SELECT'))->toBe(['id', 'identity_enforced_at']);
+
+    // The complete list of (table, privilege) pairs at column level — any
+    // grant not named above is a hole by definition. (A whole-table grant
+    // also lists every column here, hence the four tables above.)
+    $rows = $this->asOwner()->select(<<<'SQL'
+        SELECT DISTINCT table_name, privilege_type
+        FROM information_schema.role_column_grants
+        WHERE grantee = 'clintra_auth'
+        ORDER BY table_name, privilege_type
+    SQL);
+    expect(collect($rows)->map(fn ($row) => "{$row->table_name}:{$row->privilege_type}")->all())->toBe([
+        'activation_codes:SELECT', 'activation_codes:UPDATE',
+        'audit_log:INSERT',
+        'device:SELECT', 'device:UPDATE',
+        'login_attempts:INSERT', 'login_attempts:SELECT', 'login_attempts:UPDATE',
+        'member_credentials:INSERT', 'member_credentials:SELECT', 'member_credentials:UPDATE',
+        'member_passwords:INSERT', 'member_passwords:SELECT', 'member_passwords:UPDATE',
+        'memberships:SELECT', 'memberships:UPDATE',
+        'organizations:SELECT',
+        'users:SELECT',
+    ]);
+
+    // Nothing at all on clinical or financial tables, nor on the sync and
+    // audit stores beyond the one audit_log INSERT.
+    $mustNeverAppear = [
+        'patients', 'visits', 'visit_form_data', 'visit_form_revisions', 'prescriptions', 'prescription_items',
+        'care_plans', 'care_plan_items', 'messages', 'message_templates', 'day_state', 'schedules', 'schedule_exceptions',
+        'invoices', 'invoice_items', 'payments', 'cash_close', 'services', 'service_price_overrides',
+        'practitioners', 'locations', 'membership_locations', 'membership_practitioners',
+        'sync_ledger', 'device_audit_log', 'specialty_templates', 'form_definitions', 'personal_access_tokens',
+    ];
+    foreach ($mustNeverAppear as $table) {
+        $any = $this->asOwner()->select(<<<'SQL'
+            SELECT 1 FROM information_schema.role_column_grants WHERE grantee = 'clintra_auth' AND table_name = ?
+            UNION ALL
+            SELECT 1 FROM information_schema.role_table_grants WHERE grantee = 'clintra_auth' AND table_name = ?
+        SQL, [$table, $table]);
+        expect($any)->toBe([], "clintra_auth must hold no privileges on {$table}");
+    }
+
+    $role = $this->asOwner()->selectOne(<<<'SQL'
+        SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls
+        FROM pg_roles WHERE rolname = 'clintra_auth'
     SQL);
     expect((array) $role)->toBe([
         'rolcanlogin' => false, 'rolsuper' => false, 'rolcreatedb' => false, 'rolcreaterole' => false, 'rolbypassrls' => true,

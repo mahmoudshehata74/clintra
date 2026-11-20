@@ -67,8 +67,10 @@ function registeredApiRoutes(): array
  * The inventory: each route's request body, its status with no token and
  * with a revoked token, and its other-organization check (null where the
  * route touches no organization's rows by id: registration and health
- * take no token, /user answers with the caller's own device, and a staff
- * add or an audit push writes only into the caller's own organization).
+ * take no token, /user answers with the caller's own device, a staff add or
+ * an audit push writes only into the caller's own organization, and the
+ * identity routes other than the username act only for the caller or
+ * behind a person proof of the caller's device).
  *
  * @return array<string, array{body: array<string, mixed>, unauthenticated: int, revoked: int, otherOrg: ?Closure}>
  */
@@ -129,6 +131,27 @@ function apiRouteInventory(): array
         'POST api/staff' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
         'POST api/audit/push' => ['body' => ['rows' => []], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
         'GET api/audit/pull' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => $reads('/api/audit/pull')],
+        // Identity (A1). Resetting a password and revoking a credential need a
+        // person proof of the caller's own device, so another organization's
+        // token cannot even reach them; their cross-organization refusals with
+        // a real proof are in tests/Feature/Identity.
+        'POST api/auth/login' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
+        'POST api/auth/password' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
+        'POST api/auth/owner-recovery' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
+        'POST api/staff/{membership}/password-reset' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
+        'DELETE api/staff/credentials/{credential}' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
+        'PUT api/staff/{membership}/username' => [
+            'body' => [],
+            'unauthenticated' => 401,
+            'revoked' => 401,
+            'otherOrg' => function (TestCase $test, array $orgA, array $orgB): void {
+                // B's owner names A's owner.
+                $response = $test->withToken($orgB['token'])
+                    ->putJson('/api/staff/'.$orgA['membershipId'].'/username', ['username' => 'taken.by.b']);
+                $response->assertNotFound();
+                expect(test()->fx()->table('memberships')->where('id', $orgA['membershipId'])->value('username'))->toBeNull();
+            },
+        ],
     ];
 }
 
@@ -180,5 +203,5 @@ test('a valid token of another organization never reads or writes its rows', fun
         $checked++;
     }
 
-    expect($checked)->toBe(5);
+    expect($checked)->toBe(6);
 });

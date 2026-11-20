@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Middleware\ApplyMembership;
+use App\Http\Middleware\RequireDeviceProofWhenBound;
+use App\Http\Middleware\RequirePersonProof;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -20,7 +22,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // Not global — see ApplyMembership's own doc comment. Attached
         // per-route-group as 'membership' until real auth replaces the
         // X-Membership-Id bridge.
-        $middleware->alias(['membership' => ApplyMembership::class]);
+        $middleware->alias([
+            'membership' => ApplyMembership::class,
+            'device.proof' => RequireDeviceProofWhenBound::class,
+            'person' => RequirePersonProof::class,
+        ]);
 
         // Every deployment target this app is likely to run behind (a
         // PaaS load balancer, a CDN/edge proxy) terminates TLS and forwards

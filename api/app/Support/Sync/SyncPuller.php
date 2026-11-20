@@ -44,7 +44,7 @@ class SyncPuller
     /**
      * @return array{cursor: string, has_more: bool, rows: list<array{seq: int, entity: string, entity_id: string, rev: int, device_id: string, payload: ?array}>}
      */
-    public function pull(int $since): array
+    public function pull(int $since, bool $identityEnforced = false): array
     {
         $rows = DB::table('sync_ledger')
             ->where('seq', '>', $since)
@@ -57,14 +57,14 @@ class SyncPuller
 
         $newCursor = $page->isNotEmpty() ? (int) $page->last()->seq : $since;
 
-        $result = $page->map(function ($row) {
+        $result = $page->map(function ($row) use ($identityEnforced) {
             return [
                 'seq' => (int) $row->seq,
                 'entity' => $row->entity,
                 'entity_id' => $row->entity_id,
                 'rev' => (int) $row->rev,
                 'device_id' => $row->device_id,
-                'payload' => $this->currentPayload($row->entity, $row->entity_id),
+                'payload' => $this->currentPayload($row->entity, $row->entity_id, $identityEnforced),
             ];
         })->values()->all();
 
@@ -86,7 +86,7 @@ class SyncPuller
      *
      * @return array<string, mixed>|null
      */
-    private function currentPayload(string $entity, string $entityId): ?array
+    private function currentPayload(string $entity, string $entityId, bool $identityEnforced): ?array
     {
         // Every value ever written to sync_ledger.entity is in this same
         // list — SyncOpApplier refuses any other entity before writing
@@ -99,6 +99,6 @@ class SyncPuller
 
         $row = DB::table($entity)->where('id', $entityId)->first();
 
-        return $row === null ? null : SyncPayload::fromRow($entity, $row);
+        return $row === null ? null : SyncPayload::fromRow($entity, $row, $identityEnforced);
     }
 }

@@ -42,6 +42,11 @@ class AddStaffMemberRequest extends FormRequest
             'practitioners' => ['present', 'array'],
             'practitioners.*.id' => ['required', 'uuid'],
             'practitioners.*.practitioner_id' => ['required', 'uuid'],
+            // Optional (identity A1): absent, the member gets none, exactly as
+            // before the key existed. Catalogue and subset checks are
+            // add_staff_member's.
+            'permissions' => ['sometimes', 'array'],
+            'permissions.*' => ['string'],
         ];
     }
 }

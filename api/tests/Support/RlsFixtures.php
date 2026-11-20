@@ -83,8 +83,41 @@ trait RlsFixtures
         'sync_ledger' => 'op_id',
     ];
 
+    /**
+     * Cleanups that must run before the fixtures they point at are removed —
+     * rows an endpoint wrote for a fixture organization
+     * (Tests\Support\IdentityHarness). A test file's own afterEach runs
+     * after this trait's cleanup, too late for those.
+     *
+     * @var list<Closure>
+     */
+    private array $cleanupFirst = [];
+
+    protected function cleanupFirst(Closure $callback): void
+    {
+        $this->cleanupFirst[] = $callback;
+    }
+
     protected function cleanupFixtures(): void
     {
+        foreach ($this->cleanupFirst as $callback) {
+            $callback();
+        }
+        $this->cleanupFirst = [];
+
+        // Identity rows (docs/design-identity-permissions.md) written for a
+        // fixture organization — sign-ins, passwords, proven pushes — go
+        // before the memberships and devices they point at.
+        $orgIds = $this->fixtureIds['organizations'] ?? [];
+        if ($orgIds !== []) {
+            $this->fx()->table('sync_ledger')->whereIn('org_id', $orgIds)->whereNotNull('credential_id')->delete();
+            $this->fx()->table('device_audit_log')->whereIn('org_id', $orgIds)->whereNotNull('credential_id')->delete();
+            $this->fx()->table('audit_log')->whereIn('org_id', $orgIds)->whereIn('entity', ['member_credentials', 'member_passwords'])->delete();
+            foreach (['login_attempts', 'member_credentials', 'member_passwords'] as $table) {
+                $this->fx()->table($table)->whereIn('org_id', $orgIds)->delete();
+            }
+        }
+
         foreach (self::CLEANUP_ORDER as $table) {
             $ids = $this->fixtureIds[$table] ?? [];
 
@@ -461,6 +494,28 @@ trait RlsFixtures
         $this->fx()->table('device_audit_log')->insert($attributes);
 
         return $this->track('device_audit_log', $attributes['id']);
+    }
+
+    /**
+     * A live person credential on a device (member_credentials). Removed by
+     * cleanupFixtures with its organization's other identity rows.
+     *
+     * @param  array<string, mixed>  $publicKey  a P-256 public JWK
+     */
+    protected function makeMemberCredential(string $orgId, string $membershipId, string $deviceId, array $publicKey, ?string $id = null): string
+    {
+        $id ??= (string) Str::uuid();
+
+        $this->fx()->table('member_credentials')->insert($this->normalizeTimestamps([
+            'id' => $id,
+            'org_id' => $orgId,
+            'membership_id' => $membershipId,
+            'device_id' => $deviceId,
+            'public_key' => json_encode($publicKey),
+            'created_at' => now(),
+        ]));
+
+        return $id;
     }
 
     /**

@@ -25,15 +25,35 @@ use Throwable;
 class SyncOpApplier
 {
     /**
+     * The proven person of the op being applied (identity A1), set by apply()
+     * for that one call and cleared in its finally — never carried from one
+     * op or request to the next. Null for an organization that is not
+     * enforced, where everything runs exactly as before.
+     *
+     * @var array{membership_id: string, role: string, permissions: list<string>, credential_id: string, proof: string}|null
+     */
+    private ?array $identity = null;
+
+    /**
      * $group is every op of the group $op belongs to, in push order, $op
      * included; empty for an op outside a group. Only the correction rule
      * reads it (applyCorrectionRule).
      *
      * @param  array{op_id: string, entity: string, entity_id: string, action: string, payload: ?array, created_at: string, base_rev: ?int}  $op
+     *                                                                                                                                            $identity is the person who proved the op, for an enforced
+     *                                                                                                                                            organization only (docs/design-identity-permissions.md, 3.6):
+     *                                                                                                                                            SyncPushController has already checked the credential, the signature
+     *                                                                                                                                            and that the person is active, and set app.membership_id to them, so
+     *                                                                                                                                            $membershipId is theirs. With it, the actor column must name that
+     *                                                                                                                                            person (`actor_mismatch`), the person's permissions are checked
+     *                                                                                                                                            (`permission_denied`), a membership's role, permissions or username
+     *                                                                                                                                            never change by sync (`permission_escalation`), and the ledger keeps
+     *                                                                                                                                            the credential and the proof.
      * @param  list<array{op_id: string, entity: string, entity_id: string, action: string, payload: ?array, created_at: string, base_rev: ?int}>  $group
+     * @param  array{membership_id: string, role: string, permissions: list<string>, credential_id: string, proof: string}|null  $identity
      * @return array{op_id: string, status: string, rev?: int, reason?: string}
      */
-    public function apply(array $op, string $membershipId, string $deviceId, array $group = []): array
+    public function apply(array $op, string $membershipId, string $deviceId, array $group = [], ?array $identity = null): array
     {
         // An entity the server does not sync (a stuck device's `users` op,
         // say) is refused here, for this op alone — never by the request's
@@ -44,12 +64,16 @@ class SyncOpApplier
             return $this->rejected($op, 'unknown_entity');
         }
 
+        $this->identity = $identity;
+
         try {
             return DB::transaction(fn () => $this->applyInTransaction($op, $membershipId, $deviceId, $group === [] ? [$op] : $group));
         } catch (Throwable $e) {
             report($e);
 
             return $this->failed($op, 'internal_error');
+        } finally {
+            $this->identity = null;
         }
     }
 
@@ -89,8 +113,27 @@ class SyncOpApplier
             return $this->rejected($op, 'series_mismatch');
         }
 
-        if (! $this->claimsActorInOrg($op, $table, $currentOrgId)) {
-            return $this->rejected($op, 'actor_not_in_org');
+        if ($this->identity === null) {
+            // Not enforced: a memberships op naming username or permissions
+            // fails as it did before those columns existed (an unknown
+            // column) — sync never writes them.
+            if ($table === 'memberships' && $this->namesIdentityColumns($op)) {
+                return $this->failed($op, 'internal_error');
+            }
+
+            if (! $this->claimsActorInOrg($op, $table, $currentOrgId)) {
+                return $this->rejected($op, 'actor_not_in_org');
+            }
+        } else {
+            if (! $this->claimsProvenActor($op, $table, $membershipId)) {
+                return $this->rejected($op, 'actor_mismatch');
+            }
+
+            $permissionRefusal = $this->permissionRefusal($op, $table);
+
+            if ($permissionRefusal !== null) {
+                return $permissionRefusal;
+            }
         }
 
         $op = $this->withStoredEmptyTitle($op, $table);
@@ -1169,6 +1212,111 @@ class SyncOpApplier
             && DB::table('memberships')->where('id', $claim)->where('org_id', $orgId)->exists();
     }
 
+    /**
+     * For a proven op: the actor column names the person who proved it, or
+     * nothing (then buildAttributes fills it with them). Not checked where
+     * the column is not written, as claimsActorInOrg.
+     */
+    private function claimsProvenActor(array $op, string $table, string $membershipId): bool
+    {
+        $actorColumn = SyncableTables::actorColumn($table);
+
+        if ($actorColumn === null || $op['action'] === 'delete' || $this->keepsCreator($op, $table)) {
+            return true;
+        }
+
+        $claim = ($op['payload'] ?? [])[$actorColumn] ?? null;
+
+        return $claim === null || (is_string($claim) && strtolower($claim) === strtolower($membershipId));
+    }
+
+    /** A memberships payload naming a column only the online endpoints write. */
+    private function namesIdentityColumns(array $op): bool
+    {
+        $payload = $op['payload'] ?? [];
+
+        return is_array($payload) && (array_key_exists('username', $payload) || array_key_exists('permissions', $payload));
+    }
+
+    /**
+     * The person's permissions against the op (docs/design-identity-permissions.md,
+     * section 4). An owner holds every permission by role. A membership's
+     * role, permissions and username never change by sync, whoever asks: a
+     * create (it sets a role), an op naming username or permissions, or an
+     * update changing role is `permission_escalation`. Nobody but an owner
+     * touches an owner's membership or its links.
+     *
+     * @return array{op_id: string, status: string, reason: string}|null null means the op passes.
+     */
+    private function permissionRefusal(array $op, string $table): ?array
+    {
+        $payload = is_array($op['payload'] ?? null) ? $op['payload'] : [];
+        $stored = $op['action'] === 'create' ? null : DB::table($table)->where('id', $op['entity_id'])->first();
+
+        if ($table === 'memberships' && ($op['action'] === 'create' || $this->namesIdentityColumns($op)
+            || ($op['action'] === 'update' && array_key_exists('role', $payload) && $stored !== null
+                && ! $this->sameValue($payload['role'], $stored->role)))) {
+            return $this->rejected($op, 'permission_escalation');
+        }
+
+        if ($this->identity['role'] === 'owner') {
+            return null;
+        }
+
+        if ($this->touchesOwnerMembership($table, $payload, $stored)) {
+            return $this->rejected($op, 'permission_denied');
+        }
+
+        foreach ($this->requiredPermissions($op, $table, $payload, $stored) as $permission) {
+            if (! in_array($permission, $this->identity['permissions'], true)) {
+                return $this->rejected($op, 'permission_denied');
+            }
+        }
+
+        return null;
+    }
+
+    /** @param  array<string, mixed>  $payload */
+    private function touchesOwnerMembership(string $table, array $payload, ?object $stored): bool
+    {
+        $membershipId = match ($table) {
+            'memberships' => $stored?->id,
+            'membership_locations', 'membership_practitioners' => $stored?->membership_id ?? ($payload['membership_id'] ?? null),
+            default => null,
+        };
+
+        return is_string($membershipId) && Str::isUuid($membershipId)
+            && DB::table('memberships')->where('id', $membershipId)->where('role', 'owner')->exists();
+    }
+
+    /**
+     * The catalogue's server-enforced rows (section 4).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return list<string>
+     */
+    private function requiredPermissions(array $op, string $table, array $payload, ?object $stored): array
+    {
+        $changes = fn (string $column) => $op['action'] === 'update' && $stored !== null
+            && array_key_exists($column, $payload) && ! $this->sameColumnValue($column, $payload[$column], $stored->{$column} ?? null);
+
+        return match ($table) {
+            'services', 'service_price_overrides' => ['services.manage'],
+            'invoice_items' => $op['action'] === 'create' ? [] : ['invoices.edit_items'],
+            'invoices' => array_values(array_filter([
+                $changes('total') ? 'invoices.edit_items' : null,
+                $changes('status') && $payload['status'] === 'void' ? 'invoices.void' : null,
+            ])),
+            'cash_close' => $op['action'] === 'create' ? ['cash.close'] : [],
+            'memberships', 'membership_locations', 'membership_practitioners' => ['staff.manage'],
+            'schedules', 'schedule_exceptions' => ['schedules.manage'],
+            'patients' => $changes('archived_at') ? ['patients.archive'] : [],
+            'messages' => $op['action'] === 'create' || $changes('marked_sent_at') ? ['messages.send'] : [],
+            'message_templates' => ['messages.send'],
+            default => [],
+        };
+    }
+
     /** An append-only row's actor column is its creator's: an update there (a message marked sent) leaves it alone. */
     private function keepsCreator(array $op, string $table): bool
     {
@@ -1220,6 +1368,14 @@ class SyncOpApplier
     {
         $now = now()->toIso8601String();
 
+        // A proven op's evidence stays beside what was accepted
+        // (docs/design-identity-permissions.md, 3.6); an unproven op's ledger
+        // row is exactly what it was before.
+        $evidence = $this->identity === null ? [] : [
+            'credential_id' => $this->identity['credential_id'],
+            'proof' => $this->identity['proof'],
+        ];
+
         DB::table('sync_ledger')->insert([
             'op_id' => $op['op_id'],
             'org_id' => $orgId,
@@ -1230,6 +1386,7 @@ class SyncOpApplier
             'device_id' => $deviceId,
             'applied_at' => $now,
             'client_created_at' => $op['created_at'],
+            ...$evidence,
         ]);
 
         DB::table('audit_log')->insert([

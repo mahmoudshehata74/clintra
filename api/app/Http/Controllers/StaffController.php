@@ -32,7 +32,11 @@ use Symfony\Component\HttpFoundation\Response;
  * person signed in by PIN is one: PIN sessions are device-local and never
  * reach the server. A non-owner calling this endpoint from an
  * owner-registered device is not stopped here — the same limit as every
- * other settings write.
+ * other settings write — until the organization's identity_enforced_at is
+ * set (identity A1, docs/design-identity-permissions.md): from then the
+ * request carries the person's own proof (`person:enforced`), runs as that
+ * person, and add_staff_member admits an owner or a holder of staff.manage
+ * granting only permissions they hold.
  *
  * The created rows are written to sync_ledger here, on the ordinary
  * RLS-bound connection, so the organization's other devices pull them like
@@ -86,6 +90,10 @@ class StaffController extends Controller
             ),
             'audit_id' => (string) Str::uuid(),
         ];
+
+        if (array_key_exists('permissions', $validated)) {
+            $payload['permissions'] = array_values($validated['permissions']);
+        }
 
         // Before the first write: the ledger rows below commit in seq order
         // with every other sync write of the organization (SyncSeqLock).

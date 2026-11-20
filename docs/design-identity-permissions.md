@@ -1,7 +1,7 @@
 # Design: per-person identity, password login and permissions
 
-Status: design only. Nothing here is built; every statement below is a
-plan, to be reviewed before a migration is written.
+Status: phase A1 (the server foundation) is built, as "A1 decisions" at the
+end records; phases A2 to A4 are design only (see "Phases").
 
 ## 1. Goal
 
@@ -951,3 +951,110 @@ Implementation order: C, then A, then B. Every function named in a design is
 written out in full SQL in its migration PR, which the owner's reviewer reads
 before merge. (A: `docs/design-identity-permissions.md`; B:
 `docs/design-platform-admin.md`; C: `docs/design-clinical-corrections.md`.)
+
+## Phases
+
+| Phase | What | Where |
+|---|---|---|
+| A1 | Server foundation: the role and its grants, the schema (6.2), the auth functions and the permission guard (6.3, 6.4), signing in, passwords, owner recovery, usernames, device and person proof verification, and the permission checks — every check that changes sync behaviour dormant until an organization is enforced | api (and the review labels in web) |
+| A2 | The device side: device and person keys, the sign-in and first-sign-in screens, the lock screen listing credentials, the sealer and held ops, JCS in TypeScript against `contract/jcs-cases.json`, the Dexie upgrade (section 7, step 3) | web |
+| A3 | Settings: usernames, the permissions editor (`POST /api/staff/{id}`), password resets, the credential and device lists (`GET /api/staff/credentials`), the recovery screen, the permission gates across the UI, PIN hashes only from a person's own sign-in (7.7), and the clinical practitioner check for proven ops (end of section 4) | web and api |
+| A4 | Rollout: the permissions backfill (7.2), owner setup with recovery codes, the readiness screen and "تفعيل للكل", enforcement by itself 30 days after the first owner password | api and web |
+
+## A1 decisions (owner, 2026-11-20)
+
+1. **Usernames.** `PUT /api/staff/{membership_id}/username`, owner only, with
+   the device token as today (and the owner's person proof once the
+   organization is enforced); it works for an organization that is not
+   enforced too. It runs the SECURITY DEFINER function
+   `auth_set_username`. `auth_recover_owner` takes the owner's username: it
+   sets it when the owner has none and must match it when set. Rules: 3 to
+   32 characters of `[a-z0-9._-]` (this replaces decision 7's
+   `^[a-z0-9][a-z0-9._-]{2,31}$`: the first character may now be ".", "_"
+   or "-"), stored lowercase, unique per organization (a unique index on
+   `(org_id, lower(username))` where not null). Refusals: "اسم المستخدم ده
+   مستخدم قبل كده" (taken, 409) and "اسم المستخدم لازم يكون من 3 لـ 32 حرف:
+   حروف إنجليزي صغيرة أو أرقام أو . أو _ أو -" (invalid, 422).
+2. **The permissions backfill** (7.2) is not in A1; it moves to A4.
+3. **Step-up.** A seventh function, `auth_attempt_succeeded(attempt_id)`,
+   marks an attempt succeeded: only for that attempt's own credential (a
+   sign-in) or person (a step-up), only within 2 minutes of the attempt,
+   only once. `auth_login_complete` and every step-up call it on success.
+   The rate limits count failed attempts only: 5 per person per 15 minutes,
+   plus the per-device and per-organization limits of 3.7. Six successful
+   step-ups in 15 minutes do not lock; five wrong ones do.
+4. **`username` and `permissions` are not in the pull or the bootstrap**
+   for an organization whose `identity_enforced_at` is null. A Pest test
+   holds an unenforced organization's pull and bootstrap payloads to a
+   fixture captured on main before A1, byte for byte.
+5. **Recovery codes.** `clintra:mint-activation-code` keeps its required
+   location argument and gains `--purpose=device|owner-recovery` (default
+   `device`). An owner-recovery code is single use, expires in 24 hours
+   (this replaces 3.7's 72), is printed once and never logged.
+6. **Common passwords** come from SecLists'
+   `Passwords/Common-Credentials/10k-most-common.txt`, lowercased and
+   deduplicated, with about 50 common Egyptian patterns appended;
+   `contract/README.md` records the source commit, the hashes and the MIT
+   license. The check is case-insensitive.
+
+### How A1 is built
+
+What A1 does differently from the sections above, and why:
+
+- **Everything that changes sync is dormant until enforcement.** The device
+  proof on push, pull, bootstrap and the audit endpoints, the person proof
+  on every op and device audit row, acting as the proven person, the actor
+  and permission checks, `permission_escalation` and the guard trigger all
+  apply only to an organization whose `identity_enforced_at` is set. Until
+  then the sync paths do not read the proof headers or fields at all (3.4
+  said a request carrying a proof is always verified; for A1 nothing changes
+  byte for byte instead). A memberships op that names `username` or
+  `permissions` still fails `internal_error`, as an unknown column did.
+- **The identity endpoints always verify** what they need, enforced or not:
+  the device proof whenever the device has a bound key (an unbound device
+  binding its key at sign-in proves it holds that key), and a person proof
+  for the password change, reset and revoke.
+- **The person proof** is `X-Clintra-Person-Proof:
+  v1.<credential_id>.<unix_ms>.<nonce>.<signature>`, the person key's
+  signature over the same `clintra-req-v1` message as the device proof;
+  its nonces are kept per credential for 10 minutes.
+- **Owner recovery runs behind the device token** of a device of the
+  code's organization, not with no authentication (6.5): setting the
+  owner's username there moves the membership's rev, and the ledger row
+  that tells the organization's devices names a device. A new device
+  registers with a device code first.
+- **Attempts know their person and kind.** `login_attempts` gains
+  `membership_id` (null for an unknown username) and `kind` (`login` or
+  `step_up`); `auth_login_begin` takes `kind`, and a step-up resolves only
+  to the caller, so it never verifies anyone else's password.
+  `auth_set_password`, `auth_reset_member_password` and
+  `auth_revoke_credential` take `attempt_id` and atomically set
+  `login_attempts.consumed_at` on the caller's own successful, unused step-up
+  from the last 2 minutes. A step-up authorizes at most one change across
+  all 3 functions. If the change fails, the consumption rolls back with it.
+- **Delegated resets and revocations are limited by role and permissions.**
+  A non-owner needs `staff.manage` and can only reset or revoke credentials
+  for another assistant or manager in the same organization whose permissions
+  are a subset of their own. An owner can reset any other member in the
+  organization and can revoke any credential there, including their own.
+- **A step-up failure is 403** `{"error": "step_up_failed", "message":
+  "كلمة السر غلط"}`, not 401, which a device reads as a lost token.
+- **A reset needs a username**: a member without one could never sign in
+  with the temporary password (422, "حدد اسم مستخدم للموظف ده الأول").
+- **The guard trigger is SECURITY DEFINER**, owned by `clintra_auth`, so no
+  writer of memberships needs a new grant to run it, and it applies only to
+  an enforced organization.
+- **`add_staff_member`'s `permissions` key is optional**: a payload without
+  it gets exactly the response, audit row and ledger rows it got before.
+  The caller is an active owner, or an active holder of `staff.manage`
+  adding a non-owner with permissions they hold. `POST /api/staff` takes
+  the person's proof once the organization is enforced.
+- **Grants beyond 6.1**, each for a function above: `UPDATE (username)` on
+  memberships, `SELECT (created_at)` on member_credentials,
+  `UPDATE (used_by_device_id)` on activation_codes, `SELECT (id,
+  identity_enforced_at)` on organizations, and `UPDATE (consumed_at)` on
+  login_attempts. `clintra_staff` gains
+  `SELECT (permissions)` and `INSERT (permissions)` on memberships.
+- **Not in A1:** the clinical practitioner check for proven ops (end of
+  section 4), `GET /api/staff/credentials` and `POST /api/staff/{id}` (6.5),
+  and PIN hashes only from a person's own sign-in (7.7) — all phase A3.

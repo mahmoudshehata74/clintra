@@ -27,6 +27,8 @@
         <env name="CORS_ALLOWED_ORIGINS" value="https://clintra-web.example.com"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="IDENTITY_ARGON_MEMORY_KIB" value="64"/>
+        <env name="IDENTITY_ARGON_TIME_COST" value="1"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
         <!-- No DB_CONNECTION override: tests/Feature/Rls needs the real

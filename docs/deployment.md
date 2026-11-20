@@ -15,8 +15,8 @@ may need narrowing once one is picked.
   one (below).
 - **The Postgres roles**, created once by a superuser before anything else
   runs: `clintra_owner`, `clintra_app`, `clintra_rls`,
-  `clintra_provision`, `clintra_mint`, `clintra_register` — every one of
-  these is required in production; only `clintra_fixtures` is excluded
+  `clintra_provision`, `clintra_mint`, `clintra_register`, `clintra_staff`,
+  `clintra_auth` — every one of these is required in production; only `clintra_fixtures` is excluded
   (test/local-only, must never exist in a production database at all).
   Exact `CREATE ROLE`/`GRANT` statements are in `api/README.md`'s
   "Database setup" — this document doesn't repeat them, since they're
@@ -42,9 +42,10 @@ policy and function this schema defines).
 
 **What is *not* in that backup, and must be recorded separately, or a
 restored database is useless:**
-- **The six Postgres roles** (`clintra_owner`, `clintra_app`,
+- **The eight Postgres roles** (`clintra_owner`, `clintra_app`,
   `clintra_rls`, `clintra_provision`, `clintra_mint`,
-  `clintra_register`) and their passwords. Roles are cluster-level
+  `clintra_register`, `clintra_staff`, `clintra_auth`) and their
+  passwords. Roles are cluster-level
   objects in Postgres, not part of any one database — a `pg_dump` of the
   `clintra` database contains tables *owned by* `clintra_owner` and
   policies that reference `clintra_app`/`clintra_rls` by name, but not
@@ -90,7 +91,7 @@ change, not only when something has already gone wrong:**
 1. Provision a scratch Postgres instance (a throwaway database server,
    not a database on the *same* server the real one lives on).
 2. Run `api/README.md`'s full role-creation SQL against it —
-   `clintra_owner` through `clintra_register` (not `clintra_fixtures`;
+   `clintra_owner` through `clintra_auth` (not `clintra_fixtures`;
    see "Production role and database hygiene" below for why that one
    must never exist here either).
 3. Restore the backup into it (`pg_restore`/`psql < dump.sql`, matching

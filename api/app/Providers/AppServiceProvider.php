@@ -49,6 +49,14 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(120)->by($request->bearerToken() ?? $request->ip());
         });
 
+        // The identity endpoints (docs/design-identity-permissions.md, 3.7):
+        // 30 requests per 15 minutes per device token, on top of the
+        // database's own failed-attempt limits, which a forged
+        // X-Forwarded-For cannot reset either.
+        RateLimiter::for('auth', function (Request $request) {
+            return Limit::perMinutes(15, 30)->by('auth:'.($request->bearerToken() ?? $request->ip()));
+        });
+
         // See App\Support\TrustedProxyGuard's own doc comment — a
         // once-a-day diagnostic warning, never a failure, if this app is
         // running in production with bootstrap/app.php's trustProxies

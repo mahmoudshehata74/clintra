@@ -57,6 +57,12 @@ describe("describeSyncReview", () => {
     ["prescription_printed", "الوصفة دي اتطبعت، مينفعش تتعدّل"],
     ["invoice_has_payment", "الفاتورة دي اتدفع فيها، مينفعش تتعدّل"],
     ["op_id_reused", "العملية دي اتبعتت قبل كده بمحتوى مختلف"],
+    ["proof_invalid", "التغيير ده مش موقّع من حساب على الجهاز ده، فماتحفظش. سجّل دخولك تاني بكلمة السر"],
+    ["proof_missing", "التغيير ده اتعمل قبل الدخول بكلمة السر، ومحتاج صاحبه يسجّل دخول على الجهاز ده"],
+    ["actor_deactivated", "الحساب اللي عمل التغيير ده اتوقف قبل ما يوصل للسيرفر، فماتحفظش"],
+    ["actor_mismatch", "الموظف المسجّل على التغيير ده مش هو اللي عمله، فماتحفظش"],
+    ["permission_denied", "اللي عمل التغيير ده مالوش صلاحية يعمله، فماتحفظش"],
+    ["permission_escalation", "مينفعش تدي أو تشيل صلاحية إنت مش عندك، أو تغيّر صلاحياتك بنفسك"],
   ])("labels %s in Arabic", (reason, label) => {
     expect(describeSyncReview(makeReview({ entity: "prescriptions", reason }))).toBe(`وصفة — ${label}`);
   });

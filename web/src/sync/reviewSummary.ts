@@ -76,6 +76,14 @@ const REASON_LABELS: Record<string, string> = {
   correction_not_allowed: "تعديل الزيارة بعد ما تتقفل لدكتور الزيارة أو صاحب العيادة بس",
   correction_invalid: "التعديل ده مش مطابق لآخر نسخة من نموذج الزيارة، أو معاه تغييرات تانية، فماتحفظش",
   revision_immutable: "سجل التعديلات مينفعش يتغيّر أو يتمسح",
+  // Per-person identity (docs/design-identity-permissions.md section 4):
+  // what the server refuses once an organization's sign-in is enforced.
+  proof_invalid: "التغيير ده مش موقّع من حساب على الجهاز ده، فماتحفظش. سجّل دخولك تاني بكلمة السر",
+  proof_missing: "التغيير ده اتعمل قبل الدخول بكلمة السر، ومحتاج صاحبه يسجّل دخول على الجهاز ده",
+  actor_deactivated: "الحساب اللي عمل التغيير ده اتوقف قبل ما يوصل للسيرفر، فماتحفظش",
+  actor_mismatch: "الموظف المسجّل على التغيير ده مش هو اللي عمله، فماتحفظش",
+  permission_denied: "اللي عمل التغيير ده مالوش صلاحية يعمله، فماتحفظش",
+  permission_escalation: "مينفعش تدي أو تشيل صلاحية إنت مش عندك، أو تغيّر صلاحياتك بنفسك",
 };
 
 /** A correction group another device's correction of the same form beat to the server (conflict_stale_rev). */

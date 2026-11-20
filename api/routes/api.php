@@ -1,8 +1,10 @@
 <?php
 
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DeviceAuditController;
 use App\Http\Controllers\DeviceRegistrationController;
 use App\Http\Controllers\StaffController;
+use App\Http\Controllers\StaffIdentityController;
 use App\Http\Controllers\SyncBootstrapController;
 use App\Http\Controllers\SyncPullController;
 use App\Http\Controllers\SyncPushController;
@@ -36,7 +38,23 @@ Route::middleware(['membership', 'throttle:sync'])->get('/sync/bootstrap', [Sync
 
 // Adding a staff member happens on the server, online only — see
 // App\Http\Controllers\StaffController. Same middleware as sync.
-Route::middleware(['membership', 'throttle:sync'])->post('/staff', [StaffController::class, 'store']);
+Route::middleware(['membership', 'throttle:sync', 'person:enforced'])->post('/staff', [StaffController::class, 'store']);
+
+// Identity (docs/design-identity-permissions.md, 6.5, and its "A1
+// decisions"): signing in, passwords, owner recovery, credentials and
+// usernames. All behind the device token; `device.proof` needs the device
+// key's proof once the device has one; `person:required` runs the request as
+// the person whose key signed it, `person:enforced` does so only once the
+// organization is enforced. See App\Http\Controllers\AuthController and
+// StaffIdentityController.
+Route::middleware(['membership', 'throttle:auth', 'device.proof'])->group(function () {
+    Route::post('/auth/login', [AuthController::class, 'login']);
+    Route::post('/auth/owner-recovery', [AuthController::class, 'recoverOwner']);
+    Route::post('/auth/password', [AuthController::class, 'changePassword'])->middleware('person:required');
+    Route::post('/staff/{membership}/password-reset', [StaffIdentityController::class, 'resetPassword'])->middleware('person:required');
+    Route::delete('/staff/credentials/{credential}', [StaffIdentityController::class, 'revokeCredential'])->middleware('person:required');
+    Route::put('/staff/{membership}/username', [StaffIdentityController::class, 'setUsername'])->middleware('person:enforced');
+});
 
 // Device audit rows up and down — see App\Http\Controllers\DeviceAuditController
 // and docs/audit-sync.md. Same middleware as sync.
