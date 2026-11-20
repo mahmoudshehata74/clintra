@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Ltr from "../../components/Ltr";
+import LtrRuns from "../../components/LtrRuns";
 import SlashDate from "../../components/SlashDate";
 import RxDoseText from "../visit/RxDoseText";
 import { PrintPage } from "../day/PrintPage";
@@ -21,7 +22,12 @@ import { prescriptionPrintStrings as T } from "./strings";
  * width cap or padding — the margin is `@page prescription`'s (index.css).
  * A drug never splits across two pages, and the follow-up line ("ميعاد
  * الإعادة"), `.rx-sig` and the footer stay on the page of the last drug:
- * they share one unbreakable block. Up to 8 drugs fit one A5 page. Colours on paper are
+ * they share one unbreakable block, so the footer prints on the last page
+ * only. Every page after the first carries a one-line "تابع روشتة …"
+ * header in its top margin (continuationHeader.ts). Up to 8 drugs fit one
+ * A5 page. Every Latin or digit run is a left-to-right isolate: the
+ * number, the age, the phone and each hours range whole (Ltr), and those
+ * inside free text — names, diagnosis, dose, duration, note (LtrRuns). Colours on paper are
  * the print-paper and print-ink tokens (white and black, with opacity for
  * the greys); the screen-only `.rx-print-header` uses the `print-note` tokens.
  */
@@ -56,7 +62,7 @@ export default function RxPrintPage({ model, preview }: { model: RxPrintModel; p
       {/* `.rx-pt` */}
       <div className="mb-3 flex flex-wrap justify-between gap-2 rounded-control bg-print-ink/2 px-3.5 py-2 text-[12.5px] text-print-ink">
         <p>
-          <b className="font-semibold">{T.patientLabel}</b> {model.patientName}
+          <b className="font-semibold">{T.patientLabel}</b> <LtrRuns text={model.patientName} />
         </p>
         {model.age !== null && (
           <p>
@@ -65,7 +71,7 @@ export default function RxPrintPage({ model, preview }: { model: RxPrintModel; p
         )}
         {model.diagnosis && (
           <p>
-            <b className="font-semibold">{T.diagnosisLabel}</b> {model.diagnosis}
+            <b className="font-semibold">{T.diagnosisLabel}</b> <LtrRuns text={model.diagnosis} />
           </p>
         )}
       </div>
@@ -133,7 +139,11 @@ function RxDrug({ drug, isLast }: { drug: RxPrintDrug; isLast: boolean }) {
         <p className="mt-0.5 text-xs leading-snug text-print-ink/80 tabular-nums">
           <RxDoseText line={drug.dose} strongClassName="font-semibold text-print-ink" />
         </p>
-        {drug.note && <p className="mt-0.5 text-[11.5px] leading-snug text-print-ink/60 italic">{drug.note}</p>}
+        {drug.note && (
+          <p className="mt-0.5 text-[11.5px] leading-snug text-print-ink/60 italic">
+            <LtrRuns text={drug.note} />
+          </p>
+        )}
       </div>
     </li>
   );
@@ -147,7 +157,7 @@ function RxDrug({ drug, isLast }: { drug: RxPrintDrug; isLast: boolean }) {
 function DoctorSpec({ spec }: { spec: NonNullable<RxPrintModel["doctorSpec"]> }) {
   return (
     <p className="mt-0.5 text-[11.5px] text-print-ink/65">
-      {spec.title}
+      {spec.title !== null && <LtrRuns text={spec.title} />}
       {spec.title !== null && spec.syndicateNumber !== null && " · "}
       {spec.syndicateNumber !== null && (
         <>
@@ -180,7 +190,7 @@ function ClinicSpec({ clinic }: { clinic: RxPrintModel["clinic"] }) {
               {T.clinicPhonePrefix} <Ltr className="whitespace-nowrap">{part}</Ltr>
             </>
           ) : (
-            part
+            <LtrRuns text={part} />
           )}
         </span>
       ))}

@@ -25,6 +25,7 @@ import SendMessageSheet from "../messages/SendMessageSheet";
 import { messagesStrings } from "../messages/strings";
 import { MessageTemplateKey } from "../../domain/messageTemplates";
 import { buildRxPrintModel, computeRxPrintState, isDiagnosisSwitchShown, rxPrintErrorMessage } from "./printModel";
+import { rxContinuationCss } from "./continuationHeader";
 import RxPrintPage from "./RxPrintPage";
 import { prescriptionPrintStrings as T } from "./strings";
 
@@ -64,7 +65,8 @@ interface PrintData {
  * target must be the only thing on paper (index.css, `.rx-print-target`,
  * which also sets the A5 page). Like every printed page, the preview is
  * `print:hidden` and the flat target `hidden print:block`, mounted only
- * while a print is under way.
+ * while a print is under way. Every page after the first carries a
+ * one-line "تابع روشتة …" header in its top margin (continuationHeader.ts).
  *
  * Before the first print, "اطبع التشخيص" (on by default) decides whether
  * the diagnosis goes on paper; off, the first print snapshots none, so
@@ -247,6 +249,8 @@ export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: Pr
 
       {printRun !== null && isPrinted && (
         <div className="rx-print-target hidden print:block">
+          {/* Every page after the first: "تابع روشتة …" in the top margin (continuationHeader.ts). */}
+          <style>{rxContinuationCss(model.patientName, model.number)}</style>
           <RxPrintPage model={model} preview={false} />
         </div>
       )}

@@ -8,7 +8,10 @@ import { addDrug, closeSheet, karimInRoom, openPrintSheet, openVisitSheet, RX, S
 // are the sheet's preview; the 12-drug shots are paper, laid out under print
 // media at the A5 content width (148 − 2 × 12 mm) and cut where Chromium
 // breaks the page: at the first unbreakable block that would cross the
-// A5 content height (210 − 2 × 12 mm).
+// A5 content height (210 − 2 × 12 mm). The 25-drug case is the real print:
+// Chromium's own PDF of the A5 pages (e2e/rx-shots/rx-25-drugs.pdf), which
+// alone carries the page-margin header "تابع روشتة …" of every page after
+// the first; rasterise it to look at it.
 const OUT_DIR = "e2e/rx-shots";
 const MM = 96 / 25.4;
 const PAGE_WIDTH = Math.round(124 * MM);
@@ -78,4 +81,14 @@ test("@screenshot rx paper, 12 drugs, pages 1 and 2", async ({ page }) => {
     fullPage: true,
     clip: { x: 0, y: cut.top + cut.breakAt!, width: PAGE_WIDTH, height: cut.height - cut.breakAt! },
   });
+});
+
+test("@screenshot rx paper, 25 drugs, the printed PDF", async ({ page }) => {
+  const workspace = await workspaceWith(page, 25);
+  const sheet = await openPrintSheet(page, workspace, RX.printButton);
+  await sheet.getByRole("button", { name: RX.printAction, exact: true }).click();
+  await sheet.getByRole("button", { name: RX.confirmPrint, exact: true }).click();
+  await expect(page.locator(".rx-print-target")).toHaveCount(1);
+  const pdf = await page.pdf({ path: `${OUT_DIR}/rx-25-drugs.pdf`, preferCSSPageSize: true });
+  expect(pdf.toString("latin1").match(/\/Type\s*\/Page(?!s)/g)?.length).toBe(3);
 });
