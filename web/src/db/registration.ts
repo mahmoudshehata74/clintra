@@ -6,6 +6,7 @@ import type { Location, Membership, Organization, Practitioner, User } from "./t
 
 /** Matches POST /api/devices/register's response exactly (DeviceRegistrationController::register). */
 interface RegisterDeviceResponseBody {
+  identity_enforced_at?: string;
   token: string;
   device_id: string;
   org_id: string;
@@ -121,7 +122,9 @@ async function bootstrapFromRegistration(db: ClintraDatabase, response: Register
           rev: practitioner.rev ?? 1,
         })),
       );
-      await db.memberships.bulkPut(response.memberships);
+      await db.memberships.bulkPut(response.identity_enforced_at ? response.memberships.map((membership) => ({
+        ...membership, pin_hash: membership.pin_hash ?? "", pin_salt: membership.pin_salt ?? null,
+      })) : response.memberships);
       await db.users.bulkPut(response.users);
       await db.device.put({
         id: response.device_id,
@@ -131,6 +134,7 @@ async function bootstrapFromRegistration(db: ClintraDatabase, response: Register
         registered_at: new Date().toISOString(),
         pull_cursor: null,
         token: response.token,
+        ...(response.identity_enforced_at ? { identity_enforced_at: response.identity_enforced_at } : {}),
         // Null only if a server predating number series answered; the
         // next pull or bootstrap then supplies it (sync/engine.ts).
         series: response.series ?? null,

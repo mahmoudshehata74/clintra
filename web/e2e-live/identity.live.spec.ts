@@ -2,8 +2,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
-import { AUTH, lockOverlay, S } from "../e2e/support";
-import { openDevice } from "./liveSupport";
+import { AUTH, lockOverlay, readStore, S, sidebar, SIDEBAR } from "../e2e/support";
+import { eventually, openDevice, setUpClinic } from "./liveSupport";
 import { provisionOrg, removeLiveOrgs, startApi, stopApi } from "./liveServer";
 
 const exec = promisify(execFile);
@@ -18,10 +18,10 @@ function fixture(action: "prepare" | "enforce" | "deactivate", orgId: string) {
 async function accountSignIn(page: Page, username: string) {
   await page.getByRole("button", { name: AUTH.lockButtonLabel, exact: true }).click();
   const lock = lockOverlay(page);
-  await lock.getByRole("button", { name: "دخول بحساب" }).click();
+  await lock.getByRole("button", { name: "تسجيل الدخول بالحساب" }).click();
   await lock.getByLabel("اسم المستخدم").fill(username);
-  await lock.getByLabel("كلمة السر", { exact: true }).fill("Password for this live fixture");
-  await lock.getByRole("button", { name: "دخول", exact: true }).click();
+  await lock.getByLabel("كلمة المرور", { exact: true }).fill("Password for this live fixture");
+  await lock.getByRole("button", { name: "تسجيل الدخول", exact: true }).click();
   await expect(lock).toBeHidden();
 }
 
@@ -90,12 +90,76 @@ test("an enforced organization accepts signed operations and shows the three ide
       expect(await pushPatient(page, orgId, "valid")).toMatchObject({ synced: false, reason: "actor_deactivated" });
 
       await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
-      await expect(page.getByText(/التغيير ده اتعمل قبل الدخول بكلمة السر/)).toBeVisible();
-      await expect(page.getByText(/التغيير ده مش موقّع من حساب على الجهاز ده/)).toBeVisible();
-      await expect(page.getByText(/الحساب اللي عمل التغيير ده اتوقف قبل ما يوصل للسيرفر/)).toBeVisible();
+      await expect(page.getByText("أُجري التغيير قبل تسجيل الدخول بكلمة المرور. على من أجراه تسجيل الدخول على هذا الجهاز.")).toBeVisible();
+      await expect(page.getByText("لم يُحفظ التغيير لأن توقيعه غير صالح على هذا الجهاز. سجّل الدخول مرة أخرى باستخدام كلمة المرور.")).toBeVisible();
+      await expect(page.getByText("لم يُحفظ التغيير لأن حساب من أجراه عُطّل قبل وصوله إلى الخادم.")).toBeVisible();
       expect(errors).toEqual([]);
     } finally {
       await context.close();
+    }
+  } finally {
+    await stopApi();
+    if (orgId) await removeLiveOrgs([orgId]);
+  }
+});
+
+test("a permission removed on A closes the gated action on B and rejects B's offline operation", async ({ browser }) => {
+  await startApi();
+  let orgId: string | undefined;
+  try {
+    const org = await provisionOrg();
+    orgId = org.orgId;
+    await fixture("prepare", orgId);
+    const a = await openDevice(browser, org, "A");
+    const b = await openDevice(browser, org, "B");
+    try {
+      await setUpClinic(a);
+      await accountSignIn(a.page, "live-owner");
+      await accountSignIn(b.page, "live-assistant");
+      await fixture("enforce", orgId);
+      await eventually([a, b], async () => {
+        const devices = await Promise.all([a, b].map((d) => readStore<{ identity_enforced_at?: string }>(d.page, "device")));
+        return devices.every((rows) => Boolean(rows[0]?.identity_enforced_at));
+      }, true);
+
+      await sidebar(a.page).getByRole("button", { name: SIDEBAR.navSettings, exact: true }).click();
+      const settings = a.page.getByRole("dialog");
+      await settings.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
+      const assistant = settings.getByRole("listitem").filter({ hasText: "Live Identity Assistant" });
+      async function changeMessagePermission(checked: boolean) {
+        await assistant.getByRole("button", { name: "الصلاحيات", exact: true }).click();
+        await assistant.getByRole("switch", { name: /إرسال الرسائل/ }).setChecked(checked);
+        await assistant.getByLabel("اكتب كلمة المرور الخاصة بك للتأكيد").fill("Password for this live fixture");
+        await assistant.getByRole("button", { name: "تأكيد", exact: true }).click();
+        await expect(assistant.getByRole("heading", { name: "الصلاحيات", exact: true })).toHaveCount(0);
+      }
+
+      await changeMessagePermission(true);
+      const messages = sidebar(b.page).getByRole("button", { name: SIDEBAR.navMessages, exact: true });
+      await eventually([b], () => messages.count(), 1);
+      await messages.click();
+      await b.context.setOffline(true);
+      const opId = await b.page.evaluate(async () => {
+        const src = "/src/";
+        const { db } = await import(`${src}db/database.ts`) as typeof import("../src/db/database");
+        const { saveTemplateBody } = await import(`${src}db/messages.ts`) as typeof import("../src/db/messages");
+        const { MessageTemplateKey } = await import(`${src}domain/messageTemplates.ts`) as typeof import("../src/domain/messageTemplates");
+        await saveTemplateBody(db, MessageTemplateKey.BookingConfirmation, "قالب اتكتب من الجهاز وهو غير متصل");
+        return (await db.sync_ops.toArray()).find((op) => op.entity === "message_templates" && op.synced_at === null)?.op_id;
+      });
+      expect(opId).toBeTruthy();
+      await changeMessagePermission(false);
+      await b.context.setOffline(false);
+
+      await eventually([b], () => messages.count(), 0);
+      await eventually([b], async () => (await readStore<{ op_id: string; reason: string }>(b.page, "sync_review")).find((row) => row.op_id === opId)?.reason, "permission_denied");
+      await b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+      await expect(b.page.getByText("لم يُحفظ التغيير لأن من أجراه لا يملك الصلاحية اللازمة.")).toBeVisible();
+      expect(a.errors).toEqual([]);
+      expect(b.errors).toEqual([]);
+    } finally {
+      await a.context.close();
+      await b.context.close();
     }
   } finally {
     await stopApi();

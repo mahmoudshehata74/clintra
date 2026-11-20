@@ -7,6 +7,7 @@ import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import { useActingMembership } from "../../auth/useActingMembership";
 import { Role } from "../../domain/role";
+import { useIdentityAccess } from "../../auth/permissions";
 import { computeExpectedCashTotal } from "../../db/cashClose";
 import { setDayDelay } from "../../db/dayState";
 import { ensureDeviceRegistration, isDeviceSeriesUnknown } from "../../db/deviceRegistration";
@@ -232,6 +233,11 @@ export default function DayScreen({
   const [advanceCooldown, setAdvanceCooldown] = useState<CooldownState>(EMPTY_COOLDOWN_STATE);
   const actingMembership = useActingMembership();
   const isOwner = actingMembership?.role === Role.Owner;
+  const access = useIdentityAccess();
+  const canCashClose = access.allows("cash.close");
+  const canMessage = access.allows("messages.send");
+  const canReadClinical = access.allows("clinical.view");
+  const canSettings = access.allows("staff.manage", isOwner) || access.allows("services.manage", false) || access.allows("schedules.manage", false);
 
   const isSeedDayPinned = new URLSearchParams(window.location.search).get(SEED_DAY_QUERY_PARAM) === "1";
   const today = isSeedDayPinned && staticData?.seededDay ? staticData.seededDay : todayInCairo();
@@ -978,9 +984,9 @@ export default function DayScreen({
                 scheduleStartTime={currentPractitionerSchedule?.start_time ?? null}
                 onSetDelay={handleSetDelay}
               />
-              <Button variant="onDark" onClick={() => setIsCashCloseOpen(true)}>
+              {canCashClose && <Button variant="onDark" onClick={() => setIsCashCloseOpen(true)}>
                 {dayScreenStrings.cashCloseButtonLabel}
-              </Button>
+              </Button>}
               {currentPractitionerSchedule && (
                 <span className="ms-auto text-[11px] text-on-dark-dim">
                   {dayScreenStrings.slabCloseKbdPrefix} <Ltr>{currentPractitionerSchedule.end_time}</Ltr>
@@ -1102,11 +1108,11 @@ export default function DayScreen({
               onRequestCancel={handleRequestCancel}
               onMarkNoShow={handleMarkNoShow}
               onOpenInvoice={handleOpenInvoice}
-              onSendMessage={handleSendMessage}
+              onSendMessage={canMessage ? handleSendMessage : undefined}
               onOpenProfile={handleOpenProfile}
               onSendToEnd={handleSendToEnd}
               onMoveWaiting={canReorderQueue(actingMembership?.role) ? handleMoveWaiting : undefined}
-              onOpenVisitForm={handleOpenVisitForm}
+              onOpenVisitForm={canReadClinical ? handleOpenVisitForm : undefined}
               onOpenDaySheet={practitioner.id === currentPractitionerId ? () => setIsDaySheetOpen(true) : undefined}
             />
           );
@@ -1171,7 +1177,7 @@ export default function DayScreen({
         />
       )}
 
-      {sendMessageVisitId && (
+      {canMessage && sendMessageVisitId && (
         <SendMessageSheet visitId={sendMessageVisitId} onDismiss={() => setSendMessageVisitId(null)} />
       )}
 
@@ -1185,7 +1191,7 @@ export default function DayScreen({
         />
       )}
 
-      {visitFormSheetVisitId && (
+      {canReadClinical && visitFormSheetVisitId && (
         <VisitFormSheet
           visitId={visitFormSheetVisitId}
           onDismiss={() => setVisitFormSheetVisitId(null)}
@@ -1197,7 +1203,7 @@ export default function DayScreen({
         />
       )}
 
-      {isCashCloseOpen && selectedLocationId && currentPractitioner && (
+      {canCashClose && isCashCloseOpen && selectedLocationId && currentPractitioner && (
         <CashCloseSheet
           locationId={selectedLocationId}
           orgId={currentPractitioner.org_id}
@@ -1238,7 +1244,7 @@ export default function DayScreen({
         />
       )}
 
-      {isSettingsOpen && isOwner && currentPractitionerId && selectedLocationId && currentPractitioner && (
+      {isSettingsOpen && canSettings && currentPractitionerId && selectedLocationId && currentPractitioner && (
         <SettingsSheet
           practitionerId={currentPractitionerId}
           locationId={selectedLocationId}

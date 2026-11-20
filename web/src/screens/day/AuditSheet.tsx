@@ -102,6 +102,7 @@ const DOT_LOOK: Record<AuditDotTone, string> = {
  * actor and the row's context ("سارة حسن · موعد 10:30").
  */
 export default function AuditSheet({ practitionerId, locationId, today, onDismiss }: AuditSheetProps) {
+  const hasClinicalText = useIdentityAccess().allows("clinical.view");
   const [filter, setFilter] = useState<AuditFilter>("all");
 
   const rows =
@@ -323,7 +324,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
           return typeof date === "string" ? formatWeekdayDayMonth(date) : "";
         }
         if (row.entity === "visit_form_data") {
-          return describeVisitFormChange(row)?.excerpt ?? "";
+          return hasClinicalText ? (describeVisitFormChange(row)?.excerpt ?? "") : "";
         }
         // Settings name what was set — never a price, a PIN or a scope.
         if (row.entity === "services" || row.entity === "users") {
@@ -355,7 +356,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
           context: contextFor(row),
           tone: auditDotTone(row),
         }));
-    }, [practitionerId, locationId, today]) ?? [];
+    }, [practitionerId, locationId, today, hasClinicalText]) ?? [];
 
   const filteredRows = filterAuditRows(
     rows.map((item) => ({ ...item, entity: item.row.entity })),
@@ -446,3 +447,4 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
     </Sheet>
   );
 }
+import { useIdentityAccess } from "../../auth/permissions";

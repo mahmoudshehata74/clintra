@@ -48,22 +48,30 @@ async function activate(page: Page) {
 
 async function firstSignIn(page: Page, capture?: (screen: string) => Promise<void>) {
   const lock = lockOverlay(page);
-  await lock.getByRole("button", { name: "دخول بحساب" }).click();
-  await expect(lock.getByRole("heading", { name: "دخول بحساب" })).toBeVisible();
+  await lock.getByRole("button", { name: "تسجيل الدخول بالحساب" }).click();
+  await expect(lock.getByRole("heading", { name: "تسجيل الدخول بالحساب" })).toBeVisible();
   await capture?.("sign-in");
   await lock.getByLabel("اسم المستخدم").fill("owner");
-  await lock.getByLabel("كلمة السر", { exact: true }).fill("temporary password");
-  await lock.getByRole("button", { name: "دخول", exact: true }).click();
-  await expect(lock.getByRole("heading", { name: "غيّر كلمة السر" })).toBeVisible();
+  const password = lock.getByLabel("كلمة المرور", { exact: true });
+  await password.fill("temporary password");
+  await expect(password).toHaveAttribute("type", "password");
+  await lock.getByRole("button", { name: "إظهار كلمة المرور" }).click();
+  await expect(password).toHaveAttribute("type", "text");
+  await lock.getByRole("button", { name: "إخفاء كلمة المرور" }).click();
+  await expect(password).toHaveAttribute("type", "password");
+  await lock.getByRole("button", { name: "تسجيل الدخول", exact: true }).click();
+  await expect(lock.getByRole("heading", { name: "تغيير كلمة المرور" })).toBeVisible();
+  await expect(lock.getByLabel("كلمة المرور الجديدة")).toHaveAccessibleDescription("10 أحرف على الأقل");
+  await expect(lock.getByLabel("أعد كتابتها")).toHaveAccessibleDescription("10 أحرف على الأقل");
   await capture?.("change-password");
-  await lock.getByLabel("كلمة السر الحالية").fill("temporary password");
-  await lock.getByLabel("كلمة السر الجديدة").fill("a new test password");
-  await lock.getByLabel("اكتبها تاني").fill("a new test password");
+  await lock.getByLabel("كلمة المرور الحالية").fill("temporary password");
+  await lock.getByLabel("كلمة المرور الجديدة").fill("a new test password");
+  await lock.getByLabel("أعد كتابتها").fill("a new test password");
   await lock.getByRole("button", { name: "حفظ", exact: true }).click();
-  await expect(lock.getByRole("heading", { name: "اختار رقم سري" })).toBeVisible();
+  await expect(lock.getByRole("heading", { name: "اختر رقمًا سريًا" })).toBeVisible();
   await capture?.("choose-pin");
   await lock.getByLabel("الرقم السري", { exact: true }).fill("2468");
-  await lock.getByLabel("اكتبه تاني").fill("2468");
+  await lock.getByLabel("أعد إدخاله").fill("2468");
   await lock.getByRole("button", { name: "حفظ", exact: true }).click();
   await expect(lock).toBeHidden();
 }

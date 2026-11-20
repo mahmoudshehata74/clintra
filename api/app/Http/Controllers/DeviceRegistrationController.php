@@ -135,6 +135,7 @@ class DeviceRegistrationController extends Controller
             'practitioners' => $result['practitioners'],
             'memberships' => $result['memberships'],
             'users' => $result['users'],
+            ...(isset($result['identity_enforced_at']) ? ['identity_enforced_at' => $result['identity_enforced_at']] : []),
         ]);
     }
 

@@ -96,7 +96,7 @@ class SyncBootstrapPuller
     /**
      * @return array{cursor: string, has_more: bool, rows: list<array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}>}
      */
-    public function pull(?string $cursor): array
+    public function pull(?string $cursor, bool $identityEnforced = false): array
     {
         [$stage, $afterId] = $this->parseCursor($cursor);
 
@@ -124,7 +124,7 @@ class SyncBootstrapPuller
             return [
                 'cursor' => $newCursor,
                 'has_more' => $hasMoreInStage || $stage + 1 < self::STAGE_DONE,
-                'rows' => $rows->map(fn ($row) => $this->toRow($stage, $row))->values()->all(),
+                'rows' => $rows->map(fn ($row) => $this->toRow($stage, $row, $identityEnforced))->values()->all(),
             ];
         }
 
@@ -245,7 +245,7 @@ class SyncBootstrapPuller
     /**
      * @return array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}
      */
-    private function toRow(int $stage, object $row): array
+    private function toRow(int $stage, object $row, bool $identityEnforced): array
     {
         $entity = match ($stage) {
             self::STAGE_DAY_STATE => 'day_state',
@@ -266,7 +266,7 @@ class SyncBootstrapPuller
             'entity' => $entity,
             'entity_id' => $row->id,
             'rev' => (int) $row->rev,
-            'payload' => SyncPayload::fromRow($entity, $row),
+            'payload' => SyncPayload::fromRow($entity, $row, $identityEnforced),
         ];
     }
 

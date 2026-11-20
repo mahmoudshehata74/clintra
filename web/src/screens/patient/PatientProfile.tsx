@@ -152,7 +152,8 @@ export default function PatientProfile({ patientId, initialTab = "all" }: Patien
   const data = useLiveQuery(() => loadProfile(patientId), [patientId]);
   // An assistant or manager reads each visit and prescription with its date,
   // doctor and status only (domain/clinicalAccess.ts).
-  const clinical = readsClinicalText(useGuardedActingMembership());
+  const access = useIdentityAccess();
+  const clinical = access.allows("clinical.view", readsClinicalText(useGuardedActingMembership()));
 
   if (!data) {
     return <p className="px-6 py-5 text-muted">{T.loadingLabel}</p>;
@@ -174,7 +175,7 @@ export default function PatientProfile({ patientId, initialTab = "all" }: Patien
           {hero.stalledLine}
         </p>
       )}
-      <ArchiveBar patient={data.patient} />
+      {access.allows("patients.archive") && <ArchiveBar patient={data.patient} />}
 
       {/* `.pt-tabs` */}
       <div className="border-b border-rule bg-field px-[18px] py-2">
@@ -222,7 +223,7 @@ export default function PatientProfile({ patientId, initialTab = "all" }: Patien
         )}
       </section>
 
-      <ProfileSheets openSheet={openSheet} onChange={setOpenSheet} />
+      <ProfileSheets openSheet={access.enforced && !clinical && (openSheet?.kind === "visit" || openSheet?.kind === "rx" || openSheet?.kind === "history") ? null : openSheet} onChange={setOpenSheet} />
     </>
   );
 }
@@ -527,3 +528,4 @@ function ProfileSheets({ openSheet, onChange }: { openSheet: OpenSheet; onChange
       return <CarePlanSheet visitId={null} planId={openSheet.planId} onDismiss={close} />;
   }
 }
+import { useIdentityAccess } from "../../auth/permissions";

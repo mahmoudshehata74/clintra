@@ -87,11 +87,15 @@ class ApplyMembership
                 if ($enforcedAt !== null) {
                     $publicKey = Identity::devicePublicKey($credential['device_id']);
 
-                    if ($publicKey === null || ! RequestProof::verifyDevice($request, $credential['device_id'], $publicKey)) {
+                    // First sign-in proves the new key in the login controller.
+                    if ($publicKey !== null) {
+                        if (! RequestProof::verifyDevice($request, $credential['device_id'], $publicKey)) {
+                            return $this->unauthenticated();
+                        }
+                        $request->attributes->set('device_proof_verified', true);
+                    } elseif (! $request->routeIs('identity.login', 'identity.recovery')) {
                         return $this->unauthenticated();
                     }
-
-                    $request->attributes->set('device_proof_verified', true);
                 }
             }
 

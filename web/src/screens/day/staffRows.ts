@@ -19,5 +19,5 @@ export function isLastActiveOwner(membership: Membership, memberships: readonly 
  * whether this membership has a PIN set at all.
  */
 export function hasPinSet(membership: Pick<Membership, "pin_hash">): boolean {
-  return membership.pin_hash.trim() !== "";
+  return (membership.pin_hash ?? "").trim() !== "";
 }

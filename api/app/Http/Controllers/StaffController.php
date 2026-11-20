@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\AddStaffMemberRequest;
 use App\Support\EgyptianPhone;
+use App\Support\Identity\Identity;
 use App\Support\Sync\SyncSeqLock;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -117,6 +118,9 @@ class StaffController extends Controller
 
         $result = json_decode($row->result, associative: true, flags: JSON_THROW_ON_ERROR);
         $this->recordInLedger($result, $deviceId);
+        if (Identity::enforced($request)) {
+            unset($result['membership']['pin_hash'], $result['membership']['pin_salt']);
+        }
 
         return response()->json($result, Response::HTTP_CREATED);
     }

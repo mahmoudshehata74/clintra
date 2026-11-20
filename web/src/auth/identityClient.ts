@@ -1,3 +1,4 @@
+import text from "./identityStrings";
 import { getApiBaseUrl } from "../config/apiBaseUrl";
 import type { ClintraDatabase } from "../db/database";
 import type { DeviceRegistration, IdentityKeyPair, Membership, PersonCredential } from "../db/types";
@@ -37,34 +38,35 @@ export async function identityClock(baseUrl: string): Promise<number> {
 }
 
 async function identityRequest<T>(
-  device: DeviceRegistration, deviceKey: CryptoKey, path: string, payload: Record<string, unknown>,
+  device: DeviceRegistration, deviceKey: CryptoKey, path: string, payload: Record<string, unknown> | undefined,
   person?: PersonCredential, method = "POST",
 ): Promise<T> {
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}${path}`;
-  const body = JSON.stringify(payload);
+  const body = payload === undefined ? undefined : JSON.stringify(payload);
   const time = await identityClock(baseUrl);
   const headers = new Headers({
-    Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${device.token}`,
-    "X-Clintra-Device-Proof": await requestProof(deviceKey, method, url, body, time),
+    Accept: "application/json", Authorization: `Bearer ${device.token}`,
+    "X-Clintra-Device-Proof": await requestProof(deviceKey, method, url, body ?? "", time),
   });
+  if (body !== undefined) headers.set("Content-Type", "application/json");
   if (person) {
-    headers.set("X-Clintra-Person-Proof", await requestProof(person.private_key, method, url, body, time, person.id));
+    headers.set("X-Clintra-Person-Proof", await requestProof(person.private_key, method, url, body ?? "", time, person.id));
   }
   const response = await fetch(url, { method, body, headers });
   if (!response.ok) {
     const data = await response.json().catch(() => null) as { message?: string } | null;
-    throw new IdentityRequestError(data?.message ?? "حدث خطأ، جرّب تاني");
+    throw new IdentityRequestError(data?.message ?? text.requestFailed);
   }
   return response.json();
 }
 
-interface Login extends Pick<Membership, "role" | "display_name" | "pin_hash" | "pin_salt" | "rev"> {
+interface Login extends Pick<Membership, "role" | "display_name" | "pin_hash" | "pin_salt" | "username" | "permissions" | "rev"> {
   membership_id: string;
   must_change_password: boolean;
 }
 
-export async function signIn(db: ClintraDatabase, device: DeviceRegistration, username: string, password: string): Promise<PersonCredential> {
+async function identityDeviceKey(db: ClintraDatabase, device: DeviceRegistration) {
   let deviceKey = await db.device_keys.get(device.id);
   if (!deviceKey) {
     const generated = { device_id: device.id, ...await generateIdentityKey() };
@@ -75,6 +77,11 @@ export async function signIn(db: ClintraDatabase, device: DeviceRegistration, us
       return generated;
     });
   }
+  return deviceKey;
+}
+
+export async function signIn(db: ClintraDatabase, device: DeviceRegistration, username: string, password: string): Promise<PersonCredential> {
+  const deviceKey = await identityDeviceKey(db, device);
   const keys = await generateIdentityKey();
   const id = crypto.randomUUID();
   const result = await identityRequest<Login>(device, deviceKey.private_key, "/auth/login", {
@@ -88,24 +95,53 @@ export async function signIn(db: ClintraDatabase, device: DeviceRegistration, us
     await db.device_keys.update(device.id, { bound: true });
     const prior = db.credentials.where("[device_id+membership_id]").equals([device.id, result.membership_id]);
     const previousPin = await prior.first();
-    if (previousPin?.pin_hash && previousPin.pin_salt) {
+    if (device.identity_enforced_at && result.pin_hash && result.pin_salt) {
+      credential.pin_hash = result.pin_hash;
+      credential.pin_salt = result.pin_salt;
+    } else if (previousPin?.pin_hash && previousPin.pin_salt) {
       credential.pin_hash = previousPin.pin_hash;
       credential.pin_salt = previousPin.pin_salt;
     }
     await prior.delete();
     await db.credentials.add(credential);
     await db.memberships.update(result.membership_id, {
-      role: result.role, display_name: result.display_name, pin_hash: result.pin_hash, pin_salt: result.pin_salt,
+      role: result.role, display_name: result.display_name,
+      ...(device.identity_enforced_at
+        ? { pin_hash: "", pin_salt: null, username: result.username, permissions: result.permissions }
+        : { pin_hash: result.pin_hash, pin_salt: result.pin_salt }),
     });
   });
   return credential;
+}
+
+export async function recoverOwner(db: ClintraDatabase, device: DeviceRegistration, input: {
+  phone: string; code: string; username: string; password: string;
+}): Promise<PersonCredential> {
+  const key = await identityDeviceKey(db, device);
+  await identityRequest(device, key.private_key, "/auth/owner-recovery", input);
+  if (device.membership_id) {
+    await db.credentials.where("[device_id+membership_id]").equals([device.id, device.membership_id]).delete();
+  }
+  return signIn(db, device, input.username, input.password);
+}
+
+export async function requestStaffIdentity<T>(
+  db: ClintraDatabase, actorId: string, method: string, path: string, payload?: Record<string, unknown>,
+): Promise<T> {
+  const device = (await db.device.toArray()).find((row) => row.token);
+  if (!device) throw new IdentityRequestError(text.signInFirst);
+  const [key, person] = await Promise.all([
+    db.device_keys.get(device.id), db.credentials.where("[device_id+membership_id]").equals([device.id, actorId]).first(),
+  ]);
+  if (!key || !person || person.must_change_password) throw new IdentityRequestError(text.signInFirst);
+  return identityRequest<T>(device, key.private_key, path, payload, person, method);
 }
 
 export async function changeOwnPassword(
   db: ClintraDatabase, device: DeviceRegistration, credential: PersonCredential, currentPassword: string, newPassword: string,
 ): Promise<void> {
   const deviceKey = await db.device_keys.get(device.id);
-  if (!deviceKey || credential.device_id !== device.id) throw new IdentityRequestError("سجّل الدخول على الجهاز ده الأول");
+  if (!deviceKey || credential.device_id !== device.id) throw new IdentityRequestError(text.signInFirst);
   await identityRequest(device, deviceKey.private_key, "/auth/password", {
     current_password: currentPassword, password: newPassword,
   }, credential);

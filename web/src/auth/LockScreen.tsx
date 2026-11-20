@@ -1,3 +1,4 @@
+import text from "./identityStrings";
 import { useEffect, useRef, useState } from "react";
 import { db } from "../db/database";
 import { useLiveQuery } from "../db/useLiveQuery";
@@ -298,11 +299,11 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
         {!identityMode && identity && (
           <div className="mt-5 flex flex-wrap justify-center gap-4 text-sm font-semibold text-on-dark">
             <button type="button" className="min-h-10 underline underline-offset-4" onClick={() => setIdentityMode("sign-in")}>
-              دخول بحساب
+              {text.signIn}
             </button>
             {credential && (
               <button type="button" className="min-h-10 underline underline-offset-4" onClick={() => setIdentityMode("password")}>
-                غيّر كلمة السر
+                {text.changePassword}
               </button>
             )}
           </div>

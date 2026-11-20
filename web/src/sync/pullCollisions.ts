@@ -383,6 +383,14 @@ async function parkVisit(table: Table<Row, string>, visit: Row): Promise<void> {
 export async function applyPulledRow(db: ClintraDatabase, entity: string, payload: Record<string, unknown>): Promise<void> {
   const table = db.table(entity) as Table<Row, string>;
   const row = payload as Row;
+  if (entity === "memberships" && !("pin_hash" in payload)) {
+    // An enforced response carries no PIN. Preserve any PIN this device already held.
+    await db.transaction("rw", db.memberships, async () => {
+      const local = await db.memberships.get(row.id);
+      await table.put({ ...row, pin_hash: local?.pin_hash ?? "", pin_salt: local?.pin_salt ?? null });
+    });
+    return;
+  }
   if (!table.schema.indexes.some((index) => index.unique)) {
     await table.put(row);
     return;

@@ -27,7 +27,7 @@ final class Username
     {
         return response()->json([
             'error' => 'username_invalid',
-            'message' => 'اسم المستخدم لازم يكون من 3 لـ 32 حرف: حروف إنجليزي صغيرة أو أرقام أو . أو _ أو -',
+            'message' => IdentityStrings::get('usernameInvalid'),
         ], 422);
     }
 
@@ -35,7 +35,7 @@ final class Username
     {
         return response()->json([
             'error' => 'username_taken',
-            'message' => 'اسم المستخدم ده مستخدم قبل كده',
+            'message' => IdentityStrings::get('usernameTaken'),
         ], 409);
     }
 

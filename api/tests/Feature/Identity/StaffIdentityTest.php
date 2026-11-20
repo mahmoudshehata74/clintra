@@ -72,7 +72,7 @@ test('a reset needs the step-up password and a member with a username', function
     IdentityHarness::send($org, 'POST', "/api/staff/{$nameless}/password-reset", ['password' => 'wrong'], $owner)->assertStatus(403);
     $response = IdentityHarness::send($org, 'POST', "/api/staff/{$nameless}/password-reset", ['password' => 'owner password 1'], $owner);
     $response->assertStatus(422);
-    expect($response->json())->toBe(['error' => 'username_required', 'message' => 'حدد اسم مستخدم للموظف ده الأول']);
+    expect($response->json())->toBe(['error' => 'username_required', 'message' => 'حدّد اسم مستخدم لهذا الموظف أولًا.']);
     expect($this->fx()->table('member_passwords')->where('membership_id', $nameless)->exists())->toBeFalse();
 });
 
@@ -124,7 +124,13 @@ test('the owner sets usernames: lowercase, 3 to 32 of a-z 0-9 . _ -, unique per 
     $memberId = IdentityHarness::member($org, 'assistant');
     $secondId = IdentityHarness::member($org, 'assistant');
     $otherMember = IdentityHarness::member($other, 'assistant');
-    $set = fn (array $o, string $id, string $username) => IdentityHarness::send($o, 'PUT', "/api/staff/{$id}/username", ['username' => $username]);
+    $owners = [
+        $org['orgId'] => IdentityHarness::credential($org, $org['ownerId']),
+        $other['orgId'] => IdentityHarness::credential($other, $other['ownerId']),
+    ];
+    $set = fn (array $o, string $id, string $username) => IdentityHarness::send($o, 'PUT', "/api/staff/{$id}/username", [
+        'username' => $username, 'password' => 'owner password 1',
+    ], $owners[$o['orgId']]);
 
     $response = $set($org, $memberId, 'Mona.Ahmed_1');
     $response->assertOk();
@@ -137,14 +143,14 @@ test('the owner sets usernames: lowercase, 3 to 32 of a-z 0-9 . _ -, unique per 
         if ($invalid !== '') {
             expect($refused->json())->toBe([
                 'error' => 'username_invalid',
-                'message' => 'اسم المستخدم لازم يكون من 3 لـ 32 حرف: حروف إنجليزي صغيرة أو أرقام أو . أو _ أو -',
+                'message' => 'يجب أن يتألف اسم المستخدم من 3 إلى 32 محرفًا، باستخدام الحروف اللاتينية الصغيرة أو الأرقام أو . أو _ أو -.',
             ]);
         }
     }
 
     $taken = $set($org, $secondId, 'MONA.AHMED_1');
     $taken->assertStatus(409);
-    expect($taken->json())->toBe(['error' => 'username_taken', 'message' => 'اسم المستخدم ده مستخدم قبل كده']);
+    expect($taken->json())->toBe(['error' => 'username_taken', 'message' => 'اسم المستخدم هذا مستخدم بالفعل.']);
 
     // Unique per organization only, and another organization's member is not ours to name.
     $set($other, $otherMember, 'mona.ahmed_1')->assertOk();
@@ -156,7 +162,8 @@ test('a username change is recorded in the ledger with the new rev, so devices p
     $org = IdentityHarness::org(bindDeviceKey: false);
     $memberId = IdentityHarness::member($org, 'assistant');
 
-    $response = IdentityHarness::send($org, 'PUT', "/api/staff/{$memberId}/username", ['username' => 'mona']);
+    $owner = IdentityHarness::credential($org, $org['ownerId']);
+    $response = IdentityHarness::send($org, 'PUT', "/api/staff/{$memberId}/username", ['username' => 'mona', 'password' => 'owner password 1'], $owner);
 
     expect($response->json('rev'))->toBe(2);
     $ledger = $this->fx()->table('sync_ledger')->where('entity_id', $memberId)->first();
@@ -168,7 +175,7 @@ test('a username change is recorded in the ledger with the new rev, so devices p
     expect($pulled['payload'])->not->toHaveKey('username')->not->toHaveKey('permissions');
 
     // Setting the same name again changes nothing.
-    IdentityHarness::send($org, 'PUT', "/api/staff/{$memberId}/username", ['username' => 'MONA'])->assertOk();
+    IdentityHarness::send($org, 'PUT', "/api/staff/{$memberId}/username", ['username' => 'MONA', 'password' => 'owner password 1'], $owner)->assertOk();
     expect($this->fx()->table('sync_ledger')->where('entity_id', $memberId)->count())->toBe(1);
 });
 
@@ -179,7 +186,7 @@ test('auth_set_username: an active owner of the same organization only', functio
     $call = fn (?string $caller, array $payload) => $this->withMembership($this->asApp(), $caller, fn ($db) => $db->selectOne(
         'select auth_set_username(?::jsonb) as r', [json_encode($payload)],
     ));
-    $payload = fn (string $target, string $username) => ['membership_id' => $target, 'username' => $username, 'audit_id' => (string) Str::uuid()];
+    $payload = fn (string $target, string $username) => ['membership_id' => $target, 'username' => $username, 'audit_id' => (string) Str::uuid(), 'attempt_id' => 1];
 
     expect(fn () => $call($managerId, $payload($memberId, 'mona')))->toThrow(QueryException::class, 'auth: not allowed');
     expect(fn () => $call(null, $payload($memberId, 'mona')))->toThrow(QueryException::class, 'auth: not allowed');

@@ -1,5 +1,6 @@
 import { sidebarStrings } from "../components/strings";
 import { Role } from "./role";
+import { hasPermission, type IdentityAccess } from "../auth/permissions";
 
 export interface NavItem {
   key: "day" | "patients" | "doctor" | "visit" | "messages" | "audit" | "reports" | "settings";
@@ -22,21 +23,22 @@ export interface NavItem {
  * docs/design-audit.md). AppShell.tsx renders whatever this returns, given
  * an icon for each key.
  */
-export function navItemsFor(role: Role, hasPractitioner: boolean): NavItem[] {
+export function navItemsFor(role: Role, hasPractitioner: boolean, access: IdentityAccess = { enforced: false }): NavItem[] {
   const items: NavItem[] = [
     { key: "day", label: sidebarStrings.navDay },
     { key: "patients", label: sidebarStrings.navPatients },
   ];
   if (hasPractitioner) {
     items.push({ key: "doctor", label: sidebarStrings.navDoctor });
-    items.push({ key: "visit", label: sidebarStrings.navVisit });
+    if (hasPermission(access, "clinical.view", true)) items.push({ key: "visit", label: sidebarStrings.navVisit });
   }
-  items.push({ key: "messages", label: sidebarStrings.navMessages });
+  if (hasPermission(access, "messages.send", true)) items.push({ key: "messages", label: sidebarStrings.navMessages });
   items.push({ key: "audit", label: sidebarStrings.navAudit });
-  if (role === Role.Owner || hasPractitioner) {
+  if (hasPermission(access, "reports.view", role === Role.Owner || hasPractitioner)) {
     items.push({ key: "reports", label: sidebarStrings.navReports });
   }
-  if (role === Role.Owner) {
+  if (hasPermission(access, "staff.manage", role === Role.Owner)
+    || hasPermission(access, "services.manage", false) || hasPermission(access, "schedules.manage", false)) {
     items.push({ key: "settings", label: sidebarStrings.navSettings });
   }
   return items;

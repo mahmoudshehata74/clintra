@@ -84,6 +84,7 @@ interface DoctorDayData {
  * existing VisitFormSheet, unchanged.
  */
 export default function DoctorDayScreen({ practitionerId, today, onPractitionerName }: DoctorDayScreenProps) {
+  const clinical = useIdentityAccess().allows("clinical.view");
   const [locationId, setLocationId] = useState<string | null>(null);
   const [visitFormVisitId, setVisitFormVisitId] = useState<string | null>(null);
   const [profilePatientId, setProfilePatientId] = useState<string | null>(null);
@@ -194,7 +195,8 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
   const current = findCurrentVisit(visits);
   const next = findNextPatient(visits, isQueueMode);
   const waitingRoom = computeWaitingRoom(visits, isQueueMode, today, now);
-  const attentionItems = computeAttentionItems(visits, data.formValuesByVisitId, data.invoicesByVisitId);
+  const attentionItems = computeAttentionItems(visits, data.formValuesByVisitId, data.invoicesByVisitId)
+    .filter((item) => clinical || item.kind !== "missing_diagnosis");
   const dayList = computeDayList(visits, isQueueMode);
   const someoneInRoom = current !== null;
 
@@ -246,9 +248,9 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
           today={today}
           now={now}
           priorVisitCount={countPriorCompletedVisits(data.historyVisits, current)}
-          lastVisit={summarizeLastVisit(data.historyVisits, current, data.formValuesByVisitId, today)}
+          lastVisit={clinical ? summarizeLastVisit(data.historyVisits, current, data.formValuesByVisitId, today) : null}
           isCoolingDown={isCoolingDown(current.id)}
-          onOpenVisitForm={() => setVisitFormVisitId(current.id)}
+          onOpenVisitForm={clinical ? () => setVisitFormVisitId(current.id) : undefined}
           onComplete={() => void advance(current, (visitId) => markVisitCompleted(db, visitId))}
         />
       ) : (
@@ -275,7 +277,7 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
           today={today}
           now={now}
           historyVisits={data.historyVisits}
-          formValuesByVisitId={data.formValuesByVisitId}
+          formValuesByVisitId={clinical ? data.formValuesByVisitId : new Map()}
           lastInvoice={findLastInvoiceState(data.nextPatientInvoices)}
           practitionerId={practitionerId}
           callButton={next ? callButton(next.visit, T.callIn, "primary", "sm", "flex-1") : null}
@@ -309,13 +311,13 @@ export default function DoctorDayScreen({ practitionerId, today, onPractitionerN
                 isQueueMode={isQueueMode}
                 today={today}
                 now={now}
-                missingDiagnosis={hasMissingDiagnosis(visit, data.formValuesByVisitId)}
+                missingDiagnosis={clinical && hasMissingDiagnosis(visit, data.formValuesByVisitId)}
                 previousVisitLabel={
                   visit.status === VisitStatus.InRoom
                     ? summarizeLastVisit(data.historyVisits, visit, data.formValuesByVisitId, today)?.relativeTime
                     : undefined
                 }
-                onOpenVisitForm={() => setVisitFormVisitId(visit.id)}
+                onOpenVisitForm={clinical ? () => setVisitFormVisitId(visit.id) : undefined}
                 onOpenProfile={() => setProfilePatientId(visit.patient_id)}
                 callButton={callButton(visit, T.callInShort, "secondary", "sm")}
               />
@@ -453,7 +455,7 @@ interface CurrentPatientHeroProps {
   priorVisitCount: number;
   lastVisit: LastVisitSummary | null;
   isCoolingDown: boolean;
-  onOpenVisitForm: () => void;
+  onOpenVisitForm?: () => void;
   onComplete: () => void;
 }
 
@@ -524,9 +526,9 @@ function CurrentPatientHero({
           )}
         </div>
         <div className="ms-auto flex flex-wrap gap-2">
-          <Button variant="primary" onClick={onOpenVisitForm}>
+          {onOpenVisitForm && <Button variant="primary" onClick={onOpenVisitForm}>
             {T.heroOpenVisitForm}
-          </Button>
+          </Button>}
           <Button variant="secondary" disabled={isCoolingDown} onClick={onComplete}>
             {T.heroCloseVisit}
           </Button>
@@ -895,7 +897,7 @@ interface DayListRowProps {
   now: Date;
   missingDiagnosis: boolean;
   previousVisitLabel: string | undefined;
-  onOpenVisitForm: () => void;
+  onOpenVisitForm?: () => void;
   /** A booked row's "افتح الملف": the patient profile sheet. */
   onOpenProfile: () => void;
   callButton: ReactNode;
@@ -1003,12 +1005,12 @@ function DayListRow({
         </div>
       </div>
       <div className="flex flex-col items-end gap-1">
-        {action === "review" && (
+        {onOpenVisitForm && action === "review" && (
           <Button variant="muted" size="sm" onClick={onOpenVisitForm}>
             {T.dayListReview}
           </Button>
         )}
-        {action === "open" && (
+        {onOpenVisitForm && action === "open" && (
           <Button variant="secondary" size="sm" onClick={onOpenVisitForm}>
             {T.dayListOpen}
           </Button>
@@ -1023,3 +1025,4 @@ function DayListRow({
     </li>
   );
 }
+import { useIdentityAccess } from "../../auth/permissions";

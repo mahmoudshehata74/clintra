@@ -7,6 +7,8 @@ use App\Support\EgyptianPhone;
 use App\Support\Identity\AuthCall;
 use App\Support\Identity\AuthCallFailed;
 use App\Support\Identity\Es256;
+use App\Support\Identity\Identity;
+use App\Support\Identity\IdentityStrings;
 use App\Support\Identity\Password;
 use App\Support\Identity\RequestProof;
 use App\Support\Identity\StepUp;
@@ -66,6 +68,9 @@ class AuthController extends Controller
         // A device with a bound key proved it already (device.proof). A device
         // binding its key now proves it holds that key: the request carries
         // the new key's own device proof.
+        if (Identity::enforced($request) && $request->attributes->get('device_proof_verified') !== true && $input['device_public_key'] === null) {
+            return $this->unauthenticated();
+        }
         $deviceKey = null;
         if ($request->attributes->get('device_proof_verified') !== true && $input['device_public_key'] !== null) {
             if (! RequestProof::verifyDevice($request, $deviceId, $input['device_public_key'])) {
@@ -214,7 +219,7 @@ class AuthController extends Controller
                 RateLimiter::hit($orgKey, self::RECOVERY_ORG_DECAY_SECONDS);
             }
 
-            return response()->json(['error' => 'recovery_failed', 'message' => 'البيانات دي مش صح'], 401);
+            return response()->json(['error' => 'recovery_failed', 'message' => IdentityStrings::get('recoveryFailed')], 401);
         }
 
         RateLimiter::clear($ipKey);
@@ -247,16 +252,16 @@ class AuthController extends Controller
 
     private function wrongCredentials(): JsonResponse
     {
-        return response()->json(['error' => 'invalid_credentials', 'message' => 'اسم المستخدم أو كلمة السر غلط'], 401);
+        return response()->json(['error' => 'invalid_credentials', 'message' => IdentityStrings::get('invalidCredentials')], 401);
     }
 
     private function unauthenticated(): JsonResponse
     {
-        return response()->json(['error' => 'unauthenticated', 'message' => 'يجب تسجيل الدخول'], 401);
+        return response()->json(['error' => 'unauthenticated', 'message' => IdentityStrings::get('unauthenticated')], 401);
     }
 
     private function invalid(): JsonResponse
     {
-        return response()->json(['error' => 'validation_failed', 'message' => 'بيانات غير صالحة'], 422);
+        return response()->json(['error' => 'validation_failed', 'message' => IdentityStrings::get('invalid')], 422);
     }
 }

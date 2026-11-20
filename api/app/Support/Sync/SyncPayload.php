@@ -54,6 +54,7 @@ final class SyncPayload
         if ($table === 'memberships') {
             if ($identityEnforced) {
                 $payload['permissions'] = Identity::parseTextArray($payload['permissions'] ?? null);
+                unset($payload['pin_hash'], $payload['pin_salt']);
             } else {
                 $payload = array_diff_key($payload, array_flip(self::IDENTITY_COLUMNS));
             }

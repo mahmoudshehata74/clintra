@@ -96,7 +96,8 @@ export default function SyncStatusChip() {
   const isServerUnreachable = useServerUnreachable();
   const [isListOpen, setIsListOpen] = useState(false);
   const [openVisitId, setOpenVisitId] = useState<string | null>(null);
-  const clinical = readsClinicalText(useGuardedActingMembership());
+  const access = useIdentityAccess();
+  const clinical = access.allows("clinical.view", readsClinicalText(useGuardedActingMembership()));
   const { advance, isCoolingDown, advanceError } = useVisitAdvance();
 
   const reviewRows =
@@ -165,7 +166,13 @@ export default function SyncStatusChip() {
                 <p className="text-sm">{describeSyncReview(review)}</p>
                 {lostBooking && <p className="rounded-control bg-field p-2 text-xs">{lostBooking}</p>}
 
-                {lostCorrection ? (
+                {access.enforced && !clinical && (lostCorrection || ["visit_form_data", "visit_form_revisions", "prescriptions", "prescription_items"].includes(review.entity)) ? (
+                  <div className="flex shrink-0 gap-2">
+                    <button type="button" onClick={() => void resolve(review.id, acknowledgeReview)} className="rounded-control border border-rule px-2 py-1 text-sm">
+                      {dayScreenStrings.syncReviewAcknowledgeAction}
+                    </button>
+                  </div>
+                ) : lostCorrection ? (
                   // Already settled (sync/correctionReview.ts, sync/syncGroups.ts):
                   // the server's version stays; nothing is merged.
                   <>
@@ -331,3 +338,4 @@ function ReviewComparisonTable({ comparison }: { comparison: ReviewComparison })
     </table>
   );
 }
+import { useIdentityAccess } from "../../auth/permissions";

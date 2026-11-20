@@ -72,7 +72,7 @@ test('a wrong password and an unknown username read the same', function () {
     $wrong->assertStatus(401);
     $unknown->assertStatus(401);
     expect($wrong->getContent())->toBe($unknown->getContent());
-    expect($wrong->json())->toBe(['error' => 'invalid_credentials', 'message' => 'اسم المستخدم أو كلمة السر غلط']);
+    expect($wrong->json())->toBe(['error' => 'invalid_credentials', 'message' => 'اسم المستخدم أو كلمة المرور غير صحيحة.']);
     expect($this->fx()->table('member_credentials')->where('org_id', $org['orgId'])->count())->toBe(0);
 });
 
@@ -101,7 +101,7 @@ test('five failed sign-ins of one username lock it for fifteen minutes, and only
 
     $locked = IdentityHarness::send($org, 'POST', '/api/auth/login', loginBody('mona', 'mona password 1'));
     $locked->assertStatus(429);
-    expect($locked->json())->toBe(['error' => 'too_many_attempts', 'message' => 'محاولات كتير، استنى شوية وجرّب تاني']);
+    expect($locked->json())->toBe(['error' => 'too_many_attempts', 'message' => 'محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.']);
 
     // Fifteen minutes after the fifth failure it clears.
     $this->fx()->table('login_attempts')->where('org_id', $org['orgId'])->update(['at' => now()->subMinutes(16)->toIso8601String()]);
@@ -199,7 +199,7 @@ test('six successful step-ups in fifteen minutes do not lock; five wrong ones do
     for ($i = 0; $i < 5; $i++) {
         $wrong = IdentityHarness::send($org, 'DELETE', '/api/staff/credentials/'.$credential['id'], ['password' => 'wrong password'], $owner);
         $wrong->assertStatus(403);
-        expect($wrong->json())->toBe(['error' => 'step_up_failed', 'message' => 'كلمة السر غلط']);
+        expect($wrong->json())->toBe(['error' => 'step_up_failed', 'message' => 'كلمة المرور غير صحيحة.']);
     }
 
     IdentityHarness::send($org, 'DELETE', '/api/staff/credentials/'.$credential['id'], ['password' => 'owner password 1'], $owner)->assertStatus(429);
@@ -215,13 +215,13 @@ test('a member changes their own password with the current or temporary one, und
         'current_password' => $current, 'password' => $new,
     ], $credential);
 
-    expect($change('temporary pw 1', 'short')->assertStatus(422)->json('message'))->toBe('كلمة السر لازم تكون 10 حروف على الأقل');
-    expect($change('temporary pw 1', str_repeat('ك', 129))->assertStatus(422)->json('message'))->toBe('كلمة السر لازم تكون 128 حرف بالكتير');
-    expect($change('temporary pw 1', 'QwertyUIOP')->assertStatus(422)->json('message'))->toBe('كلمة السر دي سهلة أوي، اختار غيرها');
-    expect($change('temporary pw 1', 'ZAMALEK1911')->assertStatus(422)->json('message'))->toBe('كلمة السر دي سهلة أوي، اختار غيرها');
-    expect($change('temporary pw 1', 'MONA')->assertStatus(422)->json('message'))->toBe('كلمة السر لازم تكون 10 حروف على الأقل');
+    expect($change('temporary pw 1', 'short')->assertStatus(422)->json('message'))->toBe('يجب أن تتضمن كلمة المرور 10 أحرف على الأقل.');
+    expect($change('temporary pw 1', str_repeat('ك', 129))->assertStatus(422)->json('message'))->toBe('يجب ألا تتجاوز كلمة المرور 128 حرفًا.');
+    expect($change('temporary pw 1', 'QwertyUIOP')->assertStatus(422)->json('message'))->toBe('كلمة المرور هذه ضعيفة. اختر كلمة مرور أخرى.');
+    expect($change('temporary pw 1', 'ZAMALEK1911')->assertStatus(422)->json('message'))->toBe('كلمة المرور هذه ضعيفة. اختر كلمة مرور أخرى.');
+    expect($change('temporary pw 1', 'MONA')->assertStatus(422)->json('message'))->toBe('يجب أن تتضمن كلمة المرور 10 أحرف على الأقل.');
     $this->fx()->table('memberships')->where('id', $memberId)->update(['username' => 'mona.ahmed12']);
-    expect($change('temporary pw 1', 'Mona.Ahmed12')->assertStatus(422)->json('message'))->toBe('كلمة السر دي سهلة أوي، اختار غيرها');
+    expect($change('temporary pw 1', 'Mona.Ahmed12')->assertStatus(422)->json('message'))->toBe('كلمة المرور هذه ضعيفة. اختر كلمة مرور أخرى.');
     $change('wrong current', 'كلمة سر جديدة طويلة')->assertStatus(403);
 
     $change('temporary pw 1', 'كلمة سر جديدة طويلة')->assertOk()->assertExactJson(['must_change_password' => false]);

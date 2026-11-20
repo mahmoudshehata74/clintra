@@ -1,6 +1,7 @@
 import { ensureContractReferenceData } from "./db/contractReferenceData";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import LockScreen from "./auth/LockScreen";
+import { hasPermission, IdentityAccessContext } from "./auth/permissions";
 import RegistrationScreen from "./auth/RegistrationScreen";
 import {
   clearActiveSession,
@@ -14,6 +15,7 @@ import AppShell from "./components/AppShell";
 import { restoreAppearance } from "./components/appearance";
 import InstallBanner from "./components/InstallBanner";
 import { db } from "./db/database";
+import { useLiveQuery } from "./db/useLiveQuery";
 import { deviceReadiness } from "./db/deviceRegistration";
 import { isDeviceRegistered } from "./db/registration";
 import { isDemoModeRequested } from "./domain/appMode";
@@ -180,13 +182,16 @@ export default function App() {
   // the patient profile — does the same, for every role.
   const [selectedView, setSelectedView] = useState<"day" | "patients" | "doctor" | "visit" | "messages" | "reports">("day");
   const viewingMembership = useGuardedActingMembership();
+  const enforced = useLiveQuery(async () => (await db.device.toArray()).some((row) => row.identity_enforced_at != null), []) ?? false;
+  const access = { enforced, member: viewingMembership };
+  const clinical = hasPermission(access, "clinical.view", true);
   const doctorPractitionerId = viewingMembership?.practitioner_id ?? null;
   const isDoctorViewShown = selectedView === "doctor" && doctorPractitionerId !== null;
-  const isVisitViewShown = selectedView === "visit" && doctorPractitionerId !== null;
-  const isMessagesViewShown = selectedView === "messages" && viewingMembership !== undefined;
+  const isVisitViewShown = selectedView === "visit" && doctorPractitionerId !== null && clinical;
+  const isMessagesViewShown = selectedView === "messages" && viewingMembership !== undefined && hasPermission(access, "messages.send", true);
   const isPatientsViewShown = selectedView === "patients" && viewingMembership !== undefined;
   // The reports page ("التقارير"): the owner, or a membership tied to a doctor (canSeeReports).
-  const isReportsViewShown = selectedView === "reports" && viewingMembership !== undefined && canSeeReports(viewingMembership);
+  const isReportsViewShown = selectedView === "reports" && viewingMembership !== undefined && hasPermission(access, "reports.view", canSeeReports(viewingMembership));
   const [doctorPractitionerName, setDoctorPractitionerName] = useState<string | undefined>(undefined);
   const handlePractitionerName = useCallback((name: string) => setDoctorPractitionerName(name), []);
   // Reported up by DayScreen (its own subtitle, e.g. "يوم العيادة" or the
@@ -211,7 +216,7 @@ export default function App() {
   // The day screen stays mounted while locked so an open sheet with typed
   // values is preserved and restored on unlock; the overlay covers it fully.
   return (
-    <>
+    <IdentityAccessContext.Provider value={access}>
       <InstallBanner />
       {authErrorDetected && (
         // z-47: above the app bar/rail (z-40, see AppShell.tsx's own doc
@@ -304,6 +309,6 @@ export default function App() {
         {isReportsViewShown && <ReportsScreen membership={viewingMembership} />}
       </AppShell>
       {isLocked && <LockScreen defaultMembershipId={lastMembershipId} />}
-    </>
+    </IdentityAccessContext.Provider>
   );
 }

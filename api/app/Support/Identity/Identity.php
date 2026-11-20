@@ -130,7 +130,7 @@ final class Identity
     {
         return response()->json([
             'error' => 'unauthenticated',
-            'message' => 'يجب تسجيل الدخول',
+            'message' => IdentityStrings::get('unauthenticated'),
         ], 401);
     }
 }
