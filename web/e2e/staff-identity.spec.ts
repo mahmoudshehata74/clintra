@@ -42,7 +42,7 @@ async function registered(page: Page) {
     expect(request.headers()["x-clintra-person-proof"]).toMatch(/^v1\./);
     if (request.method() !== "GET") expect(request.postDataJSON().password).toBe(password);
     if (request.method() === "GET") {
-      await route.fulfill({ json: { credentials: [{ id: device.credential, membership_id: staff.id, location_id, device_id: device.id, series: 1 }] } });
+      await route.fulfill({ json: { credentials: [{ id: device.credential, membership_id: staff.id, location_id, device_id: device.id, series: 1, created_at: at }] } });
     } else if (request.method() === "DELETE") {
       await route.fulfill({ json: { revoked: true } });
     } else if (request.url().endsWith("/password-reset")) {
@@ -66,14 +66,17 @@ async function registered(page: Page) {
 async function staffWorkflow(page: Page, shot?: (screen: string) => Promise<void>) {
   await registered(page);
   const lock = lockOverlay(page);
-  await lock.getByRole("button", { name: "دخول بحساب" }).click();
-  await lock.getByRole("button", { name: "نسيت كلمة السر؟" }).click();
-  await expect(lock.getByRole("heading", { name: "استرجاع حساب صاحب العيادة" })).toBeVisible();
+  await lock.getByRole("button", { name: "تسجيل الدخول بالحساب" }).click();
+  await lock.getByRole("link", { name: "نسيت كلمة المرور؟" }).click();
+  await expect(lock.getByRole("heading", { name: "استرداد حساب مالك العيادة" })).toBeVisible();
+  await expect(lock.getByLabel("رقم هاتف مالك العيادة")).toHaveAttribute("dir", "ltr");
+  await expect(lock.getByPlaceholder("+20…")).toBeVisible();
+  await expect(lock.getByLabel("كلمة المرور الجديدة")).toHaveAccessibleDescription("10 أحرف على الأقل");
   await shot?.("a3-owner-recovery");
-  await lock.getByLabel("موبايل صاحب العيادة").fill("01001234567");
-  await lock.getByLabel("كود الاسترجاع").fill("CLT-7F3K-9QRT-4XWM-2BCD");
+  await lock.getByLabel("رقم هاتف مالك العيادة").fill("01001234567");
+  await lock.getByLabel("رمز الاسترداد").fill("CLT-7F3K-9QRT-4XWM-2BCD");
   await lock.getByLabel("اسم المستخدم").fill("owner");
-  await lock.getByLabel("كلمة السر الجديدة").fill(password);
+  await lock.getByLabel("كلمة المرور الجديدة").fill(password);
   await lock.getByRole("button", { name: "حفظ", exact: true }).click();
   await expect(lock).toBeHidden();
 
@@ -88,29 +91,35 @@ async function staffWorkflow(page: Page, shot?: (screen: string) => Promise<void
     await heading.scrollIntoViewIfNeeded();
     await shot?.(name);
   }
-  async function confirm() {
-    await member.getByLabel("اكتب كلمة السر بتاعتك للتأكيد").fill(password);
-    await member.getByRole("button", { name: "تأكيد", exact: true }).click();
+  async function confirm(revoke = false) {
+    await member.getByLabel("اكتب كلمة المرور الخاصة بك للتأكيد").fill(password);
+    const button = member.getByRole("button", { name: revoke ? "إلغاء الدخول" : "تأكيد", exact: true });
+    if (revoke) await expect(button).toHaveClass(/border-danger-line/);
+    await button.click();
   }
 
   await open("اسم المستخدم", "a3-username");
   await member.getByLabel("اسم المستخدم").fill("sara.new");
   await confirm();
-  await open("إعادة تعيين كلمة السر", "a3-password-reset");
+  await open("إعادة تعيين كلمة المرور", "a3-password-reset");
   await confirm();
-  await expect(member.getByLabel("كلمة السر المؤقتة")).toHaveValue(temporary);
-  await expect(member.getByText("اديها للموظف وهيغيّرها أول ما يدخل")).toBeVisible();
+  await expect(member.getByLabel("كلمة المرور المؤقتة")).toHaveValue(temporary);
+  await expect(member.getByText("تظهر مرة واحدة فقط")).toBeVisible();
+  await expect(member.getByText("سلِّمها للموظف، وسيُطلب منه تغييرها عند أول دخول")).toBeVisible();
   await expect(member.getByRole("button", { name: "نسخ", exact: true })).toBeVisible();
   await shot?.("a3-temporary-password");
   await member.getByRole("button", { name: "رجوع", exact: true }).click();
-  await expect(member.getByLabel("كلمة السر المؤقتة")).toHaveCount(0);
+  await expect(member.getByLabel("كلمة المرور المؤقتة")).toHaveCount(0);
 
-  await member.getByRole("button", { name: "الأجهزة اللي داخل منها", exact: true }).click();
+  await member.getByRole("button", { name: "الأجهزة المسجَّل الدخول منها", exact: true }).click();
   await expect(member.getByText("جهاز 1 · الفرع الرئيسي")).toBeVisible();
+  const date = member.locator("time");
+  await expect(date).toHaveText(/[0-9]/);
+  await expect(date).not.toHaveText(/[٠-٩]/);
   await shot?.("a3-devices");
-  await open("إلغاء الدخول من الجهاز ده", "a3-revoke");
-  await confirm();
-  await expect(member.getByText("مفيش أجهزة مسجّل دخول عليها")).toBeVisible();
+  await open("إلغاء تسجيل الدخول من هذا الجهاز", "a3-revoke");
+  await confirm(true);
+  await expect(member.getByText("لا توجد أجهزة مسجَّل الدخول منها")).toBeVisible();
   await member.getByRole("button", { name: "رجوع", exact: true }).click();
 
   await open("الصلاحيات", "a3-permissions");

@@ -18,10 +18,10 @@ function fixture(action: "prepare" | "enforce" | "deactivate", orgId: string) {
 async function accountSignIn(page: Page, username: string) {
   await page.getByRole("button", { name: AUTH.lockButtonLabel, exact: true }).click();
   const lock = lockOverlay(page);
-  await lock.getByRole("button", { name: "دخول بحساب" }).click();
+  await lock.getByRole("button", { name: "تسجيل الدخول بالحساب" }).click();
   await lock.getByLabel("اسم المستخدم").fill(username);
-  await lock.getByLabel("كلمة السر", { exact: true }).fill("Password for this live fixture");
-  await lock.getByRole("button", { name: "دخول", exact: true }).click();
+  await lock.getByLabel("كلمة المرور", { exact: true }).fill("Password for this live fixture");
+  await lock.getByRole("button", { name: "تسجيل الدخول", exact: true }).click();
   await expect(lock).toBeHidden();
 }
 
@@ -90,9 +90,9 @@ test("an enforced organization accepts signed operations and shows the three ide
       expect(await pushPatient(page, orgId, "valid")).toMatchObject({ synced: false, reason: "actor_deactivated" });
 
       await page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
-      await expect(page.getByText(/التغيير ده اتعمل قبل الدخول بكلمة السر/)).toBeVisible();
-      await expect(page.getByText(/التغيير ده مش موقّع من حساب على الجهاز ده/)).toBeVisible();
-      await expect(page.getByText(/الحساب اللي عمل التغيير ده اتوقف قبل ما يوصل للسيرفر/)).toBeVisible();
+      await expect(page.getByText("أُجري التغيير قبل تسجيل الدخول بكلمة المرور. على من أجراه تسجيل الدخول على هذا الجهاز.")).toBeVisible();
+      await expect(page.getByText("لم يُحفظ التغيير لأن توقيعه غير صالح على هذا الجهاز. سجّل الدخول مرة أخرى باستخدام كلمة المرور.")).toBeVisible();
+      await expect(page.getByText("لم يُحفظ التغيير لأن حساب من أجراه عُطّل قبل وصوله إلى الخادم.")).toBeVisible();
       expect(errors).toEqual([]);
     } finally {
       await context.close();
@@ -128,8 +128,8 @@ test("a permission removed on A closes the gated action on B and rejects B's off
       const assistant = settings.getByRole("listitem").filter({ hasText: "Live Identity Assistant" });
       async function changeMessagePermission(checked: boolean) {
         await assistant.getByRole("button", { name: "الصلاحيات", exact: true }).click();
-        await assistant.getByRole("switch", { name: /إرسال الرسايل/ }).setChecked(checked);
-        await assistant.getByLabel("اكتب كلمة السر بتاعتك للتأكيد").fill("Password for this live fixture");
+        await assistant.getByRole("switch", { name: /إرسال الرسائل/ }).setChecked(checked);
+        await assistant.getByLabel("اكتب كلمة المرور الخاصة بك للتأكيد").fill("Password for this live fixture");
         await assistant.getByRole("button", { name: "تأكيد", exact: true }).click();
         await expect(assistant.getByRole("heading", { name: "الصلاحيات", exact: true })).toHaveCount(0);
       }
@@ -154,7 +154,7 @@ test("a permission removed on A closes the gated action on B and rejects B's off
       await eventually([b], () => messages.count(), 0);
       await eventually([b], async () => (await readStore<{ op_id: string; reason: string }>(b.page, "sync_review")).find((row) => row.op_id === opId)?.reason, "permission_denied");
       await b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
-      await expect(b.page.getByText(/اللي عمل التغيير ده مالوش صلاحية يعمله/)).toBeVisible();
+      await expect(b.page.getByText("لم يُحفظ التغيير لأن من أجراه لا يملك الصلاحية اللازمة.")).toBeVisible();
       expect(a.errors).toEqual([]);
       expect(b.errors).toEqual([]);
     } finally {

@@ -1,3 +1,4 @@
+import text from "./identityStrings";
 import { getApiBaseUrl } from "../config/apiBaseUrl";
 import type { ClintraDatabase } from "../db/database";
 import type { DeviceRegistration, IdentityKeyPair, Membership, PersonCredential } from "../db/types";
@@ -55,7 +56,7 @@ async function identityRequest<T>(
   const response = await fetch(url, { method, body, headers });
   if (!response.ok) {
     const data = await response.json().catch(() => null) as { message?: string } | null;
-    throw new IdentityRequestError(data?.message ?? "حدث خطأ، جرّب تاني");
+    throw new IdentityRequestError(data?.message ?? text.requestFailed);
   }
   return response.json();
 }
@@ -128,11 +129,11 @@ export async function requestStaffIdentity<T>(
   db: ClintraDatabase, actorId: string, method: string, path: string, payload?: Record<string, unknown>,
 ): Promise<T> {
   const device = (await db.device.toArray()).find((row) => row.token);
-  if (!device) throw new IdentityRequestError("سجّل الدخول على الجهاز ده الأول");
+  if (!device) throw new IdentityRequestError(text.signInFirst);
   const [key, person] = await Promise.all([
     db.device_keys.get(device.id), db.credentials.where("[device_id+membership_id]").equals([device.id, actorId]).first(),
   ]);
-  if (!key || !person || person.must_change_password) throw new IdentityRequestError("سجّل الدخول على الجهاز ده الأول");
+  if (!key || !person || person.must_change_password) throw new IdentityRequestError(text.signInFirst);
   return identityRequest<T>(device, key.private_key, path, payload, person, method);
 }
 
@@ -140,7 +141,7 @@ export async function changeOwnPassword(
   db: ClintraDatabase, device: DeviceRegistration, credential: PersonCredential, currentPassword: string, newPassword: string,
 ): Promise<void> {
   const deviceKey = await db.device_keys.get(device.id);
-  if (!deviceKey || credential.device_id !== device.id) throw new IdentityRequestError("سجّل الدخول على الجهاز ده الأول");
+  if (!deviceKey || credential.device_id !== device.id) throw new IdentityRequestError(text.signInFirst);
   await identityRequest(device, deviceKey.private_key, "/auth/password", {
     current_password: currentPassword, password: newPassword,
   }, credential);

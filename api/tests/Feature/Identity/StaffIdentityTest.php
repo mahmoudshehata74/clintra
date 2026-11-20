@@ -72,7 +72,7 @@ test('a reset needs the step-up password and a member with a username', function
     IdentityHarness::send($org, 'POST', "/api/staff/{$nameless}/password-reset", ['password' => 'wrong'], $owner)->assertStatus(403);
     $response = IdentityHarness::send($org, 'POST', "/api/staff/{$nameless}/password-reset", ['password' => 'owner password 1'], $owner);
     $response->assertStatus(422);
-    expect($response->json())->toBe(['error' => 'username_required', 'message' => 'حدد اسم مستخدم للموظف ده الأول']);
+    expect($response->json())->toBe(['error' => 'username_required', 'message' => 'حدّد اسم مستخدم لهذا الموظف أولًا.']);
     expect($this->fx()->table('member_passwords')->where('membership_id', $nameless)->exists())->toBeFalse();
 });
 
@@ -143,14 +143,14 @@ test('the owner sets usernames: lowercase, 3 to 32 of a-z 0-9 . _ -, unique per 
         if ($invalid !== '') {
             expect($refused->json())->toBe([
                 'error' => 'username_invalid',
-                'message' => 'اسم المستخدم لازم يكون من 3 لـ 32 حرف: حروف إنجليزي صغيرة أو أرقام أو . أو _ أو -',
+                'message' => 'يجب أن يتألف اسم المستخدم من 3 إلى 32 محرفًا، باستخدام الحروف اللاتينية الصغيرة أو الأرقام أو . أو _ أو -.',
             ]);
         }
     }
 
     $taken = $set($org, $secondId, 'MONA.AHMED_1');
     $taken->assertStatus(409);
-    expect($taken->json())->toBe(['error' => 'username_taken', 'message' => 'اسم المستخدم ده مستخدم قبل كده']);
+    expect($taken->json())->toBe(['error' => 'username_taken', 'message' => 'اسم المستخدم هذا مستخدم بالفعل.']);
 
     // Unique per organization only, and another organization's member is not ours to name.
     $set($other, $otherMember, 'mona.ahmed_1')->assertOk();

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Support\Identity\AuthCall;
 use App\Support\Identity\AuthCallFailed;
 use App\Support\Identity\Identity;
+use App\Support\Identity\IdentityStrings;
 use App\Support\Identity\Password;
 use App\Support\Identity\StepUp;
 use App\Support\Identity\Username;
@@ -12,6 +13,7 @@ use App\Support\Sync\SyncSeqLock;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -59,7 +61,7 @@ class StaffIdentityController extends Controller
                 'P0001' => $this->notFound(),
                 'CL422' => response()->json([
                     'error' => 'username_required',
-                    'message' => 'حدد اسم مستخدم للموظف ده الأول',
+                    'message' => IdentityStrings::get('usernameRequired'),
                 ], 422),
                 default => throw $e,
             };
@@ -106,7 +108,7 @@ class StaffIdentityController extends Controller
         $deviceId = $request->attributes->get('device_id');
 
         if ($deviceId === null) {
-            return response()->json(['error' => 'unauthenticated', 'message' => 'يجب تسجيل الدخول'], 401);
+            return response()->json(['error' => 'unauthenticated', 'message' => IdentityStrings::get('unauthenticated')], 401);
         }
         if (! Str::isUuid($membership)) {
             return $this->notFound();
@@ -181,7 +183,7 @@ class StaffIdentityController extends Controller
             && array_diff(Identity::parseTextArray($row->permissions), $person['permissions']) === []
         ))->map(fn (object $row) => [
             'id' => $row->id, 'membership_id' => $row->membership_id, 'device_id' => $row->device_id,
-            'location_id' => $row->location_id, 'series' => $row->series, 'created_at' => $row->created_at,
+            'location_id' => $row->location_id, 'series' => $row->series, 'created_at' => Carbon::parse($row->created_at)->toISOString(),
         ])->values()]);
     }
 
@@ -241,6 +243,6 @@ class StaffIdentityController extends Controller
 
     private function notFound(): JsonResponse
     {
-        return response()->json(['error' => 'not_found', 'message' => 'لم يتم العثور على المورد'], 404);
+        return response()->json(['error' => 'not_found', 'message' => IdentityStrings::get('notFound')], 404);
     }
 }

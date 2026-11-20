@@ -1,34 +1,17 @@
+import text from "../../auth/identityStrings";
 import { useId, useState, type FormEvent } from "react";
 import { IdentityRequestError, requestStaffIdentity } from "../../auth/identityClient";
+import PasswordInput from "../../auth/PasswordInput";
 import { canEditPermissions, canManageCredential, permissionCatalogue, type Permission } from "../../auth/permissions";
 import Button from "../../components/ui/Button";
 import Field, { TextInput } from "../../components/ui/Field";
 import { db } from "../../db/database";
 import type { Location, Membership } from "../../db/types";
 
-const text = {
-  username: "اسم المستخدم",
-  reset: "إعادة تعيين كلمة السر",
-  devices: "الأجهزة اللي داخل منها",
-  permissions: "الصلاحيات",
-  revoke: "إلغاء الدخول من الجهاز ده",
-  password: "اكتب كلمة السر بتاعتك للتأكيد",
-  temporary: "كلمة السر المؤقتة",
-  handOff: "اديها للموظف وهيغيّرها أول ما يدخل",
-  copy: "نسخ",
-  copied: "تم النسخ",
-  copyFailed: "تعذر النسخ",
-  unheld: "مش عندك الصلاحية دي",
-  none: "مفيش أجهزة مسجّل دخول عليها",
-  device: "جهاز",
-  confirm: "تأكيد",
-  back: "رجوع",
-  failed: "تعذر الاتصال بالخادم. جرّب تاني",
-} as const;
-
 type Action = "username" | "reset" | "devices" | "permissions" | "revoke";
-interface Credential { id: string; device_id: string; membership_id: string; location_id: string; series: number }
+interface Credential { id: string; device_id: string; membership_id: string; location_id: string; series: number; created_at: string }
 const permissions = Object.keys(permissionCatalogue) as Permission[];
+const signInDate = new Intl.DateTimeFormat("ar-EG-u-nu-latn", { dateStyle: "medium", timeZone: "Africa/Cairo" });
 
 export default function StaffIdentityActions({ caller, target, locations }: {
   caller: Membership; target: Membership; locations: Location[];
@@ -63,7 +46,7 @@ export default function StaffIdentityActions({ caller, target, locations }: {
       const { credentials } = await requestStaffIdentity<{ credentials: Credential[] }>(db, caller.id, "GET", "/staff/credentials");
       setDevices(credentials.filter((row) => row.membership_id === target.id));
     } catch (problem) {
-      setError(problem instanceof IdentityRequestError ? problem.message : text.failed);
+      setError(problem instanceof IdentityRequestError ? problem.message : text.connectionFailed);
     } finally {
       setBusy(false);
     }
@@ -96,7 +79,7 @@ export default function StaffIdentityActions({ caller, target, locations }: {
         open("devices");
       }
     } catch (problem) {
-      setError(problem instanceof IdentityRequestError ? problem.message : text.failed);
+      setError(problem instanceof IdentityRequestError ? problem.message : text.connectionFailed);
     } finally {
       setBusy(false);
     }
@@ -120,7 +103,8 @@ export default function StaffIdentityActions({ caller, target, locations }: {
       {temporary ? (
         <div className="grid gap-2">
           <label htmlFor={`${fieldId}-temporary`}>{text.temporary}</label>
-          <TextInput id={`${fieldId}-temporary`} dir="ltr" value={temporary} readOnly />
+          <PasswordInput id={`${fieldId}-temporary`} dir="ltr" value={temporary} readOnly initiallyVisible />
+          <p className="text-sm font-semibold">{text.temporaryOnce}</p>
           <p className="text-sm">{text.handOff}</p>
           <Button size="sm" variant="secondary" onClick={async () => {
             try { await navigator.clipboard.writeText(temporary); setCopyMessage(text.copied); }
@@ -132,7 +116,10 @@ export default function StaffIdentityActions({ caller, target, locations }: {
         <ul className="grid gap-2">
           {!busy && !error && devices.length === 0 && <li>{text.none}</li>}
           {devices.map((device) => <li className="flex flex-wrap items-center justify-between gap-2" key={device.id}>
-            <span>{text.device} {device.series} · {locations.find((row) => row.id === device.location_id)?.name}</span>
+            <div>
+              <span>{text.device} {device.series} · {locations.find((row) => row.id === device.location_id)?.name}</span>
+              <p className="text-sm text-muted">{text.signInDate} <time dateTime={device.created_at}>{signInDate.format(new Date(device.created_at))}</time></p>
+            </div>
             <Button size="sm" variant="danger" onClick={() => { setSelected(device); open("revoke"); }}>{text.revoke}</Button>
           </li>)}
         </ul>
@@ -152,10 +139,12 @@ export default function StaffIdentityActions({ caller, target, locations }: {
               </label>;
             })}
           </div>}
-          <Field id={`${fieldId}-password`} label={text.password}>
-            <TextInput name="password" type="password" autoComplete="current-password" required />
+          <Field id={`${fieldId}-password`} label={text.stepUpPassword}>
+            <PasswordInput name="password" autoComplete="current-password" required />
           </Field>
-          <Button size="sm" variant="primary" disabled={busy} type="submit">{text.confirm}</Button>
+          <Button size="sm" variant={action === "revoke" ? "danger" : "primary"} disabled={busy} type="submit">
+            {action === "revoke" ? text.revokeConfirm : text.confirm}
+          </Button>
         </form>
       )}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}

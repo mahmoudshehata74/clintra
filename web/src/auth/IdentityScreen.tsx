@@ -1,3 +1,4 @@
+import text from "./identityStrings";
 import { useState, type FormEvent } from "react";
 import Button from "../components/ui/Button";
 import Field, { TextInput } from "../components/ui/Field";
@@ -5,6 +6,7 @@ import { db } from "../db/database";
 import type { DeviceRegistration, PersonCredential } from "../db/types";
 import { changeOwnPassword, IdentityRequestError, recoverOwner, signIn } from "./identityClient";
 import { generatePinSalt, hashPin } from "./pinHash";
+import PasswordInput from "./PasswordInput";
 
 interface IdentityScreenProps {
   device: DeviceRegistration;
@@ -21,7 +23,7 @@ export default function IdentityScreen({ device, changeFor, onCancel, onComplete
 
   async function finishSignIn(credential: PersonCredential) {
     const member = await db.memberships.get(credential.membership_id);
-    if (!member) throw new IdentityRequestError("بيانات الحساب لسه بتنزل على الجهاز. جرّب تاني بعد المزامنة");
+    if (!member) throw new IdentityRequestError(text.accountSync);
     if (!member.pin_salt && !credential.pin_salt) {
       setStage("pin");
       return;
@@ -48,20 +50,20 @@ export default function IdentityScreen({ device, changeFor, onCancel, onComplete
         else await finishSignIn(credential);
       } else if (stage === "password" && person) {
         const newPassword = field("new-password");
-        if (newPassword !== field("confirm-password")) throw new IdentityRequestError("كلمتا السر مش زي بعض");
+        if (newPassword !== field("confirm-password")) throw new IdentityRequestError(text.passwordMismatch);
         await changeOwnPassword(db, device, person, field("current-password"), newPassword);
         if (changeFor) onComplete();
         else await finishSignIn(person);
       } else if (person) {
         const pin = field("pin");
-        if (!/^[0-9]{4}$/.test(pin) || pin !== field("confirm-pin")) throw new IdentityRequestError("اكتب نفس الـ 4 أرقام مرتين");
+        if (!/^[0-9]{4}$/.test(pin) || pin !== field("confirm-pin")) throw new IdentityRequestError(text.pinMismatch);
         const salt = generatePinSalt();
         const updated = await db.credentials.update(person.id, { pin_hash: hashPin(pin, salt), pin_salt: salt });
-        if (!updated) throw new IdentityRequestError("سجّل الدخول على الجهاز ده تاني");
+        if (!updated) throw new IdentityRequestError(text.signInAgain);
         onComplete(person.membership_id);
       }
     } catch (problem) {
-      setError(problem instanceof IdentityRequestError ? problem.message : "تعذر الاتصال بالخادم. جرّب تاني");
+      setError(problem instanceof IdentityRequestError ? problem.message : text.connectionFailed);
     } finally {
       setBusy(false);
     }
@@ -70,60 +72,64 @@ export default function IdentityScreen({ device, changeFor, onCancel, onComplete
   return (
     <form key={stage} className="mt-6 grid w-full max-w-xs gap-3 rounded-panel bg-card p-5 text-start text-text" onSubmit={submit}>
       <h1 className="text-lg font-bold">
-        {stage === "sign-in" ? "دخول بحساب" : stage === "password" ? "غيّر كلمة السر" : stage === "recovery" ? "استرجاع حساب صاحب العيادة" : "اختار رقم سري"}
+        {stage === "sign-in" ? text.signIn : stage === "password" ? text.changePassword : stage === "recovery" ? text.recovery : text.choosePin}
       </h1>
       {stage === "recovery" && (
         <>
-          <Field id="identity-recovery-phone" label="موبايل صاحب العيادة">
-            <TextInput type="tel" name="phone" autoComplete="tel" dir="ltr" required />
+          <Field id="identity-recovery-phone" label={text.ownerPhone}>
+            <TextInput type="tel" name="phone" autoComplete="tel" dir="ltr" placeholder="+20…" required />
           </Field>
-          <Field id="identity-recovery-code" label="كود الاسترجاع">
+          <Field id="identity-recovery-code" label={text.recoveryCode}>
             <TextInput name="code" autoComplete="one-time-code" dir="ltr" required />
           </Field>
         </>
       )}
       {(stage === "sign-in" || stage === "recovery") && (
         <>
-          <Field id="identity-username" label="اسم المستخدم">
+          <Field id="identity-username" label={text.username}>
             <TextInput name="username" autoComplete="username" autoCapitalize="none" dir="ltr" spellCheck={false} required />
           </Field>
-          <Field id="identity-password" label={stage === "recovery" ? "كلمة السر الجديدة" : "كلمة السر"}>
-            <TextInput name="password" type="password" autoComplete={stage === "recovery" ? "new-password" : "current-password"} required />
+          <Field id="identity-password" label={stage === "recovery" ? text.newPassword : text.password}
+            hint={stage === "recovery" ? text.passwordMinimumHint : undefined}>
+            <PasswordInput name="password" autoComplete={stage === "recovery" ? "new-password" : "current-password"} required />
           </Field>
         </>
       )}
       {stage === "password" && (
         <>
-          <Field id="identity-current-password" label="كلمة السر الحالية">
-            <TextInput name="current-password" type="password" autoComplete="current-password" required />
+          <Field id="identity-current-password" label={text.currentPassword}>
+            <PasswordInput name="current-password" autoComplete="current-password" required />
           </Field>
-          <Field id="identity-new-password" label="كلمة السر الجديدة">
-            <TextInput name="new-password" type="password" autoComplete="new-password" required />
+          <Field id="identity-new-password" label={text.newPassword} hint={text.passwordMinimumHint}>
+            <PasswordInput name="new-password" autoComplete="new-password" required />
           </Field>
-          <Field id="identity-confirm-password" label="اكتبها تاني">
-            <TextInput name="confirm-password" type="password" autoComplete="new-password" required />
+          <Field id="identity-confirm-password" label={text.confirmPassword} hint={text.passwordMinimumHint}>
+            <PasswordInput name="confirm-password" autoComplete="new-password" required />
           </Field>
         </>
       )}
       {stage === "pin" && (
         <>
-          <Field id="identity-pin" label="الرقم السري">
+          <Field id="identity-pin" label={text.pin}>
             <TextInput name="pin" type="password" inputMode="numeric" dir="ltr" maxLength={4} pattern="[0-9]{4}" required />
           </Field>
-          <Field id="identity-confirm-pin" label="اكتبه تاني">
+          <Field id="identity-confirm-pin" label={text.confirmPin}>
             <TextInput name="confirm-pin" type="password" inputMode="numeric" dir="ltr" maxLength={4} pattern="[0-9]{4}" required />
           </Field>
         </>
       )}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="mt-2 flex gap-2">
-        <Button disabled={busy} variant="primary" type="submit">{stage === "sign-in" ? "دخول" : "حفظ"}</Button>
-        <Button disabled={busy} variant="secondary" type="button" onClick={stage === "recovery" ? () => { setError(undefined); setStage("sign-in"); } : onCancel}>رجوع</Button>
+        <Button disabled={busy} variant="primary" type="submit">{stage === "sign-in" ? text.submitSignIn : text.save}</Button>
+        <Button disabled={busy} variant="secondary" type="button" onClick={stage === "recovery" ? () => { setError(undefined); setStage("sign-in"); } : onCancel}>{text.back}</Button>
       </div>
       {stage === "sign-in" && (
-        <button disabled={busy} type="button" className="min-h-10 text-start text-sm underline" onClick={() => { setError(undefined); setStage("recovery"); }}>
-          نسيت كلمة السر؟
-        </button>
+        <a href="#owner-recovery" aria-disabled={busy} className="flex min-h-10 items-center text-start text-sm underline" onClick={(event) => {
+          event.preventDefault();
+          if (!busy) { setError(undefined); setStage("recovery"); }
+        }}>
+          {text.forgotPassword}
+        </a>
       )}
     </form>
   );

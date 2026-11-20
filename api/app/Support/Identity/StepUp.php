@@ -30,7 +30,7 @@ final class StepUp
         }
 
         if (! Password::verify($password, $begin['password_hash']) || $begin['membership_id'] !== $membershipId) {
-            return response()->json(['error' => 'step_up_failed', 'message' => 'كلمة السر غلط'], 403);
+            return response()->json(['error' => 'step_up_failed', 'message' => IdentityStrings::get('stepUpFailed')], 403);
         }
 
         AuthCall::run('auth_attempt_succeeded', ['attempt_id' => $begin['attempt_id']]);
@@ -40,6 +40,6 @@ final class StepUp
 
     public static function tooManyAttempts(): JsonResponse
     {
-        return response()->json(['error' => 'too_many_attempts', 'message' => 'محاولات كتير، استنى شوية وجرّب تاني'], 429);
+        return response()->json(['error' => 'too_many_attempts', 'message' => IdentityStrings::get('rateLimited')], 429);
     }
 }

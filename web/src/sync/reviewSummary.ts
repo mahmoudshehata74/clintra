@@ -1,3 +1,4 @@
+import identityStrings from "../auth/identityStrings";
 import { PaymentMethod, type Payment, type SyncReview } from "../db/types";
 import { isRefusedGroupReview, type RefusedGroupPayload } from "./syncGroups";
 import { findMessageTemplate } from "../domain/messageTemplates";
@@ -78,12 +79,12 @@ const REASON_LABELS: Record<string, string> = {
   revision_immutable: "سجل التعديلات مينفعش يتغيّر أو يتمسح",
   // Per-person identity (docs/design-identity-permissions.md section 4):
   // what the server refuses once an organization's sign-in is enforced.
-  proof_invalid: "التغيير ده مش موقّع من حساب على الجهاز ده، فماتحفظش. سجّل دخولك تاني بكلمة السر",
-  proof_missing: "التغيير ده اتعمل قبل الدخول بكلمة السر، ومحتاج صاحبه يسجّل دخول على الجهاز ده",
-  actor_deactivated: "الحساب اللي عمل التغيير ده اتوقف قبل ما يوصل للسيرفر، فماتحفظش",
-  actor_mismatch: "الموظف المسجّل على التغيير ده مش هو اللي عمله، فماتحفظش",
-  permission_denied: "اللي عمل التغيير ده مالوش صلاحية يعمله، فماتحفظش",
-  permission_escalation: "مينفعش تدي أو تشيل صلاحية إنت مش عندك، أو تغيّر صلاحياتك بنفسك",
+  proof_invalid: identityStrings.proof_invalid,
+  proof_missing: identityStrings.proof_missing,
+  actor_deactivated: identityStrings.actor_deactivated,
+  actor_mismatch: identityStrings.actor_mismatch,
+  permission_denied: identityStrings.permission_denied,
+  permission_escalation: identityStrings.permission_escalation,
 };
 
 /** A correction group another device's correction of the same form beat to the server (conflict_stale_rev). */

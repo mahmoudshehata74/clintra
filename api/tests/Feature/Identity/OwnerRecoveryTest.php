@@ -122,7 +122,7 @@ function assertRecoveryFailures(array $org, string $code, array $cases): void
         [$caller, $body] = $build($org, $code);
         $response = IdentityHarness::send($caller, 'POST', '/api/auth/owner-recovery', $body);
         $response->assertStatus(401);
-        expect($response->json())->toBe(['error' => 'recovery_failed', 'message' => 'البيانات دي مش صح'], $case);
+        expect($response->json())->toBe(['error' => 'recovery_failed', 'message' => 'بيانات الاسترداد غير صحيحة.'], $case);
     }
 
     $fx = test()->fx();
@@ -165,7 +165,7 @@ test('recovery is rate limited per code like registration, and checks the new pa
 
     $weak = IdentityHarness::send($org, 'POST', '/api/auth/owner-recovery', recoveryBody($org, $code, 'owner', 'qwertyuiop'));
     $weak->assertStatus(422);
-    expect($weak->json('message'))->toBe('كلمة السر دي سهلة أوي، اختار غيرها');
+    expect($weak->json('message'))->toBe('كلمة المرور هذه ضعيفة. اختر كلمة مرور أخرى.');
 
     for ($i = 0; $i < 5; $i++) {
         IdentityHarness::send($org, 'POST', '/api/auth/owner-recovery', [...recoveryBody($org, $code), 'phone' => '+20109999999'.$i])->assertStatus(401);
@@ -180,7 +180,7 @@ test('a username another member holds is refused before anything is written', fu
     $code = mintCode($org);
 
     IdentityHarness::send($org, 'POST', '/api/auth/owner-recovery', recoveryBody($org, $code, 'TAKEN'))
-        ->assertStatus(409)->assertExactJson(['error' => 'username_taken', 'message' => 'اسم المستخدم ده مستخدم قبل كده']);
+        ->assertStatus(409)->assertExactJson(['error' => 'username_taken', 'message' => 'اسم المستخدم هذا مستخدم بالفعل.']);
     expect($this->fx()->table('activation_codes')->where('code_hash', ActivationCode::hash($code))->value('used_at'))->toBeNull();
     expect($this->fx()->table('memberships')->where('id', $org['ownerId'])->value('username'))->toBeNull();
 });

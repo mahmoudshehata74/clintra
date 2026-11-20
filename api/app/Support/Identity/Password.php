@@ -83,16 +83,16 @@ final class Password
         $length = mb_strlen($normalized, 'UTF-8');
 
         if ($length < self::MIN_LENGTH) {
-            return 'كلمة السر لازم تكون 10 حروف على الأقل';
+            return IdentityStrings::get('passwordMinimumError');
         }
         if ($length > self::MAX_LENGTH) {
-            return 'كلمة السر لازم تكون 128 حرف بالكتير';
+            return IdentityStrings::get('passwordMaximum');
         }
 
         $lowered = mb_strtolower($normalized, 'UTF-8');
 
         if (($username !== null && $lowered === mb_strtolower($username, 'UTF-8')) || isset(self::common()[$lowered])) {
-            return 'كلمة السر دي سهلة أوي، اختار غيرها';
+            return IdentityStrings::get('weakPassword');
         }
 
         return null;
