@@ -6,6 +6,7 @@ import AppearanceToggle from "../components/AppearanceToggle";
 import Badge from "../components/ui/Badge";
 import { formatActorLabel } from "../screens/day/actorLabel";
 import { authStrings } from "./authStrings";
+import IdentityScreen from "./IdentityScreen";
 import { verifyPin } from "./pinHash";
 import { clearAttempts, getLockRemainingMs, registerFailedAttempt } from "./pinRateLimit";
 import { setActiveMembershipId } from "./session";
@@ -32,15 +33,26 @@ interface StaffOption {
  * on a correct PIN.
  */
 export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
-  const staff =
-    useLiveQuery<StaffOption[]>(async () => {
-      const memberships = (await db.memberships.toArray()).filter((membership) => membership.is_active);
-      const users = await db.users.bulkGet(memberships.map((membership) => membership.user_id));
-      const usersById = new Map(users.filter((user): user is User => user != null).map((user) => [user.id, user]));
-      return memberships.map((membership) => ({ membership, user: usersById.get(membership.user_id) }));
-    }, []) ?? [];
+  const lockData = useLiveQuery(async () => {
+    const device = (await db.device.toArray()).find((row) => row.token);
+    const memberships = await db.memberships.toArray();
+    const activeMemberships = memberships.filter((row) => row.is_active);
+    const users = await db.users.bulkGet(activeMemberships.map((row) => row.user_id));
+    const staff: StaffOption[] = activeMemberships.map((membership, index) => ({ membership, user: users[index] }));
+    if (!device) return { staff, identity: null };
+    const credentials = (await db.credentials.toArray()).filter((row) => row.device_id === device.id);
+    const enforced = device.identity_enforced_at != null;
+    return { staff, identity: { device, credentials, enforced } };
+  }, []);
+  const identity = lockData?.identity;
+  const staff = lockData?.staff ?? [];
+  const eligibleStaff = staff.filter(({ membership }) => {
+    const credential = identity?.credentials.find((row) => row.membership_id === membership.id);
+    return !credential?.must_change_password && (!identity?.enforced || credential !== undefined);
+  });
 
   const [pickedId, setPickedId] = useState<string | undefined>(defaultMembershipId);
+  const [identityMode, setIdentityMode] = useState<"sign-in" | "password">();
   const [entered, setEntered] = useState("");
   const [wrong, setWrong] = useState(false);
   // Bumped once a second while locked out to re-read the countdown; its value is
@@ -50,7 +62,8 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
   // the live entered value through this ref rather than a stale closure.
   const enteredRef = useRef("");
 
-  const picked = pickedId ? staff.find((option) => option.membership.id === pickedId) : undefined;
+  const picked = pickedId ? eligibleStaff.find((option) => option.membership.id === pickedId) : undefined;
+  const credential = identity?.credentials.find((row) => row.membership_id === picked?.membership.id);
   const lockRemainingMs = pickedId ? getLockRemainingMs(pickedId) : 0;
   const isLockedOut = lockRemainingMs > 0;
 
@@ -64,12 +77,11 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
   // committed, and keeping it out of an effect avoids cascading-render lint and
   // any dependency on the event-loop clock (which matters under test control).
   function verify(candidate: string): void {
-    if (!pickedId) {
+    if (!pickedId || !picked || identityMode) {
       return;
     }
-    const membership = picked?.membership;
-    const ok =
-      membership?.pin_salt != null && verifyPin(candidate, membership.pin_salt, membership.pin_hash);
+    const pin = credential?.pin_salt && credential.pin_hash ? credential : picked.membership;
+    const ok = pin.pin_salt != null && pin.pin_hash != null && verifyPin(candidate, pin.pin_salt, pin.pin_hash);
     if (ok) {
       clearAttempts(pickedId);
       setActiveMembershipId(pickedId);
@@ -118,7 +130,7 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
 
   // Hardware number keys also drive the pad (accessibility and speed).
   useEffect(() => {
-    if (!pickedId) {
+    if (!pickedId || identityMode) {
       return;
     }
     function onKeyDown(event: KeyboardEvent) {
@@ -131,7 +143,7 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handler reads live refs/state; only pickedId and isLockedOut gate registration.
-  }, [pickedId, isLockedOut]);
+  }, [pickedId, isLockedOut, identityMode, picked, credential]);
 
   // Wrong-PIN and lockout are both states the prototype's own #s1 never
   // draws (it shows one static mid-entry frame). Both read as an alert on
@@ -169,14 +181,24 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
           Clin<span className="text-copper-2">tra</span>
         </p>
 
-        {!picked ? (
+        {identityMode && identity ? (
+          <IdentityScreen
+            device={identity.device}
+            changeFor={identityMode === "password" ? credential : undefined}
+            onCancel={() => setIdentityMode(undefined)}
+            onComplete={(membershipId) => {
+              setIdentityMode(undefined);
+              if (membershipId) setActiveMembershipId(membershipId);
+            }}
+          />
+        ) : !picked ? (
           // Not drawn by the prototype (#s1 shows only the PIN state): same
           // ink surface and brand, each membership as a full-width on-dark
           // row rather than Button's onDark variant, which has no form sized
           // for a 48px-tall, full-width list item.
           <div className="mt-8 flex w-full max-w-xs flex-col gap-2">
             <p className="mb-2 text-sm font-semibold tracking-[0.02em] text-on-dark">{authStrings.lockClinicPrompt}</p>
-            {staff.map(({ membership, user }) => (
+            {eligibleStaff.map(({ membership, user }) => (
               <button
                 key={membership.id}
                 type="button"
@@ -262,13 +284,25 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
               </button>
             </div>
 
-            {staff.length > 1 && (
+            {eligibleStaff.length > 1 && (
               <button
                 type="button"
                 onClick={() => choose(undefined)}
                 className="mt-6 text-xs font-semibold text-on-dark-dim transition-colors duration-150 hover:text-on-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
               >
                 {authStrings.lockSwitchUser}
+              </button>
+            )}
+          </div>
+        )}
+        {!identityMode && identity && (
+          <div className="mt-5 flex flex-wrap justify-center gap-4 text-sm font-semibold text-on-dark">
+            <button type="button" className="min-h-10 underline underline-offset-4" onClick={() => setIdentityMode("sign-in")}>
+              دخول بحساب
+            </button>
+            {credential && (
+              <button type="button" className="min-h-10 underline underline-offset-4" onClick={() => setIdentityMode("password")}>
+                غيّر كلمة السر
               </button>
             )}
           </div>
