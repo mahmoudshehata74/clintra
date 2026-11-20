@@ -582,6 +582,28 @@ describe("runPullCycle", () => {
 });
 
 describe("runPullCycle: bootstrap gating (docs/dry-run.md's scenario 17)", () => {
+  it("stores enforcement from bootstrap and updates it on pull", async () => {
+    const id = getDeviceId();
+    await db.device.add({
+      id, org_id: "org-1", location_id: "location-1", registered_at: new Date().toISOString(),
+      pull_cursor: null, membership_id: null, token: null, series: 1,
+    });
+    const first = "2026-11-20T10:34:56Z";
+    const updated = "2026-11-20T10:35:01Z";
+    const transport = new StubTransport(() => ({ op_id: "unused", status: "accepted", rev: 1 }));
+    transport.pullBootstrapOutcomeFor = () => ({ cursor: "3:", hasMore: false, changes: [], identityEnforcedAt: first });
+    transport.pullOutcomeFor = async () => {
+      expect((await db.device.get(id))?.identity_enforced_at).toBe(first);
+      return { cursor: "0", hasMore: false, changes: [], identityEnforcedAt: updated };
+    };
+    await runPullCycle(db, transport);
+    expect((await db.device.get(id))?.identity_enforced_at).toBe(updated);
+
+    transport.pullOutcomeFor = () => ({ cursor: "0", hasMore: false, changes: [], identityEnforcedAt: null });
+    await runPullCycle(db, transport);
+    expect((await db.device.get(id))?.identity_enforced_at).toBeNull();
+  });
+
   it("drains pullBootstrap fully, applying its changes, before ever calling pullSince — only when pull_cursor is null", async () => {
     await db.device.add({
       id: getDeviceId(),
