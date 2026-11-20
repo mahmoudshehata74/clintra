@@ -1,7 +1,7 @@
 # Design: per-person identity, password login and permissions
 
-Status: phase A1 (the server foundation) is built, as "A1 decisions" at the
-end records; phases A2 to A4 are design only (see "Phases").
+Status: phases A1 through A3 are on main. The phase A4 rollout is described
+in the phase table and the activation procedure below.
 
 ## 1. Goal
 
@@ -712,16 +712,16 @@ caller as `current_membership()`.
    exactly as today (actor claim held to the organization); ops and
    requests that carry a proof are always verified. Nothing changes for a
    device that has not updated.
-2. **Permissions backfill.** In the same migration, each non-owner
-   membership gets the permissions of the actions its role can perform on
-   the device today, so nobody gains or loses anything on day one. The
-   proposed table, to be confirmed against the code when the migration is
-   written (open question 11): `practitioner` → `clinical.view`,
-   `reports.view`, `patients.archive`, `messages.send`, `cash.close`;
-   `assistant` and `manager` → `reports.view`, `patients.archive`,
-   `messages.send`, `cash.close`. No one but an owner gets
-   `services.manage`, `schedules.manage`, `staff.manage`,
-   `invoices.edit_items` or `invoices.void`, which are owner-only today.
+2. **Permissions backfill.** The migration installs the rollout function.
+   The backfill runs per organization on activation under `SyncSeqLock`.
+   It assigns defaults to active memberships with empty permissions, adds
+   one sync ledger row and one audit row per change, then sets
+   `identity_enforced_at` in the same transaction. Existing nonempty
+   permissions are preserved. Defaults for `practitioner` are
+   `clinical.view`, `reports.view`, `patients.archive`, `messages.send`,
+   and `cash.close`. `assistant` and `manager` get the same set without
+   `clinical.view`. `owner` has all ten permissions by role, and the
+   backfill records that full set for any active owner with an empty set.
 3. **Web update** (Dexie: the next version, 28 at the time of writing).
    Each device makes its device key on first start. `sync_ops` and the
    local `audit_log` gain `credential_id` (null) and `proof` (null) and an
@@ -730,9 +730,9 @@ caller as `current_membership()`.
    `credentials: "id, membership_id"` holds the person keys. No sync op or
    audit row is written by the upgrade.
 4. **Owner setup.** The Clintra team mints one owner-recovery code per
-   clinic (3.7) and gives it to the owner; the owner uses "إنشاء حسابك"
-   (the recovery screen, worded for first use: "اسم المستخدم", "كلمة السر")
-   on one of the clinic's devices. Recovery binds the first owner password;
+   clinic (3.7) and gives it to the owner. On one of the clinic's devices the
+   owner uses "إنشاء حسابك" with their phone, the code, a username, and
+   a new password. Recovery sets the first owner password;
    the device then signs in as in 3.2 and binds its device key. Doing it
    with a code — not with the legacy owner token — means a stolen token
    cannot claim the owner account first.
@@ -741,14 +741,19 @@ caller as `current_membership()`.
    device they use. Queued unsigned ops are sealed by their own author's
    credential when that author signs in on the device; ops whose author
    never will (deactivated, left) stay held and are listed for the owner.
-6. **Enforcement.** Settings → "الدخول بكلمة السر" shows readiness:
-   "{n} موظفين لسه ماسجّلوش دخول بكلمة السر", "{n} أجهزة لسه مش مربوطة",
-   "{n} تغييرات مستنية حد يسجّل دخول". "تفعيل للكل" (owner, step-up) sets
-   `identity_enforced_at`; from then the server refuses requests without a
-   device proof (401) and ops without a person proof (`proof_missing`).
-   If the owner does nothing, enforcement starts 30 days after the first
-   owner password, with a banner on every device from day 23 (open question
-   9).
+6. **Enforcement.** Settings → "الدخول بكلمة المرور" lists each active
+   member, each live device, their next steps, and the local pending
+   changes that still need their authors' sign-in. "تفعيل للكل" requires the
+   owner to confirm their password. The function checks for an active owner
+   with a username and password, usernames on all active memberships, and
+   a bound key on every non-revoked device. Staff passwords and individual
+   sign-ins are shown as progress. Starting at day 23, the sync responses
+   carry the scheduled date for a warning on every device. The scheduler
+   applies the same activation transaction at day 30 when these conditions
+   hold. Otherwise it leaves enforcement off and checks again on its next
+   run. The readiness panel shows why it is waiting. The first owner recovery
+   event fixes the deadline even when an owner later changes or recovers
+   their password. The day thresholds are elapsed 24-hour days.
 7. **PIN hashes.** From the update on, `register_device` stops returning
    other members' `pin_hash` / `pin_salt`; a device receives a person's PIN
    hash only from that person's own login (open question 6). Existing
@@ -959,7 +964,16 @@ before merge. (A: `docs/design-identity-permissions.md`; B:
 | A1 | Server foundation: the role and its grants, the schema (6.2), the auth functions and the permission guard (6.3, 6.4), signing in, passwords, owner recovery, usernames, device and person proof verification, and the permission checks — every check that changes sync behaviour dormant until an organization is enforced | api (and the review labels in web) |
 | A2 | Device and person keys, account sign-in, password change, PIN setup and offline unlock, the lock screen listing credentials, the sealer and held ops, JCS in TypeScript against `contract/jcs-cases.json`, and Dexie v29. Pull and bootstrap include `identity_enforced_at` when set. The device stores that timestamp and uses it for enforcement. | web and api |
 | A3 | Staff screens for setting usernames, resetting passwords and revoking credentials. Add server-side step-up for username changes and the credential-list endpoint (`GET /api/staff/credentials`), plus the permissions editor (`POST /api/staff/{id}`), device lists, the recovery screen, permission gates across the UI, PIN hashes only from a person's own sign-in (7.7), and the clinical practitioner check for proven ops (end of section 4). | web and api |
-| A4 | Rollout: the permissions backfill (7.2), owner setup with recovery codes, the readiness screen and "تفعيل للكل", enforcement by itself 30 days after the first owner password | api and web |
+| A4 | Rollout: owner setup with one-time recovery codes. Settings shows per-member and per-device readiness, plus a warning from day 23. "تفعيل للكل" performs the per-organization backfill (7.2) and activation atomically after step-up. Automatic enforcement uses the same readiness checks and transaction starting 30 days after the first owner password. | api and web |
+
+The rollout endpoints are `GET /api/auth/rollout` and
+`POST /api/auth/rollout/enable`. Both require the device and owner proofs.
+The POST adds a single-use password step-up and returns the same
+readiness details as GET. The scheduled command
+`clintra:enforce-ready-identity` runs only on the CLI connection. Deploy
+Laravel's scheduler (`php artisan schedule:run` each minute) where the
+CLI database connection is configured. HTTPS app requests keep using the
+ordinary RLS-bound connection.
 
 ## A1 decisions (owner, 2026-11-20)
 
@@ -975,7 +989,8 @@ before merge. (A: `docs/design-identity-permissions.md`; B:
    `(org_id, lower(username))` where not null). Refusals: "اسم المستخدم ده
    مستخدم قبل كده" (taken, 409) and "اسم المستخدم لازم يكون من 3 لـ 32 حرف:
    حروف إنجليزي صغيرة أو أرقام أو . أو _ أو -" (invalid, 422).
-2. **The permissions backfill** (7.2) is not in A1; it moves to A4.
+2. **The permissions backfill** (7.2) is deferred to per-organization
+   activation in A4.
 3. **Step-up.** A seventh function, `auth_attempt_succeeded(attempt_id)`,
    marks an attempt succeeded: only for that attempt's own credential (a
    sign-in) or person (a step-up), only within 2 minutes of the attempt,

@@ -47,6 +47,8 @@ export interface PullSinceResult {
   deviceSeries?: number | null;
   /** The organization switch. Null means off; undefined means this transport supplies no signal. */
   identityEnforcedAt?: string | null;
+  identityRolloutAutoAt?: string | null;
+  identityMemberships?: { id: string; username: string | null; permissions: string[] }[];
 }
 
 /**

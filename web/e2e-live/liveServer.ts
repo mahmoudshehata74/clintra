@@ -143,8 +143,8 @@ export async function provisionOrg(): Promise<LiveOrg> {
 }
 
 /** A fresh activation code for one more device of the organization. */
-export async function mintCode(org: LiveOrg): Promise<string> {
-  const output = await artisan(["clintra:mint-activation-code", org.orgId, org.locationId]);
+export async function mintCode(org: LiveOrg, purpose: "device" | "owner-recovery" = "device"): Promise<string> {
+  const output = await artisan(["clintra:mint-activation-code", org.orgId, org.locationId, "--purpose", purpose]);
   const code = output.match(CODE)?.[0];
   if (!code) {
     throw new Error(`no activation code in:\n${output}`);

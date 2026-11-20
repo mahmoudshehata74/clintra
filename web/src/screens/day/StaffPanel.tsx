@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Field, { TextInput } from "../../components/ui/Field";
@@ -11,6 +11,8 @@ import type { Location, Membership, Practitioner, User } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { Role } from "../../domain/role";
 import { useIdentityAccess } from "../../auth/permissions";
+import { requestStaffIdentity } from "../../auth/identityClient";
+import { useDeviceAccount, type RolloutStatus } from "../../auth/rollout";
 import { useGuardedActingMembership } from "../../auth/useActingMembership";
 import StaffIdentityActions from "./StaffIdentityActions";
 import { staffName } from "../../domain/staffName";
@@ -71,6 +73,20 @@ function GroupHeading({ children }: { children: string }) {
 export default function StaffPanel({ orgId }: { orgId: string }) {
   const access = useIdentityAccess();
   const caller = useGuardedActingMembership();
+  const account = useDeviceAccount(caller?.role === Role.Owner && !access.enforced ? caller.id : undefined);
+  const credentialId = account?.credential?.id;
+  const [preparation, setPreparation] = useState<{ credentialId: string; named: ReadonlySet<string> }>();
+  useEffect(() => {
+    if (!credentialId || !caller?.id) return;
+    let ignore = false;
+    requestStaffIdentity<RolloutStatus>(db, caller.id, "GET", "/auth/rollout").then(
+      (status) => {
+        if (!ignore) setPreparation({ credentialId, named: new Set(status.members.filter((member) => member.has_username).map((member) => member.id)) });
+      },
+      () => {},
+    );
+    return () => { ignore = true; };
+  }, [credentialId, caller?.id]);
   const data =
     useLiveQuery<PanelData>(async () => {
       const memberships = (await db.memberships.toArray()).filter((m) => m.org_id === orgId);
@@ -98,6 +114,8 @@ export default function StaffPanel({ orgId }: { orgId: string }) {
               userName={staffName(membership, data.usersById.get(membership.user_id)) ?? ""}
               isLastActiveOwner={isLastActiveOwner(membership, data.memberships)}
               caller={access.enforced ? caller : undefined}
+              rolloutOwner={!access.enforced && credentialId && caller?.role === Role.Owner ? caller : undefined}
+              hasUsername={Boolean(credentialId && preparation?.credentialId === credentialId && preparation.named.has(membership.id))}
               locations={data.locations}
             />
           ))}
@@ -147,12 +165,16 @@ function StaffRow({
   userName,
   isLastActiveOwner: isLocked,
   caller,
+  rolloutOwner,
+  hasUsername,
   locations,
 }: {
   membership: Membership;
   userName: string;
   isLastActiveOwner: boolean;
   caller?: Membership;
+  rolloutOwner?: Membership;
+  hasUsername: boolean;
   locations: Location[];
 }) {
   const [editing, setEditing] = useState(false);
@@ -168,6 +190,7 @@ function StaffRow({
   // Demoting or deactivating the last active owner is refused before it is even tried.
   const wouldRemoveLastOwner = isLocked && !(role === Role.Owner && isActive);
   const pinIsSet = hasPinSet(membership);
+  const accountEditor = caller ?? (membership.is_active ? rolloutOwner : undefined);
 
   async function save() {
     if (newPin !== "" && !/^\d{4}$/.test(newPin)) {
@@ -254,8 +277,15 @@ function StaffRow({
   ) : undefined;
 
   return (
-    <SetRow layout="staff" muted={!membership.is_active} editor={caller
-      ? <StaffIdentityActions key={caller.id} caller={caller} target={membership} locations={locations} /> : editor}>
+    <SetRow layout="staff" muted={!membership.is_active} editor={
+      <>
+        {!caller && editor}
+        {accountEditor && (
+          <StaffIdentityActions key={accountEditor.id} caller={accountEditor} target={membership}
+            locations={locations} allowPermissions={Boolean(caller)} hasUsername={hasUsername} />
+        )}
+      </>
+    }>
       <span className="min-w-0 text-[13.5px] font-semibold text-text">
         {/* A membership tied to a practitioner reads as the doctor: "د. أحمد
             المصري" with "المالك · طبيب". */}

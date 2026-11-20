@@ -29,7 +29,7 @@ $db->transaction(function () use ($db, $organization, $action, $org) {
         $db->table('memberships')->where('org_id', $org)->where('username', 'live-assistant')->update(['is_active' => false]);
         return;
     }
-    if ($action !== 'prepare') {
+    if ($action !== 'prepare' && $action !== 'prepare-rollout') {
         throw new RuntimeException('Unknown identity fixture action');
     }
 
@@ -42,10 +42,13 @@ $db->transaction(function () use ($db, $organization, $action, $org) {
     $db->table('memberships')->insert([
         'id' => $assistant, 'user_id' => $user, 'org_id' => $org, 'role' => 'assistant', 'is_active' => true,
         'location_scope' => 'all', 'practitioner_scope' => 'all', 'username' => 'live-assistant',
+        'permissions' => $action === 'prepare-rollout' ? '{messages.send}' : '{}',
         'pin_hash' => $owner->pin_hash, 'pin_salt' => $owner->pin_salt,
     ]);
-    $db->table('memberships')->where('id', $owner->id)->update(['username' => 'live-owner']);
-    foreach ([$owner->id, $assistant] as $member) {
+    if ($action === 'prepare') {
+        $db->table('memberships')->where('id', $owner->id)->update(['username' => 'live-owner']);
+    }
+    foreach ($action === 'prepare' ? [$owner->id, $assistant] : [$assistant] as $member) {
         $db->table('member_passwords')->insert([
             'membership_id' => $member, 'org_id' => $org, 'password_hash' => Password::hash('Password for this live fixture'),
             'must_change' => false, 'set_at' => now()->toIso8601String(),

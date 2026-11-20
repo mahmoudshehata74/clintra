@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DeviceAuditController;
 use App\Http\Controllers\DeviceRegistrationController;
+use App\Http\Controllers\IdentityRolloutController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StaffIdentityController;
 use App\Http\Controllers\SyncBootstrapController;
@@ -51,6 +52,8 @@ Route::middleware(['membership', 'throttle:auth', 'device.proof'])->group(functi
     Route::post('/auth/login', [AuthController::class, 'login'])->name('identity.login');
     Route::post('/auth/owner-recovery', [AuthController::class, 'recoverOwner'])->name('identity.recovery');
     Route::post('/auth/password', [AuthController::class, 'changePassword'])->middleware('person:required');
+    Route::get('/auth/rollout', [IdentityRolloutController::class, 'show'])->middleware('person:required');
+    Route::post('/auth/rollout/enable', [IdentityRolloutController::class, 'enable'])->middleware('person:required');
     Route::post('/staff/{membership}/password-reset', [StaffIdentityController::class, 'resetPassword'])->middleware('person:required');
     Route::delete('/staff/credentials/{credential}', [StaffIdentityController::class, 'revokeCredential'])->middleware('person:required');
     Route::get('/staff/credentials', [StaffIdentityController::class, 'credentials'])->middleware('person:required');

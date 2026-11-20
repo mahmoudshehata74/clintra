@@ -599,6 +599,7 @@ export interface DeviceRegistration {
   org_id: string;
   /** Last organization enforcement timestamp reported by pull or bootstrap. */
   identity_enforced_at?: string | null;
+  identity_rollout_auto_at?: string | null;
   location_id: string;
   registered_at: Instant;
   /**

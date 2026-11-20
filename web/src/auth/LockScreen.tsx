@@ -53,7 +53,7 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
   });
 
   const [pickedId, setPickedId] = useState<string | undefined>(defaultMembershipId);
-  const [identityMode, setIdentityMode] = useState<"sign-in" | "password">();
+  const [identityMode, setIdentityMode] = useState<"sign-in" | "password" | "setup">();
   const [entered, setEntered] = useState("");
   const [wrong, setWrong] = useState(false);
   // Bumped once a second while locked out to re-read the countdown; its value is
@@ -185,6 +185,7 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
         {identityMode && identity ? (
           <IdentityScreen
             device={identity.device}
+            firstSetup={identityMode === "setup"}
             changeFor={identityMode === "password" ? credential : undefined}
             onCancel={() => setIdentityMode(undefined)}
             onComplete={(membershipId) => {
@@ -301,6 +302,12 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
             <button type="button" className="min-h-10 underline underline-offset-4" onClick={() => setIdentityMode("sign-in")}>
               {text.signIn}
             </button>
+            {!identity.enforced && !staff.some(({ membership }) => membership.role === "owner"
+              && identity.credentials.some((person) => person.membership_id === membership.id)) && (
+              <button type="button" className="min-h-10 underline underline-offset-4" onClick={() => setIdentityMode("setup")}>
+                {text.rolloutSetup}
+              </button>
+            )}
             {credential && (
               <button type="button" className="min-h-10 underline underline-offset-4" onClick={() => setIdentityMode("password")}>
                 {text.changePassword}

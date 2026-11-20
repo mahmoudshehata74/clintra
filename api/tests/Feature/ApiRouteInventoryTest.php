@@ -138,6 +138,8 @@ function apiRouteInventory(): array
         'POST api/auth/login' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
         'POST api/auth/password' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
         'POST api/auth/owner-recovery' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
+        'GET api/auth/rollout' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
+        'POST api/auth/rollout/enable' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
         'POST api/staff/{membership}/password-reset' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
         'DELETE api/staff/credentials/{credential}' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
         'GET api/staff/credentials' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],

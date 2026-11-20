@@ -1,6 +1,8 @@
 import { ensureContractReferenceData } from "./db/contractReferenceData";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import LockScreen from "./auth/LockScreen";
+import identityText from "./auth/identityStrings";
+import { showRolloutWarning } from "./auth/rollout";
 import { hasPermission, IdentityAccessContext } from "./auth/permissions";
 import RegistrationScreen from "./auth/RegistrationScreen";
 import {
@@ -182,7 +184,8 @@ export default function App() {
   // the patient profile — does the same, for every role.
   const [selectedView, setSelectedView] = useState<"day" | "patients" | "doctor" | "visit" | "messages" | "reports">("day");
   const viewingMembership = useGuardedActingMembership();
-  const enforced = useLiveQuery(async () => (await db.device.toArray()).some((row) => row.identity_enforced_at != null), []) ?? false;
+  const identityDevice = useLiveQuery(async () => (await db.device.toArray()).find((row) => row.token), []);
+  const enforced = Boolean(identityDevice?.identity_enforced_at);
   const access = { enforced, member: viewingMembership };
   const clinical = hasPermission(access, "clinical.view", true);
   const doctorPractitionerId = viewingMembership?.practitioner_id ?? null;
@@ -276,6 +279,11 @@ export default function App() {
         today={dayScreenToday}
         whoName={isDoctorViewShown && doctorPractitionerName ? withDoctorPrefix(doctorPractitionerName) : undefined}
       >
+        {showRolloutWarning(identityDevice?.identity_enforced_at, identityDevice?.identity_rollout_auto_at) && (
+          <p role="status" className="mb-3 rounded-card border border-copper-line bg-copper-wash px-4 py-3 text-sm text-copper-ink">
+            {identityText.rolloutWarning}
+          </p>
+        )}
         {/* The day screen stays mounted (hidden) under the doctor's day and
             the current visit: it owns the seed/boot load, the day actually
             on screen (onTodayChange, which both read) and any sheet left

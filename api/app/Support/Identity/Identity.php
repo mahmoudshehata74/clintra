@@ -42,12 +42,29 @@ final class Identity
         return $request->attributes->get('identity_enforced_at') !== null;
     }
 
-    /** @return array{identity_enforced_at?: string} */
+    /** @return array{identity_enforced_at?: string, identity_memberships?: array, identity_rollout_auto_at?: string} */
     public static function syncMetadata(Request $request): array
     {
         $at = $request->attributes->get('identity_enforced_at');
+        if ($at !== null) {
+            // A member with a custom permission set needs no rollout ledger
+            // row, but devices still need its newly visible identity fields.
+            $memberships = DB::table('memberships')->where('org_id', DB::raw('current_org()'))
+                ->orderBy('id')->get(['id', 'username', 'permissions'])->map(fn ($member) => [
+                    'id' => $member->id,
+                    'username' => $member->username,
+                    'permissions' => self::parseTextArray($member->permissions),
+                ])->all();
 
-        return $at === null ? [] : ['identity_enforced_at' => $at];
+            return ['identity_enforced_at' => $at, 'identity_memberships' => $memberships];
+        }
+        if ($request->attributes->get('device_id') === null) {
+            return [];
+        }
+
+        $warning = AuthCall::run('auth_identity_rollout', ['action' => 'warning']);
+
+        return $warning === null ? [] : ['identity_rollout_auto_at' => Carbon::parse($warning['auto_at'])->toISOString()];
     }
 
     /** @return array<string, mixed>|null the device's bound public key */

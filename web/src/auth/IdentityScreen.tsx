@@ -11,12 +11,13 @@ import PasswordInput from "./PasswordInput";
 interface IdentityScreenProps {
   device: DeviceRegistration;
   changeFor?: PersonCredential;
+  firstSetup?: boolean;
   onCancel: () => void;
   onComplete: (membershipId?: string) => void;
 }
 
-export default function IdentityScreen({ device, changeFor, onCancel, onComplete }: IdentityScreenProps) {
-  const [stage, setStage] = useState<"sign-in" | "password" | "pin" | "recovery">(changeFor ? "password" : "sign-in");
+export default function IdentityScreen({ device, changeFor, firstSetup, onCancel, onComplete }: IdentityScreenProps) {
+  const [stage, setStage] = useState<"sign-in" | "password" | "pin" | "recovery">(firstSetup ? "recovery" : changeFor ? "password" : "sign-in");
   const [person, setPerson] = useState(changeFor);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -72,7 +73,8 @@ export default function IdentityScreen({ device, changeFor, onCancel, onComplete
   return (
     <form key={stage} className="mt-6 grid w-full max-w-xs gap-3 rounded-panel bg-card p-5 text-start text-text" onSubmit={submit}>
       <h1 className="text-lg font-bold">
-        {stage === "sign-in" ? text.signIn : stage === "password" ? text.changePassword : stage === "recovery" ? text.recovery : text.choosePin}
+        {stage === "sign-in" ? text.signIn : stage === "password" ? text.changePassword : stage === "recovery"
+          ? (firstSetup ? text.rolloutSetup : text.recovery) : text.choosePin}
       </h1>
       {stage === "recovery" && (
         <>
@@ -121,7 +123,7 @@ export default function IdentityScreen({ device, changeFor, onCancel, onComplete
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="mt-2 flex gap-2">
         <Button disabled={busy} variant="primary" type="submit">{stage === "sign-in" ? text.submitSignIn : text.save}</Button>
-        <Button disabled={busy} variant="secondary" type="button" onClick={stage === "recovery" ? () => { setError(undefined); setStage("sign-in"); } : onCancel}>{text.back}</Button>
+        <Button disabled={busy} variant="secondary" type="button" onClick={stage === "recovery" && !firstSetup ? () => { setError(undefined); setStage("sign-in"); } : onCancel}>{text.back}</Button>
       </div>
       {stage === "sign-in" && (
         <a href="#owner-recovery" aria-disabled={busy} className="flex min-h-10 items-center text-start text-sm underline" onClick={(event) => {
