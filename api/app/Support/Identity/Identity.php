@@ -4,6 +4,7 @@ namespace App\Support\Identity;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -26,17 +27,27 @@ final class Identity
     ];
 
     /** The current organization's switch, read through organizations' own policy. */
-    public static function enforcedForCurrentOrg(): bool
+    public static function enforcementTimeForCurrentOrg(): ?string
     {
-        return (bool) (DB::selectOne(
-            'select identity_enforced_at is not null as enforced from organizations where id = current_org()'
-        )?->enforced ?? false);
+        $at = DB::selectOne(
+            'select identity_enforced_at from organizations where id = current_org()'
+        )?->identity_enforced_at;
+
+        return $at === null ? null : Carbon::parse($at)->toISOString();
     }
 
     /** Set by ApplyMembership: false on the local-only bridge, which has no device. */
     public static function enforced(Request $request): bool
     {
-        return $request->attributes->get('identity_enforced') === true;
+        return $request->attributes->get('identity_enforced_at') !== null;
+    }
+
+    /** @return array{identity_enforced_at?: string} */
+    public static function syncMetadata(Request $request): array
+    {
+        $at = $request->attributes->get('identity_enforced_at');
+
+        return $at === null ? [] : ['identity_enforced_at' => $at];
     }
 
     /** @return array<string, mixed>|null the device's bound public key */

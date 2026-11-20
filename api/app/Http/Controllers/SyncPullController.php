@@ -41,6 +41,7 @@ class SyncPullController extends Controller
         return response()->json([
             ...$this->puller->pull($since, Identity::enforced($request)),
             'device_series' => DeviceSeries::of($request->attributes->get('device_id')),
+            ...Identity::syncMetadata($request),
         ]);
     }
 }

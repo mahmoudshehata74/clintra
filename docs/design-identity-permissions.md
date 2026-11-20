@@ -957,8 +957,8 @@ before merge. (A: `docs/design-identity-permissions.md`; B:
 | Phase | What | Where |
 |---|---|---|
 | A1 | Server foundation: the role and its grants, the schema (6.2), the auth functions and the permission guard (6.3, 6.4), signing in, passwords, owner recovery, usernames, device and person proof verification, and the permission checks — every check that changes sync behaviour dormant until an organization is enforced | api (and the review labels in web) |
-| A2 | The device side: device and person keys, the sign-in and first-sign-in screens, the lock screen listing credentials, the sealer and held ops, JCS in TypeScript against `contract/jcs-cases.json`, the Dexie upgrade (section 7, step 3) | web |
-| A3 | Settings: usernames, the permissions editor (`POST /api/staff/{id}`), password resets, the credential and device lists (`GET /api/staff/credentials`), the recovery screen, the permission gates across the UI, PIN hashes only from a person's own sign-in (7.7), and the clinical practitioner check for proven ops (end of section 4) | web and api |
+| A2 | Device and person keys, account sign-in, password change, PIN setup and offline unlock, the lock screen listing credentials, the sealer and held ops, JCS in TypeScript against `contract/jcs-cases.json`, and Dexie v29. Pull and bootstrap include `identity_enforced_at` when set. The device stores that timestamp and uses it for enforcement. | web and api |
+| A3 | Staff screens for setting usernames, resetting passwords and revoking credentials. Add server-side step-up for username changes and the credential-list endpoint (`GET /api/staff/credentials`), plus the permissions editor (`POST /api/staff/{id}`), device lists, the recovery screen, permission gates across the UI, PIN hashes only from a person's own sign-in (7.7), and the clinical practitioner check for proven ops (end of section 4). | web and api |
 | A4 | Rollout: the permissions backfill (7.2), owner setup with recovery codes, the readiness screen and "تفعيل للكل", enforcement by itself 30 days after the first owner password | api and web |
 
 ## A1 decisions (owner, 2026-11-20)
