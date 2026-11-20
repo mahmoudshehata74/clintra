@@ -9,6 +9,7 @@ import type {
   DayState,
   DevicePreference,
   DeviceRegistration,
+  DeviceKey,
   FormDefinition,
   Invoice,
   InvoiceItem,
@@ -20,6 +21,7 @@ import type {
   MembershipPractitioner,
   Organization,
   Patient,
+  PersonCredential,
   Payment,
   Practitioner,
   PractitionerLocation,
@@ -75,6 +77,8 @@ export class ClintraDatabase extends Dexie {
   sync_review!: EntityTable<SyncReview, "id">;
   device!: EntityTable<DeviceRegistration, "id">;
   preferences!: EntityTable<DevicePreference, "key">;
+  device_keys!: EntityTable<DeviceKey, "device_id">;
+  credentials!: EntityTable<PersonCredential, "id">;
 
   constructor(name = "clintra") {
     super(name);
@@ -617,6 +621,29 @@ export class ClintraDatabase extends Dexie {
     this.version(28).stores({
       visit_form_revisions: "id, visit_id, visit_form_data_id",
     });
+
+    this.version(29)
+      .stores({ device_keys: "device_id", credentials: "id, &[device_id+membership_id]" })
+      .upgrade(async (tx) => {
+        // Old outbox rows did not store an audit ID. Attribute only when all
+        // compatible audit rows name the same author, leaving ambiguity held.
+        const matchingAudit = new Map<string, AuditLog[]>();
+        const audit = tx.table<AuditLog, string>("audit_log");
+        for (const row of await audit.toArray()) {
+          const key = JSON.stringify([row.entity, row.entity_id, row.action, row.after]);
+          const matches = matchingAudit.get(key) ?? [];
+          matches.push(row);
+          matchingAudit.set(key, matches);
+        }
+        await tx.table<SyncOp, string>("sync_ops").toCollection().modify((row) => {
+          const key = JSON.stringify([row.entity, row.entity_id, row.action, row.payload]);
+          const authors = new Set(matchingAudit.get(key)?.filter((entry) => entry.at <= row.created_at).map((entry) => entry.actor_membership_id));
+          row.actor_membership_id = authors.size === 1 ? authors.values().next().value : null;
+          row.credential_id = null;
+          row.proof = null;
+        });
+        await audit.toCollection().modify({ credential_id: null, proof: null });
+      });
   }
 }
 

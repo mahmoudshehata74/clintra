@@ -36,6 +36,7 @@ web/e2e/compare/
 web/e2e/bug-hunt/
 # The printed prescription's review shots (e2e/rx-shots.spec.ts); never committed.
 web/e2e/rx-shots/
+web/e2e/identity-shots/
 
 # local working files
 /local/

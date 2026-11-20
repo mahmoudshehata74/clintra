@@ -4,7 +4,8 @@ import type { ClintraDatabase } from "../db/database";
 import { getDeviceId } from "../db/deviceRegistration";
 import { MUTATION_EVENT_NAME } from "../db/mutate";
 import { AuditAction, type SyncOp } from "../db/types";
-import { chainBaseRevs, rebaseUnsent } from "./baseRevChain";
+import { rebaseUnsent } from "./baseRevChain";
+import { prepareIdentityOps } from "./sealer";
 import { applyPulledRow, familyTables, foldChildOpsOfRejectedCreate } from "./pullCollisions";
 import { backOffGroup, GROUP_REJECTED_REASON, recordRefusedGroup } from "./syncGroups";
 import { CorrectionReason, settleRefusedLateEdit } from "./correctionReview";
@@ -181,7 +182,9 @@ export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport
 
   let results;
   try {
-    results = await transport.pushOps(chainBaseRevs(toSend));
+    const sealed = await prepareIdentityOps(db, getDeviceId(), allOps.filter((op) => op.synced_at === null), toSend);
+    if (sealed.length === 0) return;
+    results = await transport.pushOps(sealed);
     recordTransportSuccess();
   } catch (error) {
     if (error instanceof SyncAuthError) {
@@ -409,7 +412,7 @@ async function recordDeviceSeries(db: ClintraDatabase, deviceSeries: number | nu
  * idempotent, since every row it delivers is also reachable by the
  * ordinary backfill that always follows it.
  */
-async function runBootstrapWindow(db: ClintraDatabase, transport: SyncTransport): Promise<void> {
+async function runBootstrapWindow(db: ClintraDatabase, transport: SyncTransport, deviceId: string): Promise<void> {
   let cursor: string | null = null;
   let hasMore = true;
 
@@ -429,6 +432,9 @@ async function runBootstrapWindow(db: ClintraDatabase, transport: SyncTransport)
 
     await applyPage(db, result.changes);
     await recordDeviceSeries(db, result.deviceSeries);
+    if (result.identityEnforcedAt !== undefined) {
+      await db.device.update(deviceId, { identity_enforced_at: result.identityEnforcedAt });
+    }
 
     cursor = result.cursor;
     hasMore = result.hasMore;
@@ -463,7 +469,7 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
   }
 
   if (device.pull_cursor === null) {
-    await runBootstrapWindow(db, transport);
+    await runBootstrapWindow(db, transport, deviceId);
   }
 
   let cursor = device.pull_cursor;
@@ -488,7 +494,10 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
 
     cursor = result.cursor;
     hasMore = result.hasMore;
-    await db.device.update(deviceId, { pull_cursor: cursor });
+    await db.device.update(deviceId, {
+      pull_cursor: cursor,
+      ...(result.identityEnforcedAt === undefined ? {} : { identity_enforced_at: result.identityEnforcedAt }),
+    });
   }
 }
 

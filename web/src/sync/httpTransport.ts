@@ -1,4 +1,6 @@
 import { getApiBaseUrl } from "../config/apiBaseUrl";
+import { identityClock } from "../auth/identityClient";
+import { requestProof } from "../auth/proof";
 import { remoteAuditRowOf } from "../db/auditEntries";
 import type { RemoteAuditLog, SyncOp } from "../db/types";
 import {
@@ -37,6 +39,7 @@ function toWireOp(op: SyncOp) {
     created_at: op.created_at,
     ...(op.base_rev === null ? {} : { base_rev: op.base_rev }),
     ...(op.group_id === undefined ? {} : { group_id: op.group_id }),
+    ...(op.credential_id && op.proof ? { credential_id: op.credential_id, proof: op.proof } : {}),
   };
 }
 
@@ -55,6 +58,7 @@ export interface HttpTransportOptions {
   baseUrl?: string;
   /** Overridable for tests; defaults to the global fetch. */
   fetchImpl?: typeof fetch;
+  deviceKey?: () => Promise<CryptoKey | undefined>;
 }
 
 /**
@@ -73,6 +77,7 @@ export class HttpTransport implements SyncTransport, AuditTransport {
   private readonly token: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly deviceKey?: HttpTransportOptions["deviceKey"];
 
   constructor(options: HttpTransportOptions) {
     this.token = options.token;
@@ -81,6 +86,7 @@ export class HttpTransport implements SyncTransport, AuditTransport {
     // object and called as this.fetchImpl(...), a browser refuses it
     // ("Illegal invocation") before any request leaves.
     this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+    this.deviceKey = options.deviceKey;
   }
 
   async pushOps(ops: readonly SyncOp[]): Promise<PushOpResult[]> {
@@ -98,12 +104,14 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       has_more: boolean;
       rows: Array<{ entity: string; entity_id: string; rev: number; payload: Record<string, unknown> | null }>;
       device_series?: number | null;
+      identity_enforced_at?: string;
     };
 
     return {
       cursor: body.cursor,
       hasMore: body.has_more,
       deviceSeries: body.device_series,
+      identityEnforcedAt: body.identity_enforced_at ?? null,
       changes: body.rows.map((row) => ({
         entity: row.entity,
         entity_id: row.entity_id,
@@ -120,12 +128,14 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       has_more: boolean;
       rows: Array<{ entity: string; entity_id: string; rev: number; payload: Record<string, unknown> | null }>;
       device_series?: number | null;
+      identity_enforced_at?: string;
     };
 
     return {
       cursor: body.cursor,
       hasMore: body.has_more,
       deviceSeries: body.device_series,
+      identityEnforcedAt: body.identity_enforced_at ?? null,
       changes: body.rows.map((row) => ({
         entity: row.entity,
         entity_id: row.entity_id,
@@ -157,13 +167,17 @@ export class HttpTransport implements SyncTransport, AuditTransport {
   }
 
   private async request(path: string, init: { method: string; body?: string }): Promise<unknown> {
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+    const url = `${this.baseUrl}${path}`;
+    const key = await this.deviceKey?.();
+    const proof = key ? await requestProof(key, init.method, url, init.body ?? "", await identityClock(this.baseUrl)) : null;
+    const response = await this.fetchImpl(url, {
       method: init.method,
       body: init.body,
       headers: {
         Authorization: `Bearer ${this.token}`,
         Accept: "application/json",
         ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(proof ? { "X-Clintra-Device-Proof": proof } : {}),
       },
     });
 
@@ -189,6 +203,6 @@ export class HttpTransport implements SyncTransport, AuditTransport {
  * device row that was never really registered), and a real HttpTransport
  * — pointed at getApiBaseUrl() — the moment one is.
  */
-export function selectSyncTransport(token: string | null, fakeTransport: SyncTransport): SyncTransport {
-  return token === null ? fakeTransport : new HttpTransport({ token });
+export function selectSyncTransport(token: string | null, fakeTransport: SyncTransport, deviceKey?: HttpTransportOptions["deviceKey"]): SyncTransport {
+  return token === null ? fakeTransport : new HttpTransport({ token, deviceKey });
 }

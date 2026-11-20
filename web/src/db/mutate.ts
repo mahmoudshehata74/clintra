@@ -74,6 +74,8 @@ async function appendAuditRow<T>(
     before: input.before,
     after: input.after,
     at,
+    credential_id: null,
+    proof: null,
   });
 }
 
@@ -130,6 +132,9 @@ async function applyEntityWrite<T>(db: ClintraDatabase, input: MutationInput<T>)
     payload: input.after,
     device_id: getDeviceId(),
     created_at: nextQueuedAt(),
+    actor_membership_id: input.actorMembershipId,
+    credential_id: null,
+    proof: null,
     synced_at: null,
     // The prior row's rev, for the server's base_rev check — never sent for
     // a create (there is no prior row), and read generically here rather

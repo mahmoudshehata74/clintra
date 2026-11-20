@@ -45,6 +45,8 @@ export interface PullSinceResult {
    * report (FakeTransport, or a request with no device behind it).
    */
   deviceSeries?: number | null;
+  /** The organization switch. Null means off; undefined means this transport supplies no signal. */
+  identityEnforcedAt?: string | null;
 }
 
 /**
@@ -81,6 +83,8 @@ export interface SyncTransport {
 /** One audit row as POST /api/audit/push takes it (docs/audit-sync.md's "Rows going up"). */
 export interface WireAuditRow {
   id: string;
+  credential_id?: string;
+  proof?: string;
   org_id: string;
   location_id: string | null;
   practitioner_id: string | null;

@@ -81,10 +81,10 @@ class ApplyMembership
                 // the organization is enforced, every request carries the
                 // device key's proof. Until then nothing here changes: the
                 // header is not read at all.
-                $enforced = Identity::enforcedForCurrentOrg();
-                $request->attributes->set('identity_enforced', $enforced);
+                $enforcedAt = Identity::enforcementTimeForCurrentOrg();
+                $request->attributes->set('identity_enforced_at', $enforcedAt);
 
-                if ($enforced) {
+                if ($enforcedAt !== null) {
                     $publicKey = Identity::devicePublicKey($credential['device_id']);
 
                     if ($publicKey === null || ! RequestProof::verifyDevice($request, $credential['device_id'], $publicKey)) {
