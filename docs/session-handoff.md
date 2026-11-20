@@ -409,6 +409,25 @@ building it:
   "السبب: …" in the list, on the day screen's closed date and on tomorrow's
   sheet. Only a closure carries one; a date's own hours do not.
 
+## Clinical corrections (feat/clinical-corrections)
+Design C (`docs/design-clinical-corrections.md` and its owner decisions;
+`docs/schema.md`'s v28 additions). Decisions taken while building it:
+- The workspace's complaint and diagnosis read only once the visit is
+  completed; "قفل الزيارة" waits for the field it blurred to save first.
+  "تعديل" (the visit's doctor, the owner) opens "تعديل نموذج الزيارة" with
+  "سبب التعديل"; "تم التعديل" and "سجل التعديلات ({n})" show in the workspace
+  and as a chip under the visit on the patient's timeline, to whoever reads
+  clinical text.
+- A refused correction (another device's got there first) and a refused late
+  autosave are each one review row: the server's version stays on the
+  device, the lost text (to clinical readers) and the reason are shown, with
+  "افتح الزيارة" and "تمام". Nothing is merged.
+- The applier enforces `correction_required` only while the second
+  migration's trigger is installed, so a device on the old release keeps its
+  late edits until that deploy (decision 7).
+- e2e fixtures that set a completed visit's form now correct it with a
+  reason (`e2e/support.ts`'s `fillVisitForm` and `correctVisit`).
+
 ## Settled deviations / decisions — prototype alignment
 
 The owner's answers to `docs/screen-comparison.md`'s questions (applied on

@@ -14,7 +14,9 @@ namespace App\Support\Sync;
  * practitioners, from 2026_09_12_000027_add_profile_and_rev_to_practitioners.php,
  * and, for messages and message_templates, from
  * 2026_09_12_000029_create_messages_tables.php, and, for care_plans and
- * care_plan_items, from 2026_09_12_000030_make_care_plans_syncable.php.
+ * care_plan_items, from 2026_09_12_000030_make_care_plans_syncable.php, and,
+ * for visit_form_revisions, from
+ * 2026_09_12_000040_create_visit_form_revisions_table.php.
  */
 class SyncableTables
 {
@@ -23,7 +25,7 @@ class SyncableTables
         'membership_locations', 'membership_practitioners', 'memberships',
         'message_templates', 'messages', 'patients', 'payments',
         'practitioners', 'prescription_items', 'prescriptions', 'schedule_exceptions', 'schedules',
-        'service_price_overrides', 'services', 'visit_form_data', 'visits',
+        'service_price_overrides', 'services', 'visit_form_data', 'visit_form_revisions', 'visits',
     ];
 
     /**
@@ -37,7 +39,7 @@ class SyncableTables
      * etc.) and surfaces as a generic `failed` — see
      * SyncPushController::isRlsRefusal().
      */
-    public const DIRECT_ORG_ID_TABLES = ['care_plans', 'invoices', 'memberships', 'message_templates', 'messages', 'patients', 'practitioners', 'prescriptions', 'services', 'visits'];
+    public const DIRECT_ORG_ID_TABLES = ['care_plans', 'invoices', 'memberships', 'message_templates', 'messages', 'patients', 'practitioners', 'prescriptions', 'services', 'visit_form_revisions', 'visits'];
 
     /**
      * table => the payload column naming the acting membership: the person
@@ -55,6 +57,7 @@ class SyncableTables
         'messages' => 'created_by',
         'payments' => 'created_by',
         'prescriptions' => 'created_by',
+        'visit_form_revisions' => 'corrected_by',
         'visits' => 'created_by',
     ];
 

@@ -16,6 +16,7 @@ export type AuditGroup = Exclude<AuditFilter, "all">;
 const ENTITY_GROUP: Partial<Record<string, AuditGroup>> = {
   visits: "visits",
   visit_form_data: "visits",
+  visit_form_revisions: "visits",
   prescriptions: "visits",
   prescription_items: "visits",
   care_plans: "visits",

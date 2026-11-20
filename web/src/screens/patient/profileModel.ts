@@ -61,6 +61,8 @@ export interface PatientProfileSource {
   payments: readonly Payment[];
   /** A staff member's name, by membership id (payments.created_by). */
   staffNames: ReadonlyMap<string, string>;
+  /** How many corrections each visit's form has had (visit_form_revisions); absent or missing means none. */
+  revisionCountByVisitId?: ReadonlyMap<string, number>;
 }
 
 // ── `.pt-hero` ───────────────────────────────────────────────────────────
@@ -184,6 +186,12 @@ export interface ProfileEvent {
   /** A cancelled visit or a no-show: the row reads muted. */
   muted: boolean;
   target: ProfileEventTarget | null;
+  /**
+   * A visit whose form was corrected after completion: the row shows "تم
+   * التعديل", which opens "سجل التعديلات". Set only for whoever reads
+   * clinical text, and only when true.
+   */
+  corrected?: true;
 }
 
 /** The visits the timeline shows: history only, never what is still to come. */
@@ -307,6 +315,7 @@ function visitEvents(
       details,
       muted: visit.status !== VisitStatus.Completed,
       target: { kind: "visit", visitId: visit.id },
+      ...((source.revisionCountByVisitId?.get(visit.id) ?? 0) > 0 ? { corrected: true as const } : {}),
     });
 
     if (visit.note) {

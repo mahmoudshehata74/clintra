@@ -1,7 +1,7 @@
 import type { Table } from "dexie";
 import { id } from "../domain/id";
 import type { ClintraDatabase } from "../db/database";
-import type { SyncOp, SyncReview } from "../db/types";
+import { AuditAction, type SyncOp, type SyncReview } from "../db/types";
 import { applyPulledRow, familyTables } from "./pullCollisions";
 
 /**
@@ -54,9 +54,19 @@ export async function recordRefusedGroup(db: ClintraDatabase, head: SyncOp, reas
   const tables = entities.flatMap((entity) => familyTables(db, entity));
 
   await db.transaction("rw", [...tables, db.sync_ops, db.sync_review], async () => {
+    // Each row's first write in the group decides what it goes back to: its
+    // pre-image, or — for a row the group created (a correction's revision,
+    // or the empty form it started) — nothing: the server never had it.
     const preImages = new Map<string, { entity: string; row: Row }>();
+    const firstWrites = new Set<string>();
     for (const op of groupOps) {
-      if (!preImages.has(op.entity_id) && op.group_before) {
+      if (firstWrites.has(op.entity_id)) {
+        continue;
+      }
+      firstWrites.add(op.entity_id);
+      if (op.action === AuditAction.Create) {
+        await (db.table(op.entity) as Table<Row, string>).delete(op.entity_id);
+      } else if (op.group_before) {
         preImages.set(op.entity_id, { entity: op.entity, row: op.group_before as Row });
       }
     }

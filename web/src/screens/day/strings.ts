@@ -269,6 +269,10 @@ export const dayScreenStrings = {
   syncReviewAcknowledgeAction: "تمام",
   // A create conflict whose local row is already gone (sync/reviewActions.ts's rowGone): neither action is offered, only syncReviewAcknowledgeAction.
   syncReviewRowGone: "النسخة دي مبقتش موجودة على الجهاز",
+  // A refused correction, or a refused late write of a completed visit's
+  // form: what was not kept (to whoever reads clinical text), and the visit.
+  syncReviewLostTextLabel: "اللي ماتحفظش",
+  syncReviewOpenVisit: "افتح الزيارة",
 
   // The overflow menu's invoice entry, only shown once a visit has one.
   invoiceMenuLabel: "الفاتورة",

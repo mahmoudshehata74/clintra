@@ -1,5 +1,6 @@
 import { GENERAL_SPECIALTY_KEY } from "../domain/specialtyTemplate";
 import { id } from "../domain/id";
+import { VisitStatus } from "../domain/visitStatus";
 import { resolveActingMembership } from "./actingMembership";
 import type { ClintraDatabase } from "./database";
 import { mutate } from "./mutate";
@@ -73,16 +74,21 @@ export function readVisitFormValues(row: VisitFormData | undefined): VisitFormFi
   return (row?.data as VisitFormFieldValues | undefined) ?? EMPTY_VISIT_FORM_VALUES;
 }
 
+/** saveVisitFormField's refusal once the visit is completed: from then on the form changes only by correction. */
+export const VISIT_COMPLETED_ERROR = "visit_completed";
+
 /**
  * The autosave write behind every field's onBlur: creates the visit's
  * visit_form_data row on the first field ever saved, updates the same row on
  * every save after that — never a second row for the same visit, since the
  * natural key (visit_id + form_definition_id) is looked up before deciding
- * create vs update, exactly like every other write in db/. Writing does not
- * require the visit to be in any particular status — a late edit after
- * completion is deliberately allowed; completing a visit never reads or
+ * create vs update, exactly like every other write in db/. It saves in any
+ * status before completion; once the visit is completed it refuses
+ * (`visit_completed`, writing nothing), and the form changes only through a
+ * correction with a reason (db/visitCorrections.ts,
+ * docs/design-clinical-corrections.md). Completing a visit never reads or
  * requires this table (see db/visitCompletion.ts), and this never touches
- * visits, so the two stay fully decoupled in both directions.
+ * visits.
  */
 export async function saveVisitFormField(
   db: ClintraDatabase,
@@ -93,6 +99,9 @@ export async function saveVisitFormField(
   const visit = await db.visits.get(visitId);
   if (!visit) {
     throw new Error("visit_not_found");
+  }
+  if (visit.status === VisitStatus.Completed) {
+    throw new Error(VISIT_COMPLETED_ERROR);
   }
 
   const formDefinition = await findGeneralFormDefinition(db);

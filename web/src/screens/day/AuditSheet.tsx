@@ -61,6 +61,7 @@ const AUDITED_ENTITIES = new Set([
   "payments",
   "cash_close",
   "visit_form_data",
+  "visit_form_revisions",
   "prescriptions",
   "prescription_items",
   "practitioners",
@@ -121,7 +122,7 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
       const formDataVisitIds = [
         ...new Set(
           candidateRows
-            .filter((row) => row.entity === "visit_form_data")
+            .filter((row) => row.entity === "visit_form_data" || row.entity === "visit_form_revisions")
             .map((row) => payloadOf(row)?.visit_id)
             .filter((visitId): visitId is string => typeof visitId === "string"),
         ),
@@ -174,7 +175,8 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
       // The parent a child row is scoped by — the visit of a visit form,
       // the prescription of a drug, the plan of a session.
       function scopeParentOf(row: AuditEntry): AuditScopeParent | undefined {
-        if (row.entity === "visit_form_data") {
+        // A correction (visit_form_revisions) carries its visit_id the same way.
+        if (row.entity === "visit_form_data" || row.entity === "visit_form_revisions") {
           const visitId = payloadOf(row)?.visit_id;
           return typeof visitId === "string" ? formDataVisitsById.get(visitId) : undefined;
         }
@@ -218,6 +220,10 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         }
         if (row.entity === "care_plan_items") {
           return itemPlanOf(row)?.patient_id;
+        }
+        if (row.entity === "visit_form_revisions") {
+          const visitId = payloadOf(row)?.visit_id;
+          return typeof visitId === "string" ? formDataVisitsById.get(visitId)?.patient_id : undefined;
         }
         if (
           row.entity === "visits" ||
@@ -285,9 +291,11 @@ export default function AuditSheet({ practitionerId, locationId, today, onDismis
         }
         // A prescription's line names its patient, never a drug, its
         // instructions or the diagnosis, a message's never its body or
-        // phone, and a care plan's never its goal or diagnosis (as their
-        // verbs, domain/auditVerb.ts).
+        // phone, a care plan's never its goal or diagnosis, and a
+        // correction's never its text or reason (as their verbs,
+        // domain/auditVerb.ts).
         if (
+          row.entity === "visit_form_revisions" ||
           row.entity === "visits" ||
           row.entity === "invoices" ||
           row.entity === "prescriptions" ||

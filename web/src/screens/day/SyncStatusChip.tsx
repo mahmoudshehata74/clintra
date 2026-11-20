@@ -1,7 +1,11 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
+import { useGuardedActingMembership } from "../../auth/useActingMembership";
 import { attemptSave } from "../../components/ui/attemptSave";
 import SaveFailedLine from "../../components/ui/SaveFailedLine";
 import { db, type ClintraDatabase } from "../../db/database";
+import { markVisitCompleted } from "../../db/visitAttendance";
+import { readsClinicalText } from "../../domain/clinicalAccess";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { DISPLACED_BY_SERVER_REASON, SERVER_UNIQUE_CONFLICT_REASON, type DisplacedPayload } from "../../sync/pullCollisions";
 import { isRefusedGroupReview } from "../../sync/syncGroups";
@@ -12,13 +16,18 @@ import {
   describeReviewFieldDiffs,
   describeSupersededReviews,
   describeSyncReview,
+  lostCorrectionOf,
   SLOT_TAKEN_REASON,
+  type LostCorrection,
 } from "../../sync/reviewSummary";
 import { useOnlineStatus } from "../../sync/useOnlineStatus";
 import { useServerUnreachable } from "../../sync/useTransportHealth";
 import type { SyncReview } from "../../db/types";
+import { useVisitAdvance } from "../doctor/useVisitAdvance";
+import { visitCorrectionStrings } from "../visit/strings";
 import Sheet from "./Sheet";
 import { dayScreenStrings } from "./strings";
+import VisitFormSheet from "./VisitFormSheet";
 
 type ChipState = "online" | "local" | "server_unreachable" | "needs_review";
 
@@ -46,6 +55,8 @@ interface ReviewRow {
   supersededSummary: string | null;
   /** Which booking a slot conflict is about (describeLostBooking); null for every other row. */
   lostBooking: string | null;
+  /** A refused correction or late form write: its visit and lost text (lostCorrectionOf); null for every other row. */
+  lostCorrection: LostCorrection | null;
 }
 
 /** The patient behind a displaced visit or a lost booking, so its summary can name them; null for any other row. */
@@ -84,6 +95,9 @@ export default function SyncStatusChip() {
   const isOnline = useOnlineStatus();
   const isServerUnreachable = useServerUnreachable();
   const [isListOpen, setIsListOpen] = useState(false);
+  const [openVisitId, setOpenVisitId] = useState<string | null>(null);
+  const clinical = readsClinicalText(useGuardedActingMembership());
+  const { advance, isCoolingDown, advanceError } = useVisitAdvance();
 
   const reviewRows =
     useLiveQuery<ReviewRow[]>(async () => {
@@ -100,6 +114,7 @@ export default function SyncStatusChip() {
             displacedContent: describeDisplacedContent(review, patientNames),
             supersededSummary: describeSupersededReviews(review),
             lostBooking: describeLostBooking(review, patientNames),
+            lostCorrection: lostCorrectionOf(review),
           };
         }),
       );
@@ -145,12 +160,34 @@ export default function SyncStatusChip() {
         <Sheet onDismiss={() => setIsListOpen(false)}>
           <p className="p-3 pb-1 text-sm font-medium">{dayScreenStrings.syncReviewListTitle}</p>
           <div className="flex flex-col overflow-y-auto">
-            {reviewRows.map(({ review, comparison, displacedContent, supersededSummary, lostBooking }) => (
+            {reviewRows.map(({ review, comparison, displacedContent, supersededSummary, lostBooking, lostCorrection }) => (
               <div key={review.id} className="flex flex-col gap-2 border-t border-rule p-3">
                 <p className="text-sm">{describeSyncReview(review)}</p>
                 {lostBooking && <p className="rounded-control bg-field p-2 text-xs">{lostBooking}</p>}
 
-                {isRefusedGroupReview(review) ? (
+                {lostCorrection ? (
+                  // Already settled (sync/correctionReview.ts, sync/syncGroups.ts):
+                  // the server's version stays; nothing is merged.
+                  <>
+                    {clinical && <LostCorrectionText lost={lostCorrection} />}
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setOpenVisitId(lostCorrection.visitId)}
+                        className="rounded-control border border-rule px-2 py-1 text-sm"
+                      >
+                        {dayScreenStrings.syncReviewOpenVisit}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void resolve(review.id, acknowledgeReview)}
+                        className="rounded-control border border-rule px-2 py-1 text-sm"
+                      >
+                        {dayScreenStrings.syncReviewAcknowledgeAction}
+                      </button>
+                    </div>
+                  </>
+                ) : isRefusedGroupReview(review) ? (
                   <div className="flex shrink-0 gap-2">
                     <button
                       type="button"
@@ -218,7 +255,41 @@ export default function SyncStatusChip() {
           </div>
         </Sheet>
       )}
+
+      {openVisitId &&
+        createPortal(
+          <VisitFormSheet
+            visitId={openVisitId}
+            onDismiss={() => setOpenVisitId(null)}
+            completion={{
+              onComplete: (visit) => void advance(visit, (visitId) => markVisitCompleted(db, visitId)),
+              isCoolingDown,
+              error: advanceError,
+            }}
+          />,
+          document.body,
+        )}
     </>
+  );
+}
+
+/** What a refused correction held: the two fields' text and its reason, as typed. */
+function LostCorrectionText({ lost }: { lost: LostCorrection }) {
+  return (
+    <div className="rounded-control bg-field p-2 text-xs">
+      <p className="font-semibold">{dayScreenStrings.syncReviewLostTextLabel}</p>
+      <p>
+        {visitCorrectionStrings.fieldComplaint}: {lost.complaint || visitCorrectionStrings.emptyValue}
+      </p>
+      <p>
+        {visitCorrectionStrings.fieldDiagnosis}: {lost.diagnosis || visitCorrectionStrings.emptyValue}
+      </p>
+      {lost.reason && (
+        <p>
+          {visitCorrectionStrings.reasonPrefix} {lost.reason}
+        </p>
+      )}
+    </div>
   );
 }
 

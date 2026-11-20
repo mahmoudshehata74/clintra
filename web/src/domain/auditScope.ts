@@ -20,6 +20,7 @@ type ScopedRow = Pick<AuditEntry, "entity" | "entity_id" | "before" | "after">;
  */
 export const AUDIT_SCOPE_PARENT_FIELD: Partial<Record<string, "visit_id" | "prescription_id" | "care_plan_id" | "invoice_id">> = {
   visit_form_data: "visit_id",
+  visit_form_revisions: "visit_id",
   prescription_items: "prescription_id",
   care_plan_items: "care_plan_id",
   invoice_items: "invoice_id",

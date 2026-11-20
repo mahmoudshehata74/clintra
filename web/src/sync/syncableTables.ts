@@ -28,6 +28,7 @@ export const SYNCABLE_TABLES = [
   "service_price_overrides",
   "services",
   "visit_form_data",
+  "visit_form_revisions",
   "visits",
 ] as const;
 

@@ -37,7 +37,7 @@ function revAfter(op: SyncOp): number | null {
  */
 export function chainBaseRevs(batch: readonly SyncOp[]): SyncOp[] {
   const previousByRow = new Map<string, { stored: SyncOp; sent: SyncOp }>();
-  return batch.map((op) => {
+  const chained = batch.map((op) => {
     const key = `${op.entity}:${op.entity_id}`;
     const previous = previousByRow.get(key);
     let sent = op;
@@ -52,6 +52,32 @@ export function chainBaseRevs(batch: readonly SyncOp[]): SyncOp[] {
     previousByRow.set(key, { stored: op, sent });
     return sent;
   });
+  return chained.map((op) => withReplacedRevOfItsUpdate(op, chained));
+}
+
+/**
+ * A correction's revision (db/visitCorrections.ts) names the rev it replaces,
+ * which the server checks against the form row's rev: it is the base_rev its
+ * group's own form update is sent with — so a correction made after this
+ * device's unsent autosaves of the same row names the rev those will
+ * produce, as the update does.
+ */
+function withReplacedRevOfItsUpdate(op: SyncOp, batch: readonly SyncOp[]): SyncOp {
+  if (op.entity !== "visit_form_revisions" || op.action !== AuditAction.Create || op.group_id === undefined) {
+    return op;
+  }
+  const revision = op.payload as { visit_form_data_id?: string; replaced_rev?: number } | null;
+  const update = batch.find(
+    (candidate) =>
+      candidate.group_id === op.group_id &&
+      candidate.entity === "visit_form_data" &&
+      candidate.action === AuditAction.Update &&
+      candidate.entity_id === revision?.visit_form_data_id,
+  );
+  if (!revision || !update || update.base_rev === null || update.base_rev === revision.replaced_rev) {
+    return op;
+  }
+  return { ...op, payload: { ...revision, replaced_rev: update.base_rev } };
 }
 
 /**

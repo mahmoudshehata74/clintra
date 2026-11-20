@@ -37,6 +37,7 @@ const ENTITY_LABELS: Record<string, string> = {
   service_price_overrides: "سعر خاص لخدمة",
   services: "خدمة",
   visit_form_data: "نموذج الزيارة",
+  visit_form_revisions: "تعديل نموذج زيارة",
   visits: "زيارة",
   device: "الجهاز",
 };
@@ -69,7 +70,17 @@ const REASON_LABELS: Record<string, string> = {
   unknown_entity: "السيرفر مبيستقبلش النوع ده من البيانات، فالتغيير ده مش هيوصل",
   invoice_has_payment: "الفاتورة دي اتدفع فيها، مينفعش تتعدّل",
   op_id_reused: "العملية دي اتبعتت قبل كده بمحتوى مختلف",
+  // Clinical corrections (docs/design-clinical-corrections.md section 7).
+  correction_required:
+    "الزيارة دي اتقفلت قبل ما التعديل ده يوصل، والتعديل بعد القفل محتاج سبب. افتح الزيارة واعمل «تعديل»",
+  correction_not_allowed: "تعديل الزيارة بعد ما تتقفل لدكتور الزيارة أو صاحب العيادة بس",
+  correction_invalid: "التعديل ده مش مطابق لآخر نسخة من نموذج الزيارة، أو معاه تغييرات تانية، فماتحفظش",
+  revision_immutable: "سجل التعديلات مينفعش يتغيّر أو يتمسح",
 };
+
+/** A correction group another device's correction of the same form beat to the server (conflict_stale_rev). */
+export const CORRECTION_STALE_LABEL =
+  "حد عدّل نموذج الزيارة ده قبلك من جهاز تاني، فتعديلك ماتحفظش. افتح الزيارة وشوف آخر نسخة، ولو لسه محتاج تعدّل اعمل «تعديل» تاني";
 
 // An unknown_entity row names a table the server does not sync (a users op
 // queued before staff were added on the server, say), which has no label of
@@ -139,6 +150,13 @@ export function describeSyncReview(review: SyncReview): string {
   // a mode switch when it changed a schedule row, else a queue move.
   if (isRefusedGroupReview(review)) {
     const group = (review.payload as RefusedGroupPayload).group;
+    if (group.some((op) => op.entity === "visit_form_revisions")) {
+      const line =
+        review.reason === "conflict_stale_rev"
+          ? CORRECTION_STALE_LABEL
+          : (REASON_LABELS[review.reason] ?? `فيه مشكلة تقنية — كود المرجع: ${referenceCodeFor(review)}`);
+      return `${ENTITY_LABELS.visit_form_revisions} — ${line}`;
+    }
     return group.some((op) => op.entity === "schedules") ? MODE_SWITCH_REFUSED_LABEL : QUEUE_REORDER_REFUSED_LABEL;
   }
   const entityLabel =
@@ -274,4 +292,49 @@ export function describeLostBooking(review: SyncReview, patientNames: ReadonlyMa
     return null;
   }
   return describeVisitLine(review.payload as Record<string, unknown>, patientNames);
+}
+
+/** What a refused correction, or a refused late write of a completed visit's form, was about. */
+export interface LostCorrection {
+  visitId: string;
+  /** The text this device had and the server did not take. */
+  complaint: string;
+  diagnosis: string;
+  /** The correction's reason; null for a late autosave, which had none. */
+  reason: string | null;
+}
+
+function formText(data: unknown): { complaint: string; diagnosis: string } {
+  const record = (data ?? {}) as Record<string, unknown>;
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  return { complaint: text(record.complaint), diagnosis: text(record.diagnosis) };
+}
+
+/**
+ * A correction review's visit and lost text: a refused correction group (its
+ * revision's corrected text and reason) or a refused late autosave of a
+ * completed visit's form (correction_required, the row's latest local text).
+ * Null for any other review. The review sheet shows the text only to whoever
+ * reads clinical text (domain/clinicalAccess.ts), with "افتح الزيارة".
+ */
+export function lostCorrectionOf(review: SyncReview): LostCorrection | null {
+  if (isRefusedGroupReview(review)) {
+    const revision = (review.payload as RefusedGroupPayload).group.find((op) => op.entity === "visit_form_revisions");
+    if (!revision) {
+      return null;
+    }
+    const row = (revision.payload ?? {}) as { visit_id?: unknown; new_data?: unknown; reason?: unknown };
+    if (typeof row.visit_id !== "string") {
+      return null;
+    }
+    return { visitId: row.visit_id, ...formText(row.new_data), reason: typeof row.reason === "string" ? row.reason : null };
+  }
+  if (review.entity === "visit_form_data" && review.reason === "correction_required") {
+    const row = (review.payload ?? {}) as { visit_id?: unknown; data?: unknown };
+    if (typeof row.visit_id !== "string") {
+      return null;
+    }
+    return { visitId: row.visit_id, ...formText(row.data), reason: null };
+  }
+  return null;
 }

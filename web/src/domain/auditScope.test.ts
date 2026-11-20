@@ -35,6 +35,13 @@ describe("auditScopeTags", () => {
     }
     expect(auditScopeParentId(row("visits", { location_id: "loc-1" }))).toBeNull();
   });
+
+  it("scopes a correction of a visit's form by its visit, never organization-wide", () => {
+    const correction = row("visit_form_revisions", { visit_id: "visit-1", visit_form_data_id: "form-1" });
+    expect(auditScopeParentId(correction)).toBe("visit-1");
+    expect(auditScopeTags(correction, { location_id: "loc-1", practitioner_id: "pr-1" })).toEqual({ location_id: "loc-1", practitioner_id: "pr-1" });
+    expect(auditScopeTags(correction, undefined)).toBeNull();
+  });
 });
 
 describe("isInAuditScope", () => {
