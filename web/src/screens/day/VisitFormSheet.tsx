@@ -25,6 +25,8 @@ interface VisitFormSheetProps {
  */
 export default function VisitFormSheet({ visitId, onDismiss, completion }: VisitFormSheetProps) {
   const visit = useLiveQuery<Visit | null>(async () => (await db.visits.get(visitId)) ?? null, [visitId]);
+  const access = useIdentityAccess();
+  if (!access.allows("clinical.view")) return null;
 
   return (
     <Sheet onDismiss={onDismiss} size="lg">
@@ -43,3 +45,4 @@ export default function VisitFormSheet({ visitId, onDismiss, completion }: Visit
     </Sheet>
   );
 }
+import { useIdentityAccess } from "../../auth/permissions";

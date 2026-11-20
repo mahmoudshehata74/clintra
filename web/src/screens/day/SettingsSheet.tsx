@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useIdentityAccess } from "../../auth/permissions";
 import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
@@ -38,7 +39,15 @@ const TAB_OPTIONS: readonly { value: Panel; label: string }[] = [
  * otherwise.
  */
 export default function SettingsSheet({ practitionerId, locationId, orgId, onDismiss }: SettingsSheetProps) {
-  const [panel, setPanel] = useState<Panel>("hours");
+  const [selected, setPanel] = useState<Panel>("hours");
+  const access = useIdentityAccess();
+  const available = TAB_OPTIONS.filter(({ value }) => {
+    if (value === "hours") return access.allows("schedules.manage");
+    if (value === "services") return access.allows("services.manage");
+    if (value === "staff") return access.allows("staff.manage");
+    return !access.enforced || access.member?.role === "owner";
+  });
+  const panel = available.some(({ value }) => value === selected) ? selected : available[0]?.value;
 
   const context = useLiveQuery(async () => {
     const [practitioner, location, services, memberships] = await Promise.all([
@@ -54,6 +63,8 @@ export default function SettingsSheet({ practitionerId, locationId, orgId, onDis
       activeStaffCount: memberships.filter((membership) => membership.org_id === orgId && membership.is_active).length,
     };
   }, [practitionerId, locationId, orgId]);
+
+  if (!panel) return null;
 
   // `.c-head h3` / `.sub` per tab, as the prototype words each: the
   // practitioner whose week this is (with the location as context), the
@@ -90,7 +101,7 @@ export default function SettingsSheet({ practitionerId, locationId, orgId, onDis
           label={dayScreenStrings.settingsTabsGroupLabel}
           value={panel}
           onChange={setPanel}
-          options={TAB_OPTIONS}
+          options={available}
           className="overflow-x-auto"
         />
       </div>

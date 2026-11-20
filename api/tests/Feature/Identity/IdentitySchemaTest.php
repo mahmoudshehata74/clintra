@@ -98,6 +98,7 @@ test('each auth function is clintra_auth\'s, SECURITY DEFINER with a pinned sear
     $functions = [
         'auth_login_begin', 'auth_login_complete', 'auth_attempt_succeeded', 'auth_set_password',
         'auth_reset_member_password', 'auth_revoke_credential', 'auth_recover_owner', 'auth_set_username',
+        'auth_consume_staff_step_up',
     ];
 
     foreach ($functions as $function) {

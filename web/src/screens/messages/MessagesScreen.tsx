@@ -63,7 +63,7 @@ interface MessagesData {
 export default function MessagesScreen({ membership }: MessagesScreenProps) {
   const [selectedKey, setSelectedKey] = useState<string>(MESSAGE_TEMPLATES[0].key);
   const [sending, setSending] = useState<SuggestedMessage | null>(null);
-  const isOwner = membership.role === Role.Owner;
+  const isOwner = useIdentityAccess().allows("messages.send", membership.role === Role.Owner);
 
   const data = useLiveQuery<MessagesData>(async () => {
     const [overrides, messages, links, visits, allPatients, invoices, carePlanItems] = await Promise.all([
@@ -453,3 +453,4 @@ function splitRecipient(patientName: string | undefined, phone: string): [string
   const separator = line.lastIndexOf(" · ");
   return separator === -1 ? ["", line] : [line.slice(0, separator + 3), line.slice(separator + 3)];
 }
+import { useIdentityAccess } from "../../auth/permissions";

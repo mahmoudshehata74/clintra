@@ -2,8 +2,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
-import { AUTH, lockOverlay, S } from "../e2e/support";
-import { openDevice } from "./liveSupport";
+import { AUTH, lockOverlay, readStore, S, sidebar, SIDEBAR } from "../e2e/support";
+import { eventually, openDevice, setUpClinic } from "./liveSupport";
 import { provisionOrg, removeLiveOrgs, startApi, stopApi } from "./liveServer";
 
 const exec = promisify(execFile);
@@ -96,6 +96,70 @@ test("an enforced organization accepts signed operations and shows the three ide
       expect(errors).toEqual([]);
     } finally {
       await context.close();
+    }
+  } finally {
+    await stopApi();
+    if (orgId) await removeLiveOrgs([orgId]);
+  }
+});
+
+test("a permission removed on A closes the gated action on B and rejects B's offline operation", async ({ browser }) => {
+  await startApi();
+  let orgId: string | undefined;
+  try {
+    const org = await provisionOrg();
+    orgId = org.orgId;
+    await fixture("prepare", orgId);
+    const a = await openDevice(browser, org, "A");
+    const b = await openDevice(browser, org, "B");
+    try {
+      await setUpClinic(a);
+      await accountSignIn(a.page, "live-owner");
+      await accountSignIn(b.page, "live-assistant");
+      await fixture("enforce", orgId);
+      await eventually([a, b], async () => {
+        const devices = await Promise.all([a, b].map((d) => readStore<{ identity_enforced_at?: string }>(d.page, "device")));
+        return devices.every((rows) => Boolean(rows[0]?.identity_enforced_at));
+      }, true);
+
+      await sidebar(a.page).getByRole("button", { name: SIDEBAR.navSettings, exact: true }).click();
+      const settings = a.page.getByRole("dialog");
+      await settings.getByRole("button", { name: S.settingsStaffTab, exact: true }).click();
+      const assistant = settings.getByRole("listitem").filter({ hasText: "Live Identity Assistant" });
+      async function changeMessagePermission(checked: boolean) {
+        await assistant.getByRole("button", { name: "الصلاحيات", exact: true }).click();
+        await assistant.getByRole("switch", { name: /إرسال الرسايل/ }).setChecked(checked);
+        await assistant.getByLabel("اكتب كلمة السر بتاعتك للتأكيد").fill("Password for this live fixture");
+        await assistant.getByRole("button", { name: "تأكيد", exact: true }).click();
+        await expect(assistant.getByRole("heading", { name: "الصلاحيات", exact: true })).toHaveCount(0);
+      }
+
+      await changeMessagePermission(true);
+      const messages = sidebar(b.page).getByRole("button", { name: SIDEBAR.navMessages, exact: true });
+      await eventually([b], () => messages.count(), 1);
+      await messages.click();
+      await b.context.setOffline(true);
+      const opId = await b.page.evaluate(async () => {
+        const src = "/src/";
+        const { db } = await import(`${src}db/database.ts`) as typeof import("../src/db/database");
+        const { saveTemplateBody } = await import(`${src}db/messages.ts`) as typeof import("../src/db/messages");
+        const { MessageTemplateKey } = await import(`${src}domain/messageTemplates.ts`) as typeof import("../src/domain/messageTemplates");
+        await saveTemplateBody(db, MessageTemplateKey.BookingConfirmation, "قالب اتكتب من الجهاز وهو غير متصل");
+        return (await db.sync_ops.toArray()).find((op) => op.entity === "message_templates" && op.synced_at === null)?.op_id;
+      });
+      expect(opId).toBeTruthy();
+      await changeMessagePermission(false);
+      await b.context.setOffline(false);
+
+      await eventually([b], () => messages.count(), 0);
+      await eventually([b], async () => (await readStore<{ op_id: string; reason: string }>(b.page, "sync_review")).find((row) => row.op_id === opId)?.reason, "permission_denied");
+      await b.page.getByRole("button", { name: S.syncNeedsReview, exact: true }).click();
+      await expect(b.page.getByText(/اللي عمل التغيير ده مالوش صلاحية يعمله/)).toBeVisible();
+      expect(a.errors).toEqual([]);
+      expect(b.errors).toEqual([]);
+    } finally {
+      await a.context.close();
+      await b.context.close();
     }
   } finally {
     await stopApi();

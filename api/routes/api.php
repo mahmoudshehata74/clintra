@@ -48,12 +48,14 @@ Route::middleware(['membership', 'throttle:sync', 'person:enforced'])->post('/st
 // organization is enforced. See App\Http\Controllers\AuthController and
 // StaffIdentityController.
 Route::middleware(['membership', 'throttle:auth', 'device.proof'])->group(function () {
-    Route::post('/auth/login', [AuthController::class, 'login']);
-    Route::post('/auth/owner-recovery', [AuthController::class, 'recoverOwner']);
+    Route::post('/auth/login', [AuthController::class, 'login'])->name('identity.login');
+    Route::post('/auth/owner-recovery', [AuthController::class, 'recoverOwner'])->name('identity.recovery');
     Route::post('/auth/password', [AuthController::class, 'changePassword'])->middleware('person:required');
     Route::post('/staff/{membership}/password-reset', [StaffIdentityController::class, 'resetPassword'])->middleware('person:required');
     Route::delete('/staff/credentials/{credential}', [StaffIdentityController::class, 'revokeCredential'])->middleware('person:required');
-    Route::put('/staff/{membership}/username', [StaffIdentityController::class, 'setUsername'])->middleware('person:enforced');
+    Route::get('/staff/credentials', [StaffIdentityController::class, 'credentials'])->middleware('person:required');
+    Route::post('/staff/{membership}', [StaffIdentityController::class, 'setPermissions'])->middleware('person:required');
+    Route::put('/staff/{membership}/username', [StaffIdentityController::class, 'setUsername'])->middleware('person:required');
 });
 
 // Device audit rows up and down — see App\Http\Controllers\DeviceAuditController

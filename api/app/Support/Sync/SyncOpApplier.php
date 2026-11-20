@@ -1259,6 +1259,11 @@ class SyncOpApplier
             return $this->rejected($op, 'permission_escalation');
         }
 
+        if (in_array($table, ['visit_form_data', 'visit_form_revisions', 'prescriptions', 'prescription_items'], true)
+            && ! $this->isClinicalPractitioner($table, $payload, $stored)) {
+            return $this->rejected($op, 'permission_denied');
+        }
+
         if ($this->identity['role'] === 'owner') {
             return null;
         }
@@ -1274,6 +1279,38 @@ class SyncOpApplier
         }
 
         return null;
+    }
+
+    /** Both the existing and requested parents must belong to the proven practitioner's visits. */
+    private function isClinicalPractitioner(string $table, array $payload, ?object $stored): bool
+    {
+        $practitioner = DB::table('memberships')->where('id', $this->identity['membership_id'])->value('practitioner_id');
+        if ($practitioner === null) {
+            return false;
+        }
+        [$field, $parentTable] = match ($table) {
+            'visit_form_revisions' => ['visit_form_data_id', 'visit_form_data'],
+            'prescription_items' => ['prescription_id', 'prescriptions'],
+            default => ['visit_id', 'visits'],
+        };
+        $parents = $stored === null ? [] : [$stored->{$field}];
+        if (array_key_exists($field, $payload)) {
+            $parents[] = $payload[$field];
+        }
+        if ($parents === []) {
+            return false;
+        }
+        foreach ($parents as $parent) {
+            if (! is_string($parent) || ! Str::isUuid($parent)) {
+                return false;
+            }
+            $visit = $parentTable === 'visits' ? $parent : DB::table($parentTable)->where('id', $parent)->value('visit_id');
+            if ($visit === null || ! DB::table('visits')->where('id', $visit)->where('practitioner_id', $practitioner)->exists()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** @param  array<string, mixed>  $payload */

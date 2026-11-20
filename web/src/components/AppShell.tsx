@@ -3,6 +3,7 @@ import { authStrings } from "../auth/authStrings";
 import { clearActiveSession } from "../auth/session";
 import { useActingStaffName } from "../auth/useActingMembership";
 import { navItemsFor, type NavItem } from "../domain/navigation";
+import { useIdentityAccess } from "../auth/permissions";
 import type { Role } from "../domain/role";
 import type { ClinicDay } from "../domain/time";
 import SyncStatusChip from "../screens/day/SyncStatusChip";
@@ -258,7 +259,7 @@ export default function AppShell({
   whoName,
   children,
 }: AppShellProps) {
-  const items = navItemsFor(role, hasPractitioner);
+  const items = navItemsFor(role, hasPractitioner, useIdentityAccess());
 
   return (
     <div className="flex min-h-screen flex-col-reverse sm:flex-row">

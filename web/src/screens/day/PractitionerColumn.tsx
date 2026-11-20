@@ -63,13 +63,13 @@ interface PractitionerColumnProps {
   onMarkNoShow: (visit: Visit) => void;
   onOpenInvoice: (invoiceId: string) => void;
   /** The overflow menu's "ابعت رسالة", offered on any visit whose patient exists (SendMessageSheet). */
-  onSendMessage: (visit: Visit) => void;
+  onSendMessage?: (visit: Visit) => void;
   /** The overflow menu's "ملف المريض", offered on any visit whose patient exists (PatientProfileSheet). */
   onOpenProfile: (visit: Visit) => void;
   onSendToEnd: (visit: Visit) => void;
   /** Queue mode's reorder buttons on the waiting rows; undefined when the signed-in role may not reorder (domain/queueReorder.ts). */
   onMoveWaiting?: (visit: Visit, direction: "up" | "down") => void;
-  onOpenVisitForm: (visit: Visit) => void;
+  onOpenVisitForm?: (visit: Visit) => void;
   /** The slots card's trailing action ("ورقة الغد") — slots mode only. The audit log ("السجل") moved to AppShell's rail. */
   onOpenDaySheet?: () => void;
 }
@@ -228,7 +228,7 @@ export default function PractitionerColumn({
           const menuEligible = Boolean(visit && (administrable || invoiceId || patient));
           const showVisitFormPill =
             visit != null && (visit.status === VisitStatus.InRoom || visit.status === VisitStatus.Completed);
-          const openVisitForm = visit ? () => onOpenVisitForm(visit) : undefined;
+          const openVisitForm = visit && onOpenVisitForm ? () => onOpenVisitForm(visit) : undefined;
           const isCompleted = visit != null && visit.status === VisitStatus.Completed;
           const isVisuallyEmpty = !visit || statusIsVisuallyEmpty(visit.status);
 
@@ -264,7 +264,7 @@ export default function PractitionerColumn({
                       onCancel: administrable ? () => onRequestCancel(visit) : undefined,
                       onNoShow: administrable ? () => onMarkNoShow(visit) : undefined,
                       onInvoice: invoiceId ? () => onOpenInvoice(invoiceId) : undefined,
-                      onSendMessage: patient ? () => onSendMessage(visit) : undefined,
+                      onSendMessage: patient && onSendMessage ? () => onSendMessage(visit) : undefined,
                       onOpenProfile: patient ? () => onOpenProfile(visit) : undefined,
                     }
                   : undefined
@@ -349,13 +349,13 @@ interface QueueColumnProps {
   onMarkNoShow: (visit: Visit) => void;
   onOpenInvoice: (invoiceId: string) => void;
   /** The overflow menu's "ابعت رسالة", offered on any visit whose patient exists (SendMessageSheet). */
-  onSendMessage: (visit: Visit) => void;
+  onSendMessage?: (visit: Visit) => void;
   /** The overflow menu's "ملف المريض", offered on any visit whose patient exists (PatientProfileSheet). */
   onOpenProfile: (visit: Visit) => void;
   onSendToEnd: (visit: Visit) => void;
   /** Queue mode's reorder buttons on the waiting rows; undefined when the signed-in role may not reorder (domain/queueReorder.ts). */
   onMoveWaiting?: (visit: Visit, direction: "up" | "down") => void;
-  onOpenVisitForm: (visit: Visit) => void;
+  onOpenVisitForm?: (visit: Visit) => void;
   onOpenBooking?: () => void;
   onWalkIn?: () => void;
   /** Today, for the elapsed in_room meta phrase's real-day gating — see elapsedLabel.ts. */
@@ -419,7 +419,7 @@ function QueueColumn({
           const isNext = visit.id === summary.nextVisitId;
           const menuEligible = Boolean(isMenuEligible(visit.status) || invoiceId || isWaiting || patient);
           const showVisitFormPill = visit.status === VisitStatus.InRoom || visit.status === VisitStatus.Completed;
-          const openVisitForm = () => onOpenVisitForm(visit);
+          const openVisitForm = onOpenVisitForm ? () => onOpenVisitForm(visit) : undefined;
           const isCompleted = visit.status === VisitStatus.Completed;
 
           // Cancelled/no_show never reach the queue's own current/next/done
@@ -542,7 +542,7 @@ function QueueColumn({
                       onCancel: isMenuEligible(visit.status) ? () => onRequestCancel(visit) : undefined,
                       onNoShow: isMenuEligible(visit.status) ? () => onMarkNoShow(visit) : undefined,
                       onInvoice: invoiceId ? () => onOpenInvoice(invoiceId) : undefined,
-                      onSendMessage: patient ? () => onSendMessage(visit) : undefined,
+                      onSendMessage: patient && onSendMessage ? () => onSendMessage(visit) : undefined,
                       onOpenProfile: patient ? () => onOpenProfile(visit) : undefined,
                     }
                   : undefined

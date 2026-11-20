@@ -183,9 +183,10 @@ export function unmarkMessageSent(db: ClintraDatabase, messageId: string): Promi
   return setMarkedSent(db, messageId, false);
 }
 
-async function actingOwner(db: ClintraDatabase): Promise<Membership> {
+async function templateEditor(db: ClintraDatabase): Promise<Membership> {
   const actor = await resolveActingMembership(db);
-  if (actor.role !== Role.Owner) {
+  const enforced = (await db.device.toArray()).some((device) => device.org_id === actor.org_id && device.identity_enforced_at != null);
+  if (!hasPermission({ enforced, member: actor }, "messages.send", actor.role === Role.Owner)) {
     throw new Error(TemplateError.NotOwner);
   }
   return actor;
@@ -231,7 +232,7 @@ export async function saveTemplateBody(db: ClintraDatabase, key: string, body: s
   if (templateBodyLength(trimmed) > TEMPLATE_BODY_MAX_LENGTH) {
     throw new Error(TemplateError.BodyTooLong);
   }
-  const actor = await actingOwner(db);
+  const actor = await templateEditor(db);
 
   return db.transaction("rw", db.message_templates, db.audit_log, db.sync_ops, async () => {
     const existing = await db.message_templates.where("key").equals(key).first();
@@ -269,10 +270,11 @@ export async function resetTemplate(db: ClintraDatabase, key: string): Promise<s
   if (!isEditableTemplateKey(key)) {
     throw new Error(TemplateError.NotEditable);
   }
-  const actor = await actingOwner(db);
+  const actor = await templateEditor(db);
 
   return db.transaction("rw", db.message_templates, db.audit_log, db.sync_ops, async () => {
     const existing = await db.message_templates.where("key").equals(key).first();
     return existing ? deleteOverride(db, existing, actor) : null;
   });
 }
+import { hasPermission } from "../auth/permissions";

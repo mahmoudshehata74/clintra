@@ -105,6 +105,7 @@ export default function InvoiceSheet({
   onRequestPayment,
   onVoided,
 }: InvoiceSheetProps) {
+  const access = useIdentityAccess();
   const [printTarget, setPrintTarget] = useState<PrintTarget | null>(null);
   const [isVoiding, setIsVoiding] = useState(false);
   const [isEditingItems, setIsEditingItems] = useState(false);
@@ -183,7 +184,8 @@ export default function InvoiceSheet({
   const hasPayments = payments.length > 0;
   const editRefusal: InvoiceItemEditRefusal | null = invoiceItemEditRefusal({ invoice, paymentCount: payments.length, dayClosed });
   // A payment recorded (here or on another device) while editing ends the edit.
-  const showEditor = isEditingItems && editRefusal === null;
+  const canEditItems = access.allows("invoices.edit_items");
+  const showEditor = canEditItems && isEditingItems && editRefusal === null;
 
   async function handleVoid() {
     setIsVoiding(true);
@@ -233,7 +235,7 @@ export default function InvoiceSheet({
           <div className="flex flex-col gap-[14px] p-[18px]">
             <p className="text-xs text-muted">{dayScreenStrings.printHeaderPlaceholder}</p>
 
-            <div data-invoice-items-action className="flex flex-wrap items-center justify-end gap-2">
+            {canEditItems && <div data-invoice-items-action className="flex flex-wrap items-center justify-end gap-2">
               {editRefusal === null ? (
                 !showEditor && (
                   <Button variant="secondary" size="sm" onClick={() => setIsEditingItems(true)}>
@@ -243,7 +245,7 @@ export default function InvoiceSheet({
               ) : (
                 <p className="text-sm text-muted">{saveRefusalMessage(editRefusal)}</p>
               )}
-            </div>
+            </div>}
 
             {showEditor ? (
               <InvoiceItemsEditor
@@ -380,7 +382,7 @@ export default function InvoiceSheet({
           </CardFooter>
 
           {/* Voiding stays visually separate from the daily actions above. */}
-          <div className="border-t border-hair px-[18px] py-[14px]">
+          {access.allows("invoices.void") && <div className="border-t border-hair px-[18px] py-[14px]">
             <Button
               variant="danger"
               disabled={hasPayments || isVoiding || invoice.status === InvoiceStatus.Void}
@@ -389,7 +391,7 @@ export default function InvoiceSheet({
               {dayScreenStrings.voidInvoiceAction}
             </Button>
             {hasPayments && <p className="mt-1 text-sm text-muted">{dayScreenStrings.voidInvoiceDisabledReason}</p>}
-          </div>
+          </div>}
         </Sheet>
       </div>
 
@@ -478,3 +480,4 @@ export default function InvoiceSheet({
     </>
   );
 }
+import { useIdentityAccess } from "../../auth/permissions";

@@ -7,6 +7,7 @@ use App\Support\EgyptianPhone;
 use App\Support\Identity\AuthCall;
 use App\Support\Identity\AuthCallFailed;
 use App\Support\Identity\Es256;
+use App\Support\Identity\Identity;
 use App\Support\Identity\Password;
 use App\Support\Identity\RequestProof;
 use App\Support\Identity\StepUp;
@@ -66,6 +67,9 @@ class AuthController extends Controller
         // A device with a bound key proved it already (device.proof). A device
         // binding its key now proves it holds that key: the request carries
         // the new key's own device proof.
+        if (Identity::enforced($request) && $request->attributes->get('device_proof_verified') !== true && $input['device_public_key'] === null) {
+            return $this->unauthenticated();
+        }
         $deviceKey = null;
         if ($request->attributes->get('device_proof_verified') !== true && $input['device_public_key'] !== null) {
             if (! RequestProof::verifyDevice($request, $deviceId, $input['device_public_key'])) {

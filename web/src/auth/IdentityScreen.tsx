@@ -3,7 +3,7 @@ import Button from "../components/ui/Button";
 import Field, { TextInput } from "../components/ui/Field";
 import { db } from "../db/database";
 import type { DeviceRegistration, PersonCredential } from "../db/types";
-import { changeOwnPassword, IdentityRequestError, signIn } from "./identityClient";
+import { changeOwnPassword, IdentityRequestError, recoverOwner, signIn } from "./identityClient";
 import { generatePinSalt, hashPin } from "./pinHash";
 
 interface IdentityScreenProps {
@@ -14,7 +14,7 @@ interface IdentityScreenProps {
 }
 
 export default function IdentityScreen({ device, changeFor, onCancel, onComplete }: IdentityScreenProps) {
-  const [stage, setStage] = useState<"sign-in" | "password" | "pin">(changeFor ? "password" : "sign-in");
+  const [stage, setStage] = useState<"sign-in" | "password" | "pin" | "recovery">(changeFor ? "password" : "sign-in");
   const [person, setPerson] = useState(changeFor);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -37,8 +37,12 @@ export default function IdentityScreen({ device, changeFor, onCancel, onComplete
     setBusy(true);
     setError(undefined);
     try {
-      if (stage === "sign-in") {
-        const credential = await signIn(db, device, field("username").trim(), field("password"));
+      if (stage === "sign-in" || stage === "recovery") {
+        const username = field("username").trim();
+        const password = field("password");
+        const credential = stage === "recovery"
+          ? await recoverOwner(db, device, { username, password, phone: field("phone"), code: field("code") })
+          : await signIn(db, device, username, password);
         setPerson(credential);
         if (credential.must_change_password) setStage("password");
         else await finishSignIn(credential);
@@ -66,15 +70,25 @@ export default function IdentityScreen({ device, changeFor, onCancel, onComplete
   return (
     <form key={stage} className="mt-6 grid w-full max-w-xs gap-3 rounded-panel bg-card p-5 text-start text-text" onSubmit={submit}>
       <h1 className="text-lg font-bold">
-        {stage === "sign-in" ? "دخول بحساب" : stage === "password" ? "غيّر كلمة السر" : "اختار رقم سري"}
+        {stage === "sign-in" ? "دخول بحساب" : stage === "password" ? "غيّر كلمة السر" : stage === "recovery" ? "استرجاع حساب صاحب العيادة" : "اختار رقم سري"}
       </h1>
-      {stage === "sign-in" && (
+      {stage === "recovery" && (
+        <>
+          <Field id="identity-recovery-phone" label="موبايل صاحب العيادة">
+            <TextInput type="tel" name="phone" autoComplete="tel" dir="ltr" required />
+          </Field>
+          <Field id="identity-recovery-code" label="كود الاسترجاع">
+            <TextInput name="code" autoComplete="one-time-code" dir="ltr" required />
+          </Field>
+        </>
+      )}
+      {(stage === "sign-in" || stage === "recovery") && (
         <>
           <Field id="identity-username" label="اسم المستخدم">
             <TextInput name="username" autoComplete="username" autoCapitalize="none" dir="ltr" spellCheck={false} required />
           </Field>
-          <Field id="identity-password" label="كلمة السر">
-            <TextInput name="password" type="password" autoComplete="current-password" required />
+          <Field id="identity-password" label={stage === "recovery" ? "كلمة السر الجديدة" : "كلمة السر"}>
+            <TextInput name="password" type="password" autoComplete={stage === "recovery" ? "new-password" : "current-password"} required />
           </Field>
         </>
       )}
@@ -104,8 +118,13 @@ export default function IdentityScreen({ device, changeFor, onCancel, onComplete
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="mt-2 flex gap-2">
         <Button disabled={busy} variant="primary" type="submit">{stage === "sign-in" ? "دخول" : "حفظ"}</Button>
-        <Button disabled={busy} variant="secondary" type="button" onClick={onCancel}>رجوع</Button>
+        <Button disabled={busy} variant="secondary" type="button" onClick={stage === "recovery" ? () => { setError(undefined); setStage("sign-in"); } : onCancel}>رجوع</Button>
       </div>
+      {stage === "sign-in" && (
+        <button disabled={busy} type="button" className="min-h-10 text-start text-sm underline" onClick={() => { setError(undefined); setStage("recovery"); }}>
+          نسيت كلمة السر؟
+        </button>
+      )}
     </form>
   );
 }

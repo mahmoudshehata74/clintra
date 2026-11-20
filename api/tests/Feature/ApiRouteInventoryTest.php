@@ -140,14 +140,19 @@ function apiRouteInventory(): array
         'POST api/auth/owner-recovery' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
         'POST api/staff/{membership}/password-reset' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
         'DELETE api/staff/credentials/{credential}' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
+        'GET api/staff/credentials' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
+        'POST api/staff/{membership}' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
         'PUT api/staff/{membership}/username' => [
             'body' => [],
             'unauthenticated' => 401,
             'revoked' => 401,
             'otherOrg' => function (TestCase $test, array $orgA, array $orgB): void {
                 // B's owner names A's owner.
-                $response = $test->withToken($orgB['token'])
-                    ->putJson('/api/staff/'.$orgA['membershipId'].'/username', ['username' => 'taken.by.b']);
+                $org = \Tests\Support\IdentityHarness::org();
+                $owner = \Tests\Support\IdentityHarness::credential($org, $org['ownerId']);
+                $response = \Tests\Support\IdentityHarness::send($org, 'PUT', '/api/staff/'.$orgA['membershipId'].'/username', [
+                    'username' => 'taken.by.b', 'password' => 'owner password 1',
+                ], $owner);
                 $response->assertNotFound();
                 expect(test()->fx()->table('memberships')->where('id', $orgA['membershipId'])->value('username'))->toBeNull();
             },

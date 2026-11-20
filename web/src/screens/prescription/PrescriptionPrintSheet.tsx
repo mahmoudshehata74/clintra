@@ -77,6 +77,7 @@ interface PrintData {
  * as its text (messagesModel.ts's prescriptionMessageText), on that channel.
  */
 export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: PrescriptionPrintSheetProps) {
+  const identityAccess = useIdentityAccess();
   const actingPractitionerId = useGuardedActingMembership()?.practitioner_id ?? null;
   const [isConfirming, setIsConfirming] = useState(false);
   const [isWriting, setIsWriting] = useState(false);
@@ -195,7 +196,7 @@ export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: Pr
                   />
                 </div>
               )}
-              {isPrinted && !isConfirming && (
+              {identityAccess.allows("messages.send") && isPrinted && !isConfirming && (
                 <>
                   <Button variant="secondary" onClick={() => setSendChannel(MessageChannel.WhatsApp)}>
                     {messagesStrings.rxSendWhatsApp}
@@ -230,7 +231,7 @@ export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: Pr
         </Sheet>
       </div>
 
-      {sendChannel !== null && (
+      {identityAccess.allows("messages.send") && sendChannel !== null && (
         <SendMessageSheet
           visitId={data.prescription.visit_id}
           start={{
@@ -258,3 +259,4 @@ export default function PrescriptionPrintSheet({ prescriptionId, onDismiss }: Pr
     document.body,
   );
 }
+import { useIdentityAccess } from "../../auth/permissions";

@@ -119,6 +119,7 @@ const FIELD_CONFIG: readonly { key: VisitFormFieldKey; label: string; placeholde
  * and computeRxPrintState for the print button).
  */
 export default function VisitWorkspace({ visitId, layout, onClose, completion }: VisitWorkspaceProps) {
+  const identityAccess = useIdentityAccess();
   const actingMembership = useGuardedActingMembership();
   const actingPractitionerId = actingMembership?.practitioner_id ?? null;
   // Saves still in flight, so "حفظ ومتابعة لاحقًا" can wait for them; one
@@ -203,6 +204,7 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
   const summary = summarizePatient(data.patient, data.prior, now);
   const history = buildVisitHistory(data.prior, data.formValuesByVisitId, data.drugNamesByVisitId);
   const access = computeRxAccess(actingPractitionerId, visit, data.prescription, data.items.length);
+  const canWriteClinical = !identityAccess.enforced || (actingPractitionerId !== null && actingPractitionerId === visit.practitioner_id);
   const printState = data.prescription
     ? computeRxPrintState(actingPractitionerId, visit, data.prescription, data.items.length)
     : null;
@@ -332,14 +334,14 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
           </section>
         )}
 
-        {visit.status === VisitStatus.Completed ? (
+        {visit.status === VisitStatus.Completed || !canWriteClinical ? (
           <CompletedVisitFields
             key={visit.id}
             visitId={visit.id}
             stored={data.values}
             revisionCount={data.revisionCount}
-            canCorrect={canCorrectVisit(actingMembership, visit)}
-            showsHistory={readsClinicalText(actingMembership)}
+            canCorrect={canWriteClinical && canCorrectVisit(actingMembership, visit)}
+            showsHistory={identityAccess.allows("clinical.view", readsClinicalText(actingMembership))}
           />
         ) : (
           <VisitFields key={visit.id} visitId={visit.id} stored={data.values} pendingSaves={pendingSaves} />
@@ -759,3 +761,4 @@ function RxItemForm({ initial, confirmLabel, onSubmit, onDone }: RxItemFormProps
     </form>
   );
 }
+import { useIdentityAccess } from "../../auth/permissions";

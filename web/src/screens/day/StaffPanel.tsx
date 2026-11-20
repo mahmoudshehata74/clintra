@@ -10,6 +10,9 @@ import { addStaffMember, updateMembership, type AddStaffResult } from "../../db/
 import type { Location, Membership, Practitioner, User } from "../../db/types";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { Role } from "../../domain/role";
+import { useIdentityAccess } from "../../auth/permissions";
+import { useGuardedActingMembership } from "../../auth/useActingMembership";
+import StaffIdentityActions from "./StaffIdentityActions";
 import { staffName } from "../../domain/staffName";
 import { resolveStaffServer } from "../../sync/staffServer";
 import { useOnlineStatus } from "../../sync/useOnlineStatus";
@@ -66,6 +69,8 @@ function GroupHeading({ children }: { children: string }) {
  * domain/staffName.ts's.
  */
 export default function StaffPanel({ orgId }: { orgId: string }) {
+  const access = useIdentityAccess();
+  const caller = useGuardedActingMembership();
   const data =
     useLiveQuery<PanelData>(async () => {
       const memberships = (await db.memberships.toArray()).filter((m) => m.org_id === orgId);
@@ -92,11 +97,13 @@ export default function StaffPanel({ orgId }: { orgId: string }) {
               membership={membership}
               userName={staffName(membership, data.usersById.get(membership.user_id)) ?? ""}
               isLastActiveOwner={isLastActiveOwner(membership, data.memberships)}
+              caller={access.enforced ? caller : undefined}
+              locations={data.locations}
             />
           ))}
         </SetList>
 
-        {hasLockedOwner && (
+        {hasLockedOwner && !access.enforced && (
           <div
             id={LAST_OWNER_NOTE_ID}
             className="mt-3.5 flex items-start gap-2 rounded-card border border-dashed border-copper-line bg-copper-wash px-3.5 py-3 text-xs text-copper-ink"
@@ -139,10 +146,14 @@ function StaffRow({
   membership,
   userName,
   isLastActiveOwner: isLocked,
+  caller,
+  locations,
 }: {
   membership: Membership;
   userName: string;
   isLastActiveOwner: boolean;
+  caller?: Membership;
+  locations: Location[];
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(userName);
@@ -243,7 +254,8 @@ function StaffRow({
   ) : undefined;
 
   return (
-    <SetRow layout="staff" muted={!membership.is_active} editor={editor}>
+    <SetRow layout="staff" muted={!membership.is_active} editor={caller
+      ? <StaffIdentityActions key={caller.id} caller={caller} target={membership} locations={locations} /> : editor}>
       <span className="min-w-0 text-[13.5px] font-semibold text-text">
         {/* A membership tied to a practitioner reads as the doctor: "د. أحمد
             المصري" with "المالك · طبيب". */}
@@ -256,7 +268,7 @@ function StaffRow({
             : ROLE_LABELS[membership.role]}
         </span>
       </span>
-      {pinIsSet ? (
+      {!caller && (pinIsSet ? (
         <Badge appearance="solid" tone="eligible">
           {dayScreenStrings.staffPinSetBadge}
         </Badge>
@@ -264,7 +276,7 @@ function StaffRow({
         <Badge appearance="soft" tone="neutral">
           {dayScreenStrings.staffPinUnsetBadge}
         </Badge>
-      )}
+      ))}
       {membership.is_active ? (
         <Badge appearance="solid" tone="eligible">
           {dayScreenStrings.staffActiveLabel}
@@ -274,7 +286,7 @@ function StaffRow({
           {dayScreenStrings.staffInactiveBadge}
         </Badge>
       )}
-      {!editing && (
+      {!caller && !editing && (
         <Button
           variant="outline"
           onClick={() => {
@@ -327,6 +339,8 @@ function NewStaffForm({
   onCancel: () => void;
 }) {
   const [fullName, setFullName] = useState("");
+  const access = useIdentityAccess();
+  const roles = access.enforced && access.member?.role !== Role.Owner ? ROLE_OPTIONS.filter((option) => option.value !== Role.Owner) : ROLE_OPTIONS;
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState<Role>(Role.Assistant);
   const [locationScope, setLocationScope] = useState<LocationScope>(LocationScope.All);
@@ -405,7 +419,7 @@ function NewStaffForm({
 
       <div className="flex flex-col gap-[5px]">
         <GroupHeading>{dayScreenStrings.staffRoleLabel}</GroupHeading>
-        <ToggleGroup variant="filter" label={dayScreenStrings.staffRoleLabel} value={role} onChange={setRole} options={ROLE_OPTIONS} />
+        <ToggleGroup variant="filter" label={dayScreenStrings.staffRoleLabel} value={role} onChange={setRole} options={roles} />
       </div>
 
       <div className="flex flex-col gap-[5px]">

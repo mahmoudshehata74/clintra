@@ -133,10 +133,11 @@ async function loadPlan(planId: string): Promise<PlanData | null> {
 }
 
 function PlanView({ planId }: { planId: string }) {
+  const identityAccess = useIdentityAccess();
   const actingMembership = useGuardedActingMembership();
   const actingPractitionerId = actingMembership?.practitioner_id ?? null;
   // The front desk reads the plan without its diagnosis (domain/clinicalAccess.ts).
-  const showDiagnosis = readsClinicalText(actingMembership);
+  const showDiagnosis = identityAccess.allows("clinical.view", readsClinicalText(actingMembership));
   const [isEditing, setIsEditing] = useState(false);
   const [reminderVisitId, setReminderVisitId] = useState<string | null>(null);
   const [booking, setBooking] = useState<BookNextState | null>(null);
@@ -221,15 +222,15 @@ function PlanView({ planId }: { planId: string }) {
               {T.editPlan}
             </Button>
           )}
-          <Button
+          {identityAccess.allows("messages.send") && <Button
             variant="secondary"
             disabled={model.reminder.visitId === null}
             onClick={() => setReminderVisitId(model.reminder.visitId)}
           >
             {T.sendReminder}
-          </Button>
+          </Button>}
           {model.book?.disabledReason && <p className="basis-full text-[11.5px] text-muted">{model.book.disabledReason}</p>}
-          {model.reminder.disabledReason && (
+          {identityAccess.allows("messages.send") && model.reminder.disabledReason && (
             <p className="basis-full text-[11.5px] text-muted">{model.reminder.disabledReason}</p>
           )}
         </div>
@@ -237,7 +238,7 @@ function PlanView({ planId }: { planId: string }) {
 
       {booking && <CarePlanBookingSheet plan={plan} book={booking} onDismiss={() => setBooking(null)} />}
 
-      {reminderVisitId && (
+      {identityAccess.allows("messages.send") && reminderVisitId && (
         <SendMessageSheet
           visitId={reminderVisitId}
           start={{ templateKey: MessageTemplateKey.CarePlanSessionReminder }}
@@ -730,3 +731,4 @@ function EditPlanForm({
     </>
   );
 }
+import { useIdentityAccess } from "../../auth/permissions";
