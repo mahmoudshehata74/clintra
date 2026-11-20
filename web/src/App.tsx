@@ -103,6 +103,7 @@ export default function App() {
       return;
     }
     let handle: SyncEngineHandle | null = null;
+    let unsubscribeUnlock: (() => void) | undefined;
     let cancelled = false;
 
     function onAuthError() {
@@ -118,13 +119,20 @@ export default function App() {
         if (cancelled) {
           return;
         }
-        const token = rows.find((row) => row.token !== null)?.token ?? null;
-        handle = startSyncEngine(db, selectSyncTransport(token, new FakeTransport()), undefined, deviceReadiness);
+        const device = rows.find((row) => row.token !== null);
+        const transport = selectSyncTransport(device?.token ?? null, new FakeTransport(), device
+          ? async () => (await db.device_keys.get(device.id))?.private_key
+          : undefined);
+        handle = startSyncEngine(db, transport, undefined, deviceReadiness);
+        unsubscribeUnlock = subscribeSession(() => {
+          if (getActiveMembershipId()) handle?.triggerSync();
+        });
       });
 
     return () => {
       cancelled = true;
       window.removeEventListener(SYNC_AUTH_ERROR_EVENT_NAME, onAuthError);
+      unsubscribeUnlock?.();
       handle?.stop();
     };
   }, [bootStatus]);

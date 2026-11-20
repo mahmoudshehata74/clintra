@@ -3,6 +3,7 @@ import { getDeviceId } from "../db/deviceRegistration";
 import type { AuditLog, RemoteAuditLog } from "../db/types";
 import { AUDIT_SCOPE_PARENT_FIELD, auditScopeParentId, auditScopeTags, type AuditScopeParent } from "../domain/auditScope";
 import { addDaysToClinicDay, cairoInstant, todayInCairo } from "../domain/time";
+import { prepareIdentityAudit } from "./sealer";
 import { SyncAuthError, type AuditTransport, type WireAuditRow } from "./transport";
 
 /** Rows per POST /api/audit/push, the server's limit. */
@@ -106,7 +107,9 @@ export async function runAuditPush(db: ClintraDatabase, transport: AuditTranspor
     const parents = await scopeParentsOf(db, batch);
     let results;
     try {
-      results = await transport.pushAuditRows(batch.map((row) => toWireAuditRow(row, parents)));
+      const sealed = await prepareIdentityAudit(db, deviceId, batch.map((row) => toWireAuditRow(row, parents)));
+      if (sealed.length === 0) return "done";
+      results = await transport.pushAuditRows(sealed);
     } catch (error) {
       return outcomeOf(error);
     }

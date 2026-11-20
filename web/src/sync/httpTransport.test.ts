@@ -140,6 +140,7 @@ describe("HttpTransport.pullSince", () => {
     expect(result).toEqual({
       cursor: "42",
       hasMore: true,
+      identityEnforcedAt: null,
       changes: [{ entity: "patients", entity_id: "p1", rev: 2, payload: { id: "p1", full_name: "x" } }],
     });
   });
@@ -183,6 +184,7 @@ describe("HttpTransport.pullBootstrap", () => {
     expect(result).toEqual({
       cursor: "1:",
       hasMore: true,
+      identityEnforcedAt: null,
       changes: [{ entity: "day_state", entity_id: "d1", rev: 1, payload: { id: "d1", date: "2026-09-13" } }],
     });
   });
@@ -222,6 +224,18 @@ describe("HttpTransport: device_series", () => {
     expect((await transport.pullSince(null)).deviceSeries).toBe(2);
     expect((await transport.pullBootstrap(null)).deviceSeries).toBe(2);
   });
+});
+
+it("maps the explicit enforcement timestamp from pull and bootstrap", async () => {
+  const enforcement = "2026-11-20T10:34:56.123456Z";
+  const fetchImpl = fetchMock();
+  fetchImpl.mockImplementation(async () => jsonResponse(200, {
+    cursor: "0", has_more: false, rows: [], identity_enforced_at: enforcement,
+  }));
+  const transport = new HttpTransport({ token: "test-token", fetchImpl });
+
+  expect((await transport.pullSince(null)).identityEnforcedAt).toBe(enforcement);
+  expect((await transport.pullBootstrap(null)).identityEnforcedAt).toBe(enforcement);
 });
 
 describe("selectSyncTransport", () => {

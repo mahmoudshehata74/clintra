@@ -1,4 +1,7 @@
 import { getApiBaseUrl } from "../config/apiBaseUrl";
+import { getActiveMembershipId } from "../auth/session";
+import { identityClock } from "../auth/identityClient";
+import { requestProof } from "../auth/proof";
 import type { ClintraDatabase } from "../db/database";
 import type { Membership, MembershipLocation, MembershipPractitioner } from "../db/types";
 import type { LocationScope, PractitionerScope } from "../domain/scope";
@@ -67,26 +70,35 @@ export class HttpStaffServer implements StaffServer {
   private readonly token: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly identityHeaders?: (url: string, body: string) => Promise<Record<string, string>>;
 
   // The default calls the global fetch as a plain function: stored and
   // called as this.fetchImpl(...), a browser refuses fetch itself ("Illegal
   // invocation") before any request leaves.
-  constructor(token: string, baseUrl: string = getApiBaseUrl(), fetchImpl: typeof fetch = (input, init) => fetch(input, init)) {
+  constructor(
+    token: string, baseUrl: string = getApiBaseUrl(), fetchImpl: typeof fetch = (input, init) => fetch(input, init),
+    identityHeaders?: HttpStaffServer["identityHeaders"],
+  ) {
     this.token = token;
     this.baseUrl = baseUrl;
     this.fetchImpl = fetchImpl;
+    this.identityHeaders = identityHeaders;
   }
 
   async addStaffMember(request: AddStaffRequest): Promise<AddStaffResponse> {
     let response: Response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}/staff`, {
+      const url = `${this.baseUrl}/staff`;
+      const body = JSON.stringify(request);
+      const proofs = await this.identityHeaders?.(url, body);
+      response = await this.fetchImpl(url, {
         method: "POST",
-        body: JSON.stringify(request),
+        body,
         headers: {
           Authorization: `Bearer ${this.token}`,
           Accept: "application/json",
           "Content-Type": "application/json",
+          ...proofs,
         },
       });
     } catch {
@@ -106,9 +118,25 @@ export class HttpStaffServer implements StaffServer {
  * selectSyncTransport makes for sync.
  */
 export async function resolveStaffServer(db: ClintraDatabase, orgId: string): Promise<StaffServer> {
-  const token = (await db.device.toArray()).find((row) => row.token !== null)?.token ?? null;
-  if (token !== null) {
-    return new HttpStaffServer(token);
+  const device = (await db.device.toArray()).find((row) => row.token !== null);
+  if (device?.token) {
+    const baseUrl = getApiBaseUrl();
+    return new HttpStaffServer(device.token, baseUrl, undefined, async (url, body) => {
+      const key = await db.device_keys.get(device.id);
+      if (!key?.bound) return {};
+      const membership = getActiveMembershipId();
+      const person = membership
+        ? await db.credentials.where("[device_id+membership_id]").equals([device.id, membership]).first()
+        : undefined;
+      const time = await identityClock(baseUrl);
+      const proofs: Record<string, string> = {
+        "X-Clintra-Device-Proof": await requestProof(key.private_key, "POST", url, body, time),
+      };
+      if (person && !person.must_change_password) {
+        proofs["X-Clintra-Person-Proof"] = await requestProof(person.private_key, "POST", url, body, time, person.id);
+      }
+      return proofs;
+    });
   }
   const demo = new FakeTransport();
   return { addStaffMember: (request) => demo.addStaffMember(orgId, request) };
