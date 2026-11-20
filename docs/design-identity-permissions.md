@@ -1028,8 +1028,15 @@ What A1 does differently from the sections above, and why:
   `step_up`); `auth_login_begin` takes `kind`, and a step-up resolves only
   to the caller, so it never verifies anyone else's password.
   `auth_set_password`, `auth_reset_member_password` and
-  `auth_revoke_credential` take `attempt_id`: the database refuses them
-  without the caller's own succeeded step-up from the last 2 minutes.
+  `auth_revoke_credential` take `attempt_id` and atomically set
+  `login_attempts.consumed_at` on the caller's own successful, unused step-up
+  from the last 2 minutes. A step-up authorizes at most one change across
+  all 3 functions. If the change fails, the consumption rolls back with it.
+- **Delegated resets and revocations are limited by role and permissions.**
+  A non-owner needs `staff.manage` and can only reset or revoke credentials
+  for another assistant or manager in the same organization whose permissions
+  are a subset of their own. An owner can reset any other member in the
+  organization and can revoke any credential there, including their own.
 - **A step-up failure is 403** `{"error": "step_up_failed", "message":
   "كلمة السر غلط"}`, not 401, which a device reads as a lost token.
 - **A reset needs a username**: a member without one could never sign in
@@ -1045,7 +1052,8 @@ What A1 does differently from the sections above, and why:
 - **Grants beyond 6.1**, each for a function above: `UPDATE (username)` on
   memberships, `SELECT (created_at)` on member_credentials,
   `UPDATE (used_by_device_id)` on activation_codes, `SELECT (id,
-  identity_enforced_at)` on organizations; and `clintra_staff` gains
+  identity_enforced_at)` on organizations, and `UPDATE (consumed_at)` on
+  login_attempts. `clintra_staff` gains
   `SELECT (permissions)` and `INSERT (permissions)` on memberships.
 - **Not in A1:** the clinical practitioner check for proven ops (end of
   section 4), `GET /api/staff/credentials` and `POST /api/staff/{id}` (6.5),

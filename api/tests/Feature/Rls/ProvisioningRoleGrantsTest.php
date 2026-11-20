@@ -309,7 +309,7 @@ test('clintra_auth holds exactly the auth functions\' column-exact footprint and
     expect(columnGrants('clintra_auth', 'member_credentials', 'UPDATE'))->toBe(['last_used_at', 'revoke_reason', 'revoked_at', 'revoked_by_membership_id']);
     expect(columnGrants('clintra_auth', 'device', 'SELECT'))->toBe(['id', 'org_id', 'public_key', 'revoked_at']);
     expect(columnGrants('clintra_auth', 'device', 'UPDATE'))->toBe(['public_key', 'public_key_bound_at']);
-    expect(columnGrants('clintra_auth', 'login_attempts', 'UPDATE'))->toBe(['succeeded']);
+    expect(columnGrants('clintra_auth', 'login_attempts', 'UPDATE'))->toBe(['consumed_at', 'succeeded']);
     expect(columnGrants('clintra_auth', 'activation_codes', 'SELECT'))->toBe(['code_hash', 'expires_at', 'id', 'org_id', 'purpose', 'used_at']);
     expect(columnGrants('clintra_auth', 'activation_codes', 'UPDATE'))->toBe(['used_at', 'used_by_device_id']);
     expect(columnGrants('clintra_auth', 'users', 'SELECT'))->toBe(['id', 'phone']);
