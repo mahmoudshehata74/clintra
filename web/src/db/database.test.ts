@@ -297,7 +297,7 @@ describe("version 14: visits.note backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const visits = await upgraded.visits.toArray();
 
-    expect(upgraded.verno).toBe(28);
+    expect(upgraded.verno).toBe(29);
     expect(visits.find((visit) => visit.id === withoutNote.id)).toHaveProperty("note", null);
     expect(visits.find((visit) => visit.id === pulledWithNote.id)?.note).toBe("حساسية بنسلين");
     upgraded.close();
@@ -381,7 +381,7 @@ describe("version 15: number series backfill", () => {
 
     const upgraded = new ClintraDatabase(name);
 
-    expect(upgraded.verno).toBe(28);
+    expect(upgraded.verno).toBe(29);
     expect((await upgraded.invoices.toArray()).map((invoice) => invoice.series)).toEqual([1, 1]);
     expect((await upgraded.payments.toArray()).map((payment) => payment.series)).toEqual([1, 1]);
     expect((await upgraded.device.get("seed-device"))?.series).toBe(1);
@@ -431,7 +431,7 @@ describe("version 17: practitioners' syndicate_number and rev backfill", () => {
     const upgraded = new ClintraDatabase(name);
     const practitioners = await upgraded.practitioners.toArray();
 
-    expect(upgraded.verno).toBe(28);
+    expect(upgraded.verno).toBe(29);
     expect(practitioners.find((p) => p.id === local.id)).toEqual({ ...local, syndicate_number: null, rev: 1 });
     expect(practitioners.find((p) => p.id === pulled.id)).toEqual(pulled);
     upgraded.close();
@@ -441,7 +441,7 @@ describe("version 17: practitioners' syndicate_number and rev backfill", () => {
 describe("version 18: messages and message_templates", () => {
   it("adds both stores with their indexes, one template override per key", async () => {
     const local = new ClintraDatabase(`clintra-db-messages-test-${crypto.randomUUID()}`);
-    expect(local.verno).toBe(28);
+    expect(local.verno).toBe(29);
     expect(local.messages.schema.indexes.map((index) => index.src).sort()).toEqual([
       "attempted_at",
       "location_id",
@@ -497,7 +497,7 @@ describe("version 19: number high-water marks", () => {
     legacy.close();
 
     const upgraded = new ClintraDatabase(name);
-    expect(upgraded.verno).toBe(28);
+    expect(upgraded.verno).toBe(29);
     expect((await upgraded.device.get("device-1"))?.number_marks).toEqual({
       [`invoice:${LOCATION_ID}:2:2025`]: 9,
       [`invoice:${LOCATION_ID}:2:2026`]: 5,
@@ -511,7 +511,7 @@ describe("version 19: number high-water marks", () => {
 describe("version 20: care plans", () => {
   it("indexes care_plans by patient and practitioner and care_plan_items by plan and visit, none of them unique", async () => {
     const local = new ClintraDatabase(`clintra-db-care-plans-test-${crypto.randomUUID()}`);
-    expect(local.verno).toBe(28);
+    expect(local.verno).toBe(29);
     expect(local.care_plans.schema.indexes.map((index) => [index.src, index.unique])).toEqual([
       ["patient_id", false],
       ["practitioner_id", false],
@@ -550,7 +550,7 @@ describe("version 20: care plans", () => {
     legacy.close();
 
     const upgraded = new ClintraDatabase(name);
-    expect(upgraded.verno).toBe(28);
+    expect(upgraded.verno).toBe(29);
     expect((await upgraded.patients.get(PATIENT_ID))?.full_name).toBe("كريم");
     expect(await upgraded.care_plans.count()).toBe(0);
     expect(await upgraded.care_plan_items.where("visit_id").equals("visit-1").count()).toBe(0);
@@ -612,7 +612,7 @@ describe("version 21: a device stuck on a locally added staff member", () => {
     const upgraded = new ClintraDatabase(name);
     const remaining = (await upgraded.sync_ops.toArray()).map((row) => row.op_id).sort();
 
-    expect(upgraded.verno).toBe(28);
+    expect(upgraded.verno).toBe(29);
     expect(remaining).toEqual(["op-existing-link", "op-existing-membership", "op-sent-user", "op-visit"]);
     // Only the queue is touched: the member can still sign in on this device.
     expect(await upgraded.memberships.get("membership-new")).toBeDefined();
@@ -653,8 +653,8 @@ describe("version 23: audit rows from other devices", () => {
     legacy.close();
 
     const upgraded = new ClintraDatabase(name);
-    expect(upgraded.verno).toBe(28);
-    expect(await upgraded.audit_log.get("audit-1")).toEqual(ownRow);
+    expect(upgraded.verno).toBe(29);
+    expect(await upgraded.audit_log.get("audit-1")).toEqual({ ...ownRow, credential_id: null, proof: null });
     // No backfill: absent fields read as "nothing pushed, never pulled".
     expect(await upgraded.device.get("device-1")).toEqual(device);
     expect(await upgraded.remote_audit_log.count()).toBe(0);
@@ -691,7 +691,7 @@ describe("version 24: the cash close's opening float", () => {
     legacy.close();
 
     const upgraded = new ClintraDatabase(name);
-    expect(upgraded.verno).toBe(28);
+    expect(upgraded.verno).toBe(29);
     expect(await upgraded.cash_close.get("close-1")).toEqual({ ...close, opening_amount: 0 });
     expect((await upgraded.cash_close.get("close-2"))?.opening_amount).toBe(50000);
     expect(await upgraded.sync_ops.count()).toBe(0);
@@ -730,7 +730,7 @@ describe("version 25: patient archiving", () => {
     legacy.close();
 
     const upgraded = new ClintraDatabase(name);
-    expect(upgraded.verno).toBe(28);
+    expect(upgraded.verno).toBe(29);
     expect(await upgraded.patients.get("patient-1")).toEqual({ ...patient, archived_at: null });
     expect((await upgraded.patients.get("patient-2"))?.archived_at).toBe("2026-11-01T09:00:00.000Z");
     expect(await upgraded.sync_ops.count()).toBe(0);
@@ -765,7 +765,7 @@ describe("version 26: schedule exceptions sync", () => {
     legacy.close();
 
     const upgraded = new ClintraDatabase(name);
-    expect(upgraded.verno).toBe(28);
+    expect(upgraded.verno).toBe(29);
     expect(upgraded.schedule_exceptions.schema.indexes.map((index) => index.name)).toEqual(["[practitioner_id+date]"]);
     expect(await upgraded.schedule_exceptions.get("exception-1")).toEqual({ ...exception, rev: 1, reason: null });
     expect((await upgraded.schedule_exceptions.get("exception-2"))?.rev).toBe(4);
@@ -793,7 +793,7 @@ describe("version 28: clinical corrections", () => {
     legacy.close();
 
     const upgraded = new ClintraDatabase(name);
-    expect(upgraded.verno).toBe(28);
+    expect(upgraded.verno).toBe(29);
     expect(upgraded.visit_form_revisions.schema.indexes.map((index) => index.name).sort()).toEqual(["visit_form_data_id", "visit_id"]);
     expect(await upgraded.visit_form_data.get("form-1")).toEqual(form);
     expect(await upgraded.visit_form_revisions.count()).toBe(0);
@@ -829,7 +829,7 @@ describe("version 27: a closure's reason", () => {
     legacy.close();
 
     const upgraded = new ClintraDatabase(name);
-    expect(upgraded.verno).toBe(28);
+    expect(upgraded.verno).toBe(29);
     expect(await upgraded.schedule_exceptions.get("exception-1")).toEqual({ ...exception, reason: null });
     expect((await upgraded.schedule_exceptions.get("exception-2"))?.reason).toBe("سفر");
     expect(await upgraded.sync_ops.count()).toBe(0);

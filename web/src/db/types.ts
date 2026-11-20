@@ -65,6 +65,8 @@ export interface Membership {
    * domain/staffName.ts's staffName is the one place that decides.
    */
   display_name?: string | null;
+  username?: string | null;
+  permissions?: string[];
   /** Server-assigned; see rev's own doc comment on Visit. */
   rev: number;
 }
@@ -461,6 +463,8 @@ export interface AuditLog {
   before: unknown | null;
   after: unknown | null;
   at: Instant;
+  credential_id?: string | null;
+  proof?: string | null;
   /**
    * A strictly monotonic, globally-unique write counter — never two writes
    * ever share a value, unlike `at`, which is millisecond-resolution and can
@@ -479,7 +483,7 @@ export interface AuditLog {
  * wrote it (db/auditEntries.ts): this device's own `audit_log` row without
  * its device-local `seq`, or a row pulled from another device.
  */
-export type AuditEntry = Omit<AuditLog, "seq">;
+export type AuditEntry = Omit<AuditLog, "seq" | "credential_id" | "proof">;
 
 /**
  * An audit row another device of the organization wrote, pulled from
@@ -510,6 +514,11 @@ export interface SyncOp {
   payload: unknown;
   device_id: string;
   created_at: Instant;
+  actor_membership_id?: string | null;
+  credential_id?: string | null;
+  proof?: string | null;
+  /** The canonical message for the stored proof, including the revision sent on the wire. */
+  proof_message?: string;
   synced_at: Instant | null;
   /**
    * The entity's `rev` as this device last saw it, required by the server
@@ -588,6 +597,8 @@ export interface DevicePreference {
 export interface DeviceRegistration {
   id: string;
   org_id: string;
+  /** Last organization enforcement timestamp reported by pull or bootstrap. */
+  identity_enforced_at?: string | null;
   location_id: string;
   registered_at: Instant;
   /**
@@ -649,6 +660,25 @@ export interface DeviceRegistration {
    * the first, which starts 14 Cairo days back. Added in database version 23.
    */
   audit_pull_cursor?: string | null;
+}
+
+export interface IdentityKeyPair {
+  private_key: CryptoKey;
+  public_key: JsonWebKey;
+}
+
+export interface DeviceKey extends IdentityKeyPair {
+  device_id: string;
+  bound?: boolean;
+}
+
+export interface PersonCredential extends IdentityKeyPair {
+  id: string;
+  device_id: string;
+  membership_id: string;
+  must_change_password: boolean;
+  pin_hash?: string;
+  pin_salt?: string;
 }
 
 // Declared now, unused in v1, no screens.
