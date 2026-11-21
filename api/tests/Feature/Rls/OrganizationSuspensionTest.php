@@ -243,7 +243,7 @@ test('the disable shape enforces both null or both set and a reason length of on
 
 test('B2 roles have exact column grants and only the intended function callers', function () {
     $columns = $this->asOwner()->select("SELECT privilege_type,column_name FROM information_schema.role_column_grants WHERE grantee='clintra_admin_org' ORDER BY table_name,privilege_type,column_name");
-    expect(array_map(fn ($r) => $r->privilege_type.':'.$r->column_name, $columns))->toBe(['SELECT:disabled_at', 'SELECT:id', 'UPDATE:disabled_at', 'UPDATE:disabled_reason']);
+    expect(array_map(fn ($r) => $r->privilege_type.':'.$r->column_name, $columns))->toBe(['SELECT:id', 'SELECT:ip', 'SELECT:user_agent', 'SELECT:disabled_at', 'SELECT:id', 'UPDATE:disabled_at', 'UPDATE:disabled_reason']);
     expect($this->asOwner()->select("SELECT 1 FROM information_schema.role_table_grants WHERE grantee='clintra_admin_org'"))->toBe([]);
     foreach ([
         ['platform.admin_set_org_disabled(uuid,text,uuid,boolean,text,uuid)', 'clintra_admin_org', ['clintra_admin_app', 'clintra_admin_org']],
@@ -333,3 +333,22 @@ test('a push waits for disable to commit then rechecks before any controller wor
         if (is_resource($process)) { proc_terminate($process); proc_close($process); }
     }
 })->with(['/api/sync/push', '/api/audit/push', '/api/staff']);
+
+
+test('organization actions retain session audit context on success and refusals', function (string $case) {
+    $org = IdentityHarness::org();
+    $admin = $this->platformAdmin(['must_change_password' => $case === 'password_change_required']);
+    $ip = $this->platformIp();
+    $agent = 'B2 audit context';
+    $session = $this->platformSession($admin, ['ip' => $ip, 'user_agent' => $agent]);
+    if ($case === 'session_invalid') {
+        $this->asOwner()->table('platform.admin_sessions')->where('id', $session)->update(['ended_at' => now()->toIso8601String()]);
+    }
+    $logId = $this->platformId();
+    $otp = $case === 'step_up_failed' ? 'invalid' : $this->platformOtp($admin['secret']);
+    $result = b2PanelStatus($session, $org['orgId'], true, 'test', $otp, $logId);
+    expect($result)->toBe($case === 'success' ? ['ok' => true] : ['ok' => false, 'reason' => $case]);
+    $log = $this->asOwner()->table('platform.admin_log')->where('id', $logId)->sole();
+    expect($log->ip === null ? null : inet_pton($log->ip))->toBe($case === 'session_invalid' ? null : inet_pton($ip))
+        ->and($log->user_agent)->toBe($case === 'session_invalid' ? null : $agent);
+})->with(['success', 'step_up_failed', 'password_change_required', 'session_invalid']);

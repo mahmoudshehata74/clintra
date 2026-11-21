@@ -478,6 +478,10 @@ the identity design gives `clintra_auth`), `visit_form_data`,
 `device_audit_log`; `ProvisioningRoleGrantsTest.php` pins that, column-exact,
 for every role above.
 
+B2 audit context additionally grants `clintra_admin_org` SELECT on only
+`platform.admin_sessions(id, ip, user_agent)`; the action reads these only
+after session resolution retains a non-null admin, including step-up refusals.
+
 ### 6.5 Functions
 
 All `SECURITY DEFINER` with `SET search_path = public, platform, pg_temp`,
