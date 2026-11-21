@@ -9,7 +9,7 @@
             @endforeach
             <div class="field"><label for="filter-action">الإجراء</label><select class="in" id="filter-action" name="action"><option value="">كل الإجراءات</option>@foreach (App\Support\ActionLabels::ALL as $code=>$label)<option value="{{ $code }}" @selected(($filters['action'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>
             @foreach (['from'=>'من','to'=>'لحد'] as $key=>$label)
-            <label class="field" for="filter-{{ $key }}">{{ $label }}<input class="in" id="filter-{{ $key }}" name="{{ $key }}" type="date" value="{{ is_scalar($filters[$key] ?? '') ? ($filters[$key] ?? '') : '' }}"></label>
+            <label class="field" for="filter-{{ $key }}">{{ $label }}<input class="in" id="filter-{{ $key }}" name="{{ $key }}" type="text" dir="ltr" placeholder="2026-11-21" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" maxlength="10" value="{{ is_scalar($filters[$key] ?? '') ? ($filters[$key] ?? '') : '' }}"></label>
             @endforeach
             <label class="field" for="page-size">عدد الصفوف<select class="in" id="page-size" name="page_size">@foreach ([1,25,50,100] as $size)<option value="{{ $size }}" @selected(($filters['page_size'] ?? 25)===$size)>{{ $size }}</option>@endforeach</select></label>
             <button class="run" type="submit">تصفية</button><a class="quiet" href="{{ route('filament.admin.pages.admin-log') }}">مسح الفلاتر</a>

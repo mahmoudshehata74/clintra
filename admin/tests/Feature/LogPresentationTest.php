@@ -78,3 +78,21 @@ test('every action allowed by the installed CHECK has exactly one Arabic label a
     expect($xpath->query('//select[@name="action"]/option[@selected]')->item(0)->getAttribute('value'))->toBe('org.disable');
     $response->assertSee('إيقاف العيادة')->assertDontSee('تشغيل العيادة</td>', false);
 });
+
+test('date fields have stable Latin ISO placeholders and retain the date hint', function () {
+    $response = $this->withSession(['platform_session_id' => $this->fixture['session']])->get('/panel/admin-log')->assertOk();
+    $xpath = logPresentationDocument($response);
+    foreach (['from', 'to'] as $name) {
+        $input = $xpath->query('//input[@name="'.$name.'"]')->item(0);
+        expect($input->getAttribute('type'))->toBe('text')->and($input->getAttribute('dir'))->toBe('ltr');
+        expect($input->getAttribute('placeholder'))->toBe('2026-11-21')->and($input->getAttribute('pattern'))->toBe('[0-9]{4}-[0-9]{2}-[0-9]{2}');
+    }
+    $response->assertSee('لو سيبت الفترة فاضية، هيظهر آخر 30 يوم. الفترة لحد 366 يوم.');
+});
+
+test('the server refuses malformed impossible reversed and excessive date ranges without browser validation', function (array $dates) {
+    $this->withSession(['platform_session_id' => $this->fixture['session']])->get('/panel/admin-log?'.http_build_query($dates))->assertOk()->assertSee('راجع البيانات وحاول تاني')->assertDontSee('data-log-id=', false);
+})->with([
+    [['from' => '21/11/2026']], [['to' => '2026-11-31']], [['from' => '2026-1-01']],
+    [['from' => '2026-11-22', 'to' => '2026-11-21']], [['from' => '2025-01-01', 'to' => '2026-11-21']],
+]);
