@@ -255,9 +255,11 @@ jobs:
       - name: Install API fixture and migration dependencies
         working-directory: api
         run: composer install --prefer-dist --no-progress
-      - name: Install panel dependencies
+      - name: Validate and install locked panel dependencies
         working-directory: admin
-        run: composer install --prefer-dist --no-progress
+        run: |
+          composer validate --strict --no-check-all --check-lock
+          composer install --prefer-dist --no-progress
       - name: Provision existing roles and test databases
         env:
           PGPASSWORD: ci_postgres_superuser

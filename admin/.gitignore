@@ -10,5 +10,3 @@
 /public/fonts/ibm-plex-sans-arabic*/
 /.phpunit.cache/
 
-# Generated dependency lock stays local under the standing repository rule.
-/composer.lock

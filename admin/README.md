@@ -26,9 +26,10 @@ php artisan serve --host=127.0.0.1 --port=8001
 Open `/panel/sign-in` at http://127.0.0.1:8001. This is separate from the API's
 8000 and the clinic app's 5173. The original IBM Plex Sans Arabic font files
 and their OFL license are self-hosted in `public/fonts/`. Published Filament
-assets, caches, sessions, dependency locks and screenshots are generated locally
-and ignored under the standing repository rule. The manifest pins direct PHP
-package versions; install resolves their transitive constraints.
+assets, caches, sessions and screenshots are generated locally and ignored.
+`composer.lock` is committed: `composer install` installs its exact direct and
+transitive versions. CI validates the lock before installing. Use `composer update`
+only for an intentional dependency change, and review and commit the updated lock.
 
 ## Authentication and transport
 
