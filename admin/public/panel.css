@@ -414,7 +414,7 @@ pre {
 .install-body {
   padding:20px
 }
-.fi-simple-main-ctn {
+.fi-simple-main-ctn,.sign-in-page {
   padding:16px 12px!important
 }
 .install-hero {

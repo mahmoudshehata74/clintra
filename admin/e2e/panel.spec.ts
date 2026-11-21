@@ -76,12 +76,14 @@ test('wrong-credentials', async ({ page }) => {
 
 test('database-and-http-rate-limits', async ({ page }) => {
   await page.goto('/panel/sign-in');
+  let databaseCard: { x: number; y: number; width: number; height: number } | null = null;
   for (let i = 0; i < 10; i++) {
     await page.getByLabel('البريد الإلكتروني', { exact: true }).fill(fixture.email);
     await page.getByLabel('كلمة السر', { exact: true }).fill('wrong-password');
     await page.getByLabel('كود التحقق', { exact: true }).fill('wrong-code');
     await page.getByRole('button', { name: 'تسجيل الدخول', exact: true }).click();
     await expect(page.getByRole('alert')).toHaveText(i < 5 ? 'البيانات دي مش صح' : 'محاولات كتير، استنى ربع ساعة');
+    if (i === 9) databaseCard = await page.locator('[data-screen="sign-in"]').boundingBox();
   }
   await page.getByLabel('البريد الإلكتروني', { exact: true }).fill(fixture.email);
   await page.getByLabel('كلمة السر', { exact: true }).fill('wrong-password');
@@ -92,6 +94,9 @@ test('database-and-http-rate-limits', async ({ page }) => {
   await expect(page.locator('[data-screen="sign-in"] .logo')).toHaveText('C');
   await expect(page.getByRole('heading', { name: 'تسجيل الدخول', exact: true })).toBeVisible();
   for (const label of ['البريد الإلكتروني', 'كلمة السر', 'كود التحقق']) await expect(page.getByLabel(label, { exact: true })).toBeVisible();
+  const httpCard = await page.locator('[data-screen="sign-in"]').boundingBox();
+  expect(databaseCard).not.toBeNull(); expect(httpCard).not.toBeNull();
+  for (const dimension of ['x', 'y', 'width', 'height'] as const) expect(httpCard![dimension]).toBeCloseTo(databaseCard![dimension], 0);
   await page.screenshot({ path: shots + `b3-review-${test.info().project.name}-http-429.png`, fullPage: true });
 });
 
