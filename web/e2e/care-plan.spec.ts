@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addDaysToClinicDay, todayInCairo } from "../src/domain/time";
+import { addDaysToClinicDay, todayInCairo, type ClinicDay } from "../src/domain/time";
 import {
   ASSISTANT_NAME,
   AUTH,
@@ -41,7 +41,9 @@ const FOUR_SESSIONS: PlanGroupInput[] = [
   { service: "كشف عام", count: "3", gap: "7" },
 ];
 
-const today = () => todayInCairo();
+let fixtureDay: ClinicDay;
+test.beforeEach(() => { fixtureDay = todayInCairo(); });
+const today = () => fixtureDay;
 
 const sessions = (sheet: Locator) => sheet.getByRole("list", { name: PLAN.sessionsHeading, exact: true }).getByRole("listitem");
 const sessionRow = (sheet: Locator, n: number) => sessions(sheet).nth(n - 1);
@@ -64,7 +66,7 @@ async function startPlan(sheet: Locator): Promise<void> {
 
 /** كريم's in-room visit with the four-session plan created from it, the plan's sheet open. */
 async function karimWithPlan(page: Page): Promise<{ workspace: Locator; sheet: Locator }> {
-  await karimInRoom(page);
+  await karimInRoom(page, OWNER, today());
   const workspace = await openVisitSheet(page);
   const sheet = await fillNewPlan(page, workspace, GOAL, FOUR_SESSIONS);
   await sheet.getByLabel(PLAN.diagnosisField, { exact: true }).fill("التهاب وتر");
@@ -100,8 +102,17 @@ async function switchUser(page: Page, as: { name: string; pin: string }): Promis
 const OWNER = { name: OWNER_NAME, pin: OWNER_PIN };
 const ASSISTANT = { name: ASSISTANT_NAME, pin: DEV_SEED_PINS.assistant };
 
+test("booking and advancing retain one fixture day when the host is on another Cairo day", async ({ page }) => {
+  const day = addDaysToClinicDay(today(), -1);
+  await karimInRoom(page, OWNER, day);
+  const id = await rowFor(page, PATIENTS.karim).getAttribute('data-visit-row-id');
+  const visits = await readStore<{ id: string; visit_date: string; status: string }>(page, 'visits');
+  expect(visits.find(visit => visit.id === id)).toMatchObject({ visit_date: day, status: 'in_room' });
+  await expect(rowFor(page, PATIENTS.karim)).toContainText(S.statusInRoom);
+});
+
 test("a plan is created from the visit: checked first, its preview's days and total, then the badge reads جلسة 1 من 4", async ({ page }) => {
-  await karimInRoom(page);
+  await karimInRoom(page, OWNER, today());
   const workspace = await openVisitSheet(page);
   const diagnosis = workspace.getByPlaceholder(S.visitFormDiagnosisPlaceholder);
   await diagnosis.fill("التهاب وتر الرضفة");
@@ -285,7 +296,7 @@ test("sessions are skipped and brought back, the plan edited, stopped and resume
 });
 
 test("a second plan for the same patient and doctor is refused, saying why", async ({ page }) => {
-  await karimInRoom(page);
+  await karimInRoom(page, OWNER, today());
   const workspace = await openVisitSheet(page);
   const sheet = await fillNewPlan(page, workspace, GOAL, FOUR_SESSIONS);
   await sheet.getByLabel(PLAN.diagnosisField, { exact: true }).fill("التهاب وتر");
@@ -352,7 +363,7 @@ test("a second plan for the same patient and doctor is refused, saying why", asy
 });
 
 test("the assistant starts no plan and sees one read-only, but books its next session", async ({ page }) => {
-  await karimInRoom(page);
+  await karimInRoom(page, OWNER, today());
   let workspace = await openVisitSheet(page);
   await expect(workspace.getByRole("button", { name: PLAN.startPlan, exact: true })).toBeVisible();
   await closeSheet(workspace);
