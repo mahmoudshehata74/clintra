@@ -1,4 +1,118 @@
-# Deploying the API
+# Deployment runbook
+
+## 1. Prepare the server
+
+Install PHP 8.3+ with PostgreSQL and required Composer extensions,
+Composer, PostgreSQL 16+, and the web package manager version pinned in
+`web/package.json`. Serve `api/public` behind HTTPS. Restrict direct
+access to the upstream PHP server and keep the PostgreSQL service private.
+Use a separate CLI job environment for migration and scheduler credentials.
+
+## 2. Create the database and production roles
+
+As the PostgreSQL cluster administrator, create the production database.
+Connect psql to that database and load `api/scripts/provision-roles.sql`.
+Set the psql variables `owner_password` and `app_password` from the
+deployment secret store before loading the file. The script can be
+repeated. It creates all eight production roles, enforces their attributes,
+assigns function roles to the owner, and grants schema access.
+`clintra_auth` must exist before migrations.
+
+```sql
+CREATE DATABASE clintra;
+\connect clintra
+-- Set owner_password and app_password from your secret store in this
+-- psql session, then execute the checked-in script.
+\i api/scripts/provision-roles.sql
+```
+
+The production cluster excludes `clintra_fixtures`. Keep test data and the
+`clintra_test` database on the development or test cluster.
+
+## 3. Configure the API environment
+
+Set `APP_ENV=production`, `APP_DEBUG=false`, an HTTPS `APP_URL`, and a
+stable secret `APP_KEY`. Configure `DB_CONNECTION=pgsql`,
+`DB_USERNAME=clintra_app`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, and
+`DB_DATABASE`. `DB_APP_PASSWORD` can supply `DB_PASSWORD` through the
+example environment's interpolation.
+
+In the CLI environment also configure `DB_OWNER_USERNAME=clintra_owner`
+and `DB_OWNER_PASSWORD`. Set `CORS_ALLOWED_ORIGINS` to the exact HTTPS
+web origins. Leave fixture credentials unset.
+
+## 4. Install and migrate
+
+Run `composer install --no-dev --optimize-autoloader` from `api`.
+Apply migrations with `php artisan migrate --database=pgsql_owner --force`
+from the CLI environment. Run `php artisan config:cache` after the
+environment is complete. Preserve distinct cached configuration per process
+environment so HTTP workers do not inherit the CLI credentials.
+
+## 5. Configure and verify the scheduler
+
+Install an every-minute host job in the API directory
+
+```cron
+* * * * * cd /srv/clintra/api && php artisan schedule:run >> /var/log/clintra-scheduler.log 2>&1
+```
+
+Run it under the CLI environment. Laravel invokes
+`clintra:enforce-ready-identity` every minute using `pgsql_owner`.
+Verify the host job runs, then set `SCHEDULER_CONFIGURED=true` in the
+environment used by preflight and refresh its cached config. Preflight
+checks this operator declaration and the Laravel schedule definition.
+Inspect the host job history to verify actual executions.
+
+## 6. Run preflight
+
+Run `php artisan clintra:preflight` in the release environment. It uses
+read-only queries and prints one PASS or FAIL line per check. Its exit
+code is zero when every check passes. Resolve failures before releasing
+traffic. It checks role attributes and memberships, the app's actual
+database login, fixture-role exclusion, forced tenant RLS, migration state,
+scheduler configuration, HTTPS, debug mode, CORS origins, and proof headers.
+
+## 7. Back up and rehearse a restore
+
+Take a custom-format `pg_dump` before each release and enable the host's
+automated backups. Store the role passwords and `APP_KEY` separately.
+Restore into an isolated scratch cluster with the production roles, run
+`clintra:preflight` against it, and verify a real scoped read and clinic
+provisioning. Record the restore date, backup ID, and results. The detailed
+backup and retention procedure below applies.
+
+## 8. Build and publish the web client
+
+In `web`, install with `pnpm install --frozen-lockfile`. Set
+`VITE_API_BASE_URL=https://api.example.com/api` to the production API
+base URL and run `pnpm run build`. On Vercel set the root directory to
+`web`, the build command to `pnpm run build`, and the output directory
+to `dist`. Set that variable in the Vercel production environment before
+building. Configure the API's CORS origin to the resulting web origin.
+
+## 9. Provision the first organization and device
+
+From the CLI environment run `php artisan clintra:provision`. Record
+the organization and location IDs and deliver the displayed device code
+through the established clinic onboarding process. Open the web app,
+enter the owner's phone and device code, and verify synchronization.
+Mint the owner's setup code with
+`php artisan clintra:mint-activation-code ORG_ID LOCATION_ID --purpose=owner-recovery`.
+Deliver it to the verified owner for "إنشاء حسابك". The readiness panel
+guides staff and device setup before activation.
+
+## 10. Roll back a release
+
+Retain the previous API release and web deployment IDs. Restore those
+application artifacts first when their schema compatibility permits.
+Review each migration's `down()` before planning a database rollback,
+pause writes, and take a fresh backup. Destructive restores and schema
+rollbacks require the operational approval appropriate to the live
+database. Verify the restored application with preflight and a scoped
+sync round trip before reopening traffic.
+
+## Platform requirements and operational details
 
 Provider-neutral: this describes what any host must provide and which env
 vars to set, not a specific platform's config file. No provider has been
@@ -212,6 +326,8 @@ owner credentials don't belong here at all):**
 - `DB_USERNAME=clintra_app`, `DB_APP_PASSWORD`
 
 **CORS:**
+The proof headers must stay in allowed_headers; without them every signed request from the web origin fails its preflight once a clinic is enforced.
+
 - `CORS_ALLOWED_ORIGINS` — comma-separated, the deployed web app's real
   origin(s). `http://localhost:5173`/`http://127.0.0.1:5173` are always
   allowed in addition, for local frontend development against a real
@@ -378,6 +494,27 @@ environment variables:
    curl -i https://api.example.com/api/isolation-probe
    # expect: HTTP/1.1 401, body {"error":"unauthenticated","message":"..."}
    ```
+
+## Testing notes
+
+Before every full local gate, rebuild `clintra_test` from the branch under
+test so its schema and migration records match that branch. From `api/`,
+set `DB_DATABASE=clintra_test` in the command's environment, then run:
+
+```sh
+php artisan migrate:fresh --database=pgsql_owner --force
+```
+
+Destructive database commands are allowed only on `clintra_test`. Never
+run this on the development database; development uses plain `migrate`.
+Run gate suites sequentially: tsc, lint (0 errors and 0 warnings), Vitest,
+build, e2e with `--grep-invert '@screenshot'`, Pest, then `test:live`.
+Require zero flaky, retried, or timed-out tests and record the gate on the
+exact merge tree in the pull request.
+
+The preflight tests establish migration metadata inside their own rolled
+back transactions, including both mismatch directions. The command itself
+remains read-only and rejects either mismatch.
 
 ## Region: round-trip latency matters here specifically
 

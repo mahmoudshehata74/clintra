@@ -69,3 +69,16 @@ test('a preflight from a disallowed origin gets no Access-Control-Allow-Origin, 
 
     expect($response->headers->has('Access-Control-Allow-Origin'))->toBeFalse();
 });
+
+test('cross-origin identity requests allow both proof headers alongside the device token', function () {
+    $response = $this->withHeaders([
+        'Origin' => 'https://clintra-web.example.com',
+        'Access-Control-Request-Method' => 'POST',
+        'Access-Control-Request-Headers' => 'authorization, content-type, x-clintra-device-proof, x-clintra-person-proof',
+    ])->options('/api/auth/password');
+    $response->assertHeader('Access-Control-Allow-Origin', 'https://clintra-web.example.com');
+    $headers = strtolower((string) $response->headers->get('Access-Control-Allow-Headers'));
+    foreach (['authorization', 'content-type', 'x-clintra-device-proof', 'x-clintra-person-proof'] as $header) {
+        expect($headers)->toContain($header);
+    }
+});

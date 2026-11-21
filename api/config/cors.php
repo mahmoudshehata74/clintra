@@ -40,7 +40,7 @@ return [
     // (tests/Feature/Cors/CrossOriginTest.php). Every header this app's own
     // client (web/src/sync/httpTransport.ts) actually sends is listed
     // explicitly instead.
-    'allowed_headers' => ['Authorization', 'Accept', 'Content-Type', 'X-Requested-With'],
+    'allowed_headers' => ['Authorization', 'Accept', 'Content-Type', 'X-Requested-With', 'X-Clintra-Device-Proof', 'X-Clintra-Person-Proof'],
 
     'exposed_headers' => [],
 
