@@ -117,7 +117,8 @@ return [
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
-            'search_path' => 'public',
+            // Include the private schema so migrate:fresh also drops its tables.
+            'search_path' => 'public,platform',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 

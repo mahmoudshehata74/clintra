@@ -197,6 +197,7 @@ jobs:
             psql -h 127.0.0.1 -U postgres -c "GRANT CONNECT ON DATABASE $db TO clintra_fixtures;"
             psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT USAGE ON SCHEMA public TO clintra_fixtures;"
             psql -h 127.0.0.1 -U postgres -d "$db" -c "ALTER DEFAULT PRIVILEGES FOR ROLE clintra_owner IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clintra_fixtures;"
+            psql -h 127.0.0.1 -U postgres -d "$db" --set=admin_app_password=ci_admin_app_pw -f api/scripts/provision-admin-roles.sql
           done
 
       - name: Point .env at the CI database
@@ -211,6 +212,7 @@ jobs:
             $env = preg_replace("/^DB_FIXTURES_USERNAME=.*/m", "DB_FIXTURES_USERNAME=clintra_fixtures", $env);
             $env = preg_replace("/^DB_FIXTURES_PASSWORD=.*/m", "DB_FIXTURES_PASSWORD=ci_fixtures_pw", $env);
             file_put_contents(".env", $env);
+            file_put_contents(".env.testing", preg_replace("/^DB_DATABASE=.*/m", "DB_DATABASE=clintra_test", $env)."\nDB_ADMIN_APP_PASSWORD=ci_admin_app_pw\n");
           '
 
       - name: Run migrations (dev database)

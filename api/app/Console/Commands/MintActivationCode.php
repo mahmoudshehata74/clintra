@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Support\ActivationCode;
+use App\Support\AdminCliLog;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -35,6 +36,14 @@ class MintActivationCode extends Command
     protected $description = 'Mints a new one-time activation code for an existing organization, for registering a replacement device or recovering the owner\'s password';
 
     public function handle(): int
+    {
+        return AdminCliLog::run('cli.mint', fn () => $this->mint(), fn () => [
+            'org_id' => $this->argument('org_id'), 'target_id' => $this->argument('location_id'),
+            'purpose' => $this->option('purpose'),
+        ]);
+    }
+
+    private function mint(): int
     {
         $orgId = $this->argument('org_id');
         $locationId = $this->argument('location_id');

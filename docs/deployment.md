@@ -24,7 +24,16 @@ CREATE DATABASE clintra;
 -- Set owner_password and app_password from your secret store in this
 -- psql session, then execute the checked-in script.
 \i api/scripts/provision-roles.sql
+-- Set admin_app_password from your secret store in this psql session.
+\i api/scripts/provision-admin-roles.sql
 ```
+
+Run the separate admin-role script immediately after the base-role script
+on the same target database. It creates the nine platform roles in design
+6.1, grants the panel login CONNECT and disables parameter logging for it.
+The required `admin_app_password` psql variable is never a literal in the
+script. Existing roles, passwords, schema ownership and grants are left
+intact. A repeat run does not rotate a previously created login's password.
 
 The production cluster excludes `clintra_fixtures`. Keep test data and the
 `clintra_test` database on the development or test cluster.
@@ -497,6 +506,15 @@ environment variables:
 
 ## Testing notes
 
+The owner connection keeps `public` first and includes `platform`.
+PostgreSQL `migrate:fresh` and `db:wipe` commands reset `platform` and
+`platform_crypto` through the command lifecycle hook before the wipe,
+including their functions and pgcrypto. The hook uses the selected
+PostgreSQL connection, independent of its database name, and respects
+command confirmation/cancellation. Migration 000053 uses strict CREATE
+statements and refuses existing schemas. The crypto schema stays outside
+the search path; cryptographic calls are qualified explicitly.
+
 Before every full local gate, rebuild `clintra_test` from the branch under
 test so its schema and migration records match that branch. From `api/`,
 set `DB_DATABASE=clintra_test` in the command's environment, then run:
@@ -505,8 +523,10 @@ set `DB_DATABASE=clintra_test` in the command's environment, then run:
 php artisan migrate:fresh --database=pgsql_owner --force
 ```
 
-Destructive database commands are allowed only on `clintra_test`. Never
-run this on the development database; development uses plain `migrate`.
+Local destructive database commands run only on `clintra_test`;
+development uses plain `migrate`. CI also verifies two consecutive fresh
+runs on its disposable development database, as part of the owner-approved
+pipeline; this does not authorize rebuilding a persistent local database.
 Run gate suites sequentially: tsc, lint (0 errors and 0 warnings), Vitest,
 build, e2e with `--grep-invert '@screenshot'`, Pest, then `test:live`.
 Require zero flaky, retried, or timed-out tests and record the gate on the
@@ -515,6 +535,40 @@ exact merge tree in the pull request.
 The preflight tests establish migration metadata inside their own rolled
 back transactions, including both mismatch directions. The command itself
 remains read-only and rejects either mismatch.
+
+## Platform administrator foundation
+
+After provisioning the nine admin roles and applying migrations as the
+owner, run `php artisan clintra:admin:create EMAIL NAME` on the API host.
+It prints a random password, the SHA-1/30-second TOTP enrollment URI and
+ten recovery codes once. Passwords use pgcrypto bcrypt at cost 12; recovery
+codes are stored only as SHA-256 hashes. Keep the enrollment material in
+the team's secret store. The API runtime does not need the panel login's
+database password.
+
+The B1 panel database contract exposes `admin_login`, `admin_logout`,
+`admin_change_password` and `admin_log_refusal` only. Sessions expire after
+8 hours absolute or 30 minutes idle. New accounts must change their initial
+password before using session actions; password change and logout remain
+available. A password change requires the current password, a different
+new password and fresh TOTP, accepts 12 to 72 bytes and ends the admin's
+other sessions. Recovery codes
+work for sign-in once and do not satisfy step-up. Session actor resolution
+and the log writer are internal functions restricted to the action roles.
+
+Session failures return and log `session_invalid` without an admin actor.
+Wrong or reused step-up codes log the resolved admin with `step_up_failed`;
+the fifth such failure in 15 minutes ends all their unended sessions in
+that transaction. Initial-password restrictions return and log
+`password_change_required`. Wrong current passwords are `bad_credentials`
+and do not count toward either sign-in or step-up limits.
+
+Provision, mint, revoke and admin-create CLI invocations each append one
+admin-log row, including refusals. Rows have a null admin user, the host
+user in `detail.host_user`, and the immutable target ID. Clinic identifiers
+are retained in the detail rather than the log's organization foreign key,
+so history survives removal of a test target. No password, TOTP secret,
+recovery code or plaintext activation code is included in that detail.
 
 ## Region: round-trip latency matters here specifically
 

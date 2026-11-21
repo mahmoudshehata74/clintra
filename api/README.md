@@ -90,6 +90,43 @@ GRANT clintra_auth TO clintra_owner;
 GRANT CREATE ON SCHEMA public TO clintra_auth;
 ```
 
+### Platform admin roles
+
+After the existing role setup, connect psql as the cluster administrator
+to each target database and run the separate admin-role script:
+
+```sql
+-- Set admin_app_password from the deployment secret store in this session.
+\i api/scripts/provision-admin-roles.sql
+-- The script grants exactly these function-owner memberships:
+GRANT clintra_admin_auth TO clintra_owner;
+GRANT clintra_admin_provision TO clintra_owner;
+GRANT clintra_admin_mint TO clintra_owner;
+GRANT clintra_admin_device TO clintra_owner;
+GRANT clintra_admin_org TO clintra_owner;
+GRANT clintra_admin_stats TO clintra_owner;
+GRANT clintra_admin_support TO clintra_owner;
+GRANT clintra_support TO clintra_owner;
+```
+
+This creates exactly the nine roles in design 6.1: `clintra_admin_app`
+(LOGIN, NOINHERIT, NOBYPASSRLS); `clintra_admin_auth`,
+`clintra_admin_provision`, `clintra_admin_mint` (NOLOGIN, NOBYPASSRLS);
+and `clintra_admin_device`, `clintra_admin_org`, `clintra_admin_stats`,
+`clintra_admin_support`, `clintra_support` (NOLOGIN, BYPASSRLS). All are
+NOSUPERUSER, NOCREATEDB, NOCREATEROLE, NOREPLICATION; the NOLOGIN roles
+retain the default INHERIT. The required, nonempty `admin_app_password`
+psql variable supplies the new login's password. The script grants it
+CONNECT on the current database and sets both parameter-log limits to 0.
+It adds the eight function-owner memberships above, skipping any that already
+exist. It grants `clintra_admin_app` to no one and nothing to `clintra_app`.
+Existing attributes, passwords, ownership and other grants stay intact;
+rerunning it does not rotate the password. Use the same script in local setup and CI.
+
+For local B1 tests, keep `DB_ADMIN_APP_PASSWORD` only in the ignored
+`api/.env.testing`, alongside the test database configuration. Never put
+the panel login credentials in the deployed API environment.
+
 A fourth role, **local and CI only**: the RLS isolation suite
 (`tests/Feature/Rls`) needs to insert fixture data (an organization, a
 membership, ...) without a membership already in place to grant RLS scope —
