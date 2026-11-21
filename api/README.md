@@ -90,6 +90,32 @@ GRANT clintra_auth TO clintra_owner;
 GRANT CREATE ON SCHEMA public TO clintra_auth;
 ```
 
+### Platform admin roles
+
+After the existing role setup, connect psql as the cluster administrator
+to each target database and run the separate admin-role script:
+
+```sql
+-- Set admin_app_password from the deployment secret store in this session.
+\i api/scripts/provision-admin-roles.sql
+```
+
+This creates exactly the nine roles in design 6.1: `clintra_admin_app`
+(LOGIN, NOINHERIT, NOBYPASSRLS); `clintra_admin_auth`,
+`clintra_admin_provision`, `clintra_admin_mint` (NOLOGIN, NOBYPASSRLS);
+and `clintra_admin_device`, `clintra_admin_org`, `clintra_admin_stats`,
+`clintra_admin_support`, `clintra_support` (NOLOGIN, BYPASSRLS). All are
+NOSUPERUSER, NOCREATEDB, NOCREATEROLE, NOREPLICATION; the NOLOGIN roles
+retain the default INHERIT. The required, nonempty `admin_app_password`
+psql variable supplies the new login's password. The script grants it
+CONNECT on the current database and sets both parameter-log limits to 0.
+It leaves existing roles, passwords, ownership and grants intact; rerunning
+it does not rotate the password. Use the same script in local setup and CI.
+
+For local B1 tests, keep `DB_ADMIN_APP_PASSWORD` only in the ignored
+`api/.env.testing`, alongside the test database configuration. Never put
+the panel login credentials in the deployed API environment.
+
 A fourth role, **local and CI only**: the RLS isolation suite
 (`tests/Feature/Rls`) needs to insert fixture data (an organization, a
 membership, ...) without a membership already in place to grant RLS scope —

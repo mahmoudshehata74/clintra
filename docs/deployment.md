@@ -24,7 +24,16 @@ CREATE DATABASE clintra;
 -- Set owner_password and app_password from your secret store in this
 -- psql session, then execute the checked-in script.
 \i api/scripts/provision-roles.sql
+-- Set admin_app_password from your secret store in this psql session.
+\i api/scripts/provision-admin-roles.sql
 ```
+
+Run the separate admin-role script immediately after the base-role script
+on the same target database. It creates the nine platform roles in design
+6.1, grants the panel login CONNECT and disables parameter logging for it.
+The required `admin_app_password` psql variable is never a literal in the
+script. Existing roles, passwords, schema ownership and grants are left
+intact. A repeat run does not rotate a previously created login's password.
 
 The production cluster excludes `clintra_fixtures`. Keep test data and the
 `clintra_test` database on the development or test cluster.
