@@ -122,6 +122,12 @@ trait RlsFixtures
             $ids = $this->fixtureIds[$table] ?? [];
 
             if ($ids !== []) {
+                if ($table === 'organizations') {
+                    // The append-only admin history retains its organization FK.
+                    // Remove clinical fixtures, but keep that bare organization.
+                    $retained = $this->asOwner()->table('platform.admin_log')->whereIn('org_id', $ids)->pluck('org_id')->all();
+                    $ids = array_values(array_diff($ids, $retained));
+                }
                 $column = self::CLEANUP_KEY_COLUMN[$table] ?? 'id';
                 $this->fx()->table($table)->whereIn($column, $ids)->delete();
             }

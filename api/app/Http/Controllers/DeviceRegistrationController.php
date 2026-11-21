@@ -97,7 +97,10 @@ class DeviceRegistrationController extends Controller
             // live, unauthenticated request; see the function's own
             // migration comment.
             $row = DB::selectOne('select register_device(?::jsonb) as result', [json_encode($payload, JSON_THROW_ON_ERROR)]);
-        } catch (QueryException) {
+        } catch (QueryException $error) {
+            if ($error->getCode() === 'CL403') {
+                return \App\Support\OrganizationSuspension::response();
+            }
             RateLimiter::hit($ipKey, self::DECAY_SECONDS);
             RateLimiter::hit($codeKey, self::DECAY_SECONDS);
             if ($orgKey !== null) {

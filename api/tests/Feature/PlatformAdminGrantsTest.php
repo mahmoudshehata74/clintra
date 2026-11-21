@@ -25,7 +25,7 @@ test('the nine admin roles match design 6.1 and only the eight function roles be
     expect($this->asOwner()->select("SELECT 1 FROM pg_auth_members WHERE roleid='clintra_admin_app'::regrole OR member='clintra_app'::regrole"))->toBe([]);
 });
 
-test('the panel can reach exactly its four B1 functions and no table or column', function () {
+test('the panel can reach exactly its five B2 functions and no table or column', function () {
     expect($this->panel()->selectOne('SELECT current_user AS name')->name)->toBe('clintra_admin_app');
     $reachable = $this->asOwner()->select(<<<'SQL'
         SELECT n.nspname||'.'||p.proname AS name FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
@@ -34,7 +34,7 @@ test('the panel can reach exactly its four B1 functions and no table or column',
           AND has_function_privilege('clintra_admin_app',p.oid,'EXECUTE') ORDER BY name
     SQL);
     expect(array_column($reachable, 'name'))->toBe([
-        'platform.admin_change_password', 'platform.admin_log_refusal', 'platform.admin_login', 'platform.admin_logout',
+        'platform.admin_change_password', 'platform.admin_log_refusal', 'platform.admin_login', 'platform.admin_logout', 'platform.admin_set_org_disabled',
     ]);
     $tables = $this->asOwner()->select(<<<'SQL'
         SELECT n.nspname,c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
@@ -80,7 +80,7 @@ test('every B1 function has the exact owner security settings and EXECUTE caller
     $expected = [
         'totp_at' => [], 'admin_login' => ['clintra_admin_app'], 'admin_logout' => ['clintra_admin_app'],
         'admin_change_password' => ['clintra_admin_app'], 'admin_log_refusal' => ['clintra_admin_app'],
-        'admin_log_cli' => ['clintra_owner'], 'admin_session_actor' => $actions, 'admin_log_write' => $actions,
+        'admin_log_cli' => ['clintra_admin_org', 'clintra_owner'], 'admin_session_actor' => $actions, 'admin_log_write' => $actions,
         'admin_session_state' => [], 'admin_step_up' => [],
     ];
     foreach ($expected as $function => $callers) {
@@ -124,7 +124,7 @@ test('the auth role has column-exact grants and all other new roles have no tabl
     expect(array_map(fn ($r) => $r->table_name.':'.$r->privilege_type, $tableGrants))->toBe([
         'admin_log:INSERT', 'admin_log:SELECT', 'admin_recovery_codes:SELECT', 'admin_sessions:INSERT', 'admin_sessions:SELECT', 'admin_users:SELECT',
     ]);
-    foreach (['clintra_admin_app', 'clintra_admin_provision', 'clintra_admin_mint', 'clintra_admin_device', 'clintra_admin_org', 'clintra_admin_stats', 'clintra_admin_support', 'clintra_support'] as $role) {
+    foreach (['clintra_admin_app', 'clintra_admin_provision', 'clintra_admin_mint', 'clintra_admin_device', 'clintra_admin_stats', 'clintra_admin_support', 'clintra_support'] as $role) {
         expect($this->asOwner()->select('SELECT 1 FROM information_schema.role_column_grants WHERE grantee=?', [$role]))->toBe([]);
         expect($this->asOwner()->select('SELECT 1 FROM information_schema.role_table_grants WHERE grantee=?', [$role]))->toBe([]);
     }

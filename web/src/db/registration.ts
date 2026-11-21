@@ -85,6 +85,9 @@ export async function registerDevice(
 
   if (!response.ok) {
     const errorBody = (await response.json().catch(() => null)) as ApiErrorBody | null;
+    if (response.status === 403 && errorBody?.error === "org_disabled") {
+      return { ok: false, message: "العيادة دي حسابها موقوف. كلّم فريق كلينترا." };
+    }
     const firstFieldMessage = errorBody?.errors ? Object.values(errorBody.errors)[0]?.[0] : undefined;
     return { ok: false, message: firstFieldMessage ?? errorBody?.message ?? "حدث خطأ غير متوقع — حاول مرة أخرى" };
   }
