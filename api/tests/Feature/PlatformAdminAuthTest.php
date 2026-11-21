@@ -156,7 +156,7 @@ test('a password change needs fresh TOTP changes only its actor and ends their o
     $other = $this->platformSession($a);
     $foreign = $this->platformSession($b);
     $base = ['session_id' => $p['session_id'], 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId(), 'otp' => $p['otp']];
-    expect($this->platformCall('admin_change_password', $base))->toBe(['ok' => false, 'reason' => 'not_allowed']);
+    expect($this->platformCall('admin_change_password', $base))->toBe(['ok' => false, 'reason' => 'step_up_failed']);
     $base['log_id'] = $this->platformId();
     $base['otp'] = $this->platformOtp($a['secret'], $this->platformStep() + 1);
     expect($this->platformCall('admin_change_password', $base))->toBe(['ok' => true]);
@@ -173,7 +173,7 @@ test('step up refuses an empty code a wrong code and a recovery code', function 
     $session = $this->platformSession($admin);
     $this->asOwner()->table('platform.admin_recovery_codes')->insert(['id' => $this->platformId(), 'admin_user_id' => $admin['id'], 'code_hash' => hash('sha256', 'recovery')]);
     $p = ['session_id' => $session, 'otp' => $otp, 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId()];
-    expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => 'not_allowed']);
+    expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => 'step_up_failed']);
     expect($this->asOwner()->table('platform.admin_log')->where('id', $p['log_id'])->value('succeeded'))->toBeFalse();
 })->with(['', 'wrong-code', 'recovery']);
 

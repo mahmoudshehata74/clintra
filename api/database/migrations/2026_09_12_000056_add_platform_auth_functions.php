@@ -119,7 +119,7 @@ return new class extends Migration
                 CREATE FUNCTION platform.admin_session_actor(p_session uuid,p_otp text,p_require_otp boolean) RETURNS uuid
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
                 DECLARE
-                    v_admin uuid; v_secret bytea; v_last bigint; v_step bigint;
+                    v_admin uuid; v_secret bytea; v_last bigint; v_step bigint; v_failures integer;
                     v_now_step bigint := floor(extract(epoch FROM now())/30);
                 BEGIN
                     IF p_require_otp IS NULL THEN RAISE EXCEPTION 'missing step-up requirement' USING ERRCODE='22023'; END IF;
@@ -134,9 +134,21 @@ return new class extends Migration
                         AND ended_at IS NULL AND expires_at>now() AND last_seen_at>now()-interval '30 minutes' FOR UPDATE;
                     IF NOT FOUND THEN RETURN NULL; END IF;
                     IF p_require_otp THEN
+                        SELECT count(*) INTO v_failures FROM platform.admin_log
+                            WHERE admin_user_id=v_admin AND NOT succeeded AND reason='step_up_failed'
+                              AND at>now()-interval '15 minutes';
+                        IF v_failures>=5 THEN
+                            UPDATE platform.admin_sessions SET ended_at=now() WHERE admin_user_id=v_admin AND ended_at IS NULL;
+                            RETURN NULL;
+                        END IF;
                         SELECT s INTO v_step FROM generate_series(v_now_step-1,v_now_step+1) s
                             WHERE platform.totp_at(v_secret,s)=p_otp AND s>coalesce(v_last,-1) ORDER BY s LIMIT 1;
-                        IF v_step IS NULL THEN RETURN NULL; END IF;
+                        IF v_step IS NULL THEN
+                            IF v_failures>=4 THEN
+                                UPDATE platform.admin_sessions SET ended_at=now() WHERE admin_user_id=v_admin AND ended_at IS NULL;
+                            END IF;
+                            RETURN NULL;
+                        END IF;
                         UPDATE platform.admin_users SET last_totp_step=v_step WHERE id=v_admin;
                     END IF;
                     UPDATE platform.admin_sessions SET last_seen_at=now() WHERE id=p_session;
@@ -167,7 +179,7 @@ return new class extends Migration
                 -- p: {session_id,otp,password,log_id}; password is the new password.
                 CREATE FUNCTION platform.admin_change_password(p jsonb) RETURNS jsonb
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
-                DECLARE v_admin uuid; v_session uuid; v_log uuid; v_ip inet; v_agent text;
+                DECLARE v_admin uuid; v_session uuid; v_log uuid; v_ip inet; v_agent text; v_reason text; v_ended boolean:=false;
                 BEGIN
                     IF p IS NULL OR jsonb_typeof(p)<>'object' THEN RAISE EXCEPTION 'invalid password payload' USING ERRCODE='22023'; END IF;
                     IF NOT p ?& ARRAY['session_id','otp','password','log_id']
@@ -179,15 +191,22 @@ return new class extends Migration
                     END IF;
                     BEGIN v_session:=(p->>'session_id')::uuid; v_log:=(p->>'log_id')::uuid;
                     EXCEPTION WHEN invalid_text_representation THEN RAISE EXCEPTION 'invalid password identifiers' USING ERRCODE='22023'; END;
-                    v_admin:=platform.admin_session_actor(v_session,p->>'otp',true);
+                    v_admin:=platform.admin_session_actor(v_session,NULL,false);
                     IF v_admin IS NOT NULL THEN
+                        SELECT ip,user_agent INTO v_ip,v_agent FROM platform.admin_sessions WHERE id=v_session;
+                        IF platform.admin_session_actor(v_session,p->>'otp',true) IS NULL THEN
+                            v_reason:='step_up_failed';
+                            SELECT ended_at IS NOT NULL INTO v_ended FROM platform.admin_sessions WHERE id=v_session;
+                        END IF;
+                    ELSE v_reason:='not_allowed';
+                    END IF;
+                    IF v_reason IS NULL THEN
                         UPDATE platform.admin_users SET password_hash=platform_crypto.crypt(p->>'password',platform_crypto.gen_salt('bf',12)) WHERE id=v_admin;
                         UPDATE platform.admin_sessions SET ended_at=now() WHERE admin_user_id=v_admin AND id<>v_session AND ended_at IS NULL;
-                        SELECT ip,user_agent INTO v_ip,v_agent FROM platform.admin_sessions WHERE id=v_session;
                     END IF;
-                    PERFORM platform.admin_log_write(v_log,v_admin,'admin.password_change',NULL,NULL,v_admin IS NOT NULL,
-                        CASE WHEN v_admin IS NULL THEN 'not_allowed' END,'{}',v_ip,v_agent);
-                    IF v_admin IS NULL THEN RETURN jsonb_build_object('ok',false,'reason','not_allowed'); END IF;
+                    PERFORM platform.admin_log_write(v_log,v_admin,'admin.password_change',NULL,NULL,v_reason IS NULL,
+                        v_reason,jsonb_build_object('all_sessions_ended',v_ended),v_ip,v_agent);
+                    IF v_reason IS NOT NULL THEN RETURN jsonb_build_object('ok',false,'reason',v_reason); END IF;
                     RETURN jsonb_build_object('ok',true);
                 END;
                 $$;
