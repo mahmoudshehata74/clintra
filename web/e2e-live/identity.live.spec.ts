@@ -118,7 +118,7 @@ test("an owner activates identity while two devices sync, and a pre-sign-in oper
       const lock = lockOverlay(a.page);
       await lock.getByRole("button", { name: "إنشاء حسابك" }).click();
       await lock.getByLabel("رقم هاتف مالك العيادة").fill(org.ownerPhone);
-      await lock.getByLabel("رمز الاسترداد").fill(recoveryCode);
+      await lock.getByLabel("رمز التفعيل").fill(recoveryCode);
       await lock.getByLabel("اسم المستخدم").fill("live-owner");
       await lock.getByLabel("كلمة المرور الجديدة").fill("Password for this live fixture");
       await lock.getByRole("button", { name: "حفظ", exact: true }).click();
@@ -155,7 +155,7 @@ test("an owner activates identity while two devices sync, and a pre-sign-in oper
       await expect(settings.getByRole("list", { name: "حالة الأجهزة" }).getByRole("listitem")).toHaveCount(2);
       await settings.getByRole("button", { name: "تفعيل للكل", exact: true }).click();
       await settings.getByLabel("اكتب كلمة المرور الخاصة بك للتأكيد").fill("Password for this live fixture");
-      await settings.getByRole("button", { name: "تأكيد", exact: true }).click();
+      await settings.getByRole("button", { name: "تفعيل للكل", exact: true }).click();
       await expect(settings.getByText("الدخول بكلمة المرور مفعّل لجميع الموظفين.")).toBeVisible();
       await a.page.keyboard.press("Escape");
       await expect(settings).toBeHidden();

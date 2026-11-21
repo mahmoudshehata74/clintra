@@ -81,7 +81,7 @@ export default function IdentityScreen({ device, changeFor, firstSetup, onCancel
           <Field id="identity-recovery-phone" label={text.ownerPhone}>
             <TextInput type="tel" name="phone" autoComplete="tel" dir="ltr" placeholder="+20…" required />
           </Field>
-          <Field id="identity-recovery-code" label={text.recoveryCode}>
+          <Field id="identity-recovery-code" label={firstSetup ? text.activationCode : text.recoveryCode}>
             <TextInput name="code" autoComplete="one-time-code" dir="ltr" required />
           </Field>
         </>

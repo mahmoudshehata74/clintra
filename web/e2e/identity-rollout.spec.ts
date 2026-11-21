@@ -76,7 +76,7 @@ async function rollout(page: Page, shot?: (screen: string) => Promise<void>) {
   await expect(lock.getByRole("heading", { name: "إنشاء حسابك" })).toBeVisible();
   await shot?.("a4-owner-setup");
   await lock.getByLabel("رقم هاتف مالك العيادة").fill(phone);
-  await lock.getByLabel("رمز الاسترداد").fill(code);
+  await lock.getByLabel("رمز التفعيل").fill(code);
   await lock.getByLabel("اسم المستخدم").fill("owner");
   await lock.getByLabel("كلمة المرور الجديدة").fill(password);
   await lock.getByRole("button", { name: "حفظ", exact: true }).click();
@@ -106,7 +106,9 @@ async function rollout(page: Page, shot?: (screen: string) => Promise<void>) {
   await input.scrollIntoViewIfNeeded();
   await shot?.("a4-enable-confirm");
   await input.fill(password);
-  await settings.getByRole("button", { name: "تأكيد", exact: true }).click();
+  await expect(settings.locator("bdi")).toHaveAttribute("dir", "ltr");
+  await expect(settings.locator("bdi")).toHaveText("0");
+  await settings.getByRole("button", { name: "تفعيل للكل", exact: true }).click();
   await expect(settings.getByText("الدخول بكلمة المرور مفعّل لجميع الموظفين.")).toBeVisible();
   await shot?.("a4-enforced");
 }

@@ -117,14 +117,14 @@ function Readiness({ ownerId, deviceId }: { ownerId: string; deviceId: string })
               </li>
             ))}
           </ul>
-          <p className="text-sm">{text.rolloutUnsigned} <strong>{local?.unsigned ?? 0}</strong></p>
+          <p className="text-sm">{text.rolloutUnsigned}: <bdi dir="ltr" className="font-bold tabular-nums">{local?.unsigned ?? 0}</bdi></p>
           {confirm && status.ready && !status.identity_enforced_at && (
             <form className="grid gap-3 rounded-card border border-hair bg-card p-3" onSubmit={enable}>
               <Field id="identity-rollout-password" label={text.stepUpPassword}>
                 <PasswordInput name="password" autoComplete="current-password" required />
               </Field>
               <div className="flex gap-2">
-                <Button variant="danger" type="submit" disabled={busy}>{text.confirm}</Button>
+                <Button variant="danger" type="submit" disabled={busy}>{text.rolloutEnable}</Button>
                 <Button variant="secondary" disabled={busy} onClick={() => setConfirm(false)}>{text.back}</Button>
               </div>
             </form>
