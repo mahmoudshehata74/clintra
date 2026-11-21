@@ -205,10 +205,15 @@ settings keep a password bound to `admin_login` out of the server log.
 
 ### 6.2 The platform schema
 
+pgcrypto lives in its own schema, platform_crypto, usable only by clintra_admin_auth: the extension's functions are owned by the bootstrap superuser with PUBLIC EXECUTE, which the migration owner cannot revoke, so schema USAGE is the gate.
+
 ```sql
 CREATE SCHEMA platform AUTHORIZATION clintra_owner;
 REVOKE ALL ON SCHEMA platform FROM PUBLIC;
-CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA platform;
+CREATE SCHEMA platform_crypto AUTHORIZATION clintra_owner;
+REVOKE ALL ON SCHEMA platform_crypto FROM PUBLIC;
+GRANT USAGE ON SCHEMA platform_crypto TO clintra_admin_auth;
+CREATE EXTENSION pgcrypto WITH SCHEMA platform_crypto;
 
 CREATE TABLE platform.admin_users (
   id uuid PRIMARY KEY,
@@ -463,7 +468,7 @@ FROM PUBLIC` after each. Owners and callers:
 ```sql
 CREATE FUNCTION platform.totp_at(p_secret bytea, p_step bigint) RETURNS text
 LANGUAGE sql IMMUTABLE SET search_path = platform, pg_temp AS $$
-  WITH h AS (SELECT hmac(int8send(p_step), p_secret, 'sha1') AS mac),
+  WITH h AS (SELECT platform_crypto.hmac(int8send(p_step), p_secret, 'sha1') AS mac),
        o AS (SELECT mac, get_byte(mac, 19) & 15 AS off FROM h)
   SELECT lpad(((((get_byte(mac, off) & 127)::bigint << 24) | (get_byte(mac, off + 1) << 16)
                | (get_byte(mac, off + 2) << 8) | get_byte(mac, off + 3)) % 1000000)::text, 6, '0')
@@ -489,8 +494,8 @@ BEGIN
   END IF;
   SELECT * INTO v_user FROM platform.admin_users WHERE email = v_email AND is_active;
   IF v_user.id IS NULL THEN
-    PERFORM crypt(p->>'password', gen_salt('bf', 12));  -- the same work for an unknown email
-  ELSIF crypt(p->>'password', v_user.password_hash) = v_user.password_hash THEN
+    PERFORM platform_crypto.crypt(p->>'password', platform_crypto.gen_salt('bf', 12));  -- the same work for an unknown email
+  ELSIF platform_crypto.crypt(p->>'password', v_user.password_hash) = v_user.password_hash THEN
     SELECT s INTO v_step FROM generate_series(v_now_step - 1, v_now_step + 1) AS s
       WHERE platform.totp_at(v_user.totp_secret, s) = p->>'otp' AND s > coalesce(v_user.last_totp_step, 0)
       ORDER BY s LIMIT 1;
@@ -499,7 +504,7 @@ BEGIN
       v_ok := true;
     ELSE
       UPDATE platform.admin_recovery_codes SET used_at = now()
-        WHERE admin_user_id = v_user.id AND used_at IS NULL AND code_hash = encode(digest(p->>'otp', 'sha256'), 'hex');
+        WHERE admin_user_id = v_user.id AND used_at IS NULL AND code_hash = encode(platform_crypto.digest(p->>'otp', 'sha256'), 'hex');
       v_ok := FOUND;
     END IF;
   END IF;

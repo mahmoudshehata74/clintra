@@ -506,6 +506,13 @@ environment variables:
 
 ## Testing notes
 
+The owner connection keeps `public` first and includes `platform` so
+Laravel's fresh command removes its tables. Migration 000053 validates
+and removes the empty test schemas, standalone functions and pgcrypto
+extension left by fresh before recreating them. It refuses populated,
+incomplete or unexpected schemas. The crypto schema remains outside the
+search path; cryptographic calls are qualified explicitly.
+
 Before every full local gate, rebuild `clintra_test` from the branch under
 test so its schema and migration records match that branch. From `api/`,
 set `DB_DATABASE=clintra_test` in the command's environment, then run:
@@ -524,6 +531,30 @@ exact merge tree in the pull request.
 The preflight tests establish migration metadata inside their own rolled
 back transactions, including both mismatch directions. The command itself
 remains read-only and rejects either mismatch.
+
+## Platform administrator foundation
+
+After provisioning the nine admin roles and applying migrations as the
+owner, run `php artisan clintra:admin:create EMAIL NAME` on the API host.
+It prints a random password, the SHA-1/30-second TOTP enrollment URI and
+ten recovery codes once. Passwords use pgcrypto bcrypt at cost 12; recovery
+codes are stored only as SHA-256 hashes. Keep the enrollment material in
+the team's secret store. The API runtime does not need the panel login's
+database password.
+
+The B1 panel database contract exposes `admin_login`, `admin_logout`,
+`admin_change_password` and `admin_log_refusal` only. Sessions expire after
+8 hours absolute or 30 minutes idle. Password changes require fresh TOTP,
+accept 12 to 72 bytes and end the admin's other sessions. Recovery codes
+work for sign-in once and do not satisfy step-up. Session actor resolution
+and the log writer are internal functions restricted to the action roles.
+
+Provision, mint, revoke and admin-create CLI invocations each append one
+admin-log row, including refusals. Rows have a null admin user, the host
+user in `detail.host_user`, and the immutable target ID. Clinic identifiers
+are retained in the detail rather than the log's organization foreign key,
+so history survives removal of a test target. No password, TOTP secret,
+recovery code or plaintext activation code is included in that detail.
 
 ## Region: round-trip latency matters here specifically
 

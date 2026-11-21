@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\AdminCliLog;
 use Illuminate\Console\Command;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
@@ -56,6 +57,11 @@ class RevokeDevice extends Command
     protected $description = 'Revokes a device: deletes its Sanctum token(s) and marks it permanently unusable';
 
     public function handle(): int
+    {
+        return AdminCliLog::run('cli.revoke', fn () => $this->revoke(), fn () => ['target_id' => $this->argument('device_id')]);
+    }
+
+    private function revoke(): int
     {
         $deviceId = $this->argument('device_id');
         $connection = DB::connection('pgsql_owner');

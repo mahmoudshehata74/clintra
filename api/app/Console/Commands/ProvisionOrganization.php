@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Support\ActivationCode;
+use App\Support\AdminCliLog;
 use App\Support\EgyptianPhone;
 use App\Support\PinHash;
 use Illuminate\Console\Command;
@@ -26,6 +27,15 @@ class ProvisionOrganization extends Command
     protected $description = 'Provisions the first organization, location, owner user, practitioner, and owner membership';
 
     public function handle(): int
+    {
+        $this->adminLogContext = [];
+
+        return AdminCliLog::run('cli.provision', fn () => $this->provision(), fn () => $this->adminLogContext);
+    }
+
+    private array $adminLogContext = [];
+
+    private function provision(): int
     {
         $orgName = $this->ask('Organization name');
         $locationName = $this->ask('Location name');
@@ -84,6 +94,7 @@ class ProvisionOrganization extends Command
             'audit_activation_code_id' => (string) Str::uuid(),
         ];
 
+        $this->adminLogContext = ['org_id' => $orgId, 'target_id' => $orgId];
         $row = DB::connection('pgsql_owner')->selectOne(
             'select provision_organization(?::jsonb) as result',
             [json_encode($payload, JSON_THROW_ON_ERROR)],
