@@ -130,11 +130,13 @@ test('log-filters-and-keyset-paging', async ({ page }) => {
   await signIn(page, fixture); await expect(page).toHaveURL(/panel\/admin-log$/);
   await page.getByLabel('المسؤول', { exact: true }).fill(fixture.id);
   await page.getByLabel('العيادة', { exact: true }).fill(fixture.org);
-  await page.getByLabel('الإجراء', { exact: true }).fill('org.disable');
+  await page.getByLabel('الإجراء', { exact: true }).selectOption({ label: 'إيقاف العيادة' });
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(new Date());
   await page.getByLabel('من', { exact: true }).fill(today); await page.getByLabel('لحد', { exact: true }).fill(today);
   await page.getByLabel('عدد الصفوف').selectOption('1'); await page.getByRole('button', { name: 'تصفية', exact: true }).click();
   const rows = page.locator('tbody tr[data-seq]'); await expect(rows).toHaveCount(1);
+  await expect(rows.first().locator('td').nth(2)).toHaveText('إيقاف العيادة');
+  expect(new URL(page.url()).searchParams.get('action')).toBe('org.disable');
   const first = await rows.first().getAttribute('data-seq');
   await page.getByRole('link', { name: 'الأقدم', exact: true }).click();
   await expect(rows).toHaveCount(1); expect(BigInt((await rows.first().getAttribute('data-seq'))!)).toBeLessThan(BigInt(first!));

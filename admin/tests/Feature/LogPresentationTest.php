@@ -55,3 +55,26 @@ test('a resolved admin keeps their name in the log', function () {
     $xpath = logPresentationDocument($response);
     expect(trim($xpath->query('//tr[@data-log-id="'.$id.'"]/td[@data-log-actor]')->item(0)->textContent))->toBe('مسؤول التجربة');
 });
+
+test('every action allowed by the installed CHECK has exactly one Arabic label and select option', function () {
+    $constraints = DB::select("SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='platform.admin_log'::regclass AND contype='c'");
+    $actions = [];
+    foreach ($constraints as $constraint) {
+        if (str_contains($constraint->definition, 'action')) {
+            preg_match_all("/'([^']+)'::text/", $constraint->definition, $matches);
+            $actions = array_merge($actions, $matches[1]);
+        }
+    }
+    expect($actions)->not->toBeEmpty();
+    expect(array_keys(App\Support\ActionLabels::ALL))->toEqualCanonicalizing($actions);
+    $response = $this->withSession(['platform_session_id' => $this->fixture['session']])->get('/panel/admin-log?org_id='.$this->fixture['org'].'&action=org.disable')->assertOk();
+    $xpath = logPresentationDocument($response);
+    $options = $xpath->query('//select[@name="action"]/option');
+    expect($options->item(0)->textContent)->toBe('كل الإجراءات')->and($options->item(0)->getAttribute('value'))->toBe('');
+    expect($options->length)->toBe(count($actions) + 1);
+    foreach (App\Support\ActionLabels::ALL as $code => $label) {
+        expect($xpath->query('//select[@name="action"]/option[@value="'.$code.'"]')->item(0)->textContent)->toBe($label);
+    }
+    expect($xpath->query('//select[@name="action"]/option[@selected]')->item(0)->getAttribute('value'))->toBe('org.disable');
+    $response->assertSee('إيقاف العيادة')->assertDontSee('تشغيل العيادة</td>', false);
+});

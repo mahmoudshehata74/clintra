@@ -4,9 +4,10 @@
         @if (session('notice'))<p role="status" class="notice">{{ session('notice') }}</p>@endif
         @if ($error)<p role="alert" class="refusal">{{ $error }}</p>@endif
         <form method="get" action="{{ route('filament.admin.pages.admin-log') }}" class="filters" aria-label="فلاتر سجل الإدارة">
-            @foreach (['admin_user_id'=>'المسؤول', 'org_id'=>'العيادة', 'action'=>'الإجراء'] as $key=>$label)
+            @foreach (['admin_user_id'=>'المسؤول', 'org_id'=>'العيادة'] as $key=>$label)
             <label class="field" for="filter-{{ $key }}">{{ $label }}<input class="in" id="filter-{{ $key }}" name="{{ $key }}" dir="ltr" value="{{ is_scalar($filters[$key] ?? '') ? ($filters[$key] ?? '') : '' }}" maxlength="100"></label>
             @endforeach
+            <div class="field"><label for="filter-action">الإجراء</label><select class="in" id="filter-action" name="action"><option value="">كل الإجراءات</option>@foreach (App\Support\ActionLabels::ALL as $code=>$label)<option value="{{ $code }}" @selected(($filters['action'] ?? '') === $code)>{{ $label }}</option>@endforeach</select></div>
             @foreach (['from'=>'من','to'=>'لحد'] as $key=>$label)
             <label class="field" for="filter-{{ $key }}">{{ $label }}<input class="in" id="filter-{{ $key }}" name="{{ $key }}" type="date" value="{{ is_scalar($filters[$key] ?? '') ? ($filters[$key] ?? '') : '' }}"></label>
             @endforeach
@@ -24,7 +25,7 @@
                 @if ($row['admin_user_id'] === null && $row['action'] === 'admin.login' && is_string($row['detail']['email'] ?? null))
                     <div dir="ltr" data-attempted-email>{{ $row['detail']['email'] }}</div>
                 @endif
-            </td><td dir="ltr">{{ $row['action'] }}</td><td dir="ltr">{{ $row['org_id'] ?? '—' }}</td><td><span class="{{ $row['succeeded'] ? 'success' : 'failure' }}">{{ $row['succeeded'] ? 'تم' : App\Support\Refusal::message(['reason'=>$row['reason']]) }}</span></td>
+            </td><td>{{ App\Support\ActionLabels::ALL[$row['action']] }}</td><td dir="ltr">{{ $row['org_id'] ?? '—' }}</td><td><span class="{{ $row['succeeded'] ? 'success' : 'failure' }}">{{ $row['succeeded'] ? 'تم' : App\Support\Refusal::message(['reason'=>$row['reason']]) }}</span></td>
             <td><details><summary>عرض التفاصيل</summary><dl><dt>رقم السجل</dt><dd dir="ltr">{{ $row['seq'] }}</dd><dt>المسؤول</dt><dd dir="ltr">{{ $row['admin_user_id'] ?? '—' }}</dd><dt>عنوان الإنترنت</dt><dd dir="ltr">{{ $row['ip'] ?? '—' }}</dd><dt>المتصفح</dt><dd>{{ $row['user_agent'] ?? '—' }}</dd><dt>الهدف</dt><dd dir="ltr">{{ $row['target_id'] ?? '—' }}</dd><dt>التفاصيل</dt><dd><pre>{{ json_encode($row['detail'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</pre></dd></dl></details></td></tr>
         @empty<tr><td colspan="6" class="empty">مفيش سجلات في الفترة دي</td></tr>@endforelse
         </tbody></table></div>
