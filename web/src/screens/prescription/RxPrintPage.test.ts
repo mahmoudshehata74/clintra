@@ -84,7 +84,7 @@ describe("rxContinuationCss", () => {
     const css = rxContinuationCss("كريم فتحي", "RX-2026-0001");
     expect(css).toContain("@page prescription {");
     expect(css).toContain("@top-center {");
-    expect(css).toContain('"تابع روشتة كريم فتحي · ⁦RX-2026-0001⁩ · صفحة "');
+    expect(css).toContain('"تابع وصفة كريم فتحي · ⁦RX-2026-0001⁩ · صفحة "');
     expect(css).toContain('counter(page) "⁩ من ⁦" counter(pages)');
     expect(css).toMatch(/@page prescription:first \{\s*@top-center \{\s*content: none;/);
   });

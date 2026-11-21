@@ -7,8 +7,8 @@ export const reportsStrings = {
   fromLabel: "من",
   toLabel: "إلى",
   dayPlaceholder: "2026-01-31",
-  doctorLabel: "الدكتور",
-  allDoctors: "كل الدكاترة",
+  doctorLabel: "الطبيب",
+  allDoctors: "كل الأطباء",
   reportsNavLabel: "التقارير",
   rangeInvalid: "اكتب التاريخ كده: سنة-شهر-يوم",
   rangeReversed: "تاريخ البداية لازم يكون قبل النهاية",
@@ -34,7 +34,7 @@ export const reportsStrings = {
 
   statusRescheduled: "اتنقل",
   cancelReasonPostpone: "تأجيل",
-  cashCloseWholeClinicNote: "إقفال الصندوق للعيادة كلها، مش لكل دكتور: بيظهر مع «كل الدكاترة» بس",
+  cashCloseWholeClinicNote: "إقفال الصندوق للعيادة كلها، مش لكل طبيب: بيظهر مع «كل الأطباء» بس",
 
   figVisits: "الزيارات",
   figBooked: "محجوز",
@@ -67,7 +67,7 @@ export const reportsStrings = {
   figCollectors: "الموظفين",
 
   colPatient: "المريض",
-  colDoctor: "الدكتور",
+  colDoctor: "الطبيب",
   colVisitDay: "يوم الزيارة",
   colStatus: "الحالة",
   colCancelReason: "سبب الإلغاء",

@@ -57,7 +57,7 @@ import { prescriptionPrintStrings as RX } from "../src/screens/prescription/stri
 // skip it entirely; it runs only via `pnpm test:e2e:screenshots`, locally, so a
 // human can inspect the PNGs. Output lands in e2e/screenshots/ (gitignored).
 
-const OUT_DIR = "e2e/screenshots";
+const OUT_DIR = process.env.CLINTRA_SHOT_DIR ?? "e2e/screenshots";
 
 // A crashing screen renders blank without necessarily failing an assertion, so
 // every capture also asserts no uncaught page error fired while reaching it.
