@@ -548,10 +548,20 @@ database password.
 
 The B1 panel database contract exposes `admin_login`, `admin_logout`,
 `admin_change_password` and `admin_log_refusal` only. Sessions expire after
-8 hours absolute or 30 minutes idle. Password changes require fresh TOTP,
-accept 12 to 72 bytes and end the admin's other sessions. Recovery codes
+8 hours absolute or 30 minutes idle. New accounts must change their initial
+password before using session actions; password change and logout remain
+available. A password change requires the current password, a different
+new password and fresh TOTP, accepts 12 to 72 bytes and ends the admin's
+other sessions. Recovery codes
 work for sign-in once and do not satisfy step-up. Session actor resolution
 and the log writer are internal functions restricted to the action roles.
+
+Session failures return and log `session_invalid` without an admin actor.
+Wrong or reused step-up codes log the resolved admin with `step_up_failed`;
+the fifth such failure in 15 minutes ends all their unended sessions in
+that transaction. Initial-password restrictions return and log
+`password_change_required`. Wrong current passwords are `bad_credentials`
+and do not count toward either sign-in or step-up limits.
 
 Provision, mint, revoke and admin-create CLI invocations each append one
 admin-log row, including refusals. Rows have a null admin user, the host

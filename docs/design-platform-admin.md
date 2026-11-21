@@ -1,7 +1,7 @@
 # Design: platform admin panel, organization disable, figures and support access
 
-Status: design only. Nothing here is built; every statement below is a
-plan, to be reviewed before a migration is written.
+Status: B1 is implemented for review in PR #69. The remaining phases are
+plans, to be reviewed before their migrations are written.
 
 ## 1. Goal
 
@@ -207,6 +207,34 @@ settings keep a password bound to `admin_login` out of the server log.
 
 pgcrypto lives in its own schema, platform_crypto, usable only by clintra_admin_auth: the extension's functions are owned by the bootstrap superuser with PUBLIC EXECUTE, which the migration owner cannot revoke, so schema USAGE is the gate.
 
+`admin_log.org_id` references `organizations.id` with `ON DELETE RESTRICT`:
+organizations are disabled, never deleted. The foreign key preserves the
+organization attached to an administrative action.
+
+New admin users have `must_change_password = true`. Successful sign-in
+returns that boolean. Until it is cleared, every session action refuses
+with `password_change_required`, except password change and logout.
+`admin_change_password` requires `{session_id, current_password, otp,
+password, log_id}`: the current password, a different new password and a
+fresh TOTP. Success clears the flag and ends the admin's other sessions.
+Wrong current passwords and unchanged passwords return `bad_credentials`;
+they do not consume TOTP or enter the login or step-up failure counters.
+
+Session resolution is separate from step-up. Unknown, ended, expired or
+idle sessions, and inactive admins, return `session_invalid` and log a
+null admin. A wrong or reused TOTP returns `step_up_failed` and logs the
+admin resolved from the valid session. A valid session blocked by its
+initial-password flag logs that admin with `password_change_required`.
+Public refusals remain `{ok: false, reason}`.
+
+Five failed step-ups per admin in 15 minutes end all of that admin's
+unended sessions in the same transaction as the fifth refusal's log row.
+The counter reads failed log rows with `reason = 'step_up_failed'` in that
+window; older rows do not count. The fifth refusal records
+`detail.all_sessions_ended = true`. A later request through an ended
+session returns `session_invalid`, even with a correct TOTP. Other admins'
+sessions and budgets are unaffected.
+
 ```sql
 CREATE SCHEMA platform AUTHORIZATION clintra_owner;
 REVOKE ALL ON SCHEMA platform FROM PUBLIC;
@@ -220,6 +248,7 @@ CREATE TABLE platform.admin_users (
   email varchar(254) NOT NULL UNIQUE CHECK (email = lower(email)),
   name varchar(120) NOT NULL,
   password_hash text NOT NULL,
+  must_change_password boolean NOT NULL DEFAULT true,
   totp_secret bytea NOT NULL,
   last_totp_step bigint NULL,
   is_active boolean NOT NULL DEFAULT true,
@@ -382,7 +411,7 @@ GRANT USAGE ON SCHEMA platform TO clintra_admin_app, clintra_admin_auth, clintra
 
 -- sign-in, sessions, the log
 GRANT SELECT ON platform.admin_users TO clintra_admin_auth;
-GRANT UPDATE (last_totp_step, last_login_at, password_hash) ON platform.admin_users TO clintra_admin_auth;
+GRANT UPDATE (last_totp_step, last_login_at, password_hash, must_change_password) ON platform.admin_users TO clintra_admin_auth;
 GRANT SELECT ON platform.admin_recovery_codes TO clintra_admin_auth;
 GRANT UPDATE (used_at) ON platform.admin_recovery_codes TO clintra_admin_auth;
 GRANT SELECT, INSERT ON platform.admin_sessions TO clintra_admin_auth;
@@ -453,6 +482,8 @@ FROM PUBLIC` after each. Owners and callers:
 | `platform.admin_logout(uuid)` | `clintra_admin_auth` | `clintra_admin_app` |
 | `platform.admin_change_password(jsonb)` | `clintra_admin_auth` | `clintra_admin_app` |
 | `platform.admin_session_actor(uuid, text, boolean)` | `clintra_admin_auth` | the six action roles |
+| `platform.admin_session_state(uuid, boolean)` | `clintra_admin_auth` | `clintra_admin_auth` only (private session resolution) |
+| `platform.admin_step_up(uuid, text)` | `clintra_admin_auth` | `clintra_admin_auth` only (private TOTP check and session termination) |
 | `platform.admin_log_write(uuid, uuid, text, uuid, uuid, boolean, text, jsonb, inet, text)` | `clintra_admin_auth` | the six action roles |
 | `platform.admin_log_refusal(jsonb)` | `clintra_admin_auth` | `clintra_admin_app` (records only `succeeded = false` rows naming the session's admin) |
 | `platform.admin_log_cli(jsonb)` | `clintra_admin_auth` | `clintra_owner` |
@@ -465,110 +496,30 @@ FROM PUBLIC` after each. Owners and callers:
 | `mint_support_code(jsonb)` | `clintra_support` | `clintra_app` |
 | `support_exchange(jsonb)` | `clintra_support` | `clintra_app` |
 
+The complete B1 function bodies, validation, ownership and EXECUTE grants
+are in [migration 000056](../api/database/migrations/2026_09_12_000056_add_platform_auth_functions.php).
+`admin_session_actor` returns a JSON state with `ok`, `admin_user_id` and,
+on refusal, `reason`; step-up refusals also carry `all_sessions_ended`.
+The six action roles must check `ok` before acting and write exactly one
+log using the returned actor and reason in the same transaction. The
+private resolver and TOTP helper are callable only by `clintra_admin_auth`.
+Only password change and logout ask the private resolver to allow the
+initial-password state. The examples below show the later action contract.
+
 ```sql
-CREATE FUNCTION platform.totp_at(p_secret bytea, p_step bigint) RETURNS text
-LANGUAGE sql IMMUTABLE SET search_path = platform, pg_temp AS $$
-  WITH h AS (SELECT platform_crypto.hmac(int8send(p_step), p_secret, 'sha1') AS mac),
-       o AS (SELECT mac, get_byte(mac, 19) & 15 AS off FROM h)
-  SELECT lpad(((((get_byte(mac, off) & 127)::bigint << 24) | (get_byte(mac, off + 1) << 16)
-               | (get_byte(mac, off + 2) << 8) | get_byte(mac, off + 3)) % 1000000)::text, 6, '0')
-  FROM o
-$$;
-
--- p: {email, password, otp, ip, user_agent, session_id, log_id}
-CREATE FUNCTION platform.admin_login(p jsonb) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = platform, pg_temp AS $$
-DECLARE
-  v_email text := lower(btrim(p->>'email'));
-  v_ip inet := (p->>'ip')::inet;
-  v_user platform.admin_users%ROWTYPE;
-  v_now_step bigint := floor(extract(epoch FROM now()) / 30);
-  v_step bigint;
-  v_ok boolean := false;
-BEGIN
-  IF (SELECT count(*) FROM platform.admin_log WHERE action = 'admin.login' AND NOT succeeded
-        AND at > now() - interval '15 minutes' AND (detail->>'email' = v_email OR ip = v_ip)) >= 5 THEN
-    PERFORM platform.admin_log_write((p->>'log_id')::uuid, NULL, 'admin.login', NULL, NULL, false, 'rate_limited',
-                                     jsonb_build_object('email', v_email), v_ip, p->>'user_agent');
-    RETURN jsonb_build_object('ok', false, 'reason', 'rate_limited');
-  END IF;
-  SELECT * INTO v_user FROM platform.admin_users WHERE email = v_email AND is_active;
-  IF v_user.id IS NULL THEN
-    PERFORM platform_crypto.crypt(p->>'password', platform_crypto.gen_salt('bf', 12));  -- the same work for an unknown email
-  ELSIF platform_crypto.crypt(p->>'password', v_user.password_hash) = v_user.password_hash THEN
-    SELECT s INTO v_step FROM generate_series(v_now_step - 1, v_now_step + 1) AS s
-      WHERE platform.totp_at(v_user.totp_secret, s) = p->>'otp' AND s > coalesce(v_user.last_totp_step, 0)
-      ORDER BY s LIMIT 1;
-    IF v_step IS NOT NULL THEN
-      UPDATE platform.admin_users SET last_totp_step = v_step, last_login_at = now() WHERE id = v_user.id;
-      v_ok := true;
-    ELSE
-      UPDATE platform.admin_recovery_codes SET used_at = now()
-        WHERE admin_user_id = v_user.id AND used_at IS NULL AND code_hash = encode(platform_crypto.digest(p->>'otp', 'sha256'), 'hex');
-      v_ok := FOUND;
-    END IF;
-  END IF;
-  PERFORM platform.admin_log_write((p->>'log_id')::uuid, CASE WHEN v_ok THEN v_user.id END, 'admin.login', NULL, NULL,
-                                   v_ok, CASE WHEN NOT v_ok THEN 'bad_credentials' END,
-                                   jsonb_build_object('email', v_email), v_ip, p->>'user_agent');
-  IF NOT v_ok THEN
-    RETURN jsonb_build_object('ok', false, 'reason', 'bad_credentials');
-  END IF;
-  INSERT INTO platform.admin_sessions (id, admin_user_id, expires_at, ip, user_agent)
-    VALUES ((p->>'session_id')::uuid, v_user.id, now() + interval '8 hours', v_ip, left(p->>'user_agent', 400));
-  RETURN jsonb_build_object('ok', true, 'session_id', p->>'session_id', 'name', v_user.name);
-END;
-$$;
-
-CREATE FUNCTION platform.admin_session_actor(p_session uuid, p_otp text, p_require_otp boolean) RETURNS uuid
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = platform, pg_temp AS $$
-DECLARE
-  v_admin uuid;
-  v_secret bytea;
-  v_last bigint;
-  v_now_step bigint := floor(extract(epoch FROM now()) / 30);
-  v_step bigint;
-BEGIN
-  UPDATE platform.admin_sessions s SET last_seen_at = now()
-    FROM platform.admin_users u
-   WHERE s.id = p_session AND s.ended_at IS NULL AND s.expires_at > now()
-     AND s.last_seen_at > now() - interval '30 minutes' AND u.id = s.admin_user_id AND u.is_active
-  RETURNING s.admin_user_id, u.totp_secret, u.last_totp_step INTO v_admin, v_secret, v_last;
-  IF v_admin IS NULL THEN
-    RETURN NULL;
-  END IF;
-  IF p_require_otp THEN
-    SELECT s INTO v_step FROM generate_series(v_now_step - 1, v_now_step + 1) AS s
-      WHERE platform.totp_at(v_secret, s) = p_otp AND s > coalesce(v_last, 0) ORDER BY s LIMIT 1;
-    IF v_step IS NULL THEN
-      RETURN NULL;
-    END IF;
-    UPDATE platform.admin_users SET last_totp_step = v_step WHERE id = v_admin;
-  END IF;
-  RETURN v_admin;
-END;
-$$;
-
-CREATE FUNCTION platform.admin_log_write(p_id uuid, p_admin uuid, p_action text, p_org uuid, p_target uuid,
-                                         p_ok boolean, p_reason text, p_detail jsonb, p_ip inet DEFAULT NULL,
-                                         p_user_agent text DEFAULT NULL) RETURNS void
-LANGUAGE sql SECURITY DEFINER SET search_path = platform, pg_temp AS $$
-  INSERT INTO platform.admin_log (id, admin_user_id, action, org_id, target_id, succeeded, reason, detail, ip, user_agent)
-  VALUES (p_id, p_admin, p_action, p_org, p_target, p_ok, p_reason, coalesce(p_detail, '{}'::jsonb), p_ip, left(p_user_agent, 400))
-$$;
-
 CREATE FUNCTION platform.admin_set_org_disabled(p_session uuid, p_otp text, p_org uuid, p_disabled boolean,
                                                 p_reason text, p_log_id uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
 DECLARE
-  v_admin uuid := platform.admin_session_actor(p_session, p_otp, true);
+  v_state jsonb := platform.admin_session_actor(p_session, p_otp, true);
+  v_admin uuid := (v_state->>'admin_user_id')::uuid;
   v_action text := CASE WHEN p_disabled THEN 'org.disable' ELSE 'org.enable' END;
   v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
 BEGIN
-  IF v_admin IS NULL OR (p_disabled AND (v_reason IS NULL OR char_length(v_reason) > 200)) THEN
+  IF NOT (v_state->>'ok')::boolean OR (p_disabled AND (v_reason IS NULL OR char_length(v_reason) > 200)) THEN
     PERFORM platform.admin_log_write(p_log_id, v_admin, v_action, NULL, p_org, false,
-                                     CASE WHEN v_admin IS NULL THEN 'not_allowed' ELSE 'reason_required' END, '{}');
-    RETURN jsonb_build_object('ok', false, 'reason', CASE WHEN v_admin IS NULL THEN 'not_allowed' ELSE 'reason_required' END);
+                                     coalesce(v_state->>'reason', 'reason_required'), v_state);
+    RETURN jsonb_build_object('ok', false, 'reason', coalesce(v_state->>'reason', 'reason_required'));
   END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended('sync_seq:' || p_org::text, 0));
   UPDATE organizations
@@ -588,14 +539,17 @@ $$;
 CREATE FUNCTION platform.admin_revoke_device(p_session uuid, p_otp text, p_device_id uuid, p_log_id uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
 DECLARE
-  v_admin uuid := platform.admin_session_actor(p_session, p_otp, true);
+  v_state jsonb := platform.admin_session_actor(p_session, p_otp, true);
+  v_admin uuid := (v_state->>'admin_user_id')::uuid;
   v_org uuid;
 BEGIN
-  SELECT org_id INTO v_org FROM device WHERE id = p_device_id AND revoked_at IS NULL;
-  IF v_admin IS NULL OR v_org IS NULL THEN
+  IF (v_state->>'ok')::boolean THEN
+    SELECT org_id INTO v_org FROM device WHERE id = p_device_id AND revoked_at IS NULL;
+  END IF;
+  IF NOT (v_state->>'ok')::boolean OR v_org IS NULL THEN
     PERFORM platform.admin_log_write(p_log_id, v_admin, 'device.revoke', v_org, p_device_id, false,
-                                     CASE WHEN v_admin IS NULL THEN 'not_allowed' ELSE 'not_found' END, '{}');
-    RETURN jsonb_build_object('ok', false, 'reason', CASE WHEN v_admin IS NULL THEN 'not_allowed' ELSE 'not_found' END);
+                                     coalesce(v_state->>'reason', 'not_found'), v_state);
+    RETURN jsonb_build_object('ok', false, 'reason', coalesce(v_state->>'reason', 'not_found'));
   END IF;
   UPDATE device SET revoked_at = now() WHERE id = p_device_id;
   DELETE FROM personal_access_tokens WHERE tokenable_type = 'App\Models\Device' AND tokenable_id = p_device_id;
@@ -611,11 +565,12 @@ RETURNS TABLE (org_id uuid, org_name text, disabled_at timestamptz, active_locat
                invoices_issued bigint, billed_piastres bigint, collected_piastres bigint)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
 DECLARE
-  v_admin uuid := platform.admin_session_actor(p_session, NULL, false);
-  v_ok boolean := v_admin IS NOT NULL AND p_from <= p_to AND p_to - p_from <= 366;
+  v_state jsonb := platform.admin_session_actor(p_session, NULL, false);
+  v_admin uuid := (v_state->>'admin_user_id')::uuid;
+  v_ok boolean := (v_state->>'ok')::boolean AND p_from <= p_to AND p_to - p_from <= 366;
 BEGIN
   PERFORM platform.admin_log_write(p_log_id, v_admin, 'figures.view', NULL, NULL, v_ok,
-                                   CASE WHEN NOT v_ok THEN 'not_allowed' END, jsonb_build_object('from', p_from, 'to', p_to));
+                                   CASE WHEN NOT v_ok THEN coalesce(v_state->>'reason', 'not_allowed') END, jsonb_build_object('from', p_from, 'to', p_to));
   IF NOT v_ok THEN
     RETURN;
   END IF;
