@@ -28,7 +28,7 @@ test('session refusals return session_invalid and log a null actor for every pan
     $before = $this->asOwner()->table('platform.admin_log')->max('seq') ?? 0;
     $result = match ($function) {
         'admin_logout' => json_decode($this->panel()->selectOne('SELECT platform.admin_logout(?::uuid) AS result', [$session])->result, true),
-        'admin_change_password' => $this->platformCall($function, ['session_id' => $session, 'otp' => $this->platformOtp($admin['secret']), 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId()]),
+        'admin_change_password' => $this->platformCall($function, ['session_id' => $session, 'current_password' => $admin['password'], 'otp' => $this->platformOtp($admin['secret']), 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId()]),
         'admin_log_refusal' => $this->platformCall($function, ['session_id' => $session, 'action' => 'device.revoke', 'reason' => 'malformed_payload', 'log_id' => $this->platformId(), 'target_id' => null]),
     };
     expect($result)->toBe(['ok' => false, 'reason' => 'session_invalid']);
@@ -45,7 +45,7 @@ test('wrong and reused step up codes retain the valid admin in the refusal row',
         $this->platformCall('admin_login', $login);
         $otp = $login['otp'];
     }
-    $p = ['session_id' => $session, 'otp' => $otp, 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId()];
+    $p = ['session_id' => $session, 'current_password' => $admin['password'], 'otp' => $otp, 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId()];
     expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => 'step_up_failed']);
     $log = $this->asOwner()->table('platform.admin_log')->where('id', $p['log_id'])->sole();
     expect($log->admin_user_id)->toBe($admin['id'])->and($log->reason)->toBe('step_up_failed')->and($log->succeeded)->toBeFalse();

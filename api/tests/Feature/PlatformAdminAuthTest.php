@@ -16,7 +16,7 @@ test('TOTP matches RFC 6238 SHA1 vectors truncated to six digits', function (int
 test('sign in requires password and TOTP and returns an eight hour session with one log row', function () {
     $admin = $this->platformAdmin();
     $p = $this->platformLoginPayload($admin);
-    expect($this->platformCall('admin_login', $p))->toBe(['ok' => true, 'name' => 'Test admin', 'session_id' => $p['session_id']]);
+    expect($this->platformCall('admin_login', $p))->toBe(['ok' => true, 'name' => 'Test admin', 'session_id' => $p['session_id'], 'must_change_password' => false]);
     $session = $this->asOwner()->selectOne('SELECT *,extract(epoch FROM expires_at-created_at)::integer AS lifetime FROM platform.admin_sessions WHERE id=?', [$p['session_id']]);
     expect($session->admin_user_id)->toBe($admin['id'])->and($session->lifetime)->toBe(28800);
     $log = $this->asOwner()->table('platform.admin_log')->where('id', $p['log_id'])->sole();
@@ -155,7 +155,7 @@ test('a password change needs fresh TOTP changes only its actor and ends their o
     $this->platformCall('admin_login', $p);
     $other = $this->platformSession($a);
     $foreign = $this->platformSession($b);
-    $base = ['session_id' => $p['session_id'], 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId(), 'otp' => $p['otp']];
+    $base = ['session_id' => $p['session_id'], 'current_password' => $a['password'], 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId(), 'otp' => $p['otp']];
     expect($this->platformCall('admin_change_password', $base))->toBe(['ok' => false, 'reason' => 'step_up_failed']);
     $base['log_id'] = $this->platformId();
     $base['otp'] = $this->platformOtp($a['secret'], $this->platformStep() + 1);
@@ -165,14 +165,16 @@ test('a password change needs fresh TOTP changes only its actor and ends their o
     expect($this->asOwner()->table('platform.admin_sessions')->where('id', $foreign)->value('ended_at'))->toBeNull();
     expect($this->asOwner()->table('platform.admin_sessions')->where('id', $p['session_id'])->value('ended_at'))->toBeNull();
     $base['log_id'] = $this->platformId();
-    expect($this->platformCall('admin_change_password', $base)['ok'])->toBeFalse();
+    $base['current_password'] = $base['password'];
+    $base['password'] = 'Another-admin-password-789';
+    expect($this->platformCall('admin_change_password', $base))->toBe(['ok' => false, 'reason' => 'step_up_failed']);
 });
 
 test('step up refuses an empty code a wrong code and a recovery code', function (string $otp) {
     $admin = $this->platformAdmin();
     $session = $this->platformSession($admin);
     $this->asOwner()->table('platform.admin_recovery_codes')->insert(['id' => $this->platformId(), 'admin_user_id' => $admin['id'], 'code_hash' => hash('sha256', 'recovery')]);
-    $p = ['session_id' => $session, 'otp' => $otp, 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId()];
+    $p = ['session_id' => $session, 'current_password' => $admin['password'], 'otp' => $otp, 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId()];
     expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => 'step_up_failed']);
     expect($this->asOwner()->table('platform.admin_log')->where('id', $p['log_id'])->value('succeeded'))->toBeFalse();
 })->with(['', 'wrong-code', 'recovery']);

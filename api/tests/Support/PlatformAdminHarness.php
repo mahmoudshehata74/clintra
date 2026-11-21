@@ -44,8 +44,8 @@ trait PlatformAdminHarness
         $admin = ['id' => $this->platformId(), 'email' => 'b1-'.$this->platformId().'@example.invalid',
             'password' => 'Correct-admin-password-123', 'secret' => '12345678901234567890'];
         $this->asOwner()->insert(<<<'SQL'
-            INSERT INTO platform.admin_users(id,email,name,password_hash,totp_secret)
-            VALUES (?::uuid,?,'Test admin',platform_crypto.crypt(?,platform_crypto.gen_salt('bf',12)),decode(?,'hex'))
+            INSERT INTO platform.admin_users(id,email,name,password_hash,totp_secret,must_change_password)
+            VALUES (?::uuid,?,'Test admin',platform_crypto.crypt(?,platform_crypto.gen_salt('bf',12)),decode(?,'hex'),false)
         SQL, [$admin['id'], $admin['email'], $admin['password'], bin2hex($admin['secret'])]);
         if ($overrides !== []) {
             $this->asOwner()->table('platform.admin_users')->where('id', $admin['id'])->update($overrides);

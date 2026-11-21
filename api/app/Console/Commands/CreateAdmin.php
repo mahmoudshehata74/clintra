@@ -35,8 +35,8 @@ class CreateAdmin extends Command
             $password = bin2hex(random_bytes(16));
             $secret = random_bytes(20);
             $db->insert(<<<'SQL'
-                INSERT INTO platform.admin_users(id,email,name,password_hash,totp_secret)
-                VALUES (?::uuid,?,?,platform_crypto.crypt(?,platform_crypto.gen_salt('bf',12)),decode(?,'hex'))
+                INSERT INTO platform.admin_users(id,email,name,password_hash,totp_secret,must_change_password)
+                VALUES (?::uuid,?,?,platform_crypto.crypt(?,platform_crypto.gen_salt('bf',12)),decode(?,'hex'),true)
             SQL, [$id, $email, $name, $password, bin2hex($secret)]);
             $codes = [];
             for ($i = 0; $i < 10; $i++) {

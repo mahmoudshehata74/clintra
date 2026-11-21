@@ -33,6 +33,7 @@ test('admin create prints one password one TOTP URI ten recovery codes and logs 
         preg_match('/TOTP URI: (otpauth:\/\/[^\s]+)/', $output, $uri);
         expect($password)->toHaveCount(2)->and($uri)->toHaveCount(2);
         $admin = $db->table('platform.admin_users')->where('email', $email)->sole();
+        expect($admin->must_change_password)->toBeTrue();
         expect($db->selectOne('SELECT password_hash=platform_crypto.crypt(?,password_hash) AS matches FROM platform.admin_users WHERE id=?', [$password[1], $admin->id])->matches)->toBeTrue();
         expect($admin->password_hash)->toStartWith('$2a$12$');
         parse_str(parse_url($uri[1], PHP_URL_QUERY), $query);

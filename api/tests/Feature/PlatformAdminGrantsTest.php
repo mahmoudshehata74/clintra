@@ -103,8 +103,8 @@ test('every B1 function has the exact owner security settings and EXECUTE caller
 
 test('the auth role has column-exact grants and all other new roles have no table grants in B1', function () {
     $expected = [
-        'admin_users:SELECT' => ['created_at', 'email', 'id', 'is_active', 'last_login_at', 'last_totp_step', 'name', 'password_hash', 'totp_secret'],
-        'admin_users:UPDATE' => ['last_login_at', 'last_totp_step', 'password_hash'],
+        'admin_users:SELECT' => ['created_at', 'email', 'id', 'is_active', 'last_login_at', 'last_totp_step', 'must_change_password', 'name', 'password_hash', 'totp_secret'],
+        'admin_users:UPDATE' => ['last_login_at', 'last_totp_step', 'must_change_password', 'password_hash'],
         'admin_recovery_codes:SELECT' => ['admin_user_id', 'code_hash', 'id', 'used_at'],
         'admin_recovery_codes:UPDATE' => ['used_at'],
         'admin_sessions:SELECT' => ['admin_user_id', 'created_at', 'ended_at', 'expires_at', 'id', 'ip', 'last_seen_at', 'user_agent'],

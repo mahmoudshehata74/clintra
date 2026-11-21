@@ -108,7 +108,7 @@ return new class extends Migration
                     UPDATE platform.admin_users SET last_login_at=now() WHERE id=v_user.id;
                     INSERT INTO platform.admin_sessions(id,admin_user_id,expires_at,ip,user_agent)
                         VALUES(v_session,v_user.id,now()+interval '8 hours',v_ip,left(p->>'user_agent',400));
-                    RETURN jsonb_build_object('ok',true,'session_id',v_session,'name',v_user.name);
+                    RETURN jsonb_build_object('ok',true,'session_id',v_session,'name',v_user.name,'must_change_password',v_user.must_change_password);
                 EXCEPTION WHEN unique_violation THEN
                     RAISE EXCEPTION 'invalid login identifiers' USING ERRCODE='22023';
                 END;
@@ -117,21 +117,25 @@ return new class extends Migration
                 GRANT EXECUTE ON FUNCTION platform.admin_login(jsonb) TO clintra_admin_app;
 
                 -- Private resolution preserves attribution independently of step-up.
-                CREATE FUNCTION platform.admin_session_state(p_session uuid) RETURNS jsonb
+                CREATE FUNCTION platform.admin_session_state(p_session uuid,p_allow_password_change boolean DEFAULT false) RETURNS jsonb
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
-                DECLARE v_admin uuid;
+                DECLARE v_admin uuid; v_must_change boolean;
                 BEGIN
+                    IF p_allow_password_change IS NULL THEN RAISE EXCEPTION 'missing password-change policy' USING ERRCODE='22023'; END IF;
                     SELECT admin_user_id INTO v_admin FROM platform.admin_sessions WHERE id=p_session;
                     IF v_admin IS NULL THEN RETURN jsonb_build_object('ok',false,'admin_user_id',NULL,'reason','session_invalid'); END IF;
-                    PERFORM 1 FROM platform.admin_users WHERE id=v_admin AND is_active FOR UPDATE;
+                    SELECT must_change_password INTO v_must_change FROM platform.admin_users WHERE id=v_admin AND is_active FOR UPDATE;
                     IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'admin_user_id',NULL,'reason','session_invalid'); END IF;
                     PERFORM 1 FROM platform.admin_sessions WHERE id=p_session AND admin_user_id=v_admin
                         AND ended_at IS NULL AND expires_at>now() AND last_seen_at>now()-interval '30 minutes' FOR UPDATE;
                     IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'admin_user_id',NULL,'reason','session_invalid'); END IF;
+                    IF v_must_change AND NOT p_allow_password_change THEN
+                        RETURN jsonb_build_object('ok',false,'admin_user_id',v_admin,'reason','password_change_required');
+                    END IF;
                     RETURN jsonb_build_object('ok',true,'admin_user_id',v_admin);
                 END;
                 $$;
-                REVOKE EXECUTE ON FUNCTION platform.admin_session_state(uuid) FROM PUBLIC;
+                REVOKE EXECUTE ON FUNCTION platform.admin_session_state(uuid,boolean) FROM PUBLIC;
 
                 CREATE FUNCTION platform.admin_step_up(p_admin uuid,p_otp text) RETURNS jsonb
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
@@ -167,7 +171,7 @@ return new class extends Migration
                 DECLARE v_state jsonb;
                 BEGIN
                     IF p_require_otp IS NULL THEN RAISE EXCEPTION 'missing step-up requirement' USING ERRCODE='22023'; END IF;
-                    v_state:=platform.admin_session_state(p_session);
+                    v_state:=platform.admin_session_state(p_session,false);
                     IF NOT (v_state->>'ok')::boolean THEN RETURN v_state; END IF;
                     IF p_require_otp THEN
                         v_state:=platform.admin_step_up((v_state->>'admin_user_id')::uuid,p_otp);
@@ -185,7 +189,7 @@ return new class extends Migration
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
                 DECLARE v_admin uuid; v_ip inet; v_agent text; v_state jsonb; v_reason text;
                 BEGIN
-                    v_state:=platform.admin_session_state(p_session);
+                    v_state:=platform.admin_session_state(p_session,true);
                     v_admin:=(v_state->>'admin_user_id')::uuid; v_reason:=v_state->>'reason';
                     IF (v_state->>'ok')::boolean THEN
                         UPDATE platform.admin_sessions SET ended_at=now() WHERE id=p_session RETURNING ip,user_agent INTO v_ip,v_agent;
@@ -199,30 +203,36 @@ return new class extends Migration
                 REVOKE EXECUTE ON FUNCTION platform.admin_logout(uuid) FROM PUBLIC;
                 GRANT EXECUTE ON FUNCTION platform.admin_logout(uuid) TO clintra_admin_app;
 
-                -- p: {session_id,otp,password,log_id}; password is the new password.
+                -- p: {session_id,current_password,otp,password,log_id}; password is the new password.
                 CREATE FUNCTION platform.admin_change_password(p jsonb) RETURNS jsonb
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
-                DECLARE v_admin uuid; v_session uuid; v_log uuid; v_ip inet; v_agent text; v_state jsonb; v_reason text; v_ended boolean:=false;
+                DECLARE v_admin uuid; v_session uuid; v_log uuid; v_ip inet; v_agent text; v_state jsonb; v_reason text; v_hash text; v_ended boolean:=false;
                 BEGIN
                     IF p IS NULL OR jsonb_typeof(p)<>'object' THEN RAISE EXCEPTION 'invalid password payload' USING ERRCODE='22023'; END IF;
-                    IF NOT p ?& ARRAY['session_id','otp','password','log_id']
-                        OR EXISTS(SELECT 1 FROM jsonb_object_keys(p) k WHERE k NOT IN ('session_id','otp','password','log_id'))
+                    IF NOT p ?& ARRAY['session_id','current_password','otp','password','log_id']
+                        OR EXISTS(SELECT 1 FROM jsonb_object_keys(p) k WHERE k NOT IN ('session_id','current_password','otp','password','log_id'))
                         OR jsonb_typeof(p->'session_id')<>'string' OR jsonb_typeof(p->'log_id')<>'string'
+                        OR jsonb_typeof(p->'current_password')<>'string' OR octet_length(p->>'current_password')>72
                         OR jsonb_typeof(p->'otp')<>'string' OR length(p->>'otp')>128
                         OR jsonb_typeof(p->'password')<>'string' OR octet_length(p->>'password') NOT BETWEEN 12 AND 72 THEN
                         RAISE EXCEPTION 'invalid password payload' USING ERRCODE='22023';
                     END IF;
                     BEGIN v_session:=(p->>'session_id')::uuid; v_log:=(p->>'log_id')::uuid;
                     EXCEPTION WHEN invalid_text_representation THEN RAISE EXCEPTION 'invalid password identifiers' USING ERRCODE='22023'; END;
-                    v_state:=platform.admin_session_state(v_session);
+                    v_state:=platform.admin_session_state(v_session,true);
                     v_admin:=(v_state->>'admin_user_id')::uuid; v_reason:=v_state->>'reason';
                     IF (v_state->>'ok')::boolean THEN
                         SELECT ip,user_agent INTO v_ip,v_agent FROM platform.admin_sessions WHERE id=v_session;
-                        v_state:=platform.admin_step_up(v_admin,p->>'otp');
-                        v_reason:=v_state->>'reason'; v_ended:=coalesce((v_state->>'all_sessions_ended')::boolean,false);
+                        SELECT password_hash INTO v_hash FROM platform.admin_users WHERE id=v_admin;
+                        IF platform_crypto.crypt(p->>'current_password',v_hash)<>v_hash OR p->>'password'=p->>'current_password' THEN
+                            v_reason:='bad_credentials';
+                        ELSE
+                            v_state:=platform.admin_step_up(v_admin,p->>'otp');
+                            v_reason:=v_state->>'reason'; v_ended:=coalesce((v_state->>'all_sessions_ended')::boolean,false);
+                        END IF;
                     END IF;
                     IF v_reason IS NULL THEN
-                        UPDATE platform.admin_users SET password_hash=platform_crypto.crypt(p->>'password',platform_crypto.gen_salt('bf',12)) WHERE id=v_admin;
+                        UPDATE platform.admin_users SET password_hash=platform_crypto.crypt(p->>'password',platform_crypto.gen_salt('bf',12)),must_change_password=false WHERE id=v_admin;
                         UPDATE platform.admin_sessions SET ended_at=now() WHERE admin_user_id=v_admin AND id<>v_session AND ended_at IS NULL;
                         UPDATE platform.admin_sessions SET last_seen_at=now() WHERE id=v_session;
                     END IF;
@@ -305,7 +315,7 @@ return new class extends Migration
             DROP FUNCTION platform.admin_logout(uuid);
             DROP FUNCTION platform.admin_session_actor(uuid,text,boolean);
             DROP FUNCTION platform.admin_step_up(uuid,text);
-            DROP FUNCTION platform.admin_session_state(uuid);
+            DROP FUNCTION platform.admin_session_state(uuid,boolean);
             DROP FUNCTION platform.admin_login(jsonb);
             DROP FUNCTION platform.admin_log_write(uuid,uuid,text,uuid,uuid,boolean,text,jsonb,inet,text);
             DROP FUNCTION platform.totp_at(bytea,bigint);

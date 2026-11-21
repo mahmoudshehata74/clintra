@@ -49,6 +49,7 @@ return new class extends Migration
                 email varchar(254) NOT NULL UNIQUE CHECK (email = lower(email)),
                 name varchar(120) NOT NULL,
                 password_hash text NOT NULL,
+                must_change_password boolean NOT NULL DEFAULT true,
                 totp_secret bytea NOT NULL,
                 last_totp_step bigint NULL,
                 is_active boolean NOT NULL DEFAULT true,
