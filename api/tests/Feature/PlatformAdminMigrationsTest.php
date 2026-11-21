@@ -18,6 +18,6 @@ test('the platform migration refuses a replay over an installed schema instead o
         DB::setDefaultConnection($previous);
     }
     expect($owner->table('platform.admin_log')->count())->toBe($before);
-    expect($owner->selectOne("SELECT count(*) AS n FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='platform'")->n)->toBe(11);
+    expect($owner->selectOne("SELECT count(*) AS n FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='platform'")->n)->toBe(13);
     expect($owner->selectOne("SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace WHERE e.extname='pgcrypto'")->nspname)->toBe('platform_crypto');
 });

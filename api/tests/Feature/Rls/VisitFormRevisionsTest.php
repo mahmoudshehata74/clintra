@@ -603,6 +603,13 @@ test('a late autosave of a completed visit\'s form, a delete, and a create with 
 
 test('before the guard\'s migration a late autosave is still accepted; with it, it is correction_required', function () {
     $guard = require database_path('migrations/2026_09_12_000041_add_visit_form_data_completed_guard.php');
+    // A historical migration predates platform ACL hardening. Its replay
+    // must restore the installed ACL as well as the trigger it recreates.
+    $aclSql = "SELECT CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE quote_ident(r.rolname) END AS role, a.is_grantable
+        FROM pg_proc p, LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
+        LEFT JOIN pg_roles r ON r.oid=a.grantee
+        WHERE p.oid='visit_form_data_completed_guard()'::regprocedure ORDER BY role";
+    $acl = $this->asOwner()->select($aclSql);
     // The migration runs as clintra_owner, as migrate does (CarePlansTest's pattern).
     $asOwner = function (Closure $step) {
         $previousDefault = DB::getDefaultConnection();
@@ -614,7 +621,7 @@ test('before the guard\'s migration a late autosave is still accepted; with it, 
         }
     };
 
-    withCorrectionFixture(function (array $fixture) use ($guard, $asOwner) {
+    withCorrectionFixture(function (array $fixture) use ($guard, $asOwner, $acl, $aclSql) {
         $late = fn (int $baseRev, array $data) => ['op_id' => (string) Str::uuid(), 'entity' => 'visit_form_data', 'entity_id' => $fixture['formId'],
             'action' => 'update', 'payload' => ['data' => $data], 'created_at' => now()->toIso8601String(), 'base_rev' => $baseRev];
 
@@ -622,8 +629,16 @@ test('before the guard\'s migration a late autosave is still accepted; with it, 
         try {
             pushOps($fixture['credential']['token'], [$late(1, CORRECTED_FORM)])->assertJson(['results' => [['status' => 'accepted', 'rev' => 2]]]);
         } finally {
-            $asOwner(fn () => $guard->up());
+            $asOwner(function () use ($guard, $acl) {
+                $guard->up();
+                DB::statement('REVOKE EXECUTE ON FUNCTION visit_form_data_completed_guard() FROM PUBLIC');
+                foreach ($acl as $grant) {
+                    DB::statement('GRANT EXECUTE ON FUNCTION visit_form_data_completed_guard() TO '.$grant->role.($grant->is_grantable ? ' WITH GRANT OPTION' : ''));
+                }
+            });
         }
+
+        expect($this->asOwner()->select($aclSql))->toEqual($acl);
 
         pushOps($fixture['credential']['token'], [$late(2, STORED_FORM)])->assertJson(['results' => [['status' => 'rejected', 'reason' => 'correction_required']]]);
         expect(storedForm($fixture['formId']))->toBe(['data' => CORRECTED_FORM, 'rev' => 2]);

@@ -4,7 +4,7 @@ import type { AuditLog, RemoteAuditLog } from "../db/types";
 import { AUDIT_SCOPE_PARENT_FIELD, auditScopeParentId, auditScopeTags, type AuditScopeParent } from "../domain/auditScope";
 import { addDaysToClinicDay, cairoInstant, todayInCairo } from "../domain/time";
 import { prepareIdentityAudit } from "./sealer";
-import { SyncAuthError, type AuditTransport, type WireAuditRow } from "./transport";
+import { SyncAuthError, SyncOrganizationSuspendedError, type AuditTransport, type WireAuditRow } from "./transport";
 
 /** Rows per POST /api/audit/push, the server's limit. */
 export const AUDIT_PUSH_BATCH = 200;
@@ -16,7 +16,7 @@ export const REMOTE_AUDIT_RETENTION_DAYS = 60;
 const SECRET_MEMBERSHIP_FIELDS = ["pin_hash", "pin_salt"] as const;
 
 /** How an audit pass ended, for the engine's transport health. */
-export type AuditSyncOutcome = "done" | "unauthenticated" | "unreachable";
+export type AuditSyncOutcome = "done" | "unauthenticated" | "unreachable" | "suspended";
 
 function withoutSecrets(entity: string, record: unknown): unknown {
   if (entity !== "memberships" || record === null || typeof record !== "object") {
@@ -79,6 +79,7 @@ export function toWireAuditRow(row: AuditLog, parents: ReadonlyMap<string, Audit
 }
 
 function outcomeOf(error: unknown): AuditSyncOutcome {
+  if (error instanceof SyncOrganizationSuspendedError) return "suspended";
   return error instanceof SyncAuthError ? "unauthenticated" : "unreachable";
 }
 

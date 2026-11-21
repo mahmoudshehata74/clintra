@@ -38,6 +38,7 @@ web/e2e/bug-hunt/
 web/e2e/rx-shots/
 web/e2e/identity-shots/
 web/e2e/copy-shots/
+web/e2e/admin-shots/
 
 # local working files
 /local/

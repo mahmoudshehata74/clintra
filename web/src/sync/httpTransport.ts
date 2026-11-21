@@ -2,9 +2,11 @@ import { getApiBaseUrl } from "../config/apiBaseUrl";
 import { identityClock } from "../auth/identityClient";
 import { requestProof } from "../auth/proof";
 import { remoteAuditRowOf } from "../db/auditEntries";
+import { setOrganizationSuspended } from "./organizationSuspension";
 import type { RemoteAuditLog, SyncOp } from "../db/types";
 import {
   SyncAuthError,
+  SyncOrganizationSuspendedError,
   type AuditTransport,
   type PullAuditResult,
   type PullSinceResult,
@@ -194,6 +196,13 @@ export class HttpTransport implements SyncTransport, AuditTransport {
     if (response.status === 401) {
       throw new SyncAuthError();
     }
+    if (response.status === 403) {
+      const body = await response.json().catch(() => null) as { error?: string } | null;
+      if (body?.error === "org_disabled") {
+        setOrganizationSuspended(true);
+        throw new SyncOrganizationSuspendedError();
+      }
+    }
     if (!response.ok) {
       // Never the response body: api/docs/rls.md's "no response body
       // contains a SQLSTATE, query text, or any internal detail" is a
@@ -203,6 +212,7 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       throw new Error(`sync_transport_http_error:${response.status}`);
     }
 
+    if (path.startsWith("/sync/pull") || path.startsWith("/sync/bootstrap")) setOrganizationSuspended(false);
     return response.json();
   }
 }

@@ -11,6 +11,8 @@ import { backOffGroup, GROUP_REJECTED_REASON, recordRefusedGroup } from "./syncG
 import { CorrectionReason, settleRefusedLateEdit } from "./correctionReview";
 import { pruneRemoteAuditRows, runAuditPull, runAuditPush, type AuditSyncOutcome } from "./auditSync";
 import { hasAuditEndpoints, SyncAuthError, type PulledChange, type PullSinceResult, type SyncTransport } from "./transport";
+import { SyncOrganizationSuspendedError } from "./transport";
+import { isOrganizationSuspended, setOrganizationSuspended } from "./organizationSuspension";
 
 const DEFAULT_INTERVAL_MS = 10_000;
 
@@ -187,6 +189,10 @@ export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport
     results = await transport.pushOps(sealed);
     recordTransportSuccess();
   } catch (error) {
+    if (error instanceof SyncOrganizationSuspendedError) {
+      setOrganizationSuspended(true);
+      return;
+    }
     if (error instanceof SyncAuthError) {
       notifySyncAuthError();
       return;
@@ -423,8 +429,13 @@ async function runBootstrapWindow(db: ClintraDatabase, transport: SyncTransport,
     let result;
     try {
       result = await transport.pullBootstrap(cursor);
+      setOrganizationSuspended(false);
       recordTransportSuccess();
     } catch (error) {
+      if (error instanceof SyncOrganizationSuspendedError) {
+        setOrganizationSuspended(true);
+        return;
+      }
       if (error instanceof SyncAuthError) {
         notifySyncAuthError();
       } else {
@@ -474,6 +485,7 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
 
   if (device.pull_cursor === null) {
     await runBootstrapWindow(db, transport, deviceId);
+    if (isOrganizationSuspended()) return;
   }
 
   let cursor = device.pull_cursor;
@@ -483,8 +495,13 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
     let result;
     try {
       result = await transport.pullSince(cursor);
+      setOrganizationSuspended(false);
       recordTransportSuccess();
     } catch (error) {
+      if (error instanceof SyncOrganizationSuspendedError) {
+        setOrganizationSuspended(true);
+        return;
+      }
       if (error instanceof SyncAuthError) {
         notifySyncAuthError();
         return;
@@ -508,7 +525,9 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
 
 /** Feeds an audit pass's outcome into the same transport health the entity sync reports. */
 function recordAuditOutcome(outcome: AuditSyncOutcome): void {
-  if (outcome === "unauthenticated") {
+  if (outcome === "suspended") {
+    setOrganizationSuspended(true);
+  } else if (outcome === "unauthenticated") {
     notifySyncAuthError();
   } else if (outcome === "unreachable") {
     recordTransportFailure();
@@ -580,6 +599,7 @@ export function startSyncEngine(
   let isRunning = false;
   let hasPrunedAudit = false;
   let timerId: ReturnType<typeof setInterval> | null = null;
+  let lastSuspendedCheck = Date.now();
 
   // Once per start: pulled audit rows past the 60-day window go.
   async function pruneAuditOnce(): Promise<void> {
@@ -589,21 +609,33 @@ export function startSyncEngine(
     }
   }
 
+  async function cycle() {
+    if (isOrganizationSuspended()) {
+      lastSuspendedCheck = Date.now();
+      await runPullCycle(db, transport);
+      if (isOrganizationSuspended()) return;
+    }
+    await runSyncCycle(db, transport);
+    if (isOrganizationSuspended()) return;
+    await pruneAuditOnce();
+    await runPullCycle(db, transport);
+    if (!isOrganizationSuspended()) await runAuditCycle(db, transport);
+  }
+
   function runGuarded() {
-    if (isRunning || !deviceReadiness.isReady()) {
+    if (isRunning || !deviceReadiness.isReady()
+      || (isOrganizationSuspended() && Date.now() - lastSuspendedCheck < 15 * 60_000)) {
       return;
     }
     isRunning = true;
     // Entity ops go up before audit rows, so the server holds the entities
     // first; each pull follows its push.
-    runSyncCycle(db, transport)
-      .then(() => pruneAuditOnce())
-      .then(() => runPullCycle(db, transport))
-      .then(() => runAuditCycle(db, transport))
+    cycle()
       .catch((error: unknown) => {
         console.error(error);
       })
       .finally(() => {
+        if (isOrganizationSuspended()) lastSuspendedCheck = Date.now();
         isRunning = false;
       });
   }
@@ -629,11 +661,17 @@ export function startSyncEngine(
     }
   }
 
+  function handleOnline() {
+    lastSuspendedCheck = -Infinity;
+    runGuarded();
+  }
+
   const hasDom = typeof document !== "undefined" && typeof window !== "undefined";
 
   if (hasDom) {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener(MUTATION_EVENT_NAME, runGuarded);
+    window.addEventListener("online", handleOnline);
   }
   const unsubscribeDeviceReady = deviceReadiness.subscribe(runGuarded);
 
@@ -648,6 +686,7 @@ export function startSyncEngine(
       if (hasDom) {
         document.removeEventListener("visibilitychange", handleVisibilityChange);
         window.removeEventListener(MUTATION_EVENT_NAME, runGuarded);
+        window.removeEventListener("online", handleOnline);
       }
       unsubscribeDeviceReady();
       stopTimer();

@@ -107,6 +107,10 @@ do {
 } while ($grew);
 
 // Delete, retrying any table still referenced until a pass deletes nothing more.
+// Organization actions and their FK are immutable; keep only the bare
+// organization when admin history references it. Clinical fixtures still go.
+$retained = DB::connection('pgsql_owner')->table('platform.admin_log')->whereIn('org_id', $orgIds)->pluck('org_id')->all();
+$rows['organizations'] = array_values(array_filter($rows['organizations'], fn ($row) => ! in_array($row['id'], $retained, true)));
 $remaining = array_filter($rows);
 for ($pass = 0; $remaining !== [] && $pass < 20; $pass++) {
     foreach ($remaining as $table => $tableRows) {

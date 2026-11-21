@@ -1,7 +1,7 @@
 # Design: platform admin panel, organization disable, figures and support access
 
-Status: B1 is implemented for review in PR #69. The remaining phases are
-plans, to be reviewed before their migrations are written.
+Status: B1 is merged in PR #69. B2 organization disable/enable is implemented
+for review. The remaining phases are plans, to be reviewed before their migrations are written.
 
 ## 1. Goal
 
@@ -81,8 +81,10 @@ role that holds exactly what that action touches, which first resolves the
 admin from the session (`platform.admin_session_actor`), then acts, then
 writes one `platform.admin_log` row in the same transaction. A refusal is
 returned as `{ok: false, reason}` — not raised — so its log row commits
-too; only a malformed payload raises (`22023`), and the panel then logs the
-refusal itself through `platform.admin_log_refusal`. The CLI commands stay
+too. B2 and every later action function return logged validation refusals
+without raising, preserving the log and any session termination. B1 auth
+payload validation may raise (`22023`); the panel records that through
+`platform.admin_log_refusal`. The CLI commands stay
 as break-glass and log through `platform.admin_log_cli` with no admin user.
 
 ### 4.3 Disabling an organization
@@ -97,6 +99,8 @@ deleted or revoked. While disabled:
 | `POST /api/devices/register` | the generic failure for every credential problem, as today; only once the code and phone **are** valid, `403 org_disabled` with the same body, and the code is not consumed |
 | `POST /api/auth/owner-recovery` (identity design) | the same rule as registration |
 | The database | `current_org()` returns null for a member of a disabled organization, so every policy reads zero rows: a request that slipped past the middleware writes and reads nothing |
+
+The specific owner-recovery row takes precedence over the token-protected auth wildcard: invalid recovery credentials keep the existing generic failure and rate limits; only valid credentials reveal `org_disabled`, without consuming the code.
 
 On the device: the sync engine stops on `org_disabled` (no retry loop; one
 quiet check every 15 minutes, and on reconnect), and every screen shows a
@@ -285,7 +289,7 @@ CREATE TABLE platform.admin_log (
   action text NOT NULL CHECK (action IN (
     'admin.login', 'admin.logout', 'admin.password_change', 'figures.view', 'org.provision',
     'code.mint_request', 'code.mint_approve', 'device.revoke', 'org.disable', 'org.enable',
-    'support.open', 'cli.provision', 'cli.mint', 'cli.revoke', 'cli.admin_create')),
+    'support.open', 'cli.provision', 'cli.mint', 'cli.revoke', 'cli.admin_create', 'cli.org_disable', 'cli.org_enable')),
   org_id uuid NULL REFERENCES organizations(id) ON DELETE RESTRICT,
   target_id uuid NULL,
   succeeded boolean NOT NULL,
@@ -341,7 +345,8 @@ CREATE TRIGGER admin_log_no_truncate BEFORE TRUNCATE ON platform.admin_log
 ALTER TABLE organizations ADD COLUMN disabled_at timestamptz NULL;
 ALTER TABLE organizations ADD COLUMN disabled_reason varchar(200) NULL;
 ALTER TABLE organizations ADD CONSTRAINT organizations_disabled_reason
-  CHECK ((disabled_at IS NULL) = (disabled_reason IS NULL));
+  CHECK (((disabled_at IS NULL) = (disabled_reason IS NULL))
+    AND (disabled_reason IS NULL OR char_length(disabled_reason) BETWEEN 1 AND 200));
 
 ALTER TABLE device ADD COLUMN kind text NOT NULL DEFAULT 'clinic' CHECK (kind IN ('clinic', 'support'));
 ALTER TABLE device ADD COLUMN expires_at timestamptz NULL;
@@ -434,6 +439,8 @@ GRANT SELECT (tokenable_type, tokenable_id), DELETE ON personal_access_tokens TO
 -- disable and enable
 GRANT SELECT (id, disabled_at) ON organizations TO clintra_admin_org;
 GRANT UPDATE (disabled_at, disabled_reason) ON organizations TO clintra_admin_org;
+-- Credential-first owner recovery must check suspension under its own narrow role.
+GRANT SELECT (disabled_at) ON organizations TO clintra_auth;
 
 -- figures: exactly the columns the counts read, nothing identifying
 GRANT SELECT (id, name, disabled_at) ON organizations TO clintra_admin_stats;
@@ -488,11 +495,12 @@ FROM PUBLIC` after each. Owners and callers:
 | `platform.admin_step_up(uuid, text)` | `clintra_admin_auth` | `clintra_admin_auth` only (private TOTP check and session termination) |
 | `platform.admin_log_write(uuid, uuid, text, uuid, uuid, boolean, text, jsonb, inet, text)` | `clintra_admin_auth` | the six action roles |
 | `platform.admin_log_refusal(jsonb)` | `clintra_admin_auth` | `clintra_admin_app` (records only `succeeded = false` rows naming the session's admin) |
-| `platform.admin_log_cli(jsonb)` | `clintra_admin_auth` | `clintra_owner` |
+| `platform.admin_log_cli(jsonb)` | `clintra_admin_auth` | `clintra_owner`, `clintra_admin_org` (break-glass wrapper only) |
 | `platform.admin_provision_organization(uuid, text, jsonb, uuid)` | `clintra_admin_provision` | `clintra_admin_app` |
 | `platform.admin_request_code(uuid, text, jsonb, uuid)` / `platform.admin_approve_code(uuid, text, uuid, text, uuid)` | `clintra_admin_mint` | `clintra_admin_app` |
 | `platform.admin_revoke_device(uuid, text, uuid, uuid)` | `clintra_admin_device` | `clintra_admin_app` |
 | `platform.admin_set_org_disabled(uuid, text, uuid, boolean, text, uuid)` | `clintra_admin_org` | `clintra_admin_app` |
+| `platform.cli_set_org_disabled(uuid, boolean, text, uuid, text)` | `clintra_admin_org` | `clintra_owner` |
 | `platform.admin_org_figures(uuid, date, date, uuid)` | `clintra_admin_stats` | `clintra_admin_app` |
 | `platform.admin_open_support_session(uuid, text, jsonb, uuid)` | `clintra_admin_support` | `clintra_admin_app` |
 | `mint_support_code(jsonb)` | `clintra_support` | `clintra_app` |
@@ -506,35 +514,44 @@ The six action roles must check `ok` before acting and write exactly one
 log using the returned actor and reason in the same transaction. The
 private resolver and TOTP helper are callable only by `clintra_admin_auth`.
 Only password change and logout ask the private resolver to allow the
-initial-password state. The examples below show the later action contract.
+initial-password state. B2 resolves the actor and step-up first, then the organization. Existing-org
+refusals set `admin_log.org_id`; unknown IDs return `not_found` with `org_id`
+null and the requested UUID in `target_id`, preserving the FK. Failed step-ups
+for unknown IDs still consume the shared failure budget. The CLI follows the
+same not-found log shape with a null admin and host user in detail. Both entry
+points return refusals without raising. The complete B2 SQL, grants, and rollback
+are in migration 000057; the organization action below matches it. The other examples show later action contracts.
 
 ```sql
 CREATE FUNCTION platform.admin_set_org_disabled(p_session uuid, p_otp text, p_org uuid, p_disabled boolean,
                                                 p_reason text, p_log_id uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
 DECLARE
-  v_state jsonb := platform.admin_session_actor(p_session, p_otp, true);
-  v_admin uuid := (v_state->>'admin_user_id')::uuid;
-  v_action text := CASE WHEN p_disabled THEN 'org.disable' ELSE 'org.enable' END;
-  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+    v_state jsonb := platform.admin_session_actor(p_session,p_otp,true);
+    v_admin uuid := (v_state->>'admin_user_id')::uuid;
+    v_org uuid;
+    v_action text := CASE WHEN p_disabled IS FALSE THEN 'org.enable' ELSE 'org.disable' END;
+    v_reason text := nullif(btrim(p_reason),'');
+    v_refusal text := v_state->>'reason';
 BEGIN
-  IF NOT (v_state->>'ok')::boolean OR (p_disabled AND (v_reason IS NULL OR char_length(v_reason) > 200)) THEN
-    PERFORM platform.admin_log_write(p_log_id, v_admin, v_action, NULL, p_org, false,
-                                     coalesce(v_state->>'reason', 'reason_required'), v_state);
-    RETURN jsonb_build_object('ok', false, 'reason', coalesce(v_state->>'reason', 'reason_required'));
-  END IF;
-  PERFORM pg_advisory_xact_lock(hashtextextended('sync_seq:' || p_org::text, 0));
-  UPDATE organizations
-     SET disabled_at = CASE WHEN p_disabled THEN now() END,
-         disabled_reason = CASE WHEN p_disabled THEN v_reason END
-   WHERE id = p_org AND (disabled_at IS NULL) = p_disabled;
-  IF NOT FOUND THEN
-    PERFORM platform.admin_log_write(p_log_id, v_admin, v_action, NULL, p_org, false, 'unchanged', '{}');
-    RETURN jsonb_build_object('ok', false, 'reason', 'unchanged');
-  END IF;
-  PERFORM platform.admin_log_write(p_log_id, v_admin, v_action, p_org, p_org, true, NULL,
-                                   jsonb_build_object('reason', v_reason));
-  RETURN jsonb_build_object('ok', true);
+    -- Resolve and step up before looking up even a guessed organization ID.
+    SELECT id INTO v_org FROM organizations WHERE id=p_org;
+    IF v_refusal IS NULL THEN
+        IF v_org IS NULL THEN v_refusal := 'not_found';
+        ELSIF p_disabled IS NULL THEN v_refusal := 'invalid_payload';
+        ELSIF p_disabled AND (v_reason IS NULL OR char_length(v_reason)>200) THEN v_refusal := 'reason_required';
+        ELSE
+            PERFORM pg_advisory_xact_lock(hashtextextended('sync_seq:' || p_org::text,0));
+            UPDATE organizations SET disabled_at=CASE WHEN p_disabled THEN now() END,
+                disabled_reason=CASE WHEN p_disabled THEN v_reason END
+            WHERE id=p_org AND (disabled_at IS NULL)=p_disabled;
+            IF NOT FOUND THEN v_refusal := 'unchanged'; END IF;
+        END IF;
+    END IF;
+    PERFORM platform.admin_log_write(coalesce(p_log_id,gen_random_uuid()),v_admin,v_action,v_org,p_org,
+        v_refusal IS NULL,v_refusal,v_state || jsonb_build_object('reason',v_reason));
+    IF v_refusal IS NOT NULL THEN RETURN jsonb_build_object('ok',false,'reason',v_refusal); END IF;
+    RETURN jsonb_build_object('ok',true);
 END;
 $$;
 

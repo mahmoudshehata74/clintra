@@ -198,6 +198,7 @@ class AuthController extends Controller
 
         try {
             $result = AuthCall::run('auth_recover_owner', [
+                ...($request->attributes->get('organization_disabled') ? ['check_only' => true] : []),
                 'code_hash' => $codeHash,
                 'phone' => $phone,
                 'username' => $username,
@@ -206,6 +207,9 @@ class AuthController extends Controller
                 'audit_id' => (string) Str::uuid(),
             ]);
         } catch (AuthCallFailed $e) {
+            if ($e->sqlState === 'CL403') {
+                return \App\Support\OrganizationSuspension::response();
+            }
             if ($e->sqlState === '23505') {
                 return Username::taken();
             }

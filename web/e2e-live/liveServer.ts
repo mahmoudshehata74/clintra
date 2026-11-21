@@ -152,6 +152,10 @@ export async function mintCode(org: LiveOrg, purpose: "device" | "owner-recovery
   return code;
 }
 
+export async function setOrganizationSuspended(org: LiveOrg, disabled: boolean): Promise<void> {
+  await artisan(["clintra:organization-status", org.orgId, disabled ? "disabled" : "enabled", "--reason", "Live test"]);
+}
+
 /**
  * Removes live-run organizations, and everything hanging off them, from
  * clintra_test (removeLiveOrgs.php, through the local fixtures role): the
