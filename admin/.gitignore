@@ -1,0 +1,14 @@
+/vendor/
+/.env
+/.env.*
+!/.env.example
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+/public/css/filament/
+/public/js/filament/
+/public/fonts/filament/
+/public/fonts/ibm-plex-sans-arabic*/
+/.phpunit.cache/
+
+# Generated dependency lock stays local under the standing repository rule.
+/composer.lock

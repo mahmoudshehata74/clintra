@@ -1,0 +1,8 @@
+{
+  "name": "clintra-admin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:e2e": "pnpm --dir ../web exec playwright test --config ../admin/playwright.config.ts --retries=0"
+  }
+}
