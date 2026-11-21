@@ -19,12 +19,12 @@ export const SLOT_TAKEN_REASON = "conflict_slot_taken";
 const ENTITY_LABELS: Record<string, string> = {
   care_plan_items: "جلسة في خطة رعاية",
   care_plans: "خطة رعاية",
-  cash_close: "إغلاق اليوم",
+  cash_close: "إقفال اليوم",
   day_state: "حالة اليوم",
   invoice_items: "بند في فاتورة",
   invoices: "فاتورة",
   membership_locations: "فرع موظف",
-  membership_practitioners: "دكتور تابع لموظف",
+  membership_practitioners: "طبيب تابع لموظف",
   memberships: "موظف",
   message_templates: "قالب رسالة",
   messages: "رسالة",
@@ -74,7 +74,7 @@ const REASON_LABELS: Record<string, string> = {
   // Clinical corrections (docs/design-clinical-corrections.md section 7).
   correction_required:
     "الزيارة دي اتقفلت قبل ما التعديل ده يوصل، والتعديل بعد القفل محتاج سبب. افتح الزيارة واعمل «تعديل»",
-  correction_not_allowed: "تعديل الزيارة بعد ما تتقفل لدكتور الزيارة أو صاحب العيادة بس",
+  correction_not_allowed: "تعديل الزيارة بعد ما تتقفل لطبيب الزيارة أو صاحب العيادة بس",
   correction_invalid: "التعديل ده مش مطابق لآخر نسخة من نموذج الزيارة، أو معاه تغييرات تانية، فماتحفظش",
   revision_immutable: "سجل التعديلات مينفعش يتغيّر أو يتمسح",
   // Per-person identity (docs/design-identity-permissions.md section 4):

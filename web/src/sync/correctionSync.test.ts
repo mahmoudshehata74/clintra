@@ -195,7 +195,7 @@ describe("a correction another device's correction beat to the server", () => {
   });
 
   it.each([
-    ["correction_not_allowed", "تعديل نموذج زيارة — تعديل الزيارة بعد ما تتقفل لدكتور الزيارة أو صاحب العيادة بس"],
+    ["correction_not_allowed", "تعديل نموذج زيارة — تعديل الزيارة بعد ما تتقفل لطبيب الزيارة أو صاحب العيادة بس"],
     ["correction_invalid", "تعديل نموذج زيارة — التعديل ده مش مطابق لآخر نسخة من نموذج الزيارة، أو معاه تغييرات تانية، فماتحفظش"],
   ])("reads %s as its own line", async (reason, line) => {
     const visit = await completedVisitWithSyncedForm();

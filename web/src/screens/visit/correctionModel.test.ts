@@ -67,7 +67,7 @@ describe("correctionHistoryLabel", () => {
 
 describe("correctionErrorMessage", () => {
   it("maps every refusal the doctor can meet, and anything else to a retry line", () => {
-    expect(correctionErrorMessage(new Error(CorrectionError.NotAllowed))).toBe("تعديل الزيارة بعد ما تتقفل لدكتور الزيارة أو صاحب العيادة بس");
+    expect(correctionErrorMessage(new Error(CorrectionError.NotAllowed))).toBe("تعديل الزيارة بعد ما تتقفل لطبيب الزيارة أو صاحب العيادة بس");
     expect(correctionErrorMessage(new Error(CorrectionError.ReasonRequired))).toBe("اكتب سبب التعديل (3 حروف على الأقل)");
     expect(correctionErrorMessage(new Error(CorrectionError.ReasonTooLong))).toBe("السبب طويل، خليه 500 حرف أو أقل");
     expect(correctionErrorMessage(new Error(CorrectionError.Unchanged))).toBe("مفيش تغيير عن النسخة الحالية");

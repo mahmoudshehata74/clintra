@@ -216,7 +216,7 @@ export const dayScreenStrings = {
   // A visit left outside the doctor's hours by a schedule exception (a
   // closed date, or new hours for the date): kept, never cancelled.
   outsideHoursRowBadge: "خارج مواعيد العمل",
-  dayClosedByException: "اليوم ده إجازة للدكتور",
+  dayClosedByException: "اليوم ده إجازة للطبيب",
   // A closure's optional reason, after the closed-day line on the day
   // screen and tomorrow's sheet and under the closure in settings, e.g.
   // "السبب: سفر".
@@ -365,11 +365,11 @@ export const dayScreenStrings = {
   // The day header's cash-close action and its sheet (prototype #s7: `.c-head`,
   // `.close-summary`, `.close-grid`, `.close-cell`, `.match`, `.diff`, `.field`,
   // `.runrow`).
-  cashCloseButtonLabel: "إغلاق الصندوق",
+  cashCloseButtonLabel: "إقفال الصندوق",
   // `.c-head .badge` and `.sub` ("6:12 م · قبل ما تسيبي الاستقبال").
   cashCloseHeadBadge: "آخر اليوم",
   cashCloseHeadSubtitleSuffix: "قبل ما تسيبي الاستقبال",
-  cashCloseSheetTitle: "إغلاق الصندوق",
+  cashCloseSheetTitle: "إقفال الصندوق",
   // `.c-head h3`'s own prefix, combined with displayDate.ts's
   // formatWeekdayDayMonth(date) — e.g. "إقفال يوم الاثنين 7 سبتمبر".
   cashCloseHeadTitlePrefix: "إقفال يوم",
@@ -377,7 +377,7 @@ export const dayScreenStrings = {
   cashCloseSummaryHeading: "ملخّص اليوم",
   // `.close-grid`'s four cells.
   cashCloseExpectedLabel: "إجمالي المتوقع",
-  cashCloseGridCollectedLabel: "المحصّل نقدي",
+  cashCloseGridCollectedLabel: "المحصّل كاش",
   cashCloseGridInvoicesLabel: "فاتورة",
   cashCloseGridInvoicesUnit: "مدفوعة",
   cashCloseActualCashFieldLabel: "الكاش الفعلي في الدرج",
@@ -497,7 +497,7 @@ export const dayScreenStrings = {
   daySheetEmpty: "مفيش حجوزات للغد",
   // Above the list when tomorrow is closed for the doctor (a schedule
   // exception), followed by its reason when it has one.
-  daySheetClosedLine: "بكرة إجازة للدكتور",
+  daySheetClosedLine: "بكرة إجازة للطبيب",
   daySheetNoPhone: "بدون رقم",
   printDaySheetAction: "طباعة ورقة الغد",
   // `.print-day`'s own trailing count, e.g. "— 7 مرضى".
@@ -593,7 +593,7 @@ export const dayScreenStrings = {
   exceptionReasonLabel: "سبب الإجازة",
   exceptionReasonHint: "اختياري",
   exceptionReasonTooLongError: "السبب طويل، خليه 200 حرف أو أقل",
-  exceptionClosedLabel: "الدكتور مش شغال اليوم ده",
+  exceptionClosedLabel: "الطبيب مش شغال اليوم ده",
   exceptionHoursLabel: "مواعيد اليوم ده",
   exceptionHoursBadge: "استثنائي",
   exceptionAddAction: "إضافة",

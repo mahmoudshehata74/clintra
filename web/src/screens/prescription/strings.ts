@@ -41,7 +41,7 @@ export const prescriptionPrintStrings = {
 
   // The one-line header of every printed page after the first:
   // "تابع روشتة {patient} · {RX number} · صفحة {n} من {m}".
-  continuationPrefix: "تابع روشتة",
+  continuationPrefix: "تابع وصفة",
   continuationPage: "صفحة",
   continuationOf: "من",
 
@@ -55,7 +55,7 @@ export const prescriptionPrintStrings = {
   confirmBack: "رجوع",
 
   // Refusals, as the reader sees them.
-  errorNotPrescriber: "أول طباعة للوصفة بيعملها دكتور الزيارة بس",
+  errorNotPrescriber: "أول طباعة للوصفة بيعملها طبيب الزيارة بس",
   errorEmpty: "الوصفة فاضية، أضف دواء الأول",
   errorFailed: "الوصفة ما اتطبعتش، جرّب تاني",
 } as const;
