@@ -12,17 +12,6 @@ afterEach(function () {
     DB::disconnect();
 });
 
-function logPresentationDocument($response): DOMXPath
-{
-    $document = new DOMDocument;
-    $previous = libxml_use_internal_errors(true);
-    $document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
-    libxml_clear_errors();
-    libxml_use_internal_errors($previous);
-
-    return new DOMXPath($document);
-}
-
 function logPresentationRow(array $fixture, array $payload): string
 {
     return panelFixtureCommand('log-row', $fixture['id'], json_encode($payload, JSON_THROW_ON_ERROR))['id'];
@@ -96,3 +85,15 @@ test('the server refuses malformed impossible reversed and excessive date ranges
     [['from' => '21/11/2026']], [['to' => '2026-11-31']], [['from' => '2026-1-01']],
     [['from' => '2026-11-22', 'to' => '2026-11-21']], [['from' => '2025-01-01', 'to' => '2026-11-21']],
 ]);
+
+test('hostile log fields render literally without injected markup or Blade evaluation', function (string $payload) {
+    $id = logPresentationRow($this->fixture, ['action' => 'admin.login', 'anonymous' => true,
+        'reason' => $payload, 'user_agent' => $payload, 'detail' => ['email' => $payload, 'host_user' => $payload]]);
+    $response = $this->withSession(['platform_session_id' => $this->fixture['session']])->get('/panel/admin-log?org_id='.$this->fixture['org'])->assertOk();
+    $xpath = logPresentationDocument($response);
+    $row = $xpath->query('//tr[@data-log-id="'.$id.'"]')->item(0);
+    foreach (['data-attempted-email', 'data-log-user-agent', 'data-log-reason', 'data-log-host-user'] as $attribute) {
+        expect($xpath->query('.//*[@'.$attribute.']', $row)->item(0)->textContent)->toBe($payload);
+    }
+    expect($xpath->query('.//script|.//img|.//*[@onerror]', $row)->length)->toBe(0);
+})->with(['<script>alert(1)</script>', '"><img src=x onerror=alert(1)>', '{{7*7}}']);

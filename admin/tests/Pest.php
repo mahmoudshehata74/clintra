@@ -16,3 +16,14 @@ function panelOtp(array $fixture, int $offset = 0): string
 {
     return panelFixtureCommand('otp', $fixture['id'], (string) $offset)['otp'];
 }
+
+function logPresentationDocument($response): DOMXPath
+{
+    $document = new DOMDocument;
+    $previous = libxml_use_internal_errors(true);
+    $document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    libxml_clear_errors();
+    libxml_use_internal_errors($previous);
+
+    return new DOMXPath($document);
+}

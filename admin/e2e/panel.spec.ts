@@ -191,3 +191,28 @@ test('background-covers-scroll-height-in-light-and-dark', async ({ page }) => {
     await page.screenshot({ path: shots + `b3-review-${test.info().project.name}-background-${colorScheme}.png`, fullPage: true });
   }
 });
+
+test('hostile-log-fields-stay-literal-in-rows-and-open-details', async ({ page }) => {
+  const dialogs: string[] = [];
+  page.on('dialog', async dialog => { dialogs.push(dialog.message()); await dialog.dismiss(); });
+  const payloads = ['<script>alert(1)</script>', '"><img src=x onerror=alert(1)>', '{{7*7}}'];
+  const rows = payloads.map(payload => ({ payload, id: fixtureCommand('log-row', fixture.id, JSON.stringify({
+    action: 'admin.login', anonymous: true, reason: payload, user_agent: payload, detail: { email: payload, host_user: payload },
+  })).id }));
+  await signIn(page, fixture); await expect(page).toHaveURL(/panel\/admin-log$/);
+  await page.goto('/panel/admin-log?org_id=' + fixture.org);
+  for (const { payload, id } of rows) {
+    const row = page.locator(`tr[data-log-id="${id}"]`);
+    await expect(row.locator('[data-log-actor]')).toContainText('مش معروف');
+    await expect(row.locator('[data-attempted-email]')).toHaveText(payload);
+    await expect(row.locator('[data-attempted-email]')).toHaveAttribute('dir', 'ltr');
+    await row.getByText('عرض التفاصيل', { exact: true }).click();
+    for (const field of ['data-log-user-agent', 'data-log-reason', 'data-log-host-user']) {
+      await expect(row.locator(`[${field}]`)).toBeVisible(); await expect(row.locator(`[${field}]`)).toHaveText(payload);
+    }
+    await expect(row.locator('script,img,[onerror]')).toHaveCount(0);
+  }
+  await expect(page.locator('img[src="x"],[onerror]')).toHaveCount(0);
+  expect(dialogs).toEqual([]);
+  await page.screenshot({ path: shots + `b3-review-${test.info().project.name}-escaping-details.png`, fullPage: true });
+});
