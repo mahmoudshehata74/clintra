@@ -116,43 +116,65 @@ return new class extends Migration
                 REVOKE EXECUTE ON FUNCTION platform.admin_login(jsonb) FROM PUBLIC;
                 GRANT EXECUTE ON FUNCTION platform.admin_login(jsonb) TO clintra_admin_app;
 
-                CREATE FUNCTION platform.admin_session_actor(p_session uuid,p_otp text,p_require_otp boolean) RETURNS uuid
+                -- Private resolution preserves attribution independently of step-up.
+                CREATE FUNCTION platform.admin_session_state(p_session uuid) RETURNS jsonb
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
-                DECLARE
-                    v_admin uuid; v_secret bytea; v_last bigint; v_step bigint; v_failures integer;
-                    v_now_step bigint := floor(extract(epoch FROM now())/30);
+                DECLARE v_admin uuid;
                 BEGIN
-                    IF p_require_otp IS NULL THEN RAISE EXCEPTION 'missing step-up requirement' USING ERRCODE='22023'; END IF;
                     SELECT admin_user_id INTO v_admin FROM platform.admin_sessions WHERE id=p_session;
-                    IF v_admin IS NULL THEN RETURN NULL; END IF;
-                    -- Every path locks the user before any session, including password
-                    -- changes that end other sessions. Two live sessions cannot deadlock.
-                    SELECT totp_secret,last_totp_step INTO v_secret,v_last FROM platform.admin_users
-                        WHERE id=v_admin AND is_active FOR UPDATE;
-                    IF NOT FOUND THEN RETURN NULL; END IF;
+                    IF v_admin IS NULL THEN RETURN jsonb_build_object('ok',false,'admin_user_id',NULL,'reason','session_invalid'); END IF;
+                    PERFORM 1 FROM platform.admin_users WHERE id=v_admin AND is_active FOR UPDATE;
+                    IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'admin_user_id',NULL,'reason','session_invalid'); END IF;
                     PERFORM 1 FROM platform.admin_sessions WHERE id=p_session AND admin_user_id=v_admin
                         AND ended_at IS NULL AND expires_at>now() AND last_seen_at>now()-interval '30 minutes' FOR UPDATE;
-                    IF NOT FOUND THEN RETURN NULL; END IF;
-                    IF p_require_otp THEN
-                        SELECT count(*) INTO v_failures FROM platform.admin_log
-                            WHERE admin_user_id=v_admin AND NOT succeeded AND reason='step_up_failed'
-                              AND at>now()-interval '15 minutes';
-                        IF v_failures>=5 THEN
-                            UPDATE platform.admin_sessions SET ended_at=now() WHERE admin_user_id=v_admin AND ended_at IS NULL;
-                            RETURN NULL;
-                        END IF;
+                    IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'admin_user_id',NULL,'reason','session_invalid'); END IF;
+                    RETURN jsonb_build_object('ok',true,'admin_user_id',v_admin);
+                END;
+                $$;
+                REVOKE EXECUTE ON FUNCTION platform.admin_session_state(uuid) FROM PUBLIC;
+
+                CREATE FUNCTION platform.admin_step_up(p_admin uuid,p_otp text) RETURNS jsonb
+                LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
+                DECLARE v_secret bytea; v_last bigint; v_step bigint; v_failures integer; v_ended boolean:=false;
+                    v_now_step bigint:=floor(extract(epoch FROM now())/30);
+                BEGIN
+                    SELECT totp_secret,last_totp_step INTO v_secret,v_last FROM platform.admin_users
+                        WHERE id=p_admin AND is_active FOR UPDATE;
+                    IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'admin_user_id',NULL,'reason','session_invalid'); END IF;
+                    SELECT count(*) INTO v_failures FROM platform.admin_log
+                        WHERE admin_user_id=p_admin AND NOT succeeded AND reason='step_up_failed'
+                          AND at>now()-interval '15 minutes';
+                    IF v_failures<5 THEN
                         SELECT s INTO v_step FROM generate_series(v_now_step-1,v_now_step+1) s
                             WHERE platform.totp_at(v_secret,s)=p_otp AND s>coalesce(v_last,-1) ORDER BY s LIMIT 1;
-                        IF v_step IS NULL THEN
-                            IF v_failures>=4 THEN
-                                UPDATE platform.admin_sessions SET ended_at=now() WHERE admin_user_id=v_admin AND ended_at IS NULL;
-                            END IF;
-                            RETURN NULL;
+                    END IF;
+                    IF v_step IS NULL THEN
+                        IF v_failures>=4 THEN
+                            UPDATE platform.admin_sessions SET ended_at=now() WHERE admin_user_id=p_admin AND ended_at IS NULL;
+                            v_ended:=true;
                         END IF;
-                        UPDATE platform.admin_users SET last_totp_step=v_step WHERE id=v_admin;
+                        RETURN jsonb_build_object('ok',false,'admin_user_id',p_admin,'reason','step_up_failed','all_sessions_ended',v_ended);
+                    END IF;
+                    UPDATE platform.admin_users SET last_totp_step=v_step WHERE id=p_admin;
+                    RETURN jsonb_build_object('ok',true,'admin_user_id',p_admin);
+                END;
+                $$;
+                REVOKE EXECUTE ON FUNCTION platform.admin_step_up(uuid,text) FROM PUBLIC;
+
+                -- Action roles receive both the reason and the resolved actor.
+                CREATE FUNCTION platform.admin_session_actor(p_session uuid,p_otp text,p_require_otp boolean) RETURNS jsonb
+                LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
+                DECLARE v_state jsonb;
+                BEGIN
+                    IF p_require_otp IS NULL THEN RAISE EXCEPTION 'missing step-up requirement' USING ERRCODE='22023'; END IF;
+                    v_state:=platform.admin_session_state(p_session);
+                    IF NOT (v_state->>'ok')::boolean THEN RETURN v_state; END IF;
+                    IF p_require_otp THEN
+                        v_state:=platform.admin_step_up((v_state->>'admin_user_id')::uuid,p_otp);
+                        IF NOT (v_state->>'ok')::boolean THEN RETURN v_state; END IF;
                     END IF;
                     UPDATE platform.admin_sessions SET last_seen_at=now() WHERE id=p_session;
-                    RETURN v_admin;
+                    RETURN v_state;
                 END;
                 $$;
                 REVOKE EXECUTE ON FUNCTION platform.admin_session_actor(uuid,text,boolean) FROM PUBLIC;
@@ -161,15 +183,16 @@ return new class extends Migration
 
                 CREATE FUNCTION platform.admin_logout(p_session uuid) RETURNS jsonb
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
-                DECLARE v_admin uuid; v_ip inet; v_agent text;
+                DECLARE v_admin uuid; v_ip inet; v_agent text; v_state jsonb; v_reason text;
                 BEGIN
-                    v_admin := platform.admin_session_actor(p_session,NULL,false);
-                    IF v_admin IS NOT NULL THEN
+                    v_state:=platform.admin_session_state(p_session);
+                    v_admin:=(v_state->>'admin_user_id')::uuid; v_reason:=v_state->>'reason';
+                    IF (v_state->>'ok')::boolean THEN
                         UPDATE platform.admin_sessions SET ended_at=now() WHERE id=p_session RETURNING ip,user_agent INTO v_ip,v_agent;
                     END IF;
-                    PERFORM platform.admin_log_write(gen_random_uuid(),v_admin,'admin.logout',NULL,p_session,v_admin IS NOT NULL,
-                        CASE WHEN v_admin IS NULL THEN 'not_allowed' END,'{}',v_ip,v_agent);
-                    IF v_admin IS NULL THEN RETURN jsonb_build_object('ok',false,'reason','not_allowed'); END IF;
+                    PERFORM platform.admin_log_write(gen_random_uuid(),v_admin,'admin.logout',NULL,p_session,v_reason IS NULL,
+                        v_reason,'{}',v_ip,v_agent);
+                    IF v_reason IS NOT NULL THEN RETURN jsonb_build_object('ok',false,'reason',v_reason); END IF;
                     RETURN jsonb_build_object('ok',true);
                 END;
                 $$;
@@ -179,7 +202,7 @@ return new class extends Migration
                 -- p: {session_id,otp,password,log_id}; password is the new password.
                 CREATE FUNCTION platform.admin_change_password(p jsonb) RETURNS jsonb
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
-                DECLARE v_admin uuid; v_session uuid; v_log uuid; v_ip inet; v_agent text; v_reason text; v_ended boolean:=false;
+                DECLARE v_admin uuid; v_session uuid; v_log uuid; v_ip inet; v_agent text; v_state jsonb; v_reason text; v_ended boolean:=false;
                 BEGIN
                     IF p IS NULL OR jsonb_typeof(p)<>'object' THEN RAISE EXCEPTION 'invalid password payload' USING ERRCODE='22023'; END IF;
                     IF NOT p ?& ARRAY['session_id','otp','password','log_id']
@@ -191,18 +214,17 @@ return new class extends Migration
                     END IF;
                     BEGIN v_session:=(p->>'session_id')::uuid; v_log:=(p->>'log_id')::uuid;
                     EXCEPTION WHEN invalid_text_representation THEN RAISE EXCEPTION 'invalid password identifiers' USING ERRCODE='22023'; END;
-                    v_admin:=platform.admin_session_actor(v_session,NULL,false);
-                    IF v_admin IS NOT NULL THEN
+                    v_state:=platform.admin_session_state(v_session);
+                    v_admin:=(v_state->>'admin_user_id')::uuid; v_reason:=v_state->>'reason';
+                    IF (v_state->>'ok')::boolean THEN
                         SELECT ip,user_agent INTO v_ip,v_agent FROM platform.admin_sessions WHERE id=v_session;
-                        IF platform.admin_session_actor(v_session,p->>'otp',true) IS NULL THEN
-                            v_reason:='step_up_failed';
-                            SELECT ended_at IS NOT NULL INTO v_ended FROM platform.admin_sessions WHERE id=v_session;
-                        END IF;
-                    ELSE v_reason:='not_allowed';
+                        v_state:=platform.admin_step_up(v_admin,p->>'otp');
+                        v_reason:=v_state->>'reason'; v_ended:=coalesce((v_state->>'all_sessions_ended')::boolean,false);
                     END IF;
                     IF v_reason IS NULL THEN
                         UPDATE platform.admin_users SET password_hash=platform_crypto.crypt(p->>'password',platform_crypto.gen_salt('bf',12)) WHERE id=v_admin;
                         UPDATE platform.admin_sessions SET ended_at=now() WHERE admin_user_id=v_admin AND id<>v_session AND ended_at IS NULL;
+                        UPDATE platform.admin_sessions SET last_seen_at=now() WHERE id=v_session;
                     END IF;
                     PERFORM platform.admin_log_write(v_log,v_admin,'admin.password_change',NULL,NULL,v_reason IS NULL,
                         v_reason,jsonb_build_object('all_sessions_ended',v_ended),v_ip,v_agent);
@@ -216,7 +238,7 @@ return new class extends Migration
                 -- p: {session_id,action,reason,log_id,target_id}; no caller-supplied actor or success flag.
                 CREATE FUNCTION platform.admin_log_refusal(p jsonb) RETURNS jsonb
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
-                DECLARE v_admin uuid; v_session uuid; v_log uuid; v_target uuid; v_ip inet; v_agent text;
+                DECLARE v_admin uuid; v_session uuid; v_log uuid; v_target uuid; v_ip inet; v_agent text; v_state jsonb; v_reason text;
                 BEGIN
                     IF p IS NULL OR jsonb_typeof(p)<>'object' THEN RAISE EXCEPTION 'invalid refusal payload' USING ERRCODE='22023'; END IF;
                     IF NOT p ?& ARRAY['session_id','action','reason','log_id','target_id']
@@ -230,11 +252,12 @@ return new class extends Migration
                     END IF;
                     BEGIN v_session:=(p->>'session_id')::uuid; v_log:=(p->>'log_id')::uuid; v_target:=(p->>'target_id')::uuid;
                     EXCEPTION WHEN invalid_text_representation THEN RAISE EXCEPTION 'invalid refusal identifiers' USING ERRCODE='22023'; END;
-                    v_admin:=platform.admin_session_actor(v_session,NULL,false);
-                    IF v_admin IS NOT NULL THEN SELECT ip,user_agent INTO v_ip,v_agent FROM platform.admin_sessions WHERE id=v_session; END IF;
+                    v_state:=platform.admin_session_actor(v_session,NULL,false);
+                    v_admin:=(v_state->>'admin_user_id')::uuid; v_reason:=v_state->>'reason';
+                    IF (v_state->>'ok')::boolean THEN SELECT ip,user_agent INTO v_ip,v_agent FROM platform.admin_sessions WHERE id=v_session; END IF;
                     PERFORM platform.admin_log_write(v_log,v_admin,p->>'action',NULL,v_target,false,
-                        CASE WHEN v_admin IS NULL THEN 'not_allowed' ELSE p->>'reason' END,'{}',v_ip,v_agent);
-                    IF v_admin IS NULL THEN RETURN jsonb_build_object('ok',false,'reason','not_allowed'); END IF;
+                        coalesce(v_reason,p->>'reason'),'{}',v_ip,v_agent);
+                    IF v_reason IS NOT NULL THEN RETURN jsonb_build_object('ok',false,'reason',v_reason); END IF;
                     RETURN jsonb_build_object('ok',true);
                 END;
                 $$;
@@ -281,6 +304,8 @@ return new class extends Migration
             DROP FUNCTION platform.admin_change_password(jsonb);
             DROP FUNCTION platform.admin_logout(uuid);
             DROP FUNCTION platform.admin_session_actor(uuid,text,boolean);
+            DROP FUNCTION platform.admin_step_up(uuid,text);
+            DROP FUNCTION platform.admin_session_state(uuid);
             DROP FUNCTION platform.admin_login(jsonb);
             DROP FUNCTION platform.admin_log_write(uuid,uuid,text,uuid,uuid,boolean,text,jsonb,inet,text);
             DROP FUNCTION platform.totp_at(bytea,bigint);

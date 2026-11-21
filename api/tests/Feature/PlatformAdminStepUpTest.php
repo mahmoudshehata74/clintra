@@ -26,7 +26,7 @@ test('the fifth failed step up ends all of that admins sessions atomically and l
     }
     $p['otp'] = $this->platformOtp($admin['secret']);
     $p['log_id'] = $this->platformId();
-    expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => 'not_allowed']);
+    expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => 'session_invalid']);
     expect($this->asOwner()->table('platform.admin_sessions')->where('id', $foreign)->value('ended_at'))->toBeNull();
     $p['session_id'] = $foreign;
     $p['otp'] = $this->platformOtp($other['secret']);

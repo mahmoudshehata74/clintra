@@ -23,7 +23,7 @@ return new class extends Migration
                        OR EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
                                   WHERE n.nspname='platform' AND p.proname NOT IN ('admin_log_refuse_change',
                                     'totp_at','admin_login','admin_logout','admin_change_password',
-                                    'admin_session_actor','admin_log_write','admin_log_refusal','admin_log_cli'))
+                                    'admin_session_actor','admin_session_state','admin_step_up','admin_log_write','admin_log_refusal','admin_log_cli'))
                        OR EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
                                   WHERE n.nspname='platform_crypto' AND NOT EXISTS (
                                     SELECT 1 FROM pg_depend d JOIN pg_extension e ON e.oid=d.refobjid

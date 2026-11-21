@@ -131,7 +131,7 @@ test('expired inactive ended and unknown sessions refuse with exactly one log', 
     }
     $before = $this->asOwner()->table('platform.admin_log')->count();
     $row = $this->panel()->selectOne('SELECT platform.admin_logout(?::uuid) AS result', [$session]);
-    expect(json_decode($row->result, true))->toBe(['ok' => false, 'reason' => 'not_allowed']);
+    expect(json_decode($row->result, true))->toBe(['ok' => false, 'reason' => 'session_invalid']);
     expect($this->asOwner()->table('platform.admin_log')->count())->toBe($before + 1);
 })->with(['idle', 'absolute', 'ended', 'inactive', 'unknown']);
 
@@ -196,7 +196,7 @@ test('refusal logging resolves the session actor and never accepts a supplied ac
     }
     $p['session_id'] = $this->platformId();
     $p['log_id'] = $this->platformId();
-    expect($this->platformCall('admin_log_refusal', $p))->toBe(['ok' => false, 'reason' => 'not_allowed']);
+    expect($this->platformCall('admin_log_refusal', $p))->toBe(['ok' => false, 'reason' => 'session_invalid']);
     expect($this->asOwner()->table('platform.admin_log')->where('id', $p['log_id'])->value('admin_user_id'))->toBeNull();
 });
 
@@ -218,8 +218,9 @@ test('each action role resolves sessions and writes exactly its requested log ro
     $admin = $this->platformAdmin();
     $session = $this->platformSession($admin);
     $log = $this->platformId();
-    $actor = $this->asPlatformRole($role, fn ($db) => $db->selectOne('SELECT platform.admin_session_actor(?::uuid,NULL,false) AS id', [$session])->id);
-    expect($actor)->toBe($admin['id']);
+    $state = $this->asPlatformRole($role, fn ($db) => json_decode($db->selectOne('SELECT platform.admin_session_actor(?::uuid,NULL,false) AS result', [$session])->result, true));
+    expect($state)->toBe(['ok' => true, 'admin_user_id' => $admin['id']]);
+    $actor = $state['admin_user_id'];
     $before = $this->asOwner()->table('platform.admin_log')->count();
     $this->asPlatformRole($role, fn ($db) => $db->select('SELECT platform.admin_log_write(?::uuid,?::uuid,?,NULL,NULL,false,?,?::jsonb)', [$log, $actor, 'device.revoke', 'not_allowed', '{}']));
     expect($this->asOwner()->table('platform.admin_log')->count())->toBe($before + 1);

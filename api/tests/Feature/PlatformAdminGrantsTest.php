@@ -81,6 +81,7 @@ test('every B1 function has the exact owner security settings and EXECUTE caller
         'totp_at' => [], 'admin_login' => ['clintra_admin_app'], 'admin_logout' => ['clintra_admin_app'],
         'admin_change_password' => ['clintra_admin_app'], 'admin_log_refusal' => ['clintra_admin_app'],
         'admin_log_cli' => ['clintra_owner'], 'admin_session_actor' => $actions, 'admin_log_write' => $actions,
+        'admin_session_state' => [], 'admin_step_up' => [],
     ];
     foreach ($expected as $function => $callers) {
         $row = $this->asOwner()->selectOne(<<<'SQL'
