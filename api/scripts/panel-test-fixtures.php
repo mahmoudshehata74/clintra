@@ -40,6 +40,15 @@ if ($command === 'create') {
         $db->insert('INSERT INTO platform.admin_log(id,admin_user_id,org_id,action,succeeded,detail) VALUES (?::uuid,?::uuid,?::uuid,?,true,?::jsonb)', [$logId, $id, $org, $action, json_encode(['fixture' => '<script>alert(1)</script>'])]);
     }
     $result = compact('id', 'email', 'password', 'secret', 'recovery', 'session', 'org', 'logIds');
+} elseif ($command === 'log-row') {
+    $payload = json_decode($argv[3] ?? '{}', true, flags: JSON_THROW_ON_ERROR);
+    $org = $db->table('platform.admin_log')->where('admin_user_id', $id)->whereNotNull('org_id')->value('org_id');
+    $logId = (string) Str::uuid();
+    $db->insert('INSERT INTO platform.admin_log(id,admin_user_id,org_id,action,succeeded,reason,detail,user_agent) VALUES (?::uuid,?::uuid,?::uuid,?,?::boolean,?,?::jsonb,?)', [
+        $logId, ($payload['anonymous'] ?? false) ? null : $id, $org, $payload['action'], ($payload['succeeded'] ?? false) ? 'true' : 'false',
+        $payload['reason'] ?? null, json_encode((object) ($payload['detail'] ?? []), JSON_THROW_ON_ERROR), $payload['user_agent'] ?? null,
+    ]);
+    $result = ['id' => $logId];
 } elseif ($command === 'otp' || $command === 'wrong-otp') {
     $secret = hex2bin($db->selectOne("SELECT encode(totp_secret,'hex') AS secret FROM platform.admin_users WHERE id=?", [$id])->secret);
     $step = (int) $db->selectOne('SELECT floor(extract(epoch FROM now())/30) AS step')->step + (int) ($argv[3] ?? 0);
@@ -72,7 +81,7 @@ if ($command === 'create') {
 } elseif ($command === 'sessions') {
     $result = ['sessions' => $db->table('platform.admin_sessions')->where('admin_user_id', $id)->get(['id', 'ended_at'])->toArray()];
 } else {
-    fwrite(STDERR,"Unknown fixture command.\n");
+    fwrite(STDERR, "Unknown fixture command.\n");
     exit(1);
 }
-echo json_encode($result,JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)."\n";
+echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)."\n";
