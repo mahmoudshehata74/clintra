@@ -105,6 +105,12 @@ h1,h2,p {
 .fi-simple-header {
   display:none
 }
+.sign-in-page {
+  display:flex;
+  align-items:center;
+  min-height:100vh;
+  padding:32px 16px
+}
 .fi-main {
   padding:24px 16px!important;
   max-width:1150px!important;

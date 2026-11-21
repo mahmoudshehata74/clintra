@@ -88,7 +88,11 @@ test('database-and-http-rate-limits', async ({ page }) => {
   await page.getByLabel('كود التحقق', { exact: true }).fill('wrong-code');
   const refused = page.waitForResponse(response => response.url().endsWith('/sign-in') && response.status() === 429);
   await page.getByRole('button', { name: 'تسجيل الدخول', exact: true }).click(); await refused;
-  await expect(page.locator('body')).toContainText('محاولات كتير، استنى ربع ساعة');
+  await expect(page.getByRole('alert')).toHaveText('محاولات كتير، استنى ربع ساعة');
+  await expect(page.locator('[data-screen="sign-in"] .logo')).toHaveText('C');
+  await expect(page.getByRole('heading', { name: 'تسجيل الدخول', exact: true })).toBeVisible();
+  for (const label of ['البريد الإلكتروني', 'كلمة السر', 'كود التحقق']) await expect(page.getByLabel(label, { exact: true })).toBeVisible();
+  await page.screenshot({ path: shots + `b3-review-${test.info().project.name}-http-429.png`, fullPage: true });
 });
 
 test('must-change-and-step-up-success', async ({ page }) => {

@@ -79,7 +79,15 @@ test('the database and HTTP limits both surface the exact Arabic rate message', 
     for ($i = 0; $i < 4; $i++) {
         $this->post('/sign-in', $data)->assertRedirect();
     }
-    $this->post('/sign-in', $data)->assertStatus(429)->assertSee('محاولات كتير، استنى ربع ساعة');
+    $response = $this->post('/sign-in', $data)->assertStatus(429)->assertSee('محاولات كتير، استنى ربع ساعة');
+    $xpath = logPresentationDocument($response);
+    expect($xpath->query('//*[@data-screen="sign-in"]//input[@name="email"]')->length)->toBe(1);
+    expect($xpath->query('//*[@data-screen="sign-in"]//input[@name="password"]')->length)->toBe(1);
+    expect($xpath->query('//*[@data-screen="sign-in"]//input[@name="otp"]')->length)->toBe(1);
+    expect($xpath->query('//*[@data-screen="sign-in"]//input[@name="_token"]')->length)->toBe(1);
+    expect($xpath->query('//*[@data-screen="sign-in"]//*[@role="alert"]')->item(0)->textContent)->toBe('محاولات كتير، استنى ربع ساعة');
+    expect($xpath->query('//*[@data-screen="sign-in"]//h1')->item(0)->textContent)->toBe('تسجيل الدخول');
+    expect($xpath->query('//*[@data-screen="sign-in"]//*[contains(@class,"logo")]')->length)->toBe(1);
 });
 
 test('the must change flow exposes only password change and sign out and consumes a fresh step up', function () {
