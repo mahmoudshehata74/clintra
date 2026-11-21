@@ -842,6 +842,20 @@ on the identity design for "owner only" to be proven rather than claimed
     outside this database, so no panel role ever needs `users` or
     `memberships.display_name`.
 
+## Phases (owner, 2026-11-21)
+
+| Phase | Scope |
+|---|---|
+| B1 | Foundation, no UI: the nine roles of 6.1 (README setup, ci.yml, and api/scripts/provision-roles.sql with the admin_app password as a psql variable); the platform schema, its tables, the append-only admin log (UPDATE/DELETE/TRUNCATE refused by trigger for every role); platform.totp_at, admin_login, admin_logout, admin_change_password, admin_session_actor, admin_log_write, admin_log_refusal, admin_log_cli; `clintra:admin:create`; every existing operator CLI command (device revoke, mint, provision) writes through admin_log_cli with admin_user_id null and the host user in detail. |
+| B2 | Organization disable/enable per 4.3, built from PR #68: the function is platform.admin_set_org_disabled owned by clintra_admin_org (the CLI path goes through admin_log_cli, never a clinic audit row attributed to the owner); the design's exact Arabic texts; ApplyMembership, register_device, current_org(), the device banner and sync pause; PR #68 is then closed in favour of it. |
+| B3 | The panel app in admin/ (Laravel 13 + Filament 4, Arabic, RTL, Latin digits): sign-in with TOTP or a recovery code, sessions, the fresh-TOTP step-up on every destructive action, the admin log screen, the optional IP allowlist (off by default). |
+| B4 | Cross-clinic figures: platform.admin_org_figures with the column grants of 6.4, the "العيادات" screen and the "موقوفة" chip. |
+| B5 | Devices and codes: admin_revoke_device, admin_request_code, admin_approve_code (a second admin's approval only while two or more active admins exist), the notice on the clinic's devices. Provisioning a new clinic stays on the CLI (decision 11). |
+| B6 | Support access per 4.5: mint_support_code, support_exchange, admin_open_support_session, the read-only transaction, pull filters, support_sessions, the clinic-side settings, banners and support mode. |
+
+Each phase: its own commits, full SQL with down() for every migration, Pest for every function incl. cross-org and
+every refusal, gate, push.
+
 ## Decisions (owner, 2026-11-19)
 
 Every open question in section 12 takes its recommended answer, except
