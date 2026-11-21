@@ -16,7 +16,7 @@ test('the fifth failed step up ends all of that admins sessions atomically and l
     for ($attempt = 1; $attempt <= 5; $attempt++) {
         $p = ['session_id' => $session, 'current_password' => $admin['password'], 'otp' => 'wrong-code', 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId()];
         $before = $this->asOwner()->table('platform.admin_log')->count();
-        expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => 'step_up_failed']);
+        expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => 'step_up_failed'] + ($attempt === 5 ? ['all_sessions_ended' => true] : []));
         expect($this->asOwner()->table('platform.admin_log')->count())->toBe($before + 1);
         $log = $this->asOwner()->table('platform.admin_log')->where('id', $p['log_id'])->sole();
         expect($log->admin_user_id)->toBe($admin['id'])->and($log->reason)->toBe('step_up_failed');
@@ -59,7 +59,7 @@ test('wrong current passwords share the step up budget and end every session on 
         $p = ['session_id' => $session, 'current_password' => $wrongPassword ? 'wrong-current-password' : $admin['password'], 'otp' => $wrongPassword ? $this->platformOtp($admin['secret']) : 'wrong-code', 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId()];
         $before = $this->asOwner()->table('platform.admin_log')->count();
         $reason = $wrongPassword ? 'current_password_failed' : 'step_up_failed';
-        expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => $reason]);
+        expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => $reason] + ($i === 4 ? ['all_sessions_ended' => true] : []));
         expect($this->asOwner()->table('platform.admin_log')->count())->toBe($before + 1);
         $log = $this->asOwner()->table('platform.admin_log')->where('id', $p['log_id'])->sole();
         expect($log->admin_user_id)->toBe($admin['id'])->and($log->reason)->toBe($reason);
