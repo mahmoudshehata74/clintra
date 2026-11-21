@@ -164,3 +164,24 @@ test('sign-out', async ({ page }) => {
   await expect(page).toHaveURL(/panel\/sign-in$/);
   await page.goto('/panel/admin-log'); await expect(page).toHaveURL(/panel\/sign-in$/);
 });
+
+test('background-covers-scroll-height-in-light-and-dark', async ({ page }) => {
+  await signIn(page, fixture); await expect(page).toHaveURL(/panel\/admin-log$/);
+  const width = page.viewportSize()!.width;
+  await page.setViewportSize({ width, height: 450 });
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    const geometry = await page.locator('body').evaluate((bodyElement) => {
+      const root = getComputedStyle(document.documentElement);
+      const body = getComputedStyle(bodyElement);
+      return { root: root.backgroundColor, body: body.backgroundColor, attachment: body.backgroundAttachment,
+        height: bodyElement.getBoundingClientRect().height, scroll: document.documentElement.scrollHeight, viewport: innerHeight };
+    });
+    expect(geometry.scroll).toBeGreaterThan(geometry.viewport);
+    expect(geometry.height).toBeGreaterThanOrEqual(geometry.scroll - 1);
+    expect(geometry.root).toBe(geometry.body);
+    expect(geometry.root).not.toBe('rgba(0, 0, 0, 0)');
+    expect(geometry.attachment).toBe('scroll');
+    await page.screenshot({ path: shots + `b3-review-${test.info().project.name}-background-${colorScheme}.png`, fullPage: true });
+  }
+});
