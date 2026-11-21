@@ -217,8 +217,10 @@ with `password_change_required`, except password change and logout.
 `admin_change_password` requires `{session_id, current_password, otp,
 password, log_id}`: the current password, a different new password and a
 fresh TOTP. Success clears the flag and ends the admin's other sessions.
-Wrong current passwords and unchanged passwords return `bad_credentials`;
-they do not consume TOTP or enter the login or step-up failure counters.
+Wrong current passwords return and log `current_password_failed` and count
+in the same per-admin budget as `step_up_failed`. An unchanged new password
+returns `bad_credentials` and does not count. Neither consumes TOTP or
+enters the login failure counter.
 
 Session resolution is separate from step-up. Unknown, ended, expired or
 idle sessions, and inactive admins, return `session_invalid` and log a
@@ -227,9 +229,9 @@ admin resolved from the valid session. A valid session blocked by its
 initial-password flag logs that admin with `password_change_required`.
 Public refusals remain `{ok: false, reason}`.
 
-Five failed step-ups per admin in 15 minutes end all of that admin's
+Five failed step-ups or current-password checks per admin in 15 minutes end all of that admin's
 unended sessions in the same transaction as the fifth refusal's log row.
-The counter reads failed log rows with `reason = 'step_up_failed'` in that
+The counter reads failed log rows with `reason IN ('step_up_failed','current_password_failed')` in that
 window; older rows do not count. The fifth refusal records
 `detail.all_sessions_ended = true`. A later request through an ended
 session returns `session_invalid`, even with a correct TOTP. Other admins'

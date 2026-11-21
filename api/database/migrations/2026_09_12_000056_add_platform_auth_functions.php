@@ -146,7 +146,7 @@ return new class extends Migration
                         WHERE id=p_admin AND is_active FOR UPDATE;
                     IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'admin_user_id',NULL,'reason','session_invalid'); END IF;
                     SELECT count(*) INTO v_failures FROM platform.admin_log
-                        WHERE admin_user_id=p_admin AND NOT succeeded AND reason='step_up_failed'
+                        WHERE admin_user_id=p_admin AND NOT succeeded AND reason IN ('step_up_failed','current_password_failed')
                           AND at>now()-interval '15 minutes';
                     IF v_failures<5 THEN
                         SELECT s INTO v_step FROM generate_series(v_now_step-1,v_now_step+1) s
@@ -206,7 +206,7 @@ return new class extends Migration
                 -- p: {session_id,current_password,otp,password,log_id}; password is the new password.
                 CREATE FUNCTION platform.admin_change_password(p jsonb) RETURNS jsonb
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
-                DECLARE v_admin uuid; v_session uuid; v_log uuid; v_ip inet; v_agent text; v_state jsonb; v_reason text; v_hash text; v_ended boolean:=false;
+                DECLARE v_admin uuid; v_session uuid; v_log uuid; v_ip inet; v_agent text; v_state jsonb; v_reason text; v_hash text; v_failures integer; v_ended boolean:=false;
                 BEGIN
                     IF p IS NULL OR jsonb_typeof(p)<>'object' THEN RAISE EXCEPTION 'invalid password payload' USING ERRCODE='22023'; END IF;
                     IF NOT p ?& ARRAY['session_id','current_password','otp','password','log_id']
@@ -223,8 +223,19 @@ return new class extends Migration
                     v_admin:=(v_state->>'admin_user_id')::uuid; v_reason:=v_state->>'reason';
                     IF (v_state->>'ok')::boolean THEN
                         SELECT ip,user_agent INTO v_ip,v_agent FROM platform.admin_sessions WHERE id=v_session;
-                        SELECT password_hash INTO v_hash FROM platform.admin_users WHERE id=v_admin;
-                        IF platform_crypto.crypt(p->>'current_password',v_hash)<>v_hash OR p->>'password'=p->>'current_password' THEN
+                        -- admin_session_state holds this admin's row lock through the refusal log.
+                        SELECT password_hash INTO v_hash FROM platform.admin_users WHERE id=v_admin FOR UPDATE;
+                        SELECT count(*) INTO v_failures FROM platform.admin_log
+                            WHERE admin_user_id=v_admin AND NOT succeeded
+                              AND reason IN ('step_up_failed','current_password_failed')
+                              AND at>now()-interval '15 minutes';
+                        IF platform_crypto.crypt(p->>'current_password',v_hash)<>v_hash THEN
+                            v_reason:='current_password_failed';
+                            IF v_failures>=4 THEN
+                                UPDATE platform.admin_sessions SET ended_at=now() WHERE admin_user_id=v_admin AND ended_at IS NULL;
+                                v_ended:=true;
+                            END IF;
+                        ELSIF p->>'password'=p->>'current_password' THEN
                             v_reason:='bad_credentials';
                         ELSE
                             v_state:=platform.admin_step_up(v_admin,p->>'otp');

@@ -33,29 +33,15 @@ test('an admin that must change the password can still log out', function () {
     expect($this->asOwner()->table('platform.admin_sessions')->where('id', $session)->value('ended_at'))->not->toBeNull();
 });
 
-test('wrong current passwords do not count as step up or login failures and do not consume TOTP', function () {
-    $admin = $this->platformAdmin(['must_change_password' => true]);
-    $session = $this->platformSession($admin);
-    for ($i = 0; $i < 4; $i++) {
-        $this->asOwner()->insert("INSERT INTO platform.admin_log(id,admin_user_id,action,succeeded,reason) VALUES (?::uuid,?::uuid,'admin.password_change',false,'step_up_failed')", [$this->platformId(), $admin['id']]);
-    }
-    for ($i = 0; $i < 5; $i++) {
-        $p = ['session_id' => $session, 'current_password' => 'wrong-current-password', 'otp' => $this->platformOtp($admin['secret']), 'password' => 'Changed-admin-password-456', 'log_id' => $this->platformId()];
-        expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => 'bad_credentials']);
-        $log = $this->asOwner()->table('platform.admin_log')->where('id', $p['log_id'])->sole();
-        expect($log->admin_user_id)->toBe($admin['id'])->and($log->reason)->toBe('bad_credentials');
-    }
-    expect($this->asOwner()->table('platform.admin_log')->where('admin_user_id', $admin['id'])->where('reason', 'step_up_failed')->count())->toBe(4);
-    expect($this->asOwner()->table('platform.admin_log')->where('admin_user_id', $admin['id'])->where('action', 'admin.login')->count())->toBe(0);
-    expect($this->asOwner()->table('platform.admin_users')->where('id', $admin['id'])->value('last_totp_step'))->toBeNull();
-    expect($this->asOwner()->table('platform.admin_sessions')->where('id', $session)->value('ended_at'))->toBeNull();
-});
-
 test('the current password cannot be reused as the new password', function () {
     $admin = $this->platformAdmin(['must_change_password' => true]);
     $session = $this->platformSession($admin);
     $p = ['session_id' => $session, 'current_password' => $admin['password'], 'otp' => $this->platformOtp($admin['secret']), 'password' => $admin['password'], 'log_id' => $this->platformId()];
-    expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => 'bad_credentials']);
+    for ($i = 0; $i < 6; $i++) {
+        $p['log_id'] = $this->platformId();
+        expect($this->platformCall('admin_change_password', $p))->toBe(['ok' => false, 'reason' => 'bad_credentials']);
+    }
+    expect($this->asOwner()->table('platform.admin_sessions')->where('id', $session)->value('ended_at'))->toBeNull();
     expect($this->asOwner()->table('platform.admin_users')->where('id', $admin['id'])->value('must_change_password'))->toBeTrue();
     expect($this->asOwner()->table('platform.admin_users')->where('id', $admin['id'])->value('last_totp_step'))->toBeNull();
 });
