@@ -2,9 +2,15 @@
 
 namespace App\Providers;
 
+use App\Support\PlatformSchemaReset;
 use App\Support\TrustedProxyGuard;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Console\Events\CommandFinished;
+use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -15,7 +21,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(PlatformSchemaReset::class, fn () => new PlatformSchemaReset(fn ($name) => DB::connection($name)));
     }
 
     /**
@@ -23,6 +29,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if ($this->app->runningInConsole()) {
+            $reset = $this->app->make(PlatformSchemaReset::class);
+            Event::listen(CommandStarting::class, [$reset, 'starting']);
+            Event::listen(CommandFinished::class, [$reset, 'finished']);
+            // Laravel skips this bridge in the testing environment, including
+            // explicit CLI --env=testing runs; fresh must behave the same there.
+            $this->app->make(Kernel::class)->rerouteSymfonyCommandEvents();
+        }
         // /api/devices/register needs no limiter registered here — it
         // already rate-limits itself, dual-keyed by IP and by the
         // submitted activation code, inside

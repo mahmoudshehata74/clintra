@@ -200,15 +200,6 @@ jobs:
             psql -h 127.0.0.1 -U postgres -d "$db" --set=admin_app_password=ci_admin_app_pw -f api/scripts/provision-admin-roles.sql
           done
 
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_auth TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_provision TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_mint TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_device TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_org TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_stats TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_support TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_support TO clintra_owner;"
-
       - name: Point .env at the CI database
         working-directory: api
         run: |
@@ -224,6 +215,10 @@ jobs:
             file_put_contents(".env.testing", preg_replace("/^DB_DATABASE=.*/m", "DB_DATABASE=clintra_test", $env)."\nDB_ADMIN_APP_PASSWORD=ci_admin_app_pw\n");
           '
 
+      - name: Run migrations (dev database)
+        working-directory: api
+        run: php artisan migrate --database=pgsql_owner --force
+
       - name: Run migrations (test database)
         working-directory: api
         env:
@@ -237,14 +232,12 @@ jobs:
       # mint_activation_code: clintra_provision -> clintra_mint) only
       # breaks on a *second* full replay against a server that already has
       # it from the first — a step every CI run before this one skipped by
-      # construction. The test database above already has every function
+      # construction. The dev database above already has every function
       # from the ordinary `migrate` step just run; migrate:fresh here
       # re-runs the entire history against that already-populated server
       # twice in a row, on purpose — once wasn't proof it stayed fixed.
       - name: Verify migrate:fresh is idempotent against an already-migrated server
         working-directory: api
-        env:
-          DB_DATABASE: clintra_test
         run: |
           php artisan migrate:fresh --database=pgsql_owner --force
           php artisan migrate:fresh --database=pgsql_owner --force

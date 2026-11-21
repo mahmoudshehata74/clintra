@@ -506,12 +506,14 @@ environment variables:
 
 ## Testing notes
 
-The owner connection keeps `public` first and includes `platform` so
-Laravel's fresh command removes its tables. Migration 000053 validates
-and removes the empty test schemas, standalone functions and pgcrypto
-extension left by fresh before recreating them. It refuses populated,
-incomplete or unexpected schemas. The crypto schema remains outside the
-search path; cryptographic calls are qualified explicitly.
+The owner connection keeps `public` first and includes `platform`.
+PostgreSQL `migrate:fresh` and `db:wipe` commands reset `platform` and
+`platform_crypto` through the command lifecycle hook before the wipe,
+including their functions and pgcrypto. The hook uses the selected
+PostgreSQL connection, independent of its database name, and respects
+command confirmation/cancellation. Migration 000053 uses strict CREATE
+statements and refuses existing schemas. The crypto schema stays outside
+the search path; cryptographic calls are qualified explicitly.
 
 Before every full local gate, rebuild `clintra_test` from the branch under
 test so its schema and migration records match that branch. From `api/`,
@@ -521,8 +523,10 @@ set `DB_DATABASE=clintra_test` in the command's environment, then run:
 php artisan migrate:fresh --database=pgsql_owner --force
 ```
 
-Destructive database commands are allowed only on `clintra_test`. Never
-run this on the development database; development uses plain `migrate`.
+Local destructive database commands run only on `clintra_test`;
+development uses plain `migrate`. CI also verifies two consecutive fresh
+runs on its disposable development database, as part of the owner-approved
+pipeline; this does not authorize rebuilding a persistent local database.
 Run gate suites sequentially: tsc, lint (0 errors and 0 warnings), Vitest,
 build, e2e with `--grep-invert '@screenshot'`, Pest, then `test:live`.
 Require zero flaky, retried, or timed-out tests and record the gate on the

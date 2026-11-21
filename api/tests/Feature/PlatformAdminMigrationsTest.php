@@ -13,7 +13,7 @@ test('the platform migration refuses a replay over an installed schema instead o
         $owner->transaction(fn () => $migration->up());
         $this->fail('Expected a populated platform schema to refuse replay');
     } catch (QueryException $e) {
-        expect($e->getCode())->toBe('55000');
+        expect($e->getCode())->toBe('42P06');
     } finally {
         DB::setDefaultConnection($previous);
     }

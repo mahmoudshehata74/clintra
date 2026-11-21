@@ -8,35 +8,6 @@ return new class extends Migration
     public function up(): void
     {
         DB::unprepared(<<<'SQL'
-            -- Laravel's fresh drops the tables in the owner's search_path, but
-            -- leaves schemas, standalone functions and extensions. Only a fully
-            -- emptied test schema may be rebuilt; inconsistent states fail.
-            DO $$
-            BEGIN
-                IF to_regnamespace('platform') IS NOT NULL OR to_regnamespace('platform_crypto') IS NOT NULL THEN
-                    IF current_database() <> 'clintra_test'
-                       OR to_regnamespace('platform') IS NULL OR to_regnamespace('platform_crypto') IS NULL
-                       OR NOT EXISTS (SELECT 1 FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace
-                                      WHERE e.extname='pgcrypto' AND n.nspname='platform_crypto')
-                       OR EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-                                  WHERE n.nspname IN ('platform','platform_crypto'))
-                       OR EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-                                  WHERE n.nspname='platform' AND p.proname NOT IN ('admin_log_refuse_change',
-                                    'totp_at','admin_login','admin_logout','admin_change_password',
-                                    'admin_session_actor','admin_session_state','admin_step_up','admin_log_write','admin_log_refusal','admin_log_cli'))
-                       OR EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-                                  WHERE n.nspname='platform_crypto' AND NOT EXISTS (
-                                    SELECT 1 FROM pg_depend d JOIN pg_extension e ON e.oid=d.refobjid
-                                    WHERE d.classid='pg_proc'::regclass AND d.objid=p.oid
-                                      AND d.deptype='e' AND e.extname='pgcrypto')) THEN
-                        RAISE EXCEPTION 'platform schemas are not an empty migrate:fresh remainder' USING ERRCODE='55000';
-                    END IF;
-                    DROP SCHEMA platform CASCADE;
-                    DROP EXTENSION pgcrypto;
-                    DROP SCHEMA platform_crypto;
-                END IF;
-            END;
-            $$;
             CREATE SCHEMA platform AUTHORIZATION clintra_owner;
             REVOKE ALL ON SCHEMA platform FROM PUBLIC;
             CREATE SCHEMA platform_crypto AUTHORIZATION clintra_owner;
