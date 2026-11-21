@@ -200,6 +200,15 @@ jobs:
             psql -h 127.0.0.1 -U postgres -d "$db" --set=admin_app_password=ci_admin_app_pw -f api/scripts/provision-admin-roles.sql
           done
 
+          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_auth TO clintra_owner;"
+          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_provision TO clintra_owner;"
+          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_mint TO clintra_owner;"
+          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_device TO clintra_owner;"
+          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_org TO clintra_owner;"
+          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_stats TO clintra_owner;"
+          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_admin_support TO clintra_owner;"
+          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_support TO clintra_owner;"
+
       - name: Point .env at the CI database
         working-directory: api
         run: |

@@ -41,6 +41,16 @@ ALTER ROLE clintra_admin_app SET log_parameter_max_length = 0;
 ALTER ROLE clintra_admin_app SET log_parameter_max_length_on_error = 0;
 \endif
 
+SELECT format('GRANT %I TO clintra_owner', role_name)
+FROM (VALUES
+    ('clintra_admin_auth'), ('clintra_admin_provision'),
+    ('clintra_admin_mint'), ('clintra_admin_device'),
+    ('clintra_admin_org'), ('clintra_admin_stats'),
+    ('clintra_admin_support'), ('clintra_support')
+) AS expected(role_name)
+WHERE NOT pg_has_role('clintra_owner', role_name, 'MEMBER')
+\gexec
+
 SELECT format('GRANT CONNECT ON DATABASE %I TO clintra_admin_app', current_database())
 WHERE NOT EXISTS (
     SELECT 1 FROM pg_database d,

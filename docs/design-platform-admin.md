@@ -196,6 +196,8 @@ ALTER ROLE clintra_admin_app SET log_parameter_max_length = 0;
 ALTER ROLE clintra_admin_app SET log_parameter_max_length_on_error = 0;
 ```
 
+Like every function-owner role, the eight NOLOGIN roles are granted to clintra_owner so migrations can create their functions under them; clintra_admin_app is granted to no one.
+
 `clintra_admin_provision` and `clintra_admin_mint` need no bypass: they only
 call the existing `provision_organization` and `mint_activation_code`,
 which bypass as their own roles. The two `log_parameter_max_length`
