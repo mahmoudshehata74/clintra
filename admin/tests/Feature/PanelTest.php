@@ -40,7 +40,8 @@ test('the only connection authenticates as the panel role and application SQL ca
 test('sign in accepts TOTP or one recovery code and persists only the platform session identity', function (bool $recovery) {
     $old = session()->getId();
     $otp = $recovery ? $this->fixture['recovery'] : panelOtp($this->fixture);
-    $this->post('/sign-in', ['email' => $this->fixture['email'], 'password' => $this->fixture['password'], 'otp' => $otp])->assertRedirect('/panel/admin-log');
+    $response = $this->post('/sign-in', ['email' => $this->fixture['email'], 'password' => $this->fixture['password'], 'otp' => $otp])->assertRedirect('/panel/admin-log');
+    expect(array_map(fn ($cookie) => $cookie->getName(), $response->headers->getCookies()))->toBe(['clintra_admin_session']);
     $id = session('platform_session_id');
     expect($id)->toBeString()->and(session()->getId())->not->toBe($old);
     foreach (['name', 'email', 'password', 'current_password', 'otp', 'must_change_password'] as $key) {
@@ -134,6 +135,7 @@ test('security headers secure encrypted cookies and CSRF are enabled', function 
     $response = $this->get('/panel/sign-in')->assertOk()->assertHeader('Referrer-Policy', 'no-referrer')->assertHeader('X-Frame-Options', 'DENY')->assertHeader('X-Robots-Tag', 'noindex, nofollow');
     expect($response->headers->get('Content-Security-Policy'))->toContain("frame-ancestors 'none'")->toContain("font-src 'self'");
     expect($response->headers->get('Cache-Control'))->toContain('no-store');
+    expect(array_map(fn ($cookie) => $cookie->getName(), $response->headers->getCookies()))->toBe(['clintra_admin_session']);
     $cookie = collect($response->headers->getCookies())->first(fn ($cookie) => $cookie->getName() === 'clintra_admin_session');
     expect($cookie)->not->toBeNull()->and($cookie->isSecure())->toBeTrue()->and($cookie->isHttpOnly())->toBeTrue()->and($cookie->getSameSite())->toBe('strict');
     expect(config('session.encrypt'))->toBeTrue();

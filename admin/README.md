@@ -44,7 +44,9 @@ The database verifies password, TOTP and single-use recovery codes.
 
 Sign-in regenerates the Laravel session. Cookies are host-only, HttpOnly,
 SameSite=Strict and Secure except under APP_ENV=local. Sessions are encrypted at
-rest. All state-changing routes use CSRF. The reusable native step-up dialog
+rest. All state-changing routes use CSRF. The optional readable XSRF cookie is disabled;
+native forms use hidden tokens and Livewire uses the page meta token. Every
+issued cookie is therefore HttpOnly. The reusable native step-up dialog
 collects a fresh TOTP for password change; recovery codes cannot satisfy it.
 Passwords/codes are neither flashed nor placed into Livewire public state.
 The fifth counted failure uses the database's `all_sessions_ended:true` result

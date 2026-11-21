@@ -6,6 +6,7 @@ use App\Filament\Pages\AdminLog;
 use App\Filament\Pages\ChangePassword;
 use App\Filament\Pages\SignIn;
 use App\Http\Middleware\ResolvePlatformSession;
+use App\Http\Middleware\VerifyPanelCsrf;
 use Filament\FontProviders\LocalFontProvider;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -14,7 +15,6 @@ use Filament\PanelProvider;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
-use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\HtmlString;
@@ -31,7 +31,7 @@ final class AdminPanelProvider extends PanelProvider
             ->font('IBM Plex Sans Arabic', url: fn () => asset('fonts.css'), provider: LocalFontProvider::class)
             ->renderHook(PanelsRenderHook::HEAD_END, fn () => new HtmlString('<link rel="stylesheet" href="'.e(asset('panel.css')).'"><script src="'.e(asset('panel.js')).'"></script>'))
             ->middleware([EncryptCookies::class, AddQueuedCookiesToResponse::class, StartSession::class,
-                ShareErrorsFromSession::class, ValidateCsrfToken::class, SubstituteBindings::class,
+                ShareErrorsFromSession::class, VerifyPanelCsrf::class, SubstituteBindings::class,
                 DispatchServingFilamentEvent::class, ResolvePlatformSession::class])
             ->authMiddleware([ResolvePlatformSession::class, Authenticate::class], isPersistent: true);
     }

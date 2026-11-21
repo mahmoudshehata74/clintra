@@ -47,6 +47,7 @@ test('sign-in-totp-and-security', async ({ page, context }) => {
   await signIn(page, fixture);
   await expect(page).toHaveURL(/panel\/admin-log$/);
   await expect(page.getByRole('heading', { name: 'سجل الإدارة', exact: true })).toBeVisible();
+  expect((await context.cookies()).map(cookie => cookie.name)).toEqual(['clintra_admin_session']);
   const cookie = (await context.cookies()).find(cookie => cookie.name === 'clintra_admin_session')!;
   expect(cookie.httpOnly).toBe(true); expect(cookie.sameSite).toBe('Strict'); expect(cookie.secure).toBe(false); expect(cookie.value).not.toBe(initial);
   expect(remote).toEqual([]);
