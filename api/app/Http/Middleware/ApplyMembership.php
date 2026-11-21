@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Support\DatabaseSession;
 use App\Support\Identity\Identity;
 use App\Support\Identity\RequestProof;
+use App\Support\Sync\SyncSeqLock;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -71,6 +72,11 @@ class ApplyMembership
             }
 
             if ($credential['device_id'] !== null) {
+                // A write queued behind activation must check the new policy
+                // before the controller applies any operations.
+                if ($request->isMethod('POST') && $request->is('api/sync/push', 'api/audit/push', 'api/staff')) {
+                    SyncSeqLock::acquire();
+                }
                 $device = DB::selectOne('select device_exists(?) as exists', [$credential['device_id']]);
 
                 if (! $device->exists) {

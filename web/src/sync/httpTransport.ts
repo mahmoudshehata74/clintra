@@ -105,6 +105,8 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       rows: Array<{ entity: string; entity_id: string; rev: number; payload: Record<string, unknown> | null }>;
       device_series?: number | null;
       identity_enforced_at?: string;
+      identity_rollout_auto_at?: string;
+      identity_memberships?: PullSinceResult["identityMemberships"];
     };
 
     return {
@@ -112,6 +114,9 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       hasMore: body.has_more,
       deviceSeries: body.device_series,
       identityEnforcedAt: body.identity_enforced_at ?? null,
+      ...(body.identity_rollout_auto_at === undefined && body.identity_enforced_at === undefined
+        ? {} : { identityRolloutAutoAt: body.identity_rollout_auto_at ?? null }),
+      ...(body.identity_memberships === undefined ? {} : { identityMemberships: body.identity_memberships }),
       changes: body.rows.map((row) => ({
         entity: row.entity,
         entity_id: row.entity_id,
@@ -129,6 +134,8 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       rows: Array<{ entity: string; entity_id: string; rev: number; payload: Record<string, unknown> | null }>;
       device_series?: number | null;
       identity_enforced_at?: string;
+      identity_rollout_auto_at?: string;
+      identity_memberships?: PullSinceResult["identityMemberships"];
     };
 
     return {
@@ -136,6 +143,9 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       hasMore: body.has_more,
       deviceSeries: body.device_series,
       identityEnforcedAt: body.identity_enforced_at ?? null,
+      ...(body.identity_rollout_auto_at === undefined && body.identity_enforced_at === undefined
+        ? {} : { identityRolloutAutoAt: body.identity_rollout_auto_at ?? null }),
+      ...(body.identity_memberships === undefined ? {} : { identityMemberships: body.identity_memberships }),
       changes: body.rows.map((row) => ({
         entity: row.entity,
         entity_id: row.entity_id,

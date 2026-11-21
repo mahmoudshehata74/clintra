@@ -28,6 +28,20 @@ may need narrowing once one is picked.
   are CLI-only by design (`api/docs/rls.md`'s "One role per provisioning
   function") — nothing about them needs to be reachable over HTTP.
 
+## Identity scheduler
+
+Create all production roles, including `clintra_auth`, before running
+migrations. The identity migrations create functions owned by that role.
+
+Run `php artisan schedule:run` from the API directory every minute using
+the production environment. Laravel schedules
+`clintra:enforce-ready-identity` every minute. The command connects through
+`pgsql_owner`, using `DB_OWNER_USERNAME=clintra_owner`,
+`DB_OWNER_PASSWORD`, and the production `DB_DATABASE`. The web process
+uses the separate `pgsql` connection as `clintra_app`.
+The command activates organizations after the 30-day grace period only
+when their current readiness checks pass.
+
 ## Backups
 
 This is patient and billing data. There is no backup mechanism built

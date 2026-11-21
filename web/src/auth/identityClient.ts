@@ -95,7 +95,7 @@ export async function signIn(db: ClintraDatabase, device: DeviceRegistration, us
     await db.device_keys.update(device.id, { bound: true });
     const prior = db.credentials.where("[device_id+membership_id]").equals([device.id, result.membership_id]);
     const previousPin = await prior.first();
-    if (device.identity_enforced_at && result.pin_hash && result.pin_salt) {
+    if (result.pin_hash && result.pin_salt) {
       credential.pin_hash = result.pin_hash;
       credential.pin_salt = result.pin_salt;
     } else if (previousPin?.pin_hash && previousPin.pin_salt) {

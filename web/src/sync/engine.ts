@@ -10,7 +10,7 @@ import { applyPulledRow, familyTables, foldChildOpsOfRejectedCreate } from "./pu
 import { backOffGroup, GROUP_REJECTED_REASON, recordRefusedGroup } from "./syncGroups";
 import { CorrectionReason, settleRefusedLateEdit } from "./correctionReview";
 import { pruneRemoteAuditRows, runAuditPull, runAuditPush, type AuditSyncOutcome } from "./auditSync";
-import { hasAuditEndpoints, SyncAuthError, type PulledChange, type SyncTransport } from "./transport";
+import { hasAuditEndpoints, SyncAuthError, type PulledChange, type PullSinceResult, type SyncTransport } from "./transport";
 
 const DEFAULT_INTERVAL_MS = 10_000;
 
@@ -298,11 +298,14 @@ async function applyChange(
  * next page sees its op. Read once outside it, a tap landing while a long
  * page was still being applied had its row overwritten by that page.
  */
-async function applyPage(db: ClintraDatabase, changes: readonly PulledChange[]): Promise<void> {
+async function applyPage(db: ClintraDatabase, changes: readonly PulledChange[], identityMemberships?: PullSinceResult["identityMemberships"]): Promise<void> {
   await db.transaction("rw", db.tables, async () => {
     const pending = await rowsWithPendingWrites(db);
     for (const change of changes) {
       await applyChange(db, change, pending);
+    }
+    if (identityMemberships?.length) {
+      await db.memberships.bulkUpdate(identityMemberships.map(({ id, ...changes }) => ({ key: id, changes })));
     }
   });
 }
@@ -430,11 +433,12 @@ async function runBootstrapWindow(db: ClintraDatabase, transport: SyncTransport,
       return;
     }
 
-    await applyPage(db, result.changes);
+    await applyPage(db, result.changes, result.identityMemberships);
     await recordDeviceSeries(db, result.deviceSeries);
-    if (result.identityEnforcedAt !== undefined) {
-      await db.device.update(deviceId, { identity_enforced_at: result.identityEnforcedAt });
-    }
+    await db.device.update(deviceId, {
+      ...(result.identityEnforcedAt === undefined ? {} : { identity_enforced_at: result.identityEnforcedAt }),
+      ...(result.identityRolloutAutoAt === undefined ? {} : { identity_rollout_auto_at: result.identityRolloutAutoAt }),
+    });
 
     cursor = result.cursor;
     hasMore = result.hasMore;
@@ -489,7 +493,7 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
       return;
     }
 
-    await applyPage(db, result.changes);
+    await applyPage(db, result.changes, result.identityMemberships);
     await recordDeviceSeries(db, result.deviceSeries);
 
     cursor = result.cursor;
@@ -497,6 +501,7 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
     await db.device.update(deviceId, {
       pull_cursor: cursor,
       ...(result.identityEnforcedAt === undefined ? {} : { identity_enforced_at: result.identityEnforcedAt }),
+      ...(result.identityRolloutAutoAt === undefined ? {} : { identity_rollout_auto_at: result.identityRolloutAutoAt }),
     });
   }
 }

@@ -13,8 +13,8 @@ interface Credential { id: string; device_id: string; membership_id: string; loc
 const permissions = Object.keys(permissionCatalogue) as Permission[];
 const signInDate = new Intl.DateTimeFormat("ar-EG-u-nu-latn", { dateStyle: "medium", timeZone: "Africa/Cairo" });
 
-export default function StaffIdentityActions({ caller, target, locations }: {
-  caller: Membership; target: Membership; locations: Location[];
+export default function StaffIdentityActions({ caller, target, locations, allowPermissions, hasUsername }: {
+  caller: Membership; target: Membership; locations: Location[]; allowPermissions: boolean; hasUsername: boolean;
 }) {
   const fieldId = useId();
   const [action, setAction] = useState<Action>();
@@ -25,10 +25,11 @@ export default function StaffIdentityActions({ caller, target, locations }: {
   const [copyMessage, setCopyMessage] = useState<string>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [usernameSet, setUsernameSet] = useState(false);
   const owner = caller.role === "owner";
   const canRevoke = canManageCredential(caller, target);
-  const canReset = canRevoke && caller.id !== target.id && Boolean(target.username);
-  const canEdit = canEditPermissions(caller, target) && target.role !== "owner";
+  const canReset = canRevoke && caller.id !== target.id && Boolean(target.username || hasUsername || usernameSet);
+  const canEdit = allowPermissions && canEditPermissions(caller, target) && target.role !== "owner";
   const targetPath = `/staff/${target.id}`;
 
   function open(next?: Action) {
@@ -63,6 +64,7 @@ export default function StaffIdentityActions({ caller, target, locations }: {
       if (action === "username" && owner) {
         const result = await requestStaffIdentity<{ username: string; rev: number }>(db, caller.id, "PUT", `${targetPath}/username`, { username: String(form.get("username")), password });
         await db.memberships.update(target.id, { username: result.username, rev: result.rev });
+        setUsernameSet(true);
         open();
       } else if (action === "permissions" && canEdit) {
         const result = await requestStaffIdentity<{ permissions: string[]; rev: number }>(db, caller.id, "POST", targetPath, { permissions: granted, password });

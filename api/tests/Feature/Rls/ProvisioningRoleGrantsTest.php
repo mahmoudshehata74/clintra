@@ -303,7 +303,7 @@ test('clintra_auth holds exactly the auth functions\' column-exact footprint and
     expect(columnGrants('clintra_auth', 'memberships', 'SELECT'))->toBe([
         'display_name', 'id', 'is_active', 'org_id', 'permissions', 'pin_hash', 'pin_salt', 'rev', 'role', 'user_id', 'username',
     ]);
-    expect(columnGrants('clintra_auth', 'memberships', 'UPDATE'))->toBe(['username']);
+    expect(columnGrants('clintra_auth', 'memberships', 'UPDATE'))->toBe(['permissions', 'username']);
     expect(columnGrants('clintra_auth', 'member_passwords', 'UPDATE'))->toBe(['must_change', 'password_hash', 'set_at', 'set_by_membership_id']);
     expect(columnGrants('clintra_auth', 'member_credentials', 'SELECT'))->toBe(['created_at', 'device_id', 'id', 'membership_id', 'org_id', 'revoked_at']);
     expect(columnGrants('clintra_auth', 'member_credentials', 'UPDATE'))->toBe(['last_used_at', 'revoke_reason', 'revoked_at', 'revoked_by_membership_id']);
@@ -314,6 +314,11 @@ test('clintra_auth holds exactly the auth functions\' column-exact footprint and
     expect(columnGrants('clintra_auth', 'activation_codes', 'UPDATE'))->toBe(['used_at', 'used_by_device_id']);
     expect(columnGrants('clintra_auth', 'users', 'SELECT'))->toBe(['id', 'phone']);
     expect(columnGrants('clintra_auth', 'organizations', 'SELECT'))->toBe(['id', 'identity_enforced_at']);
+    expect(columnGrants('clintra_auth', 'organizations', 'UPDATE'))->toBe(['identity_enforced_at']);
+    expect(columnGrants('clintra_auth', 'audit_log', 'SELECT'))->toBe(['after', 'at', 'entity', 'org_id']);
+    expect(columnGrants('clintra_auth', 'sync_ledger', 'INSERT'))->toBe([
+        'actor_membership_id', 'applied_at', 'client_created_at', 'device_id', 'entity', 'entity_id', 'op_id', 'org_id', 'rev',
+    ]);
 
     // The complete list of (table, privilege) pairs at column level — any
     // grant not named above is a hole by definition. (A whole-table grant
@@ -326,24 +331,24 @@ test('clintra_auth holds exactly the auth functions\' column-exact footprint and
     SQL);
     expect(collect($rows)->map(fn ($row) => "{$row->table_name}:{$row->privilege_type}")->all())->toBe([
         'activation_codes:SELECT', 'activation_codes:UPDATE',
-        'audit_log:INSERT',
+        'audit_log:INSERT', 'audit_log:SELECT',
         'device:SELECT', 'device:UPDATE',
         'login_attempts:INSERT', 'login_attempts:SELECT', 'login_attempts:UPDATE',
         'member_credentials:INSERT', 'member_credentials:SELECT', 'member_credentials:UPDATE',
         'member_passwords:INSERT', 'member_passwords:SELECT', 'member_passwords:UPDATE',
         'memberships:SELECT', 'memberships:UPDATE',
-        'organizations:SELECT',
+        'organizations:SELECT', 'organizations:UPDATE',
+        'sync_ledger:INSERT',
         'users:SELECT',
     ]);
 
-    // Nothing at all on clinical or financial tables, nor on the sync and
-    // audit stores beyond the one audit_log INSERT.
+    // Nothing at all on clinical or financial tables or on device audit.
     $mustNeverAppear = [
         'patients', 'visits', 'visit_form_data', 'visit_form_revisions', 'prescriptions', 'prescription_items',
         'care_plans', 'care_plan_items', 'messages', 'message_templates', 'day_state', 'schedules', 'schedule_exceptions',
         'invoices', 'invoice_items', 'payments', 'cash_close', 'services', 'service_price_overrides',
         'practitioners', 'locations', 'membership_locations', 'membership_practitioners',
-        'sync_ledger', 'device_audit_log', 'specialty_templates', 'form_definitions', 'personal_access_tokens',
+        'device_audit_log', 'specialty_templates', 'form_definitions', 'personal_access_tokens',
     ];
     foreach ($mustNeverAppear as $table) {
         $any = $this->asOwner()->select(<<<'SQL'

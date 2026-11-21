@@ -1,9 +1,12 @@
 import { useState } from "react";
+import text from "../../auth/identityStrings";
 import { useIdentityAccess } from "../../auth/permissions";
+import { useDeviceAccount } from "../../auth/rollout";
 import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
 import { withDoctorPrefix } from "./doctorName";
+import IdentityRolloutPanel from "./IdentityRolloutPanel";
 import PractitionersPanel from "./PractitionersPanel";
 import { countServicesByState } from "./serviceCounts";
 import ServicesPanel from "./ServicesPanel";
@@ -13,7 +16,7 @@ import StaffPanel from "./StaffPanel";
 import { dayScreenStrings } from "./strings";
 import WorkingHoursPanel from "./WorkingHoursPanel";
 
-type Panel = "hours" | "services" | "staff" | "practitioners";
+type Panel = "hours" | "services" | "staff" | "practitioners" | "rollout";
 
 interface SettingsSheetProps {
   practitionerId: string;
@@ -27,6 +30,7 @@ const TAB_OPTIONS: readonly { value: Panel; label: string }[] = [
   { value: "services", label: dayScreenStrings.settingsServicesTab },
   { value: "staff", label: dayScreenStrings.settingsStaffTab },
   { value: "practitioners", label: dayScreenStrings.settingsPractitionersTab },
+  { value: "rollout", label: text.rolloutTitle },
 ];
 
 /**
@@ -41,10 +45,13 @@ const TAB_OPTIONS: readonly { value: Panel; label: string }[] = [
 export default function SettingsSheet({ practitionerId, locationId, orgId, onDismiss }: SettingsSheetProps) {
   const [selected, setPanel] = useState<Panel>("hours");
   const access = useIdentityAccess();
+  const ownerId = access.member?.role === "owner" && access.member.is_active ? access.member.id : undefined;
+  const ownerDevice = useDeviceAccount(ownerId);
   const available = TAB_OPTIONS.filter(({ value }) => {
     if (value === "hours") return access.allows("schedules.manage");
     if (value === "services") return access.allows("services.manage");
     if (value === "staff") return access.allows("staff.manage");
+    if (value === "rollout") return Boolean(ownerId && ownerDevice);
     return !access.enforced || access.member?.role === "owner";
   });
   const panel = available.some(({ value }) => value === selected) ? selected : available[0]?.value;
@@ -88,7 +95,7 @@ export default function SettingsSheet({ practitionerId, locationId, orgId, onDis
               title: dayScreenStrings.settingsStaffTab,
               subtitle: context ? `${context.activeStaffCount} ${dayScreenStrings.settingsStaffHeadActiveUnit}` : undefined,
             }
-          : { title: dayScreenStrings.settingsPractitionersTab, subtitle: undefined };
+          : { title: panel === "rollout" ? text.rolloutTitle : dayScreenStrings.settingsPractitionersTab, subtitle: undefined };
 
   return (
     <Sheet onDismiss={onDismiss} size="lg">
@@ -110,6 +117,7 @@ export default function SettingsSheet({ practitionerId, locationId, orgId, onDis
       {panel === "services" && <ServicesPanel orgId={orgId} />}
       {panel === "staff" && <StaffPanel orgId={orgId} />}
       {panel === "practitioners" && <PractitionersPanel orgId={orgId} />}
+      {panel === "rollout" && ownerId && <IdentityRolloutPanel key={ownerId} ownerId={ownerId} />}
     </Sheet>
   );
 }
