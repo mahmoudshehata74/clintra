@@ -326,6 +326,8 @@ owner credentials don't belong here at all):**
 - `DB_USERNAME=clintra_app`, `DB_APP_PASSWORD`
 
 **CORS:**
+The proof headers must stay in allowed_headers; without them every signed request from the web origin fails its preflight once a clinic is enforced.
+
 - `CORS_ALLOWED_ORIGINS` — comma-separated, the deployed web app's real
   origin(s). `http://localhost:5173`/`http://127.0.0.1:5173` are always
   allowed in addition, for local frontend development against a real
@@ -492,6 +494,27 @@ environment variables:
    curl -i https://api.example.com/api/isolation-probe
    # expect: HTTP/1.1 401, body {"error":"unauthenticated","message":"..."}
    ```
+
+## Testing notes
+
+Before every full local gate, rebuild `clintra_test` from the branch under
+test so its schema and migration records match that branch. From `api/`,
+set `DB_DATABASE=clintra_test` in the command's environment, then run:
+
+```sh
+php artisan migrate:fresh --database=pgsql_owner --force
+```
+
+Destructive database commands are allowed only on `clintra_test`. Never
+run this on the development database; development uses plain `migrate`.
+Run gate suites sequentially: tsc, lint (0 errors and 0 warnings), Vitest,
+build, e2e with `--grep-invert '@screenshot'`, Pest, then `test:live`.
+Require zero flaky, retried, or timed-out tests and record the gate on the
+exact merge tree in the pull request.
+
+The preflight tests establish migration metadata inside their own rolled
+back transactions, including both mismatch directions. The command itself
+remains read-only and rejects either mismatch.
 
 ## Region: round-trip latency matters here specifically
 

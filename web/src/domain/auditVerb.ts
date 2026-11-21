@@ -264,7 +264,7 @@ const FALLBACK_UPDATE_VERBS: Partial<Record<string, string>> = {
   patients: "عدّل بيانات المريض",
   invoices: "عدّل الفاتورة",
   payments: "عدّل الدفعة",
-  cash_close: "عدّل إغلاق اليوم",
+  cash_close: "عدّل إقفال اليوم",
   prescriptions: "عدّل الوصفة",
   prescription_items: "عدّل دواء",
   // Verb only: a practitioner's name, title or syndicate number never

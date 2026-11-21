@@ -101,7 +101,7 @@ describe("clinical corrections", () => {
 
   it.each([
     ["conflict_stale_rev", CORRECTION_STALE_LABEL],
-    ["correction_not_allowed", "تعديل الزيارة بعد ما تتقفل لدكتور الزيارة أو صاحب العيادة بس"],
+    ["correction_not_allowed", "تعديل الزيارة بعد ما تتقفل لطبيب الزيارة أو صاحب العيادة بس"],
     ["correction_invalid", "التعديل ده مش مطابق لآخر نسخة من نموذج الزيارة، أو معاه تغييرات تانية، فماتحفظش"],
     ["revision_immutable", "سجل التعديلات مينفعش يتغيّر أو يتمسح"],
   ])("reads a refused correction group (%s) as one line", (reason, line) => {

@@ -425,8 +425,8 @@ describe("the create form", () => {
   });
 
   it("maps the writer's refusals to Arabic", () => {
-    expect(carePlanErrorMessage(new Error(CarePlanError.PlanAlreadyActive))).toBe("المريض عنده خطة رعاية جارية مع الدكتور ده");
-    expect(carePlanErrorMessage(new Error(CarePlanError.NotPlanPractitioner))).toBe("الخطة بيعدّلها دكتور الخطة بس");
+    expect(carePlanErrorMessage(new Error(CarePlanError.PlanAlreadyActive))).toBe("المريض عنده خطة رعاية جارية مع الطبيب ده");
+    expect(carePlanErrorMessage(new Error(CarePlanError.NotPlanPractitioner))).toBe("الخطة بيعدّلها طبيب الخطة بس");
     expect(carePlanErrorMessage(new Error(CarePlanError.GoalRequired))).toBe("اكتب الهدف");
     expect(carePlanErrorMessage(new Error("boom"))).toBe("ما اتحفظش، جرّب تاني");
   });

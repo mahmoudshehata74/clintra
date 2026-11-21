@@ -52,7 +52,7 @@ export const visitWorkspaceStrings = {
   // db/prescriptions.ts's refusals, as the doctor reads them.
   rxErrorNameRequired: "اكتب اسم الدواء",
   rxErrorInstructionsRequired: "اكتب طريقة الاستخدام",
-  rxErrorNotPrescriber: "الوصفة بيكتبها دكتور الزيارة بس",
+  rxErrorNotPrescriber: "الوصفة بيكتبها طبيب الزيارة بس",
   rxErrorFailed: "ما اتحفظش، جرّب تاني",
 
   // `.runrow`
@@ -84,7 +84,7 @@ export const visitCorrectionStrings = {
   cancel: "إلغاء",
 
   // The writer's refusals (db/visitCorrections.ts), as the doctor reads them.
-  errorNotAllowed: "تعديل الزيارة بعد ما تتقفل لدكتور الزيارة أو صاحب العيادة بس",
+  errorNotAllowed: "تعديل الزيارة بعد ما تتقفل لطبيب الزيارة أو صاحب العيادة بس",
   errorReasonRequired: "اكتب سبب التعديل (3 حروف على الأقل)",
   errorReasonTooLong: "السبب طويل، خليه 500 حرف أو أقل",
   errorUnchanged: "مفيش تغيير عن النسخة الحالية",
