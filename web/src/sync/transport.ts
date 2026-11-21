@@ -150,3 +150,10 @@ export class SyncAuthError extends Error {
     this.name = "SyncAuthError";
   }
 }
+
+export class SyncOrganizationSuspendedError extends Error {
+  constructor() {
+    super("org_disabled");
+    this.name = "SyncOrganizationSuspendedError";
+  }
+}

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Support\DatabaseSession;
+use App\Support\OrganizationSuspension;
 use App\Support\Identity\Identity;
 use App\Support\Identity\RequestProof;
 use App\Support\Sync\SyncSeqLock;
@@ -55,6 +56,9 @@ class ApplyMembership
 
         return DB::transaction(function () use ($request, $next, $credential) {
             app(DatabaseSession::class)->applyMembership($credential['membership_id']);
+            if ($credential['device_id'] !== null && DB::selectOne('select device_org_disabled(?) as disabled', [$credential['device_id']])->disabled) {
+                return OrganizationSuspension::response();
+            }
 
             // current_org() re-resolves live from `memberships`, scoped to
             // `is_active = true` (see 2026_09_11_170029_enable_rls_policies.php)
@@ -76,6 +80,9 @@ class ApplyMembership
                 // before the controller applies any operations.
                 if ($request->isMethod('POST') && $request->is('api/sync/push', 'api/audit/push', 'api/staff')) {
                     SyncSeqLock::acquire();
+                    if (DB::selectOne('select device_org_disabled(?) as disabled', [$credential['device_id']])->disabled) {
+                        return OrganizationSuspension::response();
+                    }
                 }
                 $device = DB::selectOne('select device_exists(?) as exists', [$credential['device_id']]);
 

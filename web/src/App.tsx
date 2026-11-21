@@ -1,6 +1,7 @@
 import { ensureContractReferenceData } from "./db/contractReferenceData";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import LockScreen from "./auth/LockScreen";
+import { suspensionStrings, useOrganizationSuspension } from "./sync/organizationSuspension";
 import identityText from "./auth/identityStrings";
 import { showRolloutWarning } from "./auth/rollout";
 import { hasPermission, IdentityAccessContext } from "./auth/permissions";
@@ -61,6 +62,7 @@ export default function App() {
   // either way: it never runs once real org data already exists).
   const [bootStatus, setBootStatus] = useState<BootStatus>(() => (isDemoModeRequested() ? "ready" : "checking"));
   const [authErrorDetected, setAuthErrorDetected] = useState(false);
+  const organizationSuspended = useOrganizationSuspension();
 
   // The device's stored appearance (db/preferences.ts) over index.html's
   // pre-paint mirror of it — the two differ only if site storage was
@@ -279,6 +281,7 @@ export default function App() {
         today={dayScreenToday}
         whoName={isDoctorViewShown && doctorPractitionerName ? withDoctorPrefix(doctorPractitionerName) : undefined}
       >
+        {organizationSuspended && <p role="status" className="mb-3 rounded-card border border-danger-line bg-danger-wash px-4 py-3 text-sm text-danger">{suspensionStrings.banner}</p>}
         {showRolloutWarning(identityDevice?.identity_enforced_at, identityDevice?.identity_rollout_auto_at) && (
           <p role="status" className="mb-3 rounded-card border border-copper-line bg-copper-wash px-4 py-3 text-sm text-copper-ink">
             {identityText.rolloutWarning}

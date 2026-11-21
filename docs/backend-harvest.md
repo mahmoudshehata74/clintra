@@ -68,6 +68,39 @@ Verdicts: **covered** = already covered; **port** = port the idea;
 
 Counts: covered 17 · port the idea 10 · does not fit 7 (34 rows).
 
+### Port implementation inventory, 2026-11-21
+
+The original table records the source review. Its port candidates now have
+the following implementations.
+
+| Row | Feature | Current implementation |
+|---|---|---|
+| 8 | Schedule exceptions | `db/scheduleExceptions.ts`, working-hours UI, sync and schema migrations |
+| 10 | Opening float | `cash_close.opening_amount`, cash-close UI and reports, `CashCloseOpeningAmountTest` |
+| 11 | Patient archive | `db/patientArchive.ts`, profile action and booking/search filters |
+| 12 | Restricted clinical timeline | `profileModel.ts` and `clinicalAccess.ts`, plus enforced permission gates |
+| 16 | Queue reorder | `domain/queueReorder.ts`, queue controls, grouped sync and stale checks |
+| 20 | Clinical corrections | Immutable revisions, correction UI, guarded server writes and history |
+| 21 | Invoice item editing | `db/invoiceItems.ts`, invoice editor and server payment/duration guards |
+| 24 | Reports | The on-device reports screen and CSV export |
+| 27 | Organization suspension | Implemented for review in `feat/organization-suspension`, migration 000053 and the CLI command below |
+| 32 | Route inventory | `api/tests/Feature/ApiRouteInventoryTest.php` |
+
+The suspension port is independent of the platform-admin panel. Operators
+use `php artisan clintra:organization-status ORG_ID disabled --reason="..."`
+or `php artisan clintra:organization-status ORG_ID enabled` through the CLI
+connection. The function takes the organization's sync lock, retains data
+and tokens, and records the change in the clinic audit log under its active
+owner, following the existing CLI device-revocation attribution convention.
+Only the CLI role can call it. The future platform panel can use its own
+admin session and log when that design's phases are supplied.
+
+Suspended device endpoints return `403 org_disabled`. Invalid registration
+credentials retain the generic failure. A valid registration on a suspended
+organization leaves its code unused. RLS resolves the suspended organization
+to no scope. Devices preserve local work, pause sync, check status at the
+first engine tick after 15 minutes, and check immediately on reconnect.
+
 ## 3. His reports
 
 All ten take the same inputs: `date_from`, `date_to` (inclusive, `YYYY-MM-DD`,
