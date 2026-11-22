@@ -1,3 +1,4 @@
+import { shotDirectory } from "./browserArtifacts";
 import { expect, test, type Page } from "@playwright/test";
 import { formatEgyptianPhoneForDisplay } from "../src/domain/phone";
 import {
@@ -55,9 +56,9 @@ import { prescriptionPrintStrings as RX } from "../src/screens/prescription/stri
 // Opt-in visual-review capture. Every test here is tagged @screenshot, so the
 // default interaction run (pnpm test:e2e uses --grep-invert @screenshot) and CI
 // skip it entirely; it runs only via `pnpm test:e2e:screenshots`, locally, so a
-// human can inspect the PNGs. Output lands in e2e/screenshots/ (gitignored).
+// human can inspect the PNGs. Output lands in e2e/screenshots/<run>/ (gitignored).
 
-const OUT_DIR = process.env.CLINTRA_SHOT_DIR ?? "e2e/screenshots";
+const OUT_DIR = shotDirectory(process.env.CLINTRA_SHOT_DIR ?? "e2e/screenshots");
 
 // A crashing screen renders blank without necessarily failing an assertion, so
 // every capture also asserts no uncaught page error fired while reaching it.

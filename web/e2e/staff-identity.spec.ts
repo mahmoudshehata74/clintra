@@ -1,3 +1,4 @@
+import { shotDirectory } from "./browserArtifacts";
 import { expect, test, type Page } from "@playwright/test";
 import { registrationStrings as activation } from "../src/auth/registrationStrings";
 import { lockOverlay, S, sidebar, SIDEBAR } from "./support";
@@ -138,7 +139,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     });
     test("staff identity screens @screenshot", async ({ page }, info) => {
       await staffWorkflow(page, async (screen) => {
-        await page.screenshot({ path: `e2e/identity-shots/${screen}-${info.project.name}-${colorScheme}.png` });
+        await page.screenshot({ path: `${shotDirectory("e2e/identity-shots")}/${screen}-${info.project.name}-${colorScheme}.png` });
       });
     });
   });

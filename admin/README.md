@@ -100,7 +100,10 @@ desktop 1280×900 and mobile 390×844 with one worker, no retries and no flaky p
 Its three isolated servers use ports 8001–8003 to test allowlist off, denied and
 allowed without a test HTTP backdoor. The main browser server explicitly trusts
 loopback as its fixture proxy, giving each test an independent database/IP budget.
-Screenshots go to ignored `web/e2e/admin-shots/b3-*.png`.
+Screenshots go to ignored `web/e2e/admin-shots/<run>/b3-*.png`. Each browser
+invocation reserves a fresh Cairo timestamp plus a unique suffix; workers share
+that run folder. Earlier captures are never overwritten. The reporter prints
+the screenshot and failure-artifact folder paths at the end of every run.
 
 The gate is the existing sequential gate, followed by panel Pest and panel
 Playwright. CI's separate admin job uses the same role-provisioning script and

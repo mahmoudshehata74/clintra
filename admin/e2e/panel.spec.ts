@@ -1,9 +1,9 @@
+import { shotDirectory } from '../../web/e2e/browserArtifacts';
 import { test, expect, type Page } from '../../web/node_modules/@playwright/test/index.mjs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { mkdirSync } from 'node:fs';
 const api = fileURLToPath(new URL('../../api/', import.meta.url));
-const shots = fileURLToPath(new URL('../../web/e2e/admin-shots/', import.meta.url));
+const shots = shotDirectory('e2e/admin-shots') + '/';
 type Fixture = { id: string; email: string; password: string; recovery: string; org: string; logIds: string[] };
 function fixtureCommand(command: string, id = '', extra = '') {
   return JSON.parse(execFileSync('php', [api + 'scripts/panel-test-fixtures.php', command, id, extra], { cwd: api, env: { ...process.env, APP_ENV: 'testing', DB_DATABASE: 'clintra_test' }, encoding: 'utf8', timeout: 30000 }));
@@ -31,7 +31,6 @@ test.beforeEach(async ({ context }) => {
   await context.setExtraHTTPHeaders({ 'X-Forwarded-For': `2001:db8:${hex}` });
 });
 test.afterEach(async ({ page }, info) => {
-  mkdirSync(shots, { recursive: true });
   await page.screenshot({ path: shots + `b3-${info.project.name}-${info.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`, fullPage: true });
   fixtureCommand('retire', fixture.id);
 });

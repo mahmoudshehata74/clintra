@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { shotDirectory } from "./browserArtifacts";
 import { expect, test, type Page } from "@playwright/test";
 import { registrationStrings as activation } from "../src/auth/registrationStrings";
 import { suspensionStrings } from "../src/sync/organizationSuspension";
@@ -78,7 +78,6 @@ test("a suspended clinic keeps local bookings and resumes on reconnect", async (
   disabled = true;
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await expectSuspensionInFlow(page);
-  await mkdir("e2e/admin-shots", { recursive: true });
   const nav = page.getByRole("navigation", { name: SIDEBAR.navAriaLabel });
   for (const [screen, label] of Object.entries({ day: SIDEBAR.navDay, patients: SIDEBAR.navPatients,
     doctor: SIDEBAR.navDoctor, visit: SIDEBAR.navVisit, messages: SIDEBAR.navMessages,
@@ -91,7 +90,7 @@ test("a suspended clinic keeps local bookings and resumes on reconnect", async (
       await expect(control).toBeVisible();
       await control.click({ trial: true });
     }
-    await page.screenshot({ path: `e2e/admin-shots/b2-review-${testInfo.project.name}-${screen}.png` });
+    await page.screenshot({ path: `${shotDirectory("e2e/admin-shots")}/b2-review-${testInfo.project.name}-${screen}.png` });
   }
   await nav.getByRole("button", { name: SIDEBAR.navDay, exact: true }).click();
   await page.getByRole("button", { name: AUTH.lockButtonLabel, exact: true }).click();
@@ -100,7 +99,7 @@ test("a suspended clinic keeps local bookings and resumes on reconnect", async (
   await expect(lock.locator('[data-organization-suspension]')).toHaveCount(1);
   await expect(page.locator('[data-organization-suspension]')).toHaveCount(1);
   expect(await lockNotice.evaluate(element => element.closest('[role="dialog"]')?.getAttribute('aria-label'))).toBe(AUTH.lockOverlayAria);
-  await page.screenshot({ path: `e2e/admin-shots/b2-review-${testInfo.project.name}-locked.png` });
+  await page.screenshot({ path: `${shotDirectory("e2e/admin-shots")}/b2-review-${testInfo.project.name}-locked.png` });
   await enterPin(page, "2468");
   await expect(lock).toBeHidden();
   await page.context().setOffline(true);
@@ -110,7 +109,7 @@ test("a suspended clinic keeps local bookings and resumes on reconnect", async (
   expect(queued.some((op) => op.synced_at === null && op.failure_count === 0)).toBe(true);
   expect(queued.some((op) => op.payload.service_id === payloads[0][1].id)).toBe(true);
   expect(calls).toBe(pausedCalls);
-  await page.screenshot({ path: `e2e/admin-shots/b2-review-${testInfo.project.name}-offline-queue.png` });
+  await page.screenshot({ path: `${shotDirectory("e2e/admin-shots")}/b2-review-${testInfo.project.name}-offline-queue.png` });
   disabled = false;
   await page.context().setOffline(false);
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
@@ -130,6 +129,5 @@ test("registration shows the exact disabled clinic line without registering", as
   await registration.getByRole("button", { name: activation.submitLabel }).click();
   await expect(page.getByText("العيادة دي حسابها موقوف. كلّم فريق كلينترا.")).toBeVisible();
   expect(await readStore(page, "device")).toHaveLength(0);
-  await mkdir("e2e/admin-shots", { recursive: true });
-  await page.screenshot({ path: `e2e/admin-shots/b2-review-${testInfo.project.name}-registration.png` });
+  await page.screenshot({ path: `${shotDirectory("e2e/admin-shots")}/b2-review-${testInfo.project.name}-registration.png` });
 });

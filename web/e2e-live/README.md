@@ -122,3 +122,9 @@ purpose: on Windows, the console layer reads piped answers in the OEM code
 page, which has no Arabic, so an Arabic answer would be stored garbled.
 The answers are written one at a time, each only after its prompt shows,
 because the hidden PIN prompt reads straight from the inherited stdin.
+
+Browser captures use a fresh timestamped subfolder of each ignored shot folder
+for every invocation, including `web/e2e/admin-shots/<run>/` for suspension
+captures. The timestamp uses Cairo time and a unique suffix separates runs
+started in the same second. The run prints its screenshot and failure-artifact
+folder paths when it ends; earlier captures are preserved.

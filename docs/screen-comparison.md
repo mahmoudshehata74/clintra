@@ -4,8 +4,9 @@ Every screen of `docs/reference/clintra-prototype.html` (sections `#s1` …
 `#s19`) next to the app driven to the state that best matches it, at desktop
 (1280 wide) and mobile (390 wide). The captures come from
 `pnpm --dir web test:compare` (`web/e2e/compare.spec.ts`); open
-`web/e2e/compare/index.html` to see each pair side by side. The images are
-regenerated on every run and are not committed.
+`web/e2e/compare/<run>/index.html` in the folder printed at the end to see each
+pair side by side. Every invocation uses a fresh Cairo timestamp plus a unique
+suffix, preserving earlier captures. The images and reports are not committed.
 
 This is the comparison after the prototype alignment (`fix/prototype-alignment`):
 every earlier [fix] is applied, and every earlier [ask] is answered by the
@@ -329,7 +330,7 @@ Every screen again in dark: the prototype with `data-theme="dark"` on its
 `<html>` (its explicit dark block), the app on a dark system with its
 appearance left on auto (`web/src/index.css`'s `prefers-color-scheme`
 block — the same values). `pnpm --dir web test:compare` writes them next to
-the light ones with a `-dark` suffix, and `web/e2e/compare/index.html` shows
+the light ones with a `-dark` suffix, and `web/e2e/compare/<run>/index.html` shows
 light and dark pairs for both viewports. The capture asserts the app's body
 is on the dark `paper` before it shoots.
 

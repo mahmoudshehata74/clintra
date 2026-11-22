@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { browserArtifacts } from "../e2e/browserArtifacts";
+
+const artifacts = browserArtifacts("live");
 
 // The live two-device sync run (README.md here): the real web app on Vite's
 // dev server, whose /api proxy reaches the real API on 127.0.0.1:8000 —
@@ -15,7 +18,8 @@ export default defineConfig({
   retries: 0,
   timeout: 180_000,
   expect: { timeout: 30_000 },
-  reporter: [["list"]],
+  outputDir: artifacts.outputDir,
+  reporter: [["list"], artifacts.reporter],
   use: {
     ...devices["Desktop Chrome"],
     viewport: { width: 1280, height: 800 },
