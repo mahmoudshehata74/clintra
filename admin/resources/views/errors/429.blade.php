@@ -1,0 +1,1 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>تسجيل الدخول</title><link rel="stylesheet" href="/fonts.css"><link rel="stylesheet" href="/panel.css"></head><body><main class="sign-in-page"><x-sign-in-card error="محاولات كتير، استنى ربع ساعة" /></main></body></html>

@@ -1,18 +1,19 @@
+import { shotDirectory } from "./browserArtifacts";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { addDrug, closeSheet, karimInRoom, openPrintSheet, openVisitSheet, RX, S, type Drug } from "./support";
 
 // Opt-in visual review of the printed prescription (tagged @screenshot, so
 // `pnpm test:e2e` skips it): run with
 // `pnpm exec playwright test e2e/rx-shots.spec.ts --project=desktop --grep @screenshot`
-// after a build. PNGs land in e2e/rx-shots/ (gitignored). The 3-drug shots
+// after a build. PNGs land in e2e/rx-shots/<run>/ (gitignored). The 3-drug shots
 // are the sheet's preview; the 12-drug shots are paper, laid out under print
 // media at the A5 content width (148 − 2 × 12 mm) and cut where Chromium
 // breaks the page: at the first unbreakable block that would cross the
 // A5 content height (210 − 2 × 12 mm). The 25-drug case is the real print:
-// Chromium's own PDF of the A5 pages (e2e/rx-shots/rx-25-drugs.pdf), which
+// Chromium's own PDF of the A5 pages (rx-25-drugs.pdf in that run folder), which
 // alone carries the page-margin header "تابع روشتة …" of every page after
 // the first; rasterise it to look at it.
-const OUT_DIR = "e2e/rx-shots";
+const OUT_DIR = shotDirectory("e2e/rx-shots");
 const MM = 96 / 25.4;
 const PAGE_WIDTH = Math.round(124 * MM);
 const PAGE_HEIGHT = Math.floor(186 * MM);

@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { browserArtifacts } from "./e2e/browserArtifacts";
+
+const artifacts = browserArtifacts("web");
 
 // The preview server (vite preview) serves the built app from dist/. It runs
 // on a dedicated, fixed port so the baseURL and webServer agree, and so a
@@ -47,7 +50,8 @@ export default defineConfig({
   // adds nothing on an ordinary all-first-try-green run, and exactly one
   // visible marker when a retry masked a first-attempt failure — see its
   // own doc comment.
-  reporter: [["list"], ["./e2e/retrySummaryReporter.ts"]],
+  outputDir: artifacts.outputDir,
+  reporter: [["list"], ["./e2e/retrySummaryReporter.ts"], artifacts.reporter],
   use: {
     baseURL: BASE_URL,
     // Interaction tests keep a screenshot and a trace only when something

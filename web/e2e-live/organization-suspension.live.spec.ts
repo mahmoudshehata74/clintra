@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { shotDirectory } from "../e2e/browserArtifacts";
 import { expect, test } from "@playwright/test";
 import { readStore } from "../e2e/support";
 import { suspensionStrings } from "../src/sync/organizationSuspension";
@@ -22,13 +22,12 @@ test("a suspended clinic keeps A's booking and sends it to B after the CLI enabl
       await b.page.evaluate(() => window.dispatchEvent(new Event("online")));
       await expect(a.page.getByText(suspensionStrings.banner)).toBeVisible();
       await expect(b.page.getByText(suspensionStrings.banner)).toBeVisible();
-      await mkdir('e2e/admin-shots', { recursive: true });
-      await a.page.screenshot({ path: 'e2e/admin-shots/live-disabled.png' });
+      await a.page.screenshot({ path: `${shotDirectory("e2e/admin-shots")}/live-disabled.png` });
       const name = "مريض فترة إيقاف الحساب";
       await bookNew(a, name);
       expect(await pushed(a)).toBe(false);
       expect(await rowCount(b, name)).toBe(0);
-      await a.page.screenshot({ path: 'e2e/admin-shots/live-queued.png' });
+      await a.page.screenshot({ path: `${shotDirectory("e2e/admin-shots")}/live-queued.png` });
       await setOrganizationSuspended(org, false);
       await a.page.evaluate(() => window.dispatchEvent(new Event("online")));
       await b.page.evaluate(() => window.dispatchEvent(new Event("online")));
@@ -36,7 +35,7 @@ test("a suspended clinic keeps A's booking and sends it to B after the CLI enabl
       await eventually([a], () => pushed(a), true);
       await expect(a.page.getByText(suspensionStrings.banner)).toHaveCount(0);
       await expect(b.page.getByText(suspensionStrings.banner)).toHaveCount(0);
-      await a.page.screenshot({ path: 'e2e/admin-shots/live-enabled.png' });
+      await a.page.screenshot({ path: `${shotDirectory("e2e/admin-shots")}/live-enabled.png` });
       expect(a.errors).toEqual([]);
       expect(b.errors).toEqual([]);
     } finally {

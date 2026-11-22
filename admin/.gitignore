@@ -1,0 +1,12 @@
+/vendor/
+/.env
+/.env.*
+!/.env.example
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+/public/css/filament/
+/public/js/filament/
+/public/fonts/filament/
+/public/fonts/ibm-plex-sans-arabic*/
+/.phpunit.cache/
+

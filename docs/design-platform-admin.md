@@ -1,7 +1,6 @@
 # Design: platform admin panel, organization disable, figures and support access
 
-Status: B1 is merged in PR #69. B2 organization disable/enable is implemented
-for review. The remaining phases are plans, to be reviewed before their migrations are written.
+Status: B1 and B2 are merged. B3 panel implementation is under review. The remaining phases are plans, to be reviewed before their migrations are written.
 
 ## 1. Goal
 
@@ -231,7 +230,8 @@ idle sessions, and inactive admins, return `session_invalid` and log a
 null admin. A wrong or reused TOTP returns `step_up_failed` and logs the
 admin resolved from the valid session. A valid session blocked by its
 initial-password flag logs that admin with `password_change_required`.
-Public refusals remain `{ok: false, reason}`.
+Public refusals are `{ok: false, reason}`; B3 password change additionally
+returns `all_sessions_ended: true` on the refusal that ends every session.
 
 Five failed step-ups or current-password checks per admin in 15 minutes end all of that admin's
 unended sessions in the same transaction as the fifth refusal's log row.
@@ -492,6 +492,8 @@ FROM PUBLIC` after each. Owners and callers:
 |---|---|---|
 | `platform.totp_at(bytea, bigint)` | `clintra_admin_auth` | `clintra_admin_auth` only (called inside its own functions) |
 | `platform.admin_login(jsonb)` | `clintra_admin_auth` | `clintra_admin_app` |
+| `platform.admin_whoami(uuid)` | `clintra_admin_auth` | `clintra_admin_app` |
+| `platform.admin_log_page(uuid, jsonb)` | `clintra_admin_auth` | `clintra_admin_app` |
 | `platform.admin_logout(uuid)` | `clintra_admin_auth` | `clintra_admin_app` |
 | `platform.admin_change_password(jsonb)` | `clintra_admin_auth` | `clintra_admin_app` |
 | `platform.admin_session_actor(uuid, text, boolean)` | `clintra_admin_auth` | the six action roles |
@@ -876,3 +878,28 @@ Implementation order: C, then A, then B. Every function named in a design is
 written out in full SQL in its migration PR, which the owner's reviewer reads
 before merge. (A: `docs/design-identity-permissions.md`; B:
 `docs/design-platform-admin.md`; C: `docs/design-clinical-corrections.md`.)
+
+
+## B3 implementation contract
+
+`admin_whoami` resolves through `admin_session_state(..., true)`, returns only
+`ok`, `name`, `email`, `must_change_password`, and updates session activity.
+It never logs, including invalid sessions. The log reader resolves with the
+password-change exception disabled. Success reads only; every refusal commits
+one `admin.log_view` row, with the resolved session context when available.
+
+`admin_log_page` returns `{ok:true, rows:[], next_before_seq:null}`. Parameters
+are `page_size` (integer 1–100, default 25), `before_seq` (exclusive positive
+bigint cursor), `admin_user_id`, `org_id`, `action`, `from`, `to`. Cursor and
+row sequence values are decimal strings to preserve bigint precision in a
+browser. Dates are inclusive Cairo calendar dates, at most 366 days; an omitted
+`to` is today and an omitted `from` is 29 days before `to`. Unknown keys, types,
+UUIDs, cursors or dates return and log `invalid_payload`. Filters combine with
+AND. Results explicitly project the admin-log columns plus `admin_name` from
+`admin_users.name`; no other user column is selected by the reader.
+
+Password-change refusals retain the B1 shape, with `all_sessions_ended:true`
+added only to the refusal that atomically ends the admin's sessions. This is
+an authoritative database result, used by the panel's exact lockout message.
+Rollback keeps immutable `admin.log_view` history under a NOT VALID historical
+action CHECK; reapply validates the expanded CHECK.

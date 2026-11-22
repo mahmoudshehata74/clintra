@@ -560,8 +560,8 @@ Session failures return and log `session_invalid` without an admin actor.
 Wrong or reused step-up codes log the resolved admin with `step_up_failed`;
 the fifth such failure in 15 minutes ends all their unended sessions in
 that transaction. Initial-password restrictions return and log
-`password_change_required`. Wrong current passwords are `bad_credentials`
-and do not count toward either sign-in or step-up limits.
+`password_change_required`. Wrong current passwords are `current_password_failed`
+and share the per-admin step-up budget; neither enters the sign-in counter.
 
 Provision, mint, revoke and admin-create CLI invocations each append one
 admin-log row, including refusals. Rows have a null admin user, the host
@@ -589,3 +589,55 @@ MENA-adjacent region (e.g. Bahrain/UAE) if the chosen provider offers
 one. This is a real, measurable latency difference for every sync cycle,
 not a rounding error — worth weighing over a marginally cheaper
 US-region price on the same provider.
+
+
+## Platform administration panel (B3)
+
+Deploy `admin/` as a separate Laravel 13 + Filament 4 application on its own
+host/domain, for example `admin.<clintra domain>`. Point its document root at
+`admin/public`, enforce HTTPS at the edge, and redirect HTTP to HTTPS. It must
+have its own environment and APP_KEY, independent of the API. Its ONLY database
+credential is `clintra_admin_app` / `DB_ADMIN_APP_PASSWORD`; the API runtime
+never receives that password. Do not copy `api/.env` into the panel, grant the
+panel role table privileges, or deploy test-only fixture credentials/helper access.
+API test environments use disposable role credentials solely for contract tests.
+
+Run the API's normal owner migrations before deploying a compatible panel;
+B3 requires 000059. Run `composer install --no-dev --prefer-dist`,
+`php artisan filament:assets`, `php artisan config:cache`, `php artisan view:cache`
+in the panel release. Set APP_ENV=production, APP_DEBUG=false, APP_URL to its
+HTTPS domain, DB host/port/database, DB_SSLMODE=require (or verify-full with your
+provider's CA), and DB_ADMIN_APP_PASSWORD. Never run panel migrations or use an
+owner/clinic-app/superuser credential here. Required PHP extensions include
+pdo_pgsql, intl and zip. Direct packages are pinned in the panel manifest;
+generated locks/assets/caches remain uncommitted under the repository rule.
+
+Use encrypted file sessions/cache on writable, private persistent storage outside
+the document root. A multi-instance deployment needs sticky routing and shared
+session/cache storage before it can safely scale; the B3 default is one instance.
+Limit access to that storage and APP_KEY. Its host-only cookies are Secure,
+HttpOnly, SameSite=Strict. Sign-in regenerates the session. Authenticated responses
+are no-store; do not override this in a reverse-proxy/CDN cache. CSRF stays enabled.
+Keep the supplied CSP, frame denial, no-referrer and noindex response headers.
+Filament/Livewire's Alpine runtime currently needs inline/evaluated script support;
+all external origins remain disallowed by the panel's CSP.
+
+`ADMIN_IP_ALLOWLIST` is optional comma-separated IPs/CIDRs; empty is off, as
+decision 9 requires. A denied request is a plain 403. Set `ADMIN_TRUSTED_PROXIES`
+only to the edge's explicit IPs/CIDRs; empty trusts none, and `*` is rejected.
+Restrict origin access to those proxies in production. Spoofed forwarded headers
+from any other peer cannot bypass the allowlist or split the sign-in IP budget.
+The HTTP sign-in limit is 10 requests/IP/15 minutes, in addition to Postgres's
+credential failure limits. Accounts remain CLI-created on the API host.
+
+The panel calls `admin_whoami` on requests and `admin_log_page` for the log,
+with no models or table access. Initial-password accounts see only change
+password and sign-out. Fresh step-up and current-password failures are enforced
+and logged in the database. On the fifth counted refusal, the panel displays the
+authoritative all-sessions-ended message and clears its browser session.
+
+For local development run this app on port 8001; see [admin/README.md](../admin/README.md).
+Panel Pest and desktop/mobile Playwright use clintra_test and its panel role only;
+the separate API fixture process is test-only. Screenshots and generated assets
+are never committed. CI provisions the existing roles via the shared test setup
+script and runs build → e2e → API → admin sequentially.

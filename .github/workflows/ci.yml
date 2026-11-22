@@ -47,13 +47,13 @@ jobs:
         working-directory: web
         run: pnpm build
 
-  # A separate, parallel job from `build`: the e2e layer downloads a real
-  # browser, which the fast unit-test job above should not have to wait on or
-  # pay for. The opt-in screenshot capture (screenshots.spec.ts, tagged
+  # Browser checks follow build in the sequential gate. The e2e layer
+  # downloads a real browser in its own job. The opt-in screenshot capture (screenshots.spec.ts, tagged
   # @screenshot) is deliberately NOT run here — it produces PNGs for a human
   # visual review, which has no meaning on a headless CI runner with nothing
   # watching, so it stays a local-only command (pnpm test:e2e:screenshots).
   e2e:
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -93,6 +93,7 @@ jobs:
   # RLS forced, a membership sees only its own scope, cross-org writes are
   # rejected by the database, etc. See api/docs/rls.md.
   api:
+    needs: e2e
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -166,39 +167,7 @@ jobs:
       - name: Provision Postgres roles and databases
         env:
           PGPASSWORD: ci_postgres_superuser
-        run: |
-          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_owner LOGIN PASSWORD 'ci_owner_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE;"
-          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_app LOGIN PASSWORD 'ci_app_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE;"
-          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_rls NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
-          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_provision NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
-          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_mint NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
-          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_register NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
-          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_staff NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
-          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_auth NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
-          psql -h 127.0.0.1 -U postgres -c "CREATE ROLE clintra_fixtures LOGIN PASSWORD 'ci_fixtures_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_rls TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_provision TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_mint TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_register TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_staff TO clintra_owner;"
-          psql -h 127.0.0.1 -U postgres -c "GRANT clintra_auth TO clintra_owner;"
-
-          for db in clintra clintra_test; do
-            psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE $db OWNER clintra_owner;"
-            psql -h 127.0.0.1 -U postgres -d "$db" -c "ALTER SCHEMA public OWNER TO clintra_owner;"
-            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT USAGE ON SCHEMA public TO clintra_app;"
-            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_rls;"
-            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_provision;"
-            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_mint;"
-            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_register;"
-            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_staff;"
-            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT CREATE ON SCHEMA public TO clintra_auth;"
-            psql -h 127.0.0.1 -U postgres -c "GRANT CONNECT ON DATABASE $db TO clintra_app;"
-            psql -h 127.0.0.1 -U postgres -c "GRANT CONNECT ON DATABASE $db TO clintra_fixtures;"
-            psql -h 127.0.0.1 -U postgres -d "$db" -c "GRANT USAGE ON SCHEMA public TO clintra_fixtures;"
-            psql -h 127.0.0.1 -U postgres -d "$db" -c "ALTER DEFAULT PRIVILEGES FOR ROLE clintra_owner IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO clintra_fixtures;"
-            psql -h 127.0.0.1 -U postgres -d "$db" --set=admin_app_password=ci_admin_app_pw -f api/scripts/provision-admin-roles.sql
-          done
+        run: bash api/scripts/provision-ci-database.sh
 
       - name: Point .env at the CI database
         working-directory: api
@@ -245,3 +214,100 @@ jobs:
       - name: Run tests
         working-directory: api
         run: php artisan test
+
+
+  admin:
+    needs: api
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_postgres_superuser
+          POSTGRES_DB: postgres
+          TZ: America/Los_Angeles
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_pgsql, pgsql, intl, zip
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install API fixture and migration dependencies
+        working-directory: api
+        run: composer install --prefer-dist --no-progress
+      - name: Validate and install locked panel dependencies
+        working-directory: admin
+        run: |
+          composer validate --strict --no-check-all --check-lock
+          composer install --prefer-dist --no-progress
+      - name: Provision existing roles and test databases
+        env:
+          PGPASSWORD: ci_postgres_superuser
+        run: bash api/scripts/provision-ci-database.sh
+      - name: Copy API environment for test-only fixtures
+        working-directory: api
+        run: cp .env.example .env
+      - name: Point .env at the CI database
+        working-directory: api
+        run: |
+          php -r '
+            $env = file_get_contents(".env");
+            $env = preg_replace("/^DB_USERNAME=.*/m", "DB_USERNAME=clintra_app", $env);
+            $env = preg_replace("/^DB_APP_PASSWORD=.*/m", "DB_APP_PASSWORD=ci_app_pw", $env);
+            $env = preg_replace("/^DB_OWNER_USERNAME=.*/m", "DB_OWNER_USERNAME=clintra_owner", $env);
+            $env = preg_replace("/^DB_OWNER_PASSWORD=.*/m", "DB_OWNER_PASSWORD=ci_owner_pw", $env);
+            $env = preg_replace("/^DB_FIXTURES_USERNAME=.*/m", "DB_FIXTURES_USERNAME=clintra_fixtures", $env);
+            $env = preg_replace("/^DB_FIXTURES_PASSWORD=.*/m", "DB_FIXTURES_PASSWORD=ci_fixtures_pw", $env);
+            file_put_contents(".env", $env);
+            file_put_contents(".env.testing", preg_replace("/^DB_DATABASE=.*/m", "DB_DATABASE=clintra_test", $env)."\nDB_ADMIN_APP_PASSWORD=ci_admin_app_pw\n");
+          '
+
+      - name: Migrate the panel test database
+        working-directory: api
+        env:
+          DB_DATABASE: clintra_test
+        run: php artisan migrate --database=pgsql_owner --force
+      - name: Configure the independent panel environment
+        working-directory: admin
+        run: |
+          cp .env.example .env
+          php -r '
+            $env = file_get_contents(".env");
+            $env = preg_replace("/^DB_DATABASE=.*/m", "DB_DATABASE=clintra_test", $env);
+            $env = preg_replace("/^DB_ADMIN_APP_PASSWORD=.*/m", "DB_ADMIN_APP_PASSWORD=ci_admin_app_pw", $env);
+            file_put_contents(".env", $env);
+          '
+          php artisan key:generate
+          php artisan filament:assets
+      - name: Panel Pest (panel database role only)
+        working-directory: admin
+        run: php artisan test
+      - name: Install browser test dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browser
+        working-directory: web
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Panel Playwright desktop and mobile (zero retries)
+        working-directory: web
+        run: pnpm exec playwright test --config ../admin/playwright.config.ts --retries=0

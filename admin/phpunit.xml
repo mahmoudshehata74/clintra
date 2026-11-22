@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="vendor/autoload.php" colors="true" cacheDirectory=".phpunit.cache">
+  <testsuites><testsuite name="Panel"><directory>tests/Feature</directory><directory>tests/Architecture</directory></testsuite></testsuites>
+  <source><include><directory>app</directory></include></source>
+  <php><env name="APP_ENV" value="testing"/><env name="APP_DEBUG" value="false"/><env name="DB_DATABASE" value="clintra_test"/></php>
+</phpunit>

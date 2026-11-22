@@ -1,3 +1,4 @@
+import { shotDirectory } from "./browserArtifacts";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -55,7 +56,7 @@ import {
 // a dark system with its appearance left on auto (index.css's
 // prefers-color-scheme block, the same values). Dark files end in -dark.
 
-const OUT_DIR = "e2e/compare";
+const OUT_DIR = shotDirectory("e2e/compare");
 const PROTOTYPE_URL = pathToFileURL(path.resolve("../docs/reference/clintra-prototype.html")).href;
 
 // The capture day for the app scenarios that pin no day of their own: the

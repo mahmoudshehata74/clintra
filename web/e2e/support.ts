@@ -14,7 +14,7 @@ import { saveFailedStrings, sidebarStrings, timeFieldStrings } from "../src/comp
 // load without a "type: json" attribute. seededVisitsDate() itself is just
 // these two calls (see its own doc comment) — reproduced here against the
 // same pure domain/time.ts helpers rather than against the db module.
-import { addDaysToClinicDay, cairoInstant, mostRecentWeekdayOnOrBefore, todayInCairo, type ClockTime } from "../src/domain/time";
+import { addDaysToClinicDay, cairoInstant, mostRecentWeekdayOnOrBefore, todayInCairo, type ClinicDay, type ClockTime } from "../src/domain/time";
 import { carePlanStrings } from "../src/screens/carePlan/strings";
 import { dayScreenStrings } from "../src/screens/day/strings";
 import { doctorDayStrings } from "../src/screens/doctor/strings";
@@ -307,12 +307,15 @@ export type Drug = { name: string; form?: string; instructions: string; duration
 export async function karimInRoom(
   page: Page,
   as: { name: string; pin: string } = { name: OWNER_NAME, pin: OWNER_PIN },
+  day: ClinicDay = todayInCairo(),
 ): Promise<void> {
-  await page.clock.install({ time: todayAt("08:30") });
+  // Resolve the day once: the host can cross Cairo midnight between these steps.
+  const at = (time: ClockTime) => new Date(cairoInstant(day, time));
+  await page.clock.install({ time: at("08:30") });
   await gotoRealDay(page, as);
   await selectPractitioner(page, SLOTS_DR);
   await bookFirstOpenSlot(page, PATIENTS.karim, "كشف عام");
-  await page.clock.setSystemTime(todayAt("09:00"));
+  await page.clock.setSystemTime(at("09:00"));
   await advanceRowTo(page, PATIENTS.karim, S.statusArrived);
   await advanceRowTo(page, PATIENTS.karim, S.statusInRoom);
 }
