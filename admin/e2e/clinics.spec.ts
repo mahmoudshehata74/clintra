@@ -67,7 +67,7 @@ test('clinics-period-detail-and-responsive-cards', async ({ page }) => {
   expect(await row.evaluate(element => getComputedStyle(element).display)).toBe('table-row');
   await page.setViewportSize(viewport);
   await row.getByRole('link', { name: fixture.orgName, exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'العيادة', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: fixture.orgName, exact: true })).toBeVisible();
   await expect(page.locator('[data-clinic-name]')).toHaveText(fixture.orgName);
   await expect(page.locator('[data-location-name]')).toHaveText('فرع التجربة');
   await expect(page.getByText('شغّالة', { exact: true })).toBeVisible();
@@ -118,7 +118,7 @@ test('disable-reason-step-up-refusal-chip-and-enable', async ({ page }) => {
   await page.getByLabel('كود التحقق', { exact: true }).fill(command('otp', fixture.id, '1').otp);
   await page.getByRole('button', { name: 'تأكيد', exact: true }).click();
   await expect(page.locator('.notice[role="status"]')).toHaveText('اشتغلت العيادة');
-  await expect(page.locator('.state-chip')).toHaveCount(0);
+  await expect(page.locator('[data-clinic-state]')).toHaveText('شغّالة');
   expect(command('org-state', fixture.id)).toEqual({ disabled_at: null, disabled_reason: null });
 });
 
@@ -153,4 +153,42 @@ test('hostile-clinic-and-location-names-stay-literal', async ({ page }) => {
     await expect(page.locator('[data-screen="admin-log"] script,[data-screen="admin-log"] img,[data-screen="admin-log"] [onerror]')).toHaveCount(0);
   }
   expect(dialogs).toEqual([]);
+});
+
+
+test('clinic-cards-counter-danger-and-disabled-Cairo-summary', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/panel/clinic/' + fixture.org);
+  await expect(page.locator('h1')).toHaveText(fixture.orgName);
+  await expect(page.getByRole('heading', { name: 'الفروع (1)', exact: true })).toBeVisible();
+  await expect(page.locator('.location-card li')).toHaveText(['فرع التجربة']);
+  const reason = page.getByLabel('سبب الإيقاف', { exact: true });
+  const action = page.getByRole('button', { name: 'إيقاف العيادة', exact: true });
+  await action.click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await expect(page.locator('#disable-reason-count')).toHaveText('0/200');
+  await reason.fill('سبب التجربة');
+  await expect(page.locator('#disable-reason-count')).toHaveText('11/200');
+  const fieldBox = await reason.boundingBox();
+  const formBox = await page.locator('.clinic-state-form').boundingBox();
+  expect(Math.abs(fieldBox!.width - formBox!.width)).toBeLessThan(2);
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    expect(await action.evaluate(element => getComputedStyle(element).backgroundColor)).toBe(await action.evaluate(element => { const probe = document.createElement('span'); probe.style.color = 'var(--danger)'; element.append(probe); const color = getComputedStyle(probe).color; probe.remove(); return color; }));
+  }
+  await screens(page, 'review-clinic-enabled');
+  await reason.fill('<img src=x onerror=alert(1)>');
+  await action.click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByLabel('كود التحقق', { exact: true }).fill(command('otp', fixture.id).otp);
+  await page.getByRole('button', { name: 'تأكيد', exact: true }).click();
+  const state = command('org-state', fixture.id);
+  const minute = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(state.disabled_at));
+  await expect(page.locator('[data-disabled-reason]')).toHaveText(`موقوفة من ${minute} — السبب: <img src=x onerror=alert(1)>`);
+  await expect(page.locator('[data-disabled-reason] img')).toHaveCount(0);
+  await expect(page.locator('[data-clinic-state]')).toHaveText('موقوفة');
+  await expect(page.getByRole('button', { name: 'تشغيل العيادة', exact: true })).not.toHaveClass(/run-danger/);
+  await screens(page, 'review-clinic-disabled');
+  await page.getByRole('button', { name: 'تشغيل العيادة', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
 });

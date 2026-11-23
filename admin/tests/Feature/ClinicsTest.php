@@ -61,8 +61,8 @@ test('clinic detail shows only its own name locations state and scoped log link'
     try {
         $response = clinicPage('/panel/clinic/'.$this->fixture['org'])->assertOk()->assertSee($this->fixture['orgName'])->assertSee('فرع التجربة')->assertSee('شغّالة')->assertSee('إيقاف العيادة')->assertDontSee($foreign['orgName']);
         $xpath = logPresentationDocument($response);
-        expect($xpath->query('//input[@name="reason"]')->item(0)->getAttribute('maxlength'))->toBe('200');
-        expect($xpath->query('//input[@name="reason" and @required]')->length)->toBe(1);
+        expect($xpath->query('//textarea[@name="reason"]')->item(0)->getAttribute('maxlength'))->toBe('200');
+        expect($xpath->query('//textarea[@name="reason" and @required]')->length)->toBe(1);
         expect($xpath->query('//a[contains(@href,"org_id='.$this->fixture['org'].'")]')->length)->toBe(1);
     } finally {
         panelFixtureCommand('retire', $foreign['id']);
@@ -152,3 +152,33 @@ test('hostile clinic and location names stay literal across list detail rows and
         }
     }
 })->with(['<script>alert(1)</script>', '"><img src=x onerror=alert(1)>', '{{7*7}}']);
+
+
+test('clinic cards expose one named heading branches and a full width reason with live count', function () {
+    panelFixtureCommand('clinic', $this->fixture['id']);
+    $response = clinicPage('/panel/clinic/'.$this->fixture['org'])->assertOk()
+        ->assertSee('أجهزة العيادة هتكمّل شغل على الجهاز، والمزامنة هتقف لحد ما العيادة تتشغّل تاني. مفيش أي بيانات بتتمسح.');
+    $xpath = logPresentationDocument($response);
+    expect($xpath->query('//h1')->length)->toBe(1);
+    expect($xpath->query('//h1')->item(0)->textContent)->toBe($this->fixture['orgName']);
+    expect($xpath->query('//section[@aria-labelledby="clinic-locations"]/h2')->item(0)->textContent)->toBe('الفروع (1)');
+    expect($xpath->query('//section[@aria-labelledby="clinic-locations"]//li')->item(0)->textContent)->toBe('فرع التجربة');
+    expect($xpath->query('//section[@aria-labelledby="clinic-name"]/a')->item(0)->getAttribute('class'))->toBe('text-link');
+    expect($xpath->query('//output[@aria-live="polite"]')->item(0)->textContent)->toBe('0/200');
+    expect($xpath->query('//section[@aria-labelledby="clinic-action-title"]//button[@data-open-step-up]')->item(0)->getAttribute('class'))->toContain('run-danger');
+});
+
+test('disabled clinic summary renders Cairo minute and escaped reason with the enable action', function () {
+    $reason = '<img src=x onerror=alert(1)>';
+    clinicState(['otp' => panelOtp($this->fixture), 'disabled' => '1', 'reason' => $reason])->assertSessionHas('notice', 'اتوقفت العيادة');
+    $state = panelFixtureCommand('org-state', $this->fixture['id']);
+    $minute = (new DateTimeImmutable($state['disabled_at']))->setTimezone(new DateTimeZone('Africa/Cairo'))->format('Y-m-d H:i');
+    $response = clinicPage('/panel/clinic/'.$this->fixture['org'])->assertOk()->assertSee($reason)
+        ->assertSee('المزامنة هترجع، وكل اللي اتسجّل على الأجهزة وقت الإيقاف هيتبعت.');
+    $xpath = logPresentationDocument($response);
+    expect($xpath->query('//*[@data-disabled-reason]')->item(0)->textContent)->toBe('موقوفة من '.$minute.' — السبب: '.$reason);
+    expect($xpath->query('//*[@data-disabled-reason]//img')->length)->toBe(0);
+    expect($xpath->query('//textarea[@name="reason"]')->length)->toBe(0);
+    $button = $xpath->query('//button[@data-open-step-up]')->item(0);
+    expect($button->textContent)->toBe('تشغيل العيادة')->and($button->getAttribute('class'))->not->toContain('run-danger');
+});

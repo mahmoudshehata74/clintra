@@ -81,10 +81,10 @@ body,.fi-body {
   font-variant-numeric:tabular-nums;
   -webkit-font-smoothing:antialiased
 }
-button,input,select {
+button,input,select,textarea {
   font:inherit
 }
-button,a,input,select,summary {
+button,a,input,select,textarea,summary {
   touch-action:manipulation
 }
 button,a,summary {
@@ -301,7 +301,7 @@ h1,h2,p {
   gap:10px;
   margin-inline-end:auto
 }
-.brand h1 {
+.brand h1,.brand-title {
   font-size:20px;
   font-weight:600
 }
@@ -444,3 +444,19 @@ pre {
   .clinics-table .mobile-details { display:block }
   .appbar nav { display:flex; gap:8px; flex-wrap:wrap }
 }
+
+.detail-card { padding:20px; border:1px solid var(--rule); border-radius:12px; background:var(--card); display:flex; flex-direction:column; gap:14px; min-width:0 }
+.clinic-title { display:flex; align-items:center; flex-wrap:wrap; gap:12px }
+.clinic-title h1 { font-size:24px; font-weight:600; line-height:1.5; margin:0; overflow-wrap:anywhere }
+.detail-card h2 { font-size:17px; font-weight:600 }
+.state-chip-success { color:var(--green); background:var(--green-wash); border-color:var(--green-line) }
+.text-link { color:var(--green); text-decoration:underline; text-underline-offset:3px; align-self:start }
+.location-card ul { margin:0; padding:0; list-style:none }
+.location-card li { padding:12px 0; border-top:1px solid var(--hair); overflow-wrap:anywhere }
+.danger-card { border-color:var(--danger-line); background:var(--danger-wash) }
+.danger-card h2 { color:var(--danger) }
+.danger-card .clinic-state-form { max-width:none; width:100% }
+.clinic-state-form textarea { resize:vertical; min-height:100px }
+.reason-count { align-self:end; margin-top:-8px }
+.run-danger { background:var(--danger); border-color:var(--danger); color:var(--on-fill) }
+@media(max-width:640px) { .detail-card { padding:16px } .clinic-title h1 { font-size:21px } }
