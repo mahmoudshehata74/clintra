@@ -75,6 +75,99 @@ test('one active admin mints immediately while plaintext stays out of tables and
     expect(json_encode($this->asOwner()->table('platform.admin_approvals')->where('id', $payload['approval_id'])->first()))->not->toContain($plain);
 });
 
+test('repeating a request refuses the same approval without another mint or notice', function (bool $singleAdmin) {
+    [$org, $location] = b5Fixture();
+    $admin = $this->platformAdmin();
+    if ($singleAdmin) {
+        $others = $this->asOwner()->table('platform.admin_users')->where('is_active', true)->where('id', '<>', $admin['id'])->pluck('id')->all();
+        $this->asOwner()->table('platform.admin_users')->whereIn('id', $others)->update(['is_active' => false]);
+        $this->cleanupFirst(fn () => $this->asOwner()->table('platform.admin_users')->whereIn('id', $others)->update(['is_active' => true]));
+    } else {
+        $this->platformAdmin();
+    }
+    $session = $this->platformSession($admin);
+    $hash = hash('sha256', ActivationCode::generate());
+    $payload = b5RequestPayload($org, $location, $singleAdmin ? $hash : null);
+    $first = b5Call('admin_request_code', [$session, $this->platformOtp($admin['secret']), $payload, $this->platformId()]);
+    expect($first)->toMatchArray(['ok' => true, 'pending' => !$singleAdmin]);
+    $minted = $this->fx()->table('activation_codes')->where('org_id', $org)->count();
+    $notices = $this->fx()->table('admin_code_notices')->where('org_id', $org)->count();
+    $before = $this->asOwner()->table('platform.admin_log')->max('seq');
+    $log = $this->platformId();
+    expect(b5Call('admin_request_code', [$session, $this->platformOtp($admin['secret'], $this->platformStep() + 1), $payload, $log]))
+        ->toBe(['ok' => false, 'reason' => 'unchanged']);
+    expect($this->asOwner()->table('platform.admin_log')->where('seq', '>', $before)->count())->toBe(1);
+    expect(b5Log($log)->reason)->toBe('unchanged')
+        ->and(b5Log($log)->org_id)->toBe($org)
+        ->and(b5Log($log)->target_id)->toBe($payload['approval_id']);
+    expect($this->asOwner()->table('platform.admin_approvals')->where('id', $payload['approval_id'])->count())->toBe(1);
+    expect($this->fx()->table('activation_codes')->where('org_id', $org)->count())->toBe($minted);
+    expect($this->fx()->table('admin_code_notices')->where('org_id', $org)->count())->toBe($notices);
+})->with([true, false]);
+
+test('request observes a clinic disable committed while waiting for its sync lock', function () {
+    [$org, $location] = b5Fixture();
+    $requester = $this->platformAdmin();
+    $disabler = $this->platformAdmin();
+    $requestSession = $this->platformSession($requester);
+    $disableSession = $this->platformSession($disabler);
+    $payload = b5RequestPayload($org, $location);
+    $log = $this->platformId();
+    $db = $this->panel();
+    $db->beginTransaction();
+    $process = null;
+    try {
+        $db->select("SELECT pg_advisory_xact_lock(hashtextextended('sync_seq:' || ?::text,0))", [$org]);
+        $code = <<<'PHP'
+            require 'vendor/autoload.php';
+            $app = require 'bootstrap/app.php';
+            $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+            $config = config('database.connections.pgsql_owner');
+            $config['url'] = null;
+            $config['username'] = 'clintra_admin_app';
+            $config['password'] = env('DB_ADMIN_APP_PASSWORD');
+            $config['search_path'] = 'platform';
+            config(['database.connections.platform_panel' => $config]);
+            $row = Illuminate\Support\Facades\DB::connection('platform_panel')->selectOne(
+                'SELECT platform.admin_request_code(?::uuid,?::text,?::jsonb,?::uuid) AS result',
+                [$argv[1], $argv[2], $argv[3], $argv[4]]
+            );
+            echo $row->result;
+        PHP;
+        $process = proc_open([PHP_BINARY, '-r', $code, $requestSession, $this->platformOtp($requester['secret']), json_encode($payload), $log],
+            [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, base_path(), array_merge(getenv(), ['DB_DATABASE' => 'clintra_test']));
+        expect($process)->not->toBeFalse();
+        fclose($pipes[0]);
+        $deadline = microtime(true) + 10;
+        do {
+            $waiting = $db->selectOne("SELECT count(*) AS n FROM pg_locks WHERE locktype='advisory' AND NOT granted")->n > 0;
+            if ($waiting) break;
+            usleep(10_000);
+        } while (microtime(true) < $deadline && proc_get_status($process)['running']);
+        expect($waiting)->toBeTrue('Request must wait for the organization sync lock');
+        $disabled = $db->selectOne('SELECT platform.admin_set_org_disabled(?::uuid,?::text,?::uuid,true,?::text,?::uuid) AS result',
+            [$disableSession, $this->platformOtp($disabler['secret']), $org, 'B5 lock test', $this->platformId()]);
+        expect(json_decode($disabled->result, true, flags: JSON_THROW_ON_ERROR))->toBe(['ok' => true]);
+        $db->commit();
+        $output = stream_get_contents($pipes[1]);
+        $errors = stream_get_contents($pipes[2]);
+        fclose($pipes[1]); fclose($pipes[2]);
+        expect(proc_close($process))->toBe(0, $errors.$output);
+        $process = null;
+        expect(json_decode($output, true, flags: JSON_THROW_ON_ERROR))->toBe(['ok' => false, 'reason' => 'org_disabled']);
+        expect(b5Log($log)->reason)->toBe('org_disabled');
+        expect($this->fx()->table('activation_codes')->where('org_id', $org)->count())->toBe(0);
+        expect($this->asOwner()->table('platform.admin_approvals')->where('id', $payload['approval_id'])->count())->toBe(0);
+    } finally {
+        if ($db->transactionLevel()) $db->rollBack();
+        if ($process !== null) {
+            proc_terminate($process);
+            foreach ($pipes as $pipe) if (is_resource($pipe)) fclose($pipe);
+            proc_close($process);
+        }
+    }
+});
+
 test('request enforces the hash rule for the current active admin count', function (bool $singleAdmin) {
     [$org, $location] = b5Fixture();
     $admin = $this->platformAdmin();
@@ -247,7 +340,7 @@ test('devices reader lists only the requested clinic and revoke returns unchange
         ->toBe(['ok' => false, 'reason' => 'unchanged']);
 });
 
-test('device actions log unknown targets and missing owner without raising', function () {
+test('device actions log unknown targets and revoke without an active owner', function () {
     [$org, $location, $owner] = b5Fixture();
     $device = $this->makeDevice($org, $location, $owner);
     $admin = $this->platformAdmin();
@@ -263,11 +356,17 @@ test('device actions log unknown targets and missing owner without raising', fun
         ->toBe(['ok' => false, 'reason' => 'not_found']);
     expect(b5Log($log)->org_id)->toBeNull();
     $this->fx()->table('memberships')->where('id', $owner)->update(['is_active' => false]);
+    (new Device(['id' => $device]))->createToken('B5 revoke')->plainTextToken;
+    $auditBefore = $this->fx()->table('audit_log')->where('entity', 'device')->where('entity_id', $device)->count();
     $log = $this->platformId();
     expect(b5Call('admin_revoke_device', [$session, $this->platformOtp($admin['secret'], $this->platformStep() + 1), $device, $log]))
-        ->toBe(['ok' => false, 'reason' => 'no_owner']);
-    expect(b5Log($log)->org_id)->toBe($org);
-    expect($this->fx()->table('device')->where('id', $device)->value('revoked_at'))->toBeNull();
+        ->toBe(['ok' => true]);
+    expect(b5Log($log)->org_id)->toBe($org)
+        ->and(b5Log($log)->succeeded)->toBeTrue()
+        ->and(json_decode(b5Log($log)->detail, true)['clinic_audit'])->toBeFalse();
+    expect($this->fx()->table('device')->where('id', $device)->value('revoked_at'))->not->toBeNull();
+    expect($this->fx()->table('personal_access_tokens')->where('tokenable_id', $device)->count())->toBe(0);
+    expect($this->fx()->table('audit_log')->where('entity', 'device')->where('entity_id', $device)->count())->toBe($auditBefore);
 });
 
 test('panel revoke waits for a running push and makes the next device request 401', function () {
@@ -377,7 +476,7 @@ test('B5 functions and grants are limited to their declared owners callers and c
             'organizations' => ['id'], 'locations' => ['id', 'org_id', 'name'],
             'memberships' => ['id', 'org_id', 'role', 'is_active'],
             'device' => ['id', 'org_id', 'location_id', 'series', 'registered_at', 'revoked_at'],
-            'sync_ledger' => ['device_id', 'applied_at'],
+            'sync_ledger' => ['device_id', 'org_id', 'applied_at'],
             'personal_access_tokens' => ['tokenable_type', 'tokenable_id'],
         ],
     ];

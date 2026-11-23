@@ -147,7 +147,7 @@ test('B5 admin device and mint roles have column-exact grants and no admin accou
         ['memberships', 'SELECT', ['id', 'is_active', 'org_id', 'role']],
         ['device', 'SELECT', ['id', 'location_id', 'org_id', 'registered_at', 'revoked_at', 'series']],
         ['device', 'UPDATE', ['revoked_at']],
-        ['sync_ledger', 'SELECT', ['applied_at', 'device_id']],
+        ['sync_ledger', 'SELECT', ['applied_at', 'device_id', 'org_id']],
         ['personal_access_tokens', 'SELECT', ['tokenable_id', 'tokenable_type']],
         ['admin_sessions', 'SELECT', ['id', 'ip', 'user_agent']],
     ];
@@ -169,14 +169,32 @@ test('B5 admin device and mint roles have column-exact grants and no admin accou
     expect(array_column($acl, 'role'))->toBe(['clintra_admin_auth', 'clintra_admin_mint']);
     foreach (['organizations', 'locations', 'memberships'] as $table) {
         $policies = test()->asOwner()->select(
-            'SELECT policyname,roles::text AS roles FROM pg_policies WHERE tablename=? AND policyname IN (?,?) ORDER BY policyname',
+            'SELECT policyname,roles::text AS roles,cmd FROM pg_policies WHERE tablename=? AND policyname IN (?,?) ORDER BY policyname',
             [$table, $table.'_admin_mint_read', $table.'_scope']
         );
         expect(collect($policies)->pluck('roles', 'policyname')->all())->toBe([
             $table.'_admin_mint_read' => '{clintra_admin_mint}',
             $table.'_scope' => '{clintra_app,clintra_owner}',
         ]);
+        expect(collect($policies)->firstWhere('policyname', $table.'_admin_mint_read')->cmd)->toBe('SELECT');
     }
+    $noticePolicies = test()->asOwner()->select("SELECT policyname,roles::text AS roles,cmd FROM pg_policies WHERE tablename='admin_code_notices' ORDER BY policyname");
+    expect(collect($noticePolicies)->map(fn ($row) => [$row->policyname, $row->roles, $row->cmd])->all())->toBe([
+        ['admin_code_notices_read', '{clintra_app}', 'SELECT'],
+        ['admin_code_notices_write', '{clintra_admin_mint}', 'INSERT'],
+    ]);
+});
+
+test('every non-bypass clintra role is in the reviewed RLS set', function () {
+    $roles = test()->asOwner()->select("SELECT rolname FROM pg_roles WHERE left(rolname,8)='clintra_' AND NOT rolbypassrls ORDER BY rolname");
+    $actual = array_column($roles, 'rolname');
+    $expected = ['clintra_admin_app', 'clintra_admin_auth', 'clintra_admin_mint', 'clintra_admin_provision', 'clintra_app', 'clintra_owner'];
+    if (test()->asOwner()->selectOne("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='clintra_fixtures') AS present")->present
+        && test()->asOwner()->selectOne("SELECT rolbypassrls FROM pg_roles WHERE rolname='clintra_fixtures'")->rolbypassrls === false) {
+        $expected[] = 'clintra_fixtures';
+        sort($expected);
+    }
+    expect($actual)->toBe($expected);
 });
 
 test('clintra_provision is left with exactly provision_organization\'s own footprint after the split', function () {

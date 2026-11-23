@@ -1011,16 +1011,26 @@ time. The approvals result contains only unexpired, unapproved requests for
 that clinic and whether the current admin may approve each one.
 
 Every destructive call resolves its actor and fresh step-up first, validates
-its payload key by key, then reads targets. Refusals return after writing one
+its payload key by key, then reads targets. Code requests take the global
+`admin_code_mint` advisory transaction lock and the requested clinic's
+`sync_seq:` lock, in that order, before reading targets. Approval reads only
+the approval's clinic ID first, then takes those same locks in that order and
+locks the approval row. Refusals return after writing one
 admin log row with the session IP and user agent. An unknown organization or
 approval returns `not_found`; the former logs null `org_id` and its requested
-UUID as `target_id`. A disabled clinic returns `org_disabled`, a location
-outside the clinic `location_mismatch`, and a clinic without an active owner
-`no_owner`. Approval returns `expired` at or after one hour, `unchanged` for
-an already completed request, and `same_admin` for its requester. If fewer
-than two active admins remain during approval, it returns
-`approval_unavailable`; the remaining admin can request a fresh code. The
-function never catches a failure from `mint_activation_code`.
+UUID as `target_id`. Request checks an existing approval ID first and returns
+`unchanged`, logging that approval's clinic ID and the approval ID. It then
+checks `not_found`, `org_disabled`, `location_mismatch`, and `no_owner` in
+that order. Approval checks `unchanged`, `expired` (at or after one hour),
+`same_admin`, `approval_unavailable` (fewer than two active admins),
+`org_disabled`, `location_mismatch`, and `no_owner` in that order after the
+locked read. The remaining admin can request a fresh code. Mint failures
+propagate from `mint_activation_code`.
+
+Device revocation always sets `revoked_at` and deletes device tokens, even
+without an active owner. It writes a clinic audit row attributed to an active
+owner only when one exists. Its admin log records `detail.clinic_audit` as
+true or false.
 
 `admin_request_code` calls `admin_active_count()` in the same transaction.
 With at least two active admins, it accepts no `code_hash`, creates a pending

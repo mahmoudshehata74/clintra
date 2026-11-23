@@ -15,6 +15,7 @@ return new class extends Migration
                 issued_at timestamptz NOT NULL DEFAULT now()
             );
             CREATE INDEX admin_code_notices_org_time ON admin_code_notices (org_id,issued_at DESC);
+            CREATE INDEX sync_ledger_device_applied ON sync_ledger (device_id, applied_at);
             ALTER TABLE admin_code_notices ENABLE ROW LEVEL SECURITY;
             ALTER TABLE admin_code_notices FORCE ROW LEVEL SECURITY;
             CREATE POLICY admin_code_notices_read ON admin_code_notices FOR SELECT TO clintra_app
@@ -27,7 +28,7 @@ return new class extends Migration
             GRANT SELECT (id,org_id,location_id,series,registered_at,revoked_at) ON device TO clintra_admin_device;
             GRANT UPDATE (revoked_at) ON device TO clintra_admin_device;
             GRANT SELECT (id,org_id,name) ON locations TO clintra_admin_device;
-            GRANT SELECT (device_id,applied_at) ON sync_ledger TO clintra_admin_device;
+            GRANT SELECT (device_id,org_id,applied_at) ON sync_ledger TO clintra_admin_device;
             GRANT SELECT (id,org_id,role,is_active) ON memberships TO clintra_admin_device;
             GRANT SELECT (tokenable_type,tokenable_id), DELETE ON personal_access_tokens TO clintra_admin_device;
             GRANT INSERT ON audit_log TO clintra_admin_device;
@@ -80,7 +81,7 @@ return new class extends Migration
                 IF v_reason IS NULL THEN
                     SELECT coalesce(jsonb_agg(jsonb_build_object('id',d.id,'location_name',l.name,
                         'series',d.series,'registered_at',d.registered_at,'revoked_at',d.revoked_at,
-                        'last_sync_at',(SELECT max(sl.applied_at) FROM sync_ledger sl WHERE sl.device_id=d.id))
+                        'last_sync_at',(SELECT max(sl.applied_at) FROM sync_ledger sl WHERE sl.device_id=d.id AND sl.org_id=d.org_id))
                         ORDER BY d.registered_at,d.id),'[]'::jsonb)
                     INTO v_devices FROM device d JOIN locations l ON l.id=d.location_id WHERE d.org_id=p_org;
                 END IF;
@@ -100,7 +101,7 @@ return new class extends Migration
                 v_admin uuid := (v_state->>'admin_user_id')::uuid;
                 v_reason text := v_state->>'reason';
                 v_org uuid; v_revoked timestamptz; v_owner uuid; v_now timestamptz;
-                v_ip inet; v_agent text;
+                v_ip inet; v_agent text; v_clinic_audit boolean := false;
             BEGIN
                 SELECT ip,user_agent INTO v_ip,v_agent FROM platform.admin_sessions WHERE id=p_session;
                 IF v_reason IS NULL AND p_device_id IS NOT NULL THEN
@@ -116,21 +117,21 @@ return new class extends Migration
                         ELSE
                             SELECT id INTO v_owner FROM memberships
                             WHERE org_id=v_org AND role='owner' AND is_active ORDER BY id LIMIT 1;
-                            IF v_owner IS NULL THEN v_reason:='no_owner';
-                            ELSE
-                                v_now:=now();
-                                UPDATE device SET revoked_at=v_now WHERE id=p_device_id;
-                                DELETE FROM personal_access_tokens
-                                WHERE tokenable_type='App\Models\Device' AND tokenable_id=p_device_id;
+                            v_now:=now();
+                            UPDATE device SET revoked_at=v_now WHERE id=p_device_id;
+                            DELETE FROM personal_access_tokens
+                            WHERE tokenable_type='App\Models\Device' AND tokenable_id=p_device_id;
+                            IF v_owner IS NOT NULL THEN
                                 INSERT INTO audit_log(id,org_id,actor_membership_id,entity,entity_id,action,before,after,at)
                                 VALUES (gen_random_uuid(),v_org,v_owner,'device',p_device_id,'update',
                                     jsonb_build_object('revoked_at',NULL),jsonb_build_object('revoked_at',v_now),v_now);
+                                v_clinic_audit:=true;
                             END IF;
                         END IF;
                     END IF;
                 END IF;
                 PERFORM platform.admin_log_write(coalesce(p_log_id,gen_random_uuid()),v_admin,'device.revoke',v_org,p_device_id,
-                    v_reason IS NULL,v_reason,v_state,v_ip,v_agent);
+                    v_reason IS NULL,v_reason,v_state||jsonb_build_object('clinic_audit',v_clinic_audit),v_ip,v_agent);
                 IF v_reason IS NOT NULL THEN RETURN jsonb_build_object('ok',false,'reason',v_reason)
                     || CASE WHEN coalesce((v_state->>'all_sessions_ended')::boolean,false)
                         THEN jsonb_build_object('all_sessions_ended',true) ELSE '{}'::jsonb END; END IF;
@@ -204,15 +205,20 @@ return new class extends Migration
                     END IF;
                 END IF;
                 IF v_reason IS NULL THEN
+                    PERFORM pg_advisory_xact_lock(hashtextextended('admin_code_mint',0));
+                    PERFORM pg_advisory_xact_lock(hashtextextended('sync_seq:'||v_org::text,0));
+                    SELECT org_id INTO v_exists FROM platform.admin_approvals WHERE id=v_approval;
+                    IF FOUND THEN v_reason:='unchanged'; v_org:=v_exists;
+                    ELSE
                     SELECT id INTO v_exists FROM organizations WHERE id=v_org;
                     IF v_exists IS NULL THEN v_reason:='not_found'; v_org:=NULL;
                     ELSIF EXISTS(SELECT 1 FROM organizations WHERE id=v_org AND disabled_at IS NOT NULL) THEN v_reason:='org_disabled';
                     ELSIF NOT EXISTS(SELECT 1 FROM locations WHERE id=v_location AND org_id=v_org) THEN v_reason:='location_mismatch';
                     ELSIF NOT EXISTS(SELECT 1 FROM memberships WHERE org_id=v_org AND role='owner' AND is_active) THEN v_reason:='no_owner';
                     END IF;
+                    END IF;
                 END IF;
                 IF v_reason IS NULL THEN
-                    PERFORM pg_advisory_xact_lock(hashtextextended('admin_code_mint',0));
                     v_count:=platform.admin_active_count();
                     IF (v_count<2 AND v_hash IS NULL) OR (v_count>=2 AND v_hash IS NOT NULL) THEN
                         v_reason:='invalid_payload';
@@ -258,29 +264,24 @@ return new class extends Migration
                 IF v_reason IS NULL THEN
                     IF p_approval_id IS NULL OR coalesce(p_code_hash ~ '^[0-9a-f]{64}$',false)=false THEN v_reason:='invalid_payload';
                     ELSE
-                        SELECT * INTO v_approval FROM platform.admin_approvals WHERE id=p_approval_id;
-                        IF FOUND THEN v_org:=v_approval.org_id;
+                        SELECT org_id INTO v_org FROM platform.admin_approvals WHERE id=p_approval_id;
+                        IF FOUND THEN
+                            PERFORM pg_advisory_xact_lock(hashtextextended('admin_code_mint',0));
+                            PERFORM pg_advisory_xact_lock(hashtextextended('sync_seq:'||v_org::text,0));
+                            SELECT * INTO v_approval FROM platform.admin_approvals WHERE id=p_approval_id FOR UPDATE;
                         ELSE v_reason:='not_found'; END IF;
                     END IF;
                 END IF;
                 IF v_reason IS NULL THEN
-                    IF v_org IS NULL THEN v_reason:='not_found';
-                    ELSIF EXISTS(SELECT 1 FROM organizations WHERE id=v_org AND disabled_at IS NOT NULL) THEN v_reason:='org_disabled';
-                    ELSIF NOT EXISTS(SELECT 1 FROM locations WHERE id=v_approval.location_id AND org_id=v_org) THEN v_reason:='location_mismatch';
-                    ELSIF NOT EXISTS(SELECT 1 FROM memberships WHERE org_id=v_org AND role='owner' AND is_active) THEN v_reason:='no_owner';
+                    IF NOT FOUND THEN v_reason:='not_found';
                     ELSIF v_approval.approved_at IS NOT NULL THEN v_reason:='unchanged';
                     ELSIF v_approval.expires_at<=now() THEN v_reason:='expired';
                     ELSIF v_approval.requested_by=v_admin THEN v_reason:='same_admin';
                     ELSIF platform.admin_active_count()<2 THEN v_reason:='approval_unavailable';
+                    ELSIF EXISTS(SELECT 1 FROM organizations WHERE id=v_org AND disabled_at IS NOT NULL) THEN v_reason:='org_disabled';
+                    ELSIF NOT EXISTS(SELECT 1 FROM locations WHERE id=v_approval.location_id AND org_id=v_org) THEN v_reason:='location_mismatch';
+                    ELSIF NOT EXISTS(SELECT 1 FROM memberships WHERE org_id=v_org AND role='owner' AND is_active) THEN v_reason:='no_owner';
                     ELSE
-                        PERFORM pg_advisory_xact_lock(hashtextextended('admin_code_mint',0));
-                        SELECT * INTO v_approval FROM platform.admin_approvals WHERE id=p_approval_id FOR UPDATE;
-                        IF v_approval.approved_at IS NOT NULL THEN v_reason:='unchanged';
-                        ELSIF v_approval.expires_at<=now() THEN v_reason:='expired';
-                        ELSIF platform.admin_active_count()<2 THEN v_reason:='approval_unavailable';
-                        ELSIF NOT EXISTS(SELECT 1 FROM locations WHERE id=v_approval.location_id AND org_id=v_org) THEN v_reason:='location_mismatch';
-                        ELSIF NOT EXISTS(SELECT 1 FROM memberships WHERE org_id=v_org AND role='owner' AND is_active) THEN v_reason:='no_owner';
-                        ELSE
                             PERFORM mint_activation_code(jsonb_build_object('id',gen_random_uuid(),'org_id',v_org,
                                 'location_id',v_approval.location_id,'code_hash',p_code_hash,'expires_at',
                                 now()+CASE WHEN v_approval.purpose='owner_recovery' THEN interval '24 hours' ELSE interval '72 hours' END,
@@ -288,7 +289,6 @@ return new class extends Migration
                             UPDATE platform.admin_approvals SET approved_by=v_admin,approved_at=now() WHERE id=p_approval_id;
                             INSERT INTO admin_code_notices(id,org_id,purpose,issued_at)
                             VALUES(gen_random_uuid(),v_org,v_approval.purpose,now());
-                        END IF;
                     END IF;
                 END IF;
                 PERFORM platform.admin_log_write(coalesce(p_log_id,gen_random_uuid()),v_admin,'code.mint_approve',v_org,
@@ -332,10 +332,11 @@ return new class extends Migration
             REVOKE SELECT (id,org_id,location_id,series,registered_at,revoked_at) ON device FROM clintra_admin_device;
             REVOKE UPDATE (revoked_at) ON device FROM clintra_admin_device;
             REVOKE SELECT (id,org_id,name) ON locations FROM clintra_admin_device;
-            REVOKE SELECT (device_id,applied_at) ON sync_ledger FROM clintra_admin_device;
+            REVOKE SELECT (device_id,org_id,applied_at) ON sync_ledger FROM clintra_admin_device;
             REVOKE SELECT (id,org_id,role,is_active) ON memberships FROM clintra_admin_device;
             REVOKE SELECT (tokenable_type,tokenable_id), DELETE ON personal_access_tokens FROM clintra_admin_device;
             REVOKE INSERT ON audit_log FROM clintra_admin_device;
+            DROP INDEX IF EXISTS sync_ledger_device_applied;
             DROP TABLE admin_code_notices;
         SQL);
     }

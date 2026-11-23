@@ -15,6 +15,8 @@ test('clintra_owner with no membership set sees zero rows on tenant-scoped table
     $this->makeVisit($orgId, $locationId, $practitionerId, $patientId, $membershipId);
 
     expect($this->asOwner()->table('organizations')->count())->toBe(0);
+    expect($this->asOwner()->table('locations')->count())->toBe(0);
+    expect($this->asOwner()->table('memberships')->count())->toBe(0);
     expect($this->asOwner()->table('patients')->count())->toBe(0);
     expect($this->asOwner()->table('visits')->count())->toBe(0);
 
