@@ -182,3 +182,14 @@ test('disabled clinic summary renders Cairo minute and escaped reason with the e
     $button = $xpath->query('//button[@data-open-step-up]')->item(0);
     expect($button->textContent)->toBe('تشغيل العيادة')->and($button->getAttribute('class'))->not->toContain('run-danger');
 });
+
+
+test('clinic and log navigation mark only their current section including clinic detail', function (string $path, string $label) {
+    $response = clinicPage($path === 'detail' ? '/panel/clinic/'.$this->fixture['org'] : $path)->assertOk();
+    $xpath = logPresentationDocument($response);
+    $active = $xpath->query('//nav[@aria-label="التنقل"]/a[@aria-current="page"]');
+    expect($active->length)->toBe(1)->and(trim($active->item(0)->textContent))->toBe($label)
+        ->and($active->item(0)->getAttribute('class'))->toContain('nav-active');
+    expect($xpath->query('//details[contains(@class,"mobile-account")]/summary')->item(0)->textContent)->toBe('الحساب');
+    expect($xpath->query('//details[contains(@class,"mobile-account")]//form[@method="post"]//input[@name="_token"]')->length)->toBe(1);
+})->with([['/panel/clinics', 'العيادات'], ['detail', 'العيادات'], ['/panel/admin-log', 'سجل الإدارة']]);

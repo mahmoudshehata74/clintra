@@ -58,6 +58,7 @@ test('sign-in-totp-and-security', async ({ page, context }) => {
 
 test('sign-in-recovery-code-once', async ({ page }) => {
   await signIn(page, fixture, true); await expect(page).toHaveURL(/panel\/admin-log$/);
+  if (page.viewportSize()!.width <= 640) await page.locator('.mobile-account summary').click();
   await page.getByRole('button', { name: 'تسجيل الخروج' }).click();
   await expect(page).toHaveURL(/panel\/sign-in$/);
   await signIn(page, fixture, true);
@@ -116,6 +117,7 @@ test('must-change-and-step-up-success', async ({ page }) => {
 
 test('step-up-failure-and-lockout', async ({ page }) => {
   await signIn(page, fixture, true); await expect(page).toHaveURL(/panel\/admin-log$/);
+  if (page.viewportSize()!.width <= 640) await page.locator('.mobile-account summary').click();
   await page.getByRole('link', { name: 'تغيير كلمة السر', exact: true }).click();
   for (let i = 0; i < 5; i++) {
     await passwordFields(page, fixture);
@@ -170,6 +172,7 @@ test('allowlist-on-off-and-untrusted-forwarding', async ({ page, request }) => {
 
 test('sign-out', async ({ page }) => {
   await signIn(page, fixture); await expect(page).toHaveURL(/panel\/admin-log$/);
+  if (page.viewportSize()!.width <= 640) await page.locator('.mobile-account summary').click();
   await page.getByRole('button', { name: 'تسجيل الخروج', exact: true }).click();
   await expect(page).toHaveURL(/panel\/sign-in$/);
   await page.goto('/panel/admin-log'); await expect(page).toHaveURL(/panel\/sign-in$/);

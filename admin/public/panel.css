@@ -460,3 +460,19 @@ pre {
 .reason-count { align-self:end; margin-top:-8px }
 .run-danger { background:var(--danger); border-color:var(--danger); color:var(--on-fill) }
 @media(max-width:640px) { .detail-card { padding:16px } .clinic-title h1 { font-size:21px } }
+
+.panel-nav,.desktop-account { display:flex; gap:8px; align-items:center }
+.appbar .nav-active { background:var(--green); border-color:var(--green); color:var(--on-fill) }
+.mobile-account { display:none }
+@media(max-width:640px) {
+  .appbar { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; padding:8px 12px }
+  .appbar .brand { grid-column:1; grid-row:1; width:auto; min-width:0 }
+  .appbar .desktop-account { display:none }
+  .appbar .mobile-account { display:block; grid-column:2; grid-row:1; position:relative; align-self:center }
+  .mobile-account summary { list-style:none }
+  .mobile-account summary::-webkit-details-marker { display:none }
+  .account-items { position:absolute; inset-inline-end:0; top:calc(100% + 8px); z-index:10; background:var(--ink-2); border:1px solid var(--rule); border-radius:12px; padding:8px; min-width:180px; display:flex; flex-direction:column; gap:8px; box-shadow:0 8px 20px var(--shadow-mid) }
+  .account-items .quiet,.account-items form { width:100% }
+  .appbar .panel-nav { grid-column:1 / -1; grid-row:2; display:grid; grid-template-columns:1fr 1fr; gap:0; padding:3px; border:1px solid var(--on-dark-dim); border-radius:10px }
+  .panel-nav .quiet { text-align:center; border-color:transparent; border-radius:7px }
+}

@@ -192,3 +192,48 @@ test('clinic-cards-counter-danger-and-disabled-Cairo-summary', async ({ page }) 
   await page.getByRole('button', { name: 'تشغيل العيادة', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
 });
+
+
+test('header-active-navigation-and-two-row-mobile-account', async ({ page }) => {
+  await signIn(page);
+  for (const [path, label, shot] of [
+    ['/panel/clinics', 'العيادات', 'clinics'],
+    ['/panel/clinic/' + fixture.org, 'العيادات', 'clinic'],
+    ['/panel/admin-log?org_id=' + fixture.org, 'سجل الإدارة', 'log'],
+  ]) {
+    await page.goto(path);
+    const active = page.locator('.panel-nav [aria-current="page"]');
+    await expect(active).toHaveCount(1);
+    await expect(active).toHaveText(label);
+    await expect(active).toHaveClass(/nav-active/);
+    await screens(page, 'review-header-' + shot);
+  }
+  const viewport = page.viewportSize()!;
+  for (const width of [390, 640]) {
+    await page.setViewportSize({ ...viewport, width });
+    const boxes = await page.locator('.panel-nav a').evaluateAll(elements => elements.map(element => { const box = element.getBoundingClientRect(); return { y: box.y, width: box.width }; }));
+    expect(boxes[0].y).toBe(boxes[1].y);
+    expect(Math.abs(boxes[0].width - boxes[1].width)).toBeLessThan(1);
+    const header = await page.locator('.appbar').boundingBox();
+    expect(header!.height).toBeLessThanOrEqual(130);
+    await expect(page.getByRole('link', { name: 'تغيير كلمة السر', exact: true })).not.toBeVisible();
+    const summary = page.locator('.mobile-account summary');
+    await summary.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.mobile-account')).toHaveAttribute('open', '');
+    await expect(page.getByRole('link', { name: 'تغيير كلمة السر', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'تسجيل الخروج', exact: true })).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.mobile-account')).not.toHaveAttribute('open', '');
+  }
+  await page.setViewportSize(viewport);
+  if (viewport.width <= 640) {
+    await page.locator('.mobile-account summary').click();
+    await screens(page, 'review-header-account-open');
+  } else {
+    await expect(page.locator('.mobile-account')).not.toBeVisible();
+    await expect(page.getByRole('link', { name: 'تغيير كلمة السر', exact: true })).toBeVisible();
+  }
+  await page.getByRole('link', { name: 'تغيير كلمة السر', exact: true }).click();
+  await expect(page).toHaveURL(/panel\/change-password$/);
+});
