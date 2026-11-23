@@ -257,3 +257,17 @@ test('migration 000060 rolls back all four readers and grants and reapplies with
         DB::setDefaultConnection($previous);
     }
 });
+
+test('the fixture process refuses non fixture accounts and non test database configuration before mutation', function (string $case) {
+    $admin = $this->platformAdmin();
+    $count = $this->asOwner()->table('platform.admin_users')->count();
+    $process = new Symfony\Component\Process\Process(
+        [PHP_BINARY, base_path('scripts/panel-test-fixtures.php'), $case === 'account' ? 'inactive' : 'create', $case === 'account' ? $admin['id'] : ''],
+        base_path(), ['APP_ENV' => 'testing', 'DB_DATABASE' => $case === 'account' ? 'clintra_test' : 'clintra'],
+    );
+    $process->run();
+    expect($process->isSuccessful())->toBeFalse();
+    expect($process->getErrorOutput())->toContain($case === 'account' ? 'Only b3-/b4- fixture accounts are allowed.' : 'Panel fixtures require clintra_test.');
+    expect($this->asOwner()->table('platform.admin_users')->count())->toBe($count);
+    expect($this->asOwner()->table('platform.admin_users')->where('id', $admin['id'])->value('is_active'))->toBeTrue();
+})->with(['account', 'database']);

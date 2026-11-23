@@ -137,13 +137,13 @@ test('idle-expiry', async ({ page }) => {
 test('log-filters-and-keyset-paging', async ({ page }) => {
   await signIn(page, fixture); await expect(page).toHaveURL(/panel\/admin-log$/);
   await page.getByLabel('المسؤول', { exact: true }).fill(fixture.id);
-  await page.getByLabel('العيادة', { exact: true }).fill(fixture.org);
+  await page.getByLabel('العيادة', { exact: true }).selectOption(fixture.org);
   await page.getByLabel('الإجراء', { exact: true }).selectOption({ label: 'إيقاف العيادة' });
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(new Date());
   for (const label of ['من', 'لحد']) {
     const input = page.getByLabel(label, { exact: true });
     await expect(input).toHaveAttribute('type', 'text'); await expect(input).toHaveAttribute('dir', 'ltr');
-    await expect(input).toHaveAttribute('placeholder', '2026-11-21');
+    await expect(input).toHaveAttribute('placeholder', 'YYYY-MM-DD');
     await expect(input).toHaveAttribute('pattern', '[0-9]{4}-[0-9]{2}-[0-9]{2}');
   }
   await page.getByLabel('من', { exact: true }).fill(today); await page.getByLabel('لحد', { exact: true }).fill(today);

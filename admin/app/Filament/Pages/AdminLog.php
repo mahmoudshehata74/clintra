@@ -26,6 +26,12 @@ final class AdminLog extends Page
     #[Locked]
     public ?string $error = null;
 
+    #[Locked]
+    public array $clinics = [];
+
+    #[Locked]
+    public array $orgNames = [];
+
     public static function canAccess(): bool
     {
         return Auth::guard('platform')->check() && ! Auth::guard('platform')->user()->must_change_password;
@@ -51,6 +57,24 @@ final class AdminLog extends Page
         }
         $this->rows = $result['rows'];
         $this->next = $result['next_before_seq'];
+        $session = Auth::guard('platform')->id();
+        $names = $platform->orgNames($session, array_values(array_unique(array_filter(array_column($this->rows, 'org_id')))));
+        $clinics = $platform->orgList($session);
+        foreach ([$names, $clinics] as $read) {
+            if (! $read['ok']) {
+                $this->error = Refusal::message($read);
+                $this->rows = [];
+                $this->next = null;
+                if ($read['reason'] === 'session_invalid') {
+                    session()->forget('platform_session_id');
+                    $this->redirect(route('filament.admin.auth.login'));
+                }
+
+                return;
+            }
+        }
+        $this->orgNames = $names['names'];
+        $this->clinics = array_map(fn ($row) => ['org_id' => $row['id'], 'org_name' => $row['name']], $clinics['clinics']);
     }
 
     public function getHeading(): string
