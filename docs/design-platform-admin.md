@@ -1,6 +1,6 @@
 # Design: platform admin panel, organization disable, figures and support access
 
-Status: B1 and B2 are merged. B3 panel implementation is under review. The remaining phases are plans, to be reviewed before their migrations are written.
+Status: B1, B2 and B3 are merged. B4 implements clinic figures and clinic screens. The remaining phases are plans, to be reviewed before their migrations are written.
 
 ## 1. Goal
 
@@ -443,15 +443,16 @@ GRANT UPDATE (disabled_at, disabled_reason) ON organizations TO clintra_admin_or
 GRANT SELECT (disabled_at) ON organizations TO clintra_auth;
 
 -- figures: exactly the columns the counts read, nothing identifying
-GRANT SELECT (id, name, disabled_at) ON organizations TO clintra_admin_stats;
-GRANT SELECT (org_id, name, is_active) ON locations TO clintra_admin_stats;
+GRANT SELECT (id, name, disabled_at, disabled_reason) ON organizations TO clintra_admin_stats;
+GRANT SELECT (id, org_id, name, is_active) ON locations TO clintra_admin_stats;
 GRANT SELECT (org_id, is_active) ON practitioners TO clintra_admin_stats;
 GRANT SELECT (org_id, is_active) ON memberships TO clintra_admin_stats;
-GRANT SELECT (org_id, revoked_at, kind) ON device TO clintra_admin_stats;
+GRANT SELECT (org_id, revoked_at) ON device TO clintra_admin_stats;
 GRANT SELECT (org_id, applied_at) ON sync_ledger TO clintra_admin_stats;
 GRANT SELECT (org_id, visit_date, status) ON visits TO clintra_admin_stats;
 GRANT SELECT (id, org_id, total, status, issued_at) ON invoices TO clintra_admin_stats;
 GRANT SELECT (invoice_id, amount, created_at) ON payments TO clintra_admin_stats;
+GRANT SELECT (id, ip, user_agent) ON platform.admin_sessions TO clintra_admin_stats;
 
 -- open a support session
 GRANT SELECT (id, org_id, location_id, code_hash, expires_at, used_at, purpose, support_hours, include_clinical,
@@ -508,6 +509,9 @@ FROM PUBLIC` after each. Owners and callers:
 | `platform.admin_set_org_disabled(uuid, text, uuid, boolean, text, uuid)` | `clintra_admin_org` | `clintra_admin_app` |
 | `platform.cli_set_org_disabled(uuid, boolean, text, uuid, text)` | `clintra_admin_org` | `clintra_owner` |
 | `platform.admin_org_figures(uuid, date, date, uuid)` | `clintra_admin_stats` | `clintra_admin_app` |
+| `platform.admin_org_detail(uuid, uuid)` | `clintra_admin_stats` | `clintra_admin_app` |
+| `platform.admin_org_names(uuid, uuid[])` | `clintra_admin_stats` | `clintra_admin_app` |
+| `platform.admin_org_list(uuid)` | `clintra_admin_stats` | `clintra_admin_app` |
 | `platform.admin_open_support_session(uuid, text, jsonb, uuid)` | `clintra_admin_support` | `clintra_admin_app` |
 | `mint_support_code(jsonb)` | `clintra_support` | `clintra_app` |
 | `support_exchange(jsonb)` | `clintra_support` | `clintra_app` |
@@ -585,44 +589,50 @@ $$;
 
 CREATE FUNCTION platform.admin_org_figures(p_session uuid, p_from date, p_to date, p_log_id uuid)
 RETURNS TABLE (org_id uuid, org_name text, disabled_at timestamptz, active_locations bigint,
-               active_practitioners bigint, active_members bigint, active_devices bigint, last_sync_at timestamptz,
-               visits_completed bigint, visits_cancelled bigint, visits_no_show bigint,
-               invoices_issued bigint, billed_piastres bigint, collected_piastres bigint)
+    active_practitioners bigint, active_members bigint, active_devices bigint, last_sync_at timestamptz,
+    visits_completed bigint, visits_cancelled bigint, visits_no_show bigint,
+    invoices_issued bigint, billed_piastres bigint, collected_piastres bigint)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, platform, pg_temp AS $$
 DECLARE
-  v_state jsonb := platform.admin_session_actor(p_session, NULL, false);
-  v_admin uuid := (v_state->>'admin_user_id')::uuid;
-  v_ok boolean := (v_state->>'ok')::boolean AND p_from <= p_to AND p_to - p_from <= 366;
+    v_state jsonb := platform.admin_session_actor(p_session,NULL,false);
+    v_admin uuid := (v_state->>'admin_user_id')::uuid;
+    v_reason text := v_state->>'reason';
+    v_ip inet; v_agent text;
+    v_to date := coalesce(p_to,(now() AT TIME ZONE 'Africa/Cairo')::date);
+    v_from date := coalesce(p_from,v_to-29);
 BEGIN
-  PERFORM platform.admin_log_write(p_log_id, v_admin, 'figures.view', NULL, NULL, v_ok,
-                                   CASE WHEN NOT v_ok THEN coalesce(v_state->>'reason', 'not_allowed') END, jsonb_build_object('from', p_from, 'to', p_to));
-  IF NOT v_ok THEN
-    RETURN;
-  END IF;
-  RETURN QUERY
-  SELECT o.id, o.name::text, o.disabled_at,
-    (SELECT count(*) FROM locations l WHERE l.org_id = o.id AND l.is_active),
-    (SELECT count(*) FROM practitioners pr WHERE pr.org_id = o.id AND pr.is_active),
-    (SELECT count(*) FROM memberships m WHERE m.org_id = o.id AND m.is_active),
-    (SELECT count(*) FROM device d WHERE d.org_id = o.id AND d.revoked_at IS NULL AND d.kind = 'clinic'),
-    (SELECT max(sl.applied_at) FROM sync_ledger sl WHERE sl.org_id = o.id),
-    (SELECT count(*) FROM visits v WHERE v.org_id = o.id AND v.visit_date BETWEEN p_from AND p_to AND v.status = 'completed'),
-    (SELECT count(*) FROM visits v WHERE v.org_id = o.id AND v.visit_date BETWEEN p_from AND p_to AND v.status = 'cancelled'),
-    (SELECT count(*) FROM visits v WHERE v.org_id = o.id AND v.visit_date BETWEEN p_from AND p_to AND v.status = 'no_show'),
-    (SELECT count(*) FROM invoices i WHERE i.org_id = o.id AND i.status <> 'void'
-        AND (i.issued_at AT TIME ZONE 'Africa/Cairo')::date BETWEEN p_from AND p_to),
-    (SELECT coalesce(sum(i.total), 0)::bigint FROM invoices i WHERE i.org_id = o.id AND i.status <> 'void'
-        AND (i.issued_at AT TIME ZONE 'Africa/Cairo')::date BETWEEN p_from AND p_to),
-    (SELECT coalesce(sum(pa.amount), 0)::bigint FROM payments pa JOIN invoices i ON i.id = pa.invoice_id
-        WHERE i.org_id = o.id AND (pa.created_at AT TIME ZONE 'Africa/Cairo')::date BETWEEN p_from AND p_to)
-  FROM organizations o
-  ORDER BY o.name;
+    SELECT s.ip,s.user_agent INTO v_ip,v_agent FROM platform.admin_sessions s WHERE s.id=p_session;
+    IF v_reason IS NULL AND (NOT isfinite(v_from) OR NOT isfinite(v_to)
+        OR v_from>v_to OR v_to-v_from>365) THEN
+        v_reason := 'invalid_payload';
+    END IF;
+    PERFORM platform.admin_log_write(coalesce(p_log_id,gen_random_uuid()),v_admin,'figures.view',NULL,NULL,
+        v_reason IS NULL,v_reason,jsonb_build_object('from',v_from,'to',v_to),v_ip,v_agent);
+    IF v_reason IS NOT NULL THEN RETURN; END IF;
+    RETURN QUERY
+    SELECT o.id,o.name::text,o.disabled_at,
+        (SELECT count(*) FROM locations l WHERE l.org_id=o.id AND l.is_active),
+        (SELECT count(*) FROM practitioners pr WHERE pr.org_id=o.id AND pr.is_active),
+        (SELECT count(*) FROM memberships m WHERE m.org_id=o.id AND m.is_active),
+        (SELECT count(*) FROM device d WHERE d.org_id=o.id AND d.revoked_at IS NULL),
+        (SELECT max(sl.applied_at) FROM sync_ledger sl WHERE sl.org_id=o.id),
+        (SELECT count(*) FROM visits v WHERE v.org_id=o.id AND v.visit_date BETWEEN v_from AND v_to AND v.status='completed'),
+        (SELECT count(*) FROM visits v WHERE v.org_id=o.id AND v.visit_date BETWEEN v_from AND v_to AND v.status='cancelled'),
+        (SELECT count(*) FROM visits v WHERE v.org_id=o.id AND v.visit_date BETWEEN v_from AND v_to AND v.status='no_show'),
+        (SELECT count(*) FROM invoices i WHERE i.org_id=o.id AND i.status<>'void'
+            AND (i.issued_at AT TIME ZONE 'Africa/Cairo')::date BETWEEN v_from AND v_to),
+        (SELECT coalesce(sum(i.total),0)::bigint FROM invoices i WHERE i.org_id=o.id AND i.status<>'void'
+            AND (i.issued_at AT TIME ZONE 'Africa/Cairo')::date BETWEEN v_from AND v_to),
+        (SELECT coalesce(sum(pa.amount),0)::bigint FROM payments pa JOIN invoices i ON i.id=pa.invoice_id
+            WHERE i.org_id=o.id AND (pa.created_at AT TIME ZONE 'Africa/Cairo')::date BETWEEN v_from AND v_to)
+    FROM organizations o ORDER BY o.name,o.id;
 END;
 $$;
 ```
 
-The remaining functions follow the same shape, each with its payload
-checked key by key (`22023`) before any read:
+The remaining action functions follow the same shape: resolve the actor and
+fresh step-up first, validate the payload key by key, and return a logged
+`invalid_payload` refusal before reading targets or acting:
 
 - `platform.admin_provision_organization(session, otp, payload, log_id)`:
   `admin_session_actor(…, true)`, then `PERFORM provision_organization(payload)`
@@ -903,3 +913,60 @@ added only to the refusal that atomically ends the admin's sessions. This is
 an authoritative database result, used by the panel's exact lockout message.
 Rollback keeps immutable `admin.log_view` history under a NOT VALID historical
 action CHECK; reapply validates the expanded CHECK.
+
+## B4 implementation contract
+
+The complete figures/detail/names/list SQL, column grants and rollback are in
+[migration 000060](../api/database/migrations/2026_09_12_000060_add_platform_clinic_figures.php).
+All four resolve `admin_session_actor(session, NULL, false)` before target
+lookups and consume no TOTP. Known sessions supply their stored IP and user
+agent even when expired, ended or inactive; unknown/null sessions have no
+context. Refusals return after logging, never raise.
+
+`admin_org_figures` keeps 6.5's exact table signature. NULL `to` means today's
+Cairo date; NULL `from` means 29 days before the effective `to`. Both endpoints
+are inclusive (difference at most 365 days). Reversed, longer or non-finite
+periods return no rows and exactly one `figures.view` refusal with
+`reason=invalid_payload`. Success writes exactly one row too. Every figures log
+has the effective `from` and `to` in detail. NULL log IDs get a generated UUID.
+The panel passes malformed ISO dates as the non-finite `infinity` date, routing
+them through that same logged refusal instead of allowing a cast exception.
+
+Locations, practitioners, memberships and non-revoked devices are current
+active counts, independent of the period; memberships include all active roles,
+as in the design query. There is no device `kind` column until B6. Last sync is
+the latest `sync_ledger.applied_at`, across all time and devices, including
+revoked devices. This records the latest applied push, not an empty pull;
+there is no device sync heartbeat column. Visits use `visit_date`. Invoice
+count and billed total exclude void invoices and use the Cairo issue date.
+Collections use the Cairo payment date, including payments for invoices issued
+outside the period and payments whose invoice is now void, as in the design
+query. Money remains integer piastres; the UI formats pounds with exactly two
+Latin decimal digits without floating point conversion. Name ties sort by UUID.
+
+`admin_org_detail` returns `{ok:true, org:{id,name,disabled_at,disabled_reason,
+locations:[{id,name}]}}`, including inactive locations, sorted by name then ID.
+Success logs `figures.view` with the organization set. NULL targets refuse
+`invalid_payload`; unknown targets refuse `not_found`, with null `org_id` and
+the requested UUID in `target_id`. Detail log metadata is
+`{operation:"org.detail"}`. Authentication refusals do not look up the target.
+
+`admin_org_names` returns `{ok:true,names:{id:name}}` and writes no success log.
+Zero through 100 requested IDs are accepted, counting duplicates toward the
+limit; duplicates collapse and unknown IDs are omitted. NULL arrays, NULL
+elements and multidimensional arrays refuse `invalid_payload`. Refusals log
+`figures.view` with `{operation:"org.names",count}`. The log screen calls it
+once per successful page for that page's distinct non-null clinic IDs. Its
+clinic select calls `admin_org_list` to enumerate all clinic names without an
+audit row on success. No figures query runs when loading the log screen.
+
+The list and log retain desktop tables and become cards at widths up to and
+including 640px, with expandable details. Clinic detail uses the existing
+native step-up dialog and `admin_set_org_disabled`; returned reasons use the
+existing Arabic refusal mapping. Sign-in continues to land on the log screen.
+
+`admin_org_list(session)` returns `{ok:true,clinics:[{id,name}]}`, including
+disabled clinics, ordered by name then ID. Success is silent; session refusals
+write exactly one `figures.view` row with `{operation:"org.list"}` and the stored
+session IP/user agent. It uses the same actor-first, no-step-up contract as the
+other stats readers.
