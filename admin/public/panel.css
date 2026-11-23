@@ -81,10 +81,10 @@ body,.fi-body {
   font-variant-numeric:tabular-nums;
   -webkit-font-smoothing:antialiased
 }
-button,input,select {
+button,input,select,textarea {
   font:inherit
 }
-button,a,input,select,summary {
+button,a,input,select,textarea,summary {
   touch-action:manipulation
 }
 button,a,summary {
@@ -301,7 +301,7 @@ h1,h2,p {
   gap:10px;
   margin-inline-end:auto
 }
-.brand h1 {
+.brand h1,.brand-title {
   font-size:20px;
   font-weight:600
 }
@@ -392,10 +392,11 @@ pre {
   gap:12px
 }
 
-@media(max-width:600px) {
+@media(max-width:640px) {
   .table-hint {
-  display:block
+  display:none
 }
+
 .fi-main {
   padding:12px 8px!important
 }
@@ -421,4 +422,57 @@ pre {
   padding:24px 20px 18px
 }
 
+}
+
+.mobile-details { display:none }
+.clinic-name { color:var(--green); font-weight:600; overflow-wrap:anywhere }
+.state-chip { display:inline-block; padding:2px 8px; border:1px solid var(--danger-line); border-radius:99px; background:var(--danger-wash); color:var(--danger); font-size:12px; white-space:nowrap }
+.clinic-state-form { display:flex; flex-direction:column; align-items:start; gap:14px; max-width:440px }
+.clinic-state-form .field { width:100% }
+[data-clinic-name],[data-location-name],[data-disabled-reason] { overflow-wrap:anywhere }
+@media(max-width:640px) {
+  .responsive-table { overflow:visible }
+  .responsive-table table,.responsive-table tbody { display:block; width:100%; min-width:0 }
+  .responsive-table thead { display:none }
+  .responsive-table tr { display:block; border:1px solid var(--rule); border-radius:12px; padding:12px; margin-bottom:12px; background:var(--card) }
+  .responsive-table td { display:block; max-width:none; padding:8px 0; white-space:normal; overflow-wrap:anywhere }
+  .responsive-table td:first-child { border-top:0 }
+  .responsive-table td[data-label]::before { content:attr(data-label) ": "; color:var(--muted); font-weight:600; margin-inline-end:6px }
+  .responsive-table dl { min-width:0 }
+  .responsive-table dd { overflow-wrap:anywhere }
+  .clinics-table .figure-cell { display:none }
+  .clinics-table .mobile-details { display:block }
+  .appbar nav { display:flex; gap:8px; flex-wrap:wrap }
+}
+
+.detail-card { padding:20px; border:1px solid var(--rule); border-radius:12px; background:var(--card); display:flex; flex-direction:column; gap:14px; min-width:0 }
+.clinic-title { display:flex; align-items:center; flex-wrap:wrap; gap:12px }
+.clinic-title h1 { font-size:24px; font-weight:600; line-height:1.5; margin:0; overflow-wrap:anywhere }
+.detail-card h2 { font-size:17px; font-weight:600 }
+.state-chip-success { color:var(--green); background:var(--green-wash); border-color:var(--green-line) }
+.text-link { color:var(--green); text-decoration:underline; text-underline-offset:3px; align-self:start }
+.location-card ul { margin:0; padding:0; list-style:none }
+.location-card li { padding:12px 0; border-top:1px solid var(--hair); overflow-wrap:anywhere }
+.danger-card { border-color:var(--danger-line); background:var(--danger-wash) }
+.danger-card h2 { color:var(--danger) }
+.danger-card .clinic-state-form { max-width:none; width:100% }
+.clinic-state-form textarea { resize:vertical; min-height:100px }
+.reason-count { align-self:end; margin-top:-8px }
+.run-danger { background:var(--danger); border-color:var(--danger); color:var(--on-fill) }
+@media(max-width:640px) { .detail-card { padding:16px } .clinic-title h1 { font-size:21px } }
+
+.panel-nav,.desktop-account { display:flex; gap:8px; align-items:center }
+.appbar .nav-active { background:var(--green); border-color:var(--green); color:var(--on-fill) }
+.mobile-account { display:none }
+@media(max-width:640px) {
+  .appbar { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; padding:8px 12px }
+  .appbar .brand { grid-column:1; grid-row:1; width:auto; min-width:0 }
+  .appbar .desktop-account { display:none }
+  .appbar .mobile-account { display:block; grid-column:2; grid-row:1; position:relative; align-self:center }
+  .mobile-account summary { list-style:none }
+  .mobile-account summary::-webkit-details-marker { display:none }
+  .account-items { position:absolute; inset-inline-end:0; top:calc(100% + 8px); z-index:10; background:var(--ink-2); border:1px solid var(--rule); border-radius:12px; padding:8px; min-width:180px; display:flex; flex-direction:column; gap:8px; box-shadow:0 8px 20px var(--shadow-mid) }
+  .account-items .quiet,.account-items form { width:100% }
+  .appbar .panel-nav { grid-column:1 / -1; grid-row:2; display:grid; grid-template-columns:1fr 1fr; gap:0; padding:3px; border:1px solid var(--on-dark-dim); border-radius:10px }
+  .panel-nav .quiet { text-align:center; border-color:transparent; border-radius:7px }
 }

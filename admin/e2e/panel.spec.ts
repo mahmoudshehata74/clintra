@@ -58,6 +58,7 @@ test('sign-in-totp-and-security', async ({ page, context }) => {
 
 test('sign-in-recovery-code-once', async ({ page }) => {
   await signIn(page, fixture, true); await expect(page).toHaveURL(/panel\/admin-log$/);
+  if (page.viewportSize()!.width <= 640) await page.locator('.mobile-account summary').click();
   await page.getByRole('button', { name: 'تسجيل الخروج' }).click();
   await expect(page).toHaveURL(/panel\/sign-in$/);
   await signIn(page, fixture, true);
@@ -116,6 +117,7 @@ test('must-change-and-step-up-success', async ({ page }) => {
 
 test('step-up-failure-and-lockout', async ({ page }) => {
   await signIn(page, fixture, true); await expect(page).toHaveURL(/panel\/admin-log$/);
+  if (page.viewportSize()!.width <= 640) await page.locator('.mobile-account summary').click();
   await page.getByRole('link', { name: 'تغيير كلمة السر', exact: true }).click();
   for (let i = 0; i < 5; i++) {
     await passwordFields(page, fixture);
@@ -137,13 +139,13 @@ test('idle-expiry', async ({ page }) => {
 test('log-filters-and-keyset-paging', async ({ page }) => {
   await signIn(page, fixture); await expect(page).toHaveURL(/panel\/admin-log$/);
   await page.getByLabel('المسؤول', { exact: true }).fill(fixture.id);
-  await page.getByLabel('العيادة', { exact: true }).fill(fixture.org);
+  await page.getByLabel('العيادة', { exact: true }).selectOption(fixture.org);
   await page.getByLabel('الإجراء', { exact: true }).selectOption({ label: 'إيقاف العيادة' });
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(new Date());
   for (const label of ['من', 'لحد']) {
     const input = page.getByLabel(label, { exact: true });
     await expect(input).toHaveAttribute('type', 'text'); await expect(input).toHaveAttribute('dir', 'ltr');
-    await expect(input).toHaveAttribute('placeholder', '2026-11-21');
+    await expect(input).toHaveAttribute('placeholder', 'YYYY-MM-DD');
     await expect(input).toHaveAttribute('pattern', '[0-9]{4}-[0-9]{2}-[0-9]{2}');
   }
   await page.getByLabel('من', { exact: true }).fill(today); await page.getByLabel('لحد', { exact: true }).fill(today);
@@ -170,6 +172,7 @@ test('allowlist-on-off-and-untrusted-forwarding', async ({ page, request }) => {
 
 test('sign-out', async ({ page }) => {
   await signIn(page, fixture); await expect(page).toHaveURL(/panel\/admin-log$/);
+  if (page.viewportSize()!.width <= 640) await page.locator('.mobile-account summary').click();
   await page.getByRole('button', { name: 'تسجيل الخروج', exact: true }).click();
   await expect(page).toHaveURL(/panel\/sign-in$/);
   await page.goto('/panel/admin-log'); await expect(page).toHaveURL(/panel\/sign-in$/);

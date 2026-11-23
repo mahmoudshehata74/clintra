@@ -77,7 +77,39 @@ test("a suspended clinic keeps local bookings and resumes on reconnect", async (
   await expect(lock).toBeHidden();
   disabled = true;
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await expectSuspensionInFlow(page);
+  const contentNotice = await expectSuspensionInFlow(page);
+  const originalViewport = page.viewportSize()!;
+  if (originalViewport.width >= 640) {
+    await expect(page.locator('main:visible .rounded-panel').first()).toBeVisible();
+    for (const width of [originalViewport.width, 1600]) {
+      await page.setViewportSize({ ...originalViewport, width });
+      const edges = await contentNotice.evaluate(element => {
+        const main = [...document.querySelectorAll('main')].find(candidate => candidate.getClientRects().length > 0)!;
+        const card = main.querySelector('.rounded-panel')!;
+        const bounds = element.getBoundingClientRect();
+        const content = main.getBoundingClientRect();
+        const padding = getComputedStyle(main);
+        return { left: bounds.left, right: bounds.right,
+          contentLeft: content.left + parseFloat(padding.paddingLeft), contentRight: content.right - parseFloat(padding.paddingRight),
+          radius: getComputedStyle(element).borderTopLeftRadius, cardRadius: getComputedStyle(card).borderTopLeftRadius };
+      });
+      expect(edges.left).toBeCloseTo(edges.contentLeft, 0);
+      expect(edges.right).toBeCloseTo(edges.contentRight, 0);
+      expect(edges.radius).toBe(edges.cardRadius);
+    }
+    await page.setViewportSize(originalViewport);
+  } else {
+    const mobileStyle = await contentNotice.evaluate(element => {
+      const style = getComputedStyle(element);
+      return { left: style.marginLeft, right: style.marginRight, radius: style.borderTopLeftRadius };
+    });
+    expect(mobileStyle).toEqual({ left: '0px', right: '0px', radius: '12px' });
+  }
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.screenshot({ path: `${shotDirectory("e2e/admin-shots")}/b4-banner-${testInfo.project.name}-${colorScheme}.png` });
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
   const nav = page.getByRole("navigation", { name: SIDEBAR.navAriaLabel });
   for (const [screen, label] of Object.entries({ day: SIDEBAR.navDay, patients: SIDEBAR.navPatients,
     doctor: SIDEBAR.navDoctor, visit: SIDEBAR.navVisit, messages: SIDEBAR.navMessages,

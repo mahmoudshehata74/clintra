@@ -10,7 +10,7 @@ fixture or superuser password. Use an independent `APP_KEY` and domain.
 ## Local setup
 
 Requirements: PHP 8.3+ with pdo_pgsql, intl, zip, mbstring, openssl; Composer;
-the API database already migrated through 000059. Provision accounts only with
+the API database already migrated through 000060. Provision accounts only with
 the API host's `clintra:admin:create` command. No panel migrations or sign-up.
 
 ```powershell
@@ -68,13 +68,29 @@ same as the database rate limit.
 
 ## Log view
 
-Filters are admin UUID, clinic UUID, exact action and inclusive Cairo dates.
+Filters are admin UUID, clinic-name select, exact action and inclusive Cairo dates.
 The default window is 30 days ending today; at most 366 days are accepted.
 Page sizes 1, 25, 50, 100 are offered; the function accepts any integer 1–100.
 The `before_seq` cursor is exclusive and remains a string for bigint precision.
 “الأقدم” follows the keyset; “الأحدث” returns to the newest matching page.
-The view escapes all values, including log detail. Filtering uses free-text UUIDs
-because B3 exposes no table or account/clinic enumeration function.
+The view escapes all values, including log detail and clinic/location names.
+Clinic names resolve in one `admin_org_names` call per page (at most 100 IDs).
+The clinic select uses the silent `admin_org_list` reader and sends the UUID;
+row UUIDs appear only in expandable details. The admin filter stays a UUID.
+
+## Clinics
+
+The header links clinics and the admin log. Clinics show current active counts,
+all-time last applied sync, and visits/invoices/money for an inclusive Cairo
+period (30 days by default, at most 366). Both screens use ISO text inputs with
+`YYYY-MM-DD` placeholders. Piastres format as pounds with two Latin decimal
+digits without passing through floating point. Cards replace tables at 640px
+and below; details expand inside each card without sideways table scrolling.
+
+Clinic detail calls `admin_org_detail` for the name, location names and state.
+Disable requires a reason up to 200 characters; enable clears it. Both use the
+existing native fresh-TOTP dialog and `admin_set_org_disabled`. Secrets are
+neither flashed nor stored in Livewire state. A link opens the clinic's log.
 
 ## Tests
 
@@ -100,7 +116,8 @@ desktop 1280×900 and mobile 390×844 with one worker, no retries and no flaky p
 Its three isolated servers use ports 8001–8003 to test allowlist off, denied and
 allowed without a test HTTP backdoor. The main browser server explicitly trusts
 loopback as its fixture proxy, giving each test an independent database/IP budget.
-Screenshots go to ignored `web/e2e/admin-shots/<run>/b3-*.png`. Each browser
+Screenshots go to ignored `web/e2e/admin-shots/<run>/b3-*.png` and `b4-*.png`,
+including clinics, detail and log in light/dark on desktop/mobile. Each browser
 invocation reserves a fresh Cairo timestamp plus a unique suffix; workers share
 that run folder. Earlier captures are never overwritten. The reporter prints
 the screenshot and failure-artifact folder paths at the end of every run.

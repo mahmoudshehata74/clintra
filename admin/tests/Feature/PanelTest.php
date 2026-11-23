@@ -30,7 +30,7 @@ test('the only connection authenticates as the panel role and application SQL ca
     expect($response->headers->get('Cache-Control'))->toContain('no-store');
     expect($queries)->not->toBeEmpty();
     foreach ($queries as $sql) {
-        expect($sql)->toMatch('/^SELECT platform\.admin_(whoami|log_page)\(/');
+        expect($sql)->toMatch('/^SELECT platform\.admin_(whoami|log_page|org_names|org_list)\(/');
     }
     foreach (['platform.admin_users', 'platform.admin_sessions', 'platform.admin_log', 'public.patients'] as $table) {
         expect(fn () => DB::select('SELECT * FROM '.$table))->toThrow(QueryException::class);

@@ -2,7 +2,7 @@ document.addEventListener('click', (event) => {
   const open = event.target.closest('[data-open-step-up]');
   if (open) {
     const form = open.closest('form');
-    const fields = [...form.querySelectorAll('input:not([name="otp"])')];
+    const fields = [...form.querySelectorAll('input:not([name="otp"]), textarea, select')];
     if (fields.every((field) => field.reportValidity())) {
       form.querySelector('dialog').showModal();
       form.querySelector('[name="otp"]').focus();
@@ -12,5 +12,8 @@ document.addEventListener('click', (event) => {
   if (close) close.closest('dialog').close();
 });
 document.addEventListener('input', (event) => {
+  if (event.target.matches('[data-disable-reason]')) {
+    document.getElementById('disable-reason-count').textContent = `${Array.from(event.target.value).length}/200`;
+  }
   if (event.target.name === 'otp') event.target.value = event.target.value.replace(/[٠-٩]/g, (n) => String(n.charCodeAt(0) - 1632)).replace(/[۰-۹]/g, (n) => String(n.charCodeAt(0) - 1776));
 });
