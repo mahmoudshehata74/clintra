@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import OrganizationSuspensionNotice from "../../components/OrganizationSuspensionNotice";
+import CodeNoticeBanner from "../../components/CodeNoticeBanner";
 
 const DRAG_DISMISS_THRESHOLD_PX = 80;
 
@@ -216,6 +217,7 @@ export default function Sheet({ onDismiss, size = "md", children }: SheetProps) 
           aria-modal="true"
         >
           {!isCovered && <OrganizationSuspensionNotice />}
+          {!isCovered && <CodeNoticeBanner />}
           {children}
         </div>
       </div>

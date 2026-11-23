@@ -179,7 +179,7 @@ test('disabled clinic summary renders Cairo minute and escaped reason with the e
     expect($xpath->query('//*[@data-disabled-reason]')->item(0)->textContent)->toBe('موقوفة من '.$minute.' — السبب: '.$reason);
     expect($xpath->query('//*[@data-disabled-reason]//img')->length)->toBe(0);
     expect($xpath->query('//textarea[@name="reason"]')->length)->toBe(0);
-    $button = $xpath->query('//button[@data-open-step-up]')->item(0);
+    $button = $xpath->query('//section[@aria-labelledby="clinic-action-title"]//button[@data-open-step-up]')->item(0);
     expect($button->textContent)->toBe('تشغيل العيادة')->and($button->getAttribute('class'))->not->toContain('run-danger');
 });
 
@@ -193,3 +193,97 @@ test('clinic and log navigation mark only their current section including clinic
     expect($xpath->query('//details[contains(@class,"mobile-account")]/summary')->item(0)->textContent)->toBe('الحساب');
     expect($xpath->query('//details[contains(@class,"mobile-account")]//form[@method="post"]//input[@name="_token"]')->length)->toBe(1);
 })->with([['/panel/clinics', 'العيادات'], ['detail', 'العيادات'], ['/panel/admin-log', 'سجل الإدارة']]);
+
+test('B5 clinic cards show scoped devices codes approvals and escaped location names', function () {
+    $hostile = '<img src=x onerror=alert(1)>';
+    $b5 = panelFixtureCommand('b5', $this->fixture['id'], json_encode(['location' => $hostile], JSON_THROW_ON_ERROR));
+    $response = clinicPage('/panel/clinic/'.$this->fixture['org'])->assertOk();
+    foreach (['الأجهزة', 'أكواد التفعيل', 'طلبات مستنية موافقة', 'طلب كود تفعيل جهاز', 'طلب كود استرجاع للمالك', 'إلغاء الجهاز'] as $label) $response->assertSee($label);
+    $xpath = logPresentationDocument($response);
+    expect($xpath->query('//*[@data-device-id="'.$b5['device'].'"]')->length)->toBe(1);
+    expect($xpath->query('//*[@data-screen]//img|//*[@data-screen]//*[@onerror]')->length)->toBe(0);
+    expect($xpath->query('//select[@name="location_id"]/option[@value="'.$b5['location'].'"]')->item(0)->textContent)->toBe($hostile);
+});
+
+test('B5 device revoke uses step up and reports unchanged on repetition', function () {
+    $b5 = panelFixtureCommand('b5', $this->fixture['id']);
+    $path = '/clinics/'.$this->fixture['org'].'/devices/'.$b5['device'].'/revoke';
+    $this->withSession(['platform_session_id' => $this->fixture['session']])->post($path, ['otp' => panelOtp($this->fixture)])
+        ->assertRedirect('/panel/clinic/'.$this->fixture['org'])->assertSessionHas('notice', 'اتلغى الجهاز');
+    clinicPage('/panel/clinic/'.$this->fixture['org'])->assertOk()->assertSee('ملغي');
+    $this->withSession(['platform_session_id' => $this->fixture['session']])->post($path, ['otp' => panelOtp($this->fixture, 1)])
+        ->assertSessionHasErrors(['auth' => 'الحالة دي متسجّلة بالفعل']);
+});
+
+test('B5 one admin receives the code once in a copy dialog and a reused step up refuses', function () {
+    $b5 = panelFixtureCommand('b5', $this->fixture['id']);
+    $others = panelFixtureCommand('solo', $this->fixture['id'])['others'];
+    try {
+        $path = '/clinics/'.$this->fixture['org'].'/codes/request';
+        $data = ['otp' => panelOtp($this->fixture), 'location_id' => $b5['location'], 'purpose' => 'device'];
+        $response = $this->withSession(['platform_session_id' => $this->fixture['session']])->post($path, $data)->assertOk()
+            ->assertSee('الكود ده بيظهر مرة واحدة بس، ابعته للعيادة دلوقتي')->assertSee('نسخ الكود');
+        expect($response->getContent())->toMatch('/CLT-[2-9A-HJKMNP-Z]{4}(?:-[2-9A-HJKMNP-Z]{4}){3}/');
+        expect(session()->has('minted_code'))->toBeFalse();
+        $this->withSession(['platform_session_id' => $this->fixture['session']])->post($path, $data)
+            ->assertSessionHasErrors(['auth' => 'كود التحقق مش صح أو اتستخدم قبل كده']);
+        clinicPage('/panel/clinic/'.$this->fixture['org'])->assertDontSee('الكود ده بيظهر مرة واحدة بس، ابعته للعيادة دلوقتي');
+    } finally {
+        panelFixtureCommand('restore', $this->fixture['id'], json_encode($others, JSON_THROW_ON_ERROR));
+    }
+});
+
+test('B5 two admins request and approve while requester cannot see approval button', function () {
+    $b5 = panelFixtureCommand('b5', $this->fixture['id']);
+    $second = panelFixtureCommand('create');
+    try {
+        $path = '/clinics/'.$this->fixture['org'].'/codes/request';
+        $this->withSession(['platform_session_id' => $this->fixture['session']])->post($path,
+            ['otp' => panelOtp($this->fixture), 'location_id' => $b5['location'], 'purpose' => 'owner_recovery'])
+            ->assertSessionHas('notice', 'طلب الكود مستني موافقة مسؤول تاني');
+        $xpath = logPresentationDocument(clinicPage('/panel/clinic/'.$this->fixture['org'])->assertOk());
+        $approval = $xpath->query('//*[@data-approval-id]')->item(0);
+        expect($approval)->not->toBeNull();
+        expect($xpath->query('.//button[text()="موافقة"]', $approval)->length)->toBe(0);
+        $id = $approval->getAttribute('data-approval-id');
+        $this->withSession(['platform_session_id' => $second['session']])->post('/clinics/'.$this->fixture['org'].'/codes/'.$id.'/approve', ['otp' => panelOtp($second)])
+            ->assertOk()->assertSee('الكود ده بيظهر مرة واحدة بس، ابعته للعيادة دلوقتي');
+        $this->withSession(['platform_session_id' => $second['session']])->post('/clinics/'.$this->fixture['org'].'/codes/'.$id.'/approve', ['otp' => panelOtp($second, 1)])
+            ->assertSessionHasErrors(['auth' => 'الحالة دي متسجّلة بالفعل']);
+    } finally {
+        panelFixtureCommand('retire', $second['id']);
+    }
+});
+
+test('B5 code request refuses a location from another clinic', function () {
+    panelFixtureCommand('b5', $this->fixture['id']);
+    $other = panelFixtureCommand('create');
+    try {
+        $foreign = panelFixtureCommand('b5', $other['id']);
+        $this->withSession(['platform_session_id' => $this->fixture['session']])
+            ->post('/clinics/'.$this->fixture['org'].'/codes/request',
+                ['otp' => panelOtp($this->fixture), 'location_id' => $foreign['location'], 'purpose' => 'device'])
+            ->assertSessionHasErrors(['auth' => 'الفرع ده مش تابع للعيادة']);
+    } finally {
+        panelFixtureCommand('retire', $other['id']);
+    }
+});
+
+test('B5 expired approval returns its mapped refusal to the second admin', function () {
+    $b5 = panelFixtureCommand('b5', $this->fixture['id']);
+    $second = panelFixtureCommand('create');
+    try {
+        $this->withSession(['platform_session_id' => $this->fixture['session']])
+            ->post('/clinics/'.$this->fixture['org'].'/codes/request',
+                ['otp' => panelOtp($this->fixture), 'location_id' => $b5['location'], 'purpose' => 'device'])
+            ->assertSessionHas('notice', 'طلب الكود مستني موافقة مسؤول تاني');
+        $xpath = logPresentationDocument(clinicPage('/panel/clinic/'.$this->fixture['org'])->assertOk());
+        $approval = $xpath->query('//*[@data-approval-id]')->item(0)->getAttribute('data-approval-id');
+        panelFixtureCommand('expire-approval', $this->fixture['id'], $approval);
+        $this->withSession(['platform_session_id' => $second['session']])
+            ->post('/clinics/'.$this->fixture['org'].'/codes/'.$approval.'/approve', ['otp' => panelOtp($second)])
+            ->assertSessionHasErrors(['auth' => 'طلب الموافقة انتهى، اطلب كود جديد']);
+    } finally {
+        panelFixtureCommand('retire', $second['id']);
+    }
+});

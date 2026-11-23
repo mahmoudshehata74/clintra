@@ -459,6 +459,17 @@ pre {
 .clinic-state-form textarea { resize:vertical; min-height:100px }
 .reason-count { align-self:end; margin-top:-8px }
 .run-danger { background:var(--danger); border-color:var(--danger); color:var(--on-fill) }
+.device-row { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)) auto; gap:12px; align-items:center; padding:12px 0; border-top:1px solid var(--hair) }
+.device-row span,.approval-row span { overflow-wrap:anywhere }
+.device-row small { display:block; color:var(--muted) }
+.code-actions { display:flex; gap:12px; flex-wrap:wrap }
+.code-actions form { flex:1 1 220px; display:flex; flex-direction:column; gap:12px }
+.approval-row { display:flex; gap:16px; flex-wrap:wrap; align-items:center; padding:12px 0; border-top:1px solid var(--hair) }
+.minted-page { margin:0; background:var(--ink); color:var(--text); font-family:'IBM Plex Sans Arabic',sans-serif }
+.minted-backdrop { min-height:100vh; display:grid; place-items:center; padding:16px }
+.minted-dialog { position:static; margin:auto; max-width:480px; width:100%; color:var(--text) }
+.minted-code { display:block; padding:16px; border:1px solid var(--rule); border-radius:8px; font-size:22px; letter-spacing:.04em; text-align:center; white-space:nowrap; overflow-x:auto }
+@media(max-width:640px) { .device-row { grid-template-columns:repeat(2,minmax(0,1fr)) } .minted-code { font-size:16px; letter-spacing:0; padding:12px 8px } }
 @media(max-width:640px) { .detail-card { padding:16px } .clinic-title h1 { font-size:21px } }
 
 .panel-nav,.desktop-account { display:flex; gap:8px; align-items:center }

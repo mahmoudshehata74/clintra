@@ -132,6 +132,53 @@ test('clintra_mint holds no write outside activation_codes and audit_log, and no
     }
 });
 
+test('B5 admin device and mint roles have column-exact grants and no admin account read', function () {
+    $mint = [
+        ['organizations', 'SELECT', ['disabled_at', 'id']],
+        ['locations', 'SELECT', ['id', 'org_id']],
+        ['memberships', 'SELECT', ['is_active', 'org_id', 'role']],
+        ['admin_sessions', 'SELECT', ['id', 'ip', 'user_agent']],
+        ['admin_code_notices', 'INSERT', ['id', 'issued_at', 'org_id', 'purpose']],
+        ['admin_approvals', 'UPDATE', ['approved_at', 'approved_by']],
+    ];
+    $device = [
+        ['organizations', 'SELECT', ['id']],
+        ['locations', 'SELECT', ['id', 'name', 'org_id']],
+        ['memberships', 'SELECT', ['id', 'is_active', 'org_id', 'role']],
+        ['device', 'SELECT', ['id', 'location_id', 'org_id', 'registered_at', 'revoked_at', 'series']],
+        ['device', 'UPDATE', ['revoked_at']],
+        ['sync_ledger', 'SELECT', ['applied_at', 'device_id']],
+        ['personal_access_tokens', 'SELECT', ['tokenable_id', 'tokenable_type']],
+        ['admin_sessions', 'SELECT', ['id', 'ip', 'user_agent']],
+    ];
+    foreach (['clintra_admin_mint' => $mint, 'clintra_admin_device' => $device] as $role => $expected) {
+        foreach ($expected as [$table, $privilege, $columns]) {
+            expect(columnGrants($role, $table, $privilege))->toBe($columns);
+        }
+        foreach (['patients','users','visit_form_data','prescriptions','prescription_items','messages',
+            'message_templates','care_plans','care_plan_items','device_audit_log'] as $table) {
+            expect(test()->asOwner()->selectOne('SELECT has_any_column_privilege(?, ?, ?) AS allowed', [$role, $table, 'SELECT'])->allowed)->toBeFalse();
+        }
+        expect(test()->asOwner()->selectOne('SELECT has_table_privilege(?, ?, ?) AS allowed', [$role, 'audit_log', 'SELECT'])->allowed)->toBeFalse();
+    }
+    expect(tableGrants('clintra_admin_mint')->all())->toBe(['admin_approvals' => ['INSERT', 'SELECT']]);
+    expect(tableGrants('clintra_admin_device')->all())->toBe(['audit_log' => ['INSERT'], 'personal_access_tokens' => ['DELETE']]);
+    expect(test()->asOwner()->selectOne("SELECT has_table_privilege('clintra_admin_mint','platform.admin_users','SELECT') AS allowed")->allowed)->toBeFalse();
+    expect(test()->asOwner()->selectOne("SELECT has_function_privilege('clintra_admin_app','platform.admin_active_count()','EXECUTE') AS allowed")->allowed)->toBeFalse();
+    $acl = test()->asOwner()->select("SELECT a.grantee::regrole::text AS role FROM pg_proc p,LATERAL aclexplode(p.proacl) a WHERE p.oid='platform.admin_active_count()'::regprocedure ORDER BY role");
+    expect(array_column($acl, 'role'))->toBe(['clintra_admin_auth', 'clintra_admin_mint']);
+    foreach (['organizations', 'locations', 'memberships'] as $table) {
+        $policies = test()->asOwner()->select(
+            'SELECT policyname,roles::text AS roles FROM pg_policies WHERE tablename=? AND policyname IN (?,?) ORDER BY policyname',
+            [$table, $table.'_admin_mint_read', $table.'_scope']
+        );
+        expect(collect($policies)->pluck('roles', 'policyname')->all())->toBe([
+            $table.'_admin_mint_read' => '{clintra_admin_mint}',
+            $table.'_scope' => '{clintra_app,clintra_owner}',
+        ]);
+    }
+});
+
 test('clintra_provision is left with exactly provision_organization\'s own footprint after the split', function () {
     $grants = tableGrants('clintra_provision');
 
@@ -184,7 +231,7 @@ test('each of the three roles owns exactly its own function, and only that role 
         ->map(fn ($rows) => $rows->pluck('grantee')->sort()->values()->all());
 
     expect($executeGrants['provision_organization'])->toBe(['clintra_owner', 'clintra_provision']);
-    expect($executeGrants['mint_activation_code'])->toBe(['clintra_mint', 'clintra_owner']);
+    expect($executeGrants['mint_activation_code'])->toBe(['clintra_admin_mint', 'clintra_mint', 'clintra_owner']);
     expect($executeGrants['register_device'])->toBe(['clintra_app', 'clintra_register']);
 
     $owners = $this->asOwner()->select(<<<'SQL'

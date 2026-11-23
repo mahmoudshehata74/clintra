@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\SyncBootstrapRequest;
 use App\Support\Identity\Identity;
 use App\Support\Sync\DeviceSeries;
+use App\Support\Sync\CodeNotices;
 use App\Support\Sync\SyncBootstrapPuller;
 use Illuminate\Http\JsonResponse;
 
@@ -29,6 +30,7 @@ class SyncBootstrapController extends Controller
         return response()->json([
             ...$this->puller->pull($cursor, Identity::enforced($request)),
             'device_series' => DeviceSeries::of($request->attributes->get('device_id')),
+            'code_notices' => CodeNotices::current(),
             ...Identity::syncMetadata($request),
         ]);
     }

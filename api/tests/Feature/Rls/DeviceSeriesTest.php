@@ -523,6 +523,9 @@ test('the backfill numbers existing devices per location in registered_at order,
         }
     } finally {
         $owner->transaction(fn () => $migration->up());
+        // Recreating the column drops B5's later column ACL; restore the
+        // installed-schema grant so subsequent role checks see the real state.
+        $owner->statement('GRANT SELECT (series) ON device TO clintra_admin_device');
         DB::setDefaultConnection($previousDefault);
     }
 

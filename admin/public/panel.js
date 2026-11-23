@@ -10,6 +10,11 @@ document.addEventListener('click', (event) => {
   }
   const close = event.target.closest('[data-close-step-up]');
   if (close) close.closest('dialog').close();
+  const copy = event.target.closest('[data-copy-code]');
+  if (copy) {
+    const value = document.querySelector('[data-minted-code]')?.textContent?.trim();
+    if (value) navigator.clipboard.writeText(value).then(() => { copy.textContent = 'اتنسخ الكود'; });
+  }
 });
 document.addEventListener('input', (event) => {
   if (event.target.matches('[data-disable-reason]')) {

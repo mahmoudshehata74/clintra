@@ -25,7 +25,7 @@ test('the nine admin roles match design 6.1 and only the eight function roles be
     expect($this->asOwner()->select("SELECT 1 FROM pg_auth_members WHERE roleid='clintra_admin_app'::regrole OR member='clintra_app'::regrole"))->toBe([]);
 });
 
-test('the panel can reach exactly its eleven B4 functions and no table or column', function () {
+test('the panel can reach exactly its sixteen B5 functions and no table or column', function () {
     expect($this->panel()->selectOne('SELECT current_user AS name')->name)->toBe('clintra_admin_app');
     $reachable = $this->asOwner()->select(<<<'SQL'
         SELECT n.nspname||'.'||p.proname AS name FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
@@ -34,8 +34,9 @@ test('the panel can reach exactly its eleven B4 functions and no table or column
           AND has_function_privilege('clintra_admin_app',p.oid,'EXECUTE') ORDER BY name
     SQL);
     expect(array_column($reachable, 'name'))->toBe([
-        'platform.admin_change_password', 'platform.admin_log_page', 'platform.admin_log_refusal', 'platform.admin_login', 'platform.admin_logout',
-        'platform.admin_org_detail', 'platform.admin_org_figures', 'platform.admin_org_list', 'platform.admin_org_names', 'platform.admin_set_org_disabled', 'platform.admin_whoami',
+        'platform.admin_approve_code', 'platform.admin_change_password', 'platform.admin_log_page', 'platform.admin_log_refusal', 'platform.admin_login', 'platform.admin_logout',
+        'platform.admin_org_approvals', 'platform.admin_org_detail', 'platform.admin_org_devices', 'platform.admin_org_figures', 'platform.admin_org_list', 'platform.admin_org_names',
+        'platform.admin_request_code', 'platform.admin_revoke_device', 'platform.admin_set_org_disabled', 'platform.admin_whoami',
     ]);
     $tables = $this->asOwner()->select(<<<'SQL'
         SELECT n.nspname,c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
@@ -60,7 +61,9 @@ test('no public or platform function exposes PUBLIC EXECUTE and crypto is schema
               WHERE a.grantee=0 AND a.privilege_type='USAGE'))
     SQL);
     expect($leaks)->toBe([]);
-    foreach (['admin_org_figures(uuid,date,date,uuid)', 'admin_org_detail(uuid,uuid)', 'admin_org_names(uuid,uuid[])', 'admin_org_list(uuid)'] as $signature) {
+    foreach (['admin_org_figures(uuid,date,date,uuid)', 'admin_org_detail(uuid,uuid)', 'admin_org_names(uuid,uuid[])', 'admin_org_list(uuid)',
+        'admin_org_devices(uuid,uuid)', 'admin_org_approvals(uuid,uuid)', 'admin_revoke_device(uuid,text,uuid,uuid)',
+        'admin_request_code(uuid,text,jsonb,uuid)', 'admin_approve_code(uuid,text,uuid,text,uuid)', 'admin_active_count()'] as $signature) {
         expect($this->asOwner()->selectOne("SELECT NOT EXISTS(SELECT 1 FROM pg_proc p,LATERAL aclexplode(p.proacl) a WHERE p.oid=?::regprocedure AND a.grantee=0 AND a.privilege_type='EXECUTE') AS guarded", ['platform.'.$signature])->guarded)->toBeTrue();
     }
     $grants = $this->asOwner()->select(<<<'SQL'
@@ -129,7 +132,7 @@ test('the auth role has column-exact grants and unused action roles have no tabl
     expect(array_map(fn ($r) => $r->table_name.':'.$r->privilege_type, $tableGrants))->toBe([
         'admin_log:INSERT', 'admin_log:SELECT', 'admin_recovery_codes:SELECT', 'admin_sessions:INSERT', 'admin_sessions:SELECT', 'admin_users:SELECT',
     ]);
-    foreach (['clintra_admin_app', 'clintra_admin_provision', 'clintra_admin_mint', 'clintra_admin_device', 'clintra_admin_support', 'clintra_support'] as $role) {
+    foreach (['clintra_admin_app', 'clintra_admin_provision', 'clintra_admin_support', 'clintra_support'] as $role) {
         expect($this->asOwner()->select('SELECT 1 FROM information_schema.role_column_grants WHERE grantee=?', [$role]))->toBe([]);
         expect($this->asOwner()->select('SELECT 1 FROM information_schema.role_table_grants WHERE grantee=?', [$role]))->toBe([]);
     }

@@ -430,11 +430,21 @@ GRANT EXECUTE ON FUNCTION provision_organization(jsonb) TO clintra_admin_provisi
 GRANT EXECUTE ON FUNCTION mint_activation_code(jsonb) TO clintra_admin_mint;
 GRANT SELECT, INSERT ON platform.admin_approvals TO clintra_admin_mint;
 GRANT UPDATE (approved_by, approved_at) ON platform.admin_approvals TO clintra_admin_mint;
+GRANT SELECT (id, disabled_at) ON organizations TO clintra_admin_mint;
+GRANT SELECT (id, org_id) ON locations TO clintra_admin_mint;
+GRANT SELECT (org_id, role, is_active) ON memberships TO clintra_admin_mint;
+GRANT SELECT (id, ip, user_agent) ON platform.admin_sessions TO clintra_admin_mint;
 
 -- revoke a device
-GRANT SELECT (id, org_id, revoked_at) ON device TO clintra_admin_device;
+GRANT SELECT (id, org_id, location_id, series, registered_at, revoked_at) ON device TO clintra_admin_device;
 GRANT UPDATE (revoked_at) ON device TO clintra_admin_device;
 GRANT SELECT (tokenable_type, tokenable_id), DELETE ON personal_access_tokens TO clintra_admin_device;
+GRANT SELECT (id, org_id, name) ON locations TO clintra_admin_device;
+GRANT SELECT (device_id, applied_at) ON sync_ledger TO clintra_admin_device;
+GRANT SELECT (id, org_id, role, is_active) ON memberships TO clintra_admin_device;
+GRANT SELECT (id) ON organizations TO clintra_admin_device;
+GRANT SELECT (id, ip, user_agent) ON platform.admin_sessions TO clintra_admin_device;
+GRANT INSERT ON audit_log TO clintra_admin_device;
 
 -- disable and enable
 GRANT SELECT (id, disabled_at) ON organizations TO clintra_admin_org;
@@ -472,6 +482,21 @@ GRANT SELECT (id, org_id, location_id, membership_id) ON device TO clintra_suppo
 GRANT INSERT ON audit_log TO clintra_support;
 ```
 
+B5 adds the minimum columns used to verify a target clinic and location, count
+active owners, display devices and their last sync, attribute a revoke to an
+owner, and retain the session's audit context. Because the three clinic tables
+force RLS and `clintra_admin_mint` has no BYPASSRLS, B5 scopes their existing
+policies to `clintra_app` and `clintra_owner` and adds SELECT policies for mint.
+This prevents the existing policies from calling `current_org()` for mint,
+which has no permission to execute it. The new policies check `current_user`
+because `clintra_owner` inherits mint and must remain blocked without a clinic
+membership. The column grants above still limit what mint can read.
+`clintra_admin_mint` does not read
+`platform.admin_users`: `platform.admin_active_count()` is owned by the auth
+role and returns only the active count. B5's `admin_code_notices` table gives
+`clintra_app` SELECT on only its four non-secret columns through the clinic's
+own RLS and `clintra_admin_mint` INSERT on those columns.
+
 None of these roles holds any privilege on `patients`, `users` (beyond what
 the identity design gives `clintra_auth`), `visit_form_data`,
 `prescriptions`, `prescription_items`, `messages`, `message_templates`,
@@ -498,6 +523,7 @@ FROM PUBLIC` after each. Owners and callers:
 | `platform.admin_logout(uuid)` | `clintra_admin_auth` | `clintra_admin_app` |
 | `platform.admin_change_password(jsonb)` | `clintra_admin_auth` | `clintra_admin_app` |
 | `platform.admin_session_actor(uuid, text, boolean)` | `clintra_admin_auth` | the six action roles |
+| `platform.admin_active_count()` | `clintra_admin_auth` | `clintra_admin_mint` only |
 | `platform.admin_session_state(uuid, boolean)` | `clintra_admin_auth` | `clintra_admin_auth` only (private session resolution) |
 | `platform.admin_step_up(uuid, text)` | `clintra_admin_auth` | `clintra_admin_auth` only (private TOTP check and session termination) |
 | `platform.admin_log_write(uuid, uuid, text, uuid, uuid, boolean, text, jsonb, inet, text)` | `clintra_admin_auth` | the six action roles |
@@ -505,6 +531,8 @@ FROM PUBLIC` after each. Owners and callers:
 | `platform.admin_log_cli(jsonb)` | `clintra_admin_auth` | `clintra_owner`, `clintra_admin_org` (break-glass wrapper only) |
 | `platform.admin_provision_organization(uuid, text, jsonb, uuid)` | `clintra_admin_provision` | `clintra_admin_app` |
 | `platform.admin_request_code(uuid, text, jsonb, uuid)` / `platform.admin_approve_code(uuid, text, uuid, text, uuid)` | `clintra_admin_mint` | `clintra_admin_app` |
+| `platform.admin_org_approvals(uuid, uuid)` | `clintra_admin_mint` | `clintra_admin_app` |
+| `platform.admin_org_devices(uuid, uuid)` | `clintra_admin_device` | `clintra_admin_app` |
 | `platform.admin_revoke_device(uuid, text, uuid, uuid)` | `clintra_admin_device` | `clintra_admin_app` |
 | `platform.admin_set_org_disabled(uuid, text, uuid, boolean, text, uuid)` | `clintra_admin_org` | `clintra_admin_app` |
 | `platform.cli_set_org_disabled(uuid, boolean, text, uuid, text)` | `clintra_admin_org` | `clintra_owner` |
@@ -970,3 +998,44 @@ disabled clinics, ordered by name then ID. Success is silent; session refusals
 write exactly one `figures.view` row with `{operation:"org.list"}` and the stored
 session IP/user agent. It uses the same actor-first, no-step-up contract as the
 other stats readers.
+
+## B5 implementation contract
+
+Migration 000061 contains the complete SQL, grants, policies and rollback for
+devices, codes, approvals and notices. `admin_org_devices` and
+`admin_org_approvals` resolve the session before looking up the clinic and log
+one `figures.view` row with the clinic set and an `org.devices` or
+`org.approvals` operation. The device result contains only the ID, location
+name, series, registration and revocation times, and the last applied push
+time. The approvals result contains only unexpired, unapproved requests for
+that clinic and whether the current admin may approve each one.
+
+Every destructive call resolves its actor and fresh step-up first, validates
+its payload key by key, then reads targets. Refusals return after writing one
+admin log row with the session IP and user agent. An unknown organization or
+approval returns `not_found`; the former logs null `org_id` and its requested
+UUID as `target_id`. A disabled clinic returns `org_disabled`, a location
+outside the clinic `location_mismatch`, and a clinic without an active owner
+`no_owner`. Approval returns `expired` at or after one hour, `unchanged` for
+an already completed request, and `same_admin` for its requester. If fewer
+than two active admins remain during approval, it returns
+`approval_unavailable`; the remaining admin can request a fresh code. The
+function never catches a failure from `mint_activation_code`.
+
+`admin_request_code` calls `admin_active_count()` in the same transaction.
+With at least two active admins, it accepts no `code_hash`, creates a pending
+approval for one hour and mints nothing. With one admin, a valid hash is
+required: it mints immediately, inserts the approval row with `approved_by`
+null and `approved_at` set, and records `detail.single_admin=true`. Every
+approval path generates a fresh code through the existing mint function, with
+the existing 72-hour device and 24-hour owner-recovery expiration rules.
+Only the completing admin's response contains the plaintext, once. The hash
+is bound to the database call but never included in an admin log or approval
+row.
+
+Each completed panel mint writes one `admin_code_notices` row. Both pull and
+bootstrap return `code_notices` as a top-level field, read by `clintra_app`
+through `admin_code_notices`' clinic-scoped RLS. Only notices younger than
+seven days are returned. They are not sync ops; older devices ignore the
+unknown field. The web app shows the device or owner-recovery Arabic banner
+using the notice time, on desktop and mobile.

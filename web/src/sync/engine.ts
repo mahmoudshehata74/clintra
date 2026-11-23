@@ -13,6 +13,7 @@ import { pruneRemoteAuditRows, runAuditPull, runAuditPush, type AuditSyncOutcome
 import { hasAuditEndpoints, SyncAuthError, type PulledChange, type PullSinceResult, type SyncTransport } from "./transport";
 import { SyncOrganizationSuspendedError } from "./transport";
 import { isOrganizationSuspended, setOrganizationSuspended } from "./organizationSuspension";
+import { setCodeNotices } from "./codeNotices";
 
 const DEFAULT_INTERVAL_MS = 10_000;
 
@@ -446,6 +447,7 @@ async function runBootstrapWindow(db: ClintraDatabase, transport: SyncTransport,
 
     await applyPage(db, result.changes, result.identityMemberships);
     await recordDeviceSeries(db, result.deviceSeries);
+    if (result.codeNotices !== undefined) setCodeNotices(result.codeNotices, deviceId);
     await db.device.update(deviceId, {
       ...(result.identityEnforcedAt === undefined ? {} : { identity_enforced_at: result.identityEnforcedAt }),
       ...(result.identityRolloutAutoAt === undefined ? {} : { identity_rollout_auto_at: result.identityRolloutAutoAt }),
@@ -512,6 +514,7 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
 
     await applyPage(db, result.changes, result.identityMemberships);
     await recordDeviceSeries(db, result.deviceSeries);
+    if (result.codeNotices !== undefined) setCodeNotices(result.codeNotices, deviceId);
 
     cursor = result.cursor;
     hasMore = result.hasMore;

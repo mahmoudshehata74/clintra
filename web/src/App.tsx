@@ -2,6 +2,8 @@ import { ensureContractReferenceData } from "./db/contractReferenceData";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import LockScreen from "./auth/LockScreen";
 import OrganizationSuspensionNotice from "./components/OrganizationSuspensionNotice";
+import CodeNoticeBanner from "./components/CodeNoticeBanner";
+import { setCodeNoticeDevice } from "./sync/codeNotices";
 import identityText from "./auth/identityStrings";
 import { showRolloutWarning } from "./auth/rollout";
 import { hasPermission, IdentityAccessContext } from "./auth/permissions";
@@ -186,6 +188,7 @@ export default function App() {
   const [selectedView, setSelectedView] = useState<"day" | "patients" | "doctor" | "visit" | "messages" | "reports">("day");
   const viewingMembership = useGuardedActingMembership();
   const identityDevice = useLiveQuery(async () => (await db.device.toArray()).find((row) => row.token), []);
+  useEffect(() => { setCodeNoticeDevice(identityDevice?.id ?? null); }, [identityDevice?.id]);
   const enforced = Boolean(identityDevice?.identity_enforced_at);
   const access = { enforced, member: viewingMembership };
   const clinical = hasPermission(access, "clinical.view", true);
@@ -281,6 +284,7 @@ export default function App() {
         whoName={isDoctorViewShown && doctorPractitionerName ? withDoctorPrefix(doctorPractitionerName) : undefined}
       >
         <OrganizationSuspensionNotice inContentFlow />
+        <CodeNoticeBanner inContentFlow />
         {showRolloutWarning(identityDevice?.identity_enforced_at, identityDevice?.identity_rollout_auto_at) && (
           <p role="status" className="mb-3 rounded-card border border-copper-line bg-copper-wash px-4 py-3 text-sm text-copper-ink">
             {identityText.rolloutWarning}
