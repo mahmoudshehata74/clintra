@@ -237,3 +237,23 @@ test('header-active-navigation-and-two-row-mobile-account', async ({ page }) => 
   await page.getByRole('link', { name: 'تغيير كلمة السر', exact: true }).click();
   await expect(page).toHaveURL(/panel\/change-password$/);
 });
+
+
+test('figures-log-operation-labels-and-one-filter-option', async ({ page }) => {
+  const ids: Array<[string, string]> = [];
+  for (const [operation, label] of [
+    ['org.detail', 'عرض العيادة'],
+    ['org.list', 'عرض أسماء العيادات'],
+    ['org.names', 'عرض أسماء العيادات'],
+    ['', 'عرض الأرقام'],
+  ]) {
+    const detail = operation ? { operation } : {};
+    ids.push([command('log-row', fixture.id, JSON.stringify({ action: 'figures.view', detail })).id, label]);
+  }
+  await signIn(page);
+  await page.goto('/panel/admin-log?org_id=' + fixture.org + '&action=figures.view');
+  for (const [id, label] of ids) await expect(page.locator(`tr[data-log-id="${id}"] td[data-label="الإجراء"]`)).toHaveText(label);
+  await expect(page.locator('select[name="action"] option[value="figures.view"]')).toHaveCount(1);
+  await expect(page.locator('select[name="action"] option[value="figures.view"]')).toHaveText('عرض الأرقام والعيادات');
+  await screens(page, 'review-operation-labels');
+});

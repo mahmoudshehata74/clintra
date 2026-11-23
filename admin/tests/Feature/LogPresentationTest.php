@@ -98,3 +98,23 @@ test('all hostile log strings remain literal in actor and expanded detail fields
     }
     expect($xpath->query('.//script|.//img|.//*[@onerror]', $row)->length)->toBe(0);
 })->with(['<script>alert(1)</script>', '"><img src=x onerror=alert(1)>', '{{7*7}}']);
+
+
+test('figures row labels follow operation while action filter stays one combined option', function () {
+    $ids = [];
+    foreach ([
+        'org.detail' => 'عرض العيادة',
+        'org.list' => 'عرض أسماء العيادات',
+        'org.names' => 'عرض أسماء العيادات',
+        'none' => 'عرض الأرقام',
+    ] as $operation => $label) {
+        $detail = $operation === 'none' ? [] : ['operation' => $operation];
+        $ids[$label][] = presentationRow($this->fixture, ['action' => 'figures.view', 'detail' => $detail]);
+    }
+    $xpath = logPresentationDocument(presentationResponse());
+    foreach ($ids as $label => $rows) {
+        foreach ($rows as $id) expect($xpath->query('//tr[@data-log-id="'.$id.'"]/td[@data-label="الإجراء"]')->item(0)->textContent)->toBe($label);
+    }
+    $option = $xpath->query('//select[@name="action"]/option[@value="figures.view"]');
+    expect($option->length)->toBe(1)->and($option->item(0)->textContent)->toBe('عرض الأرقام والعيادات');
+});
