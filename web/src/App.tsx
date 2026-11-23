@@ -280,7 +280,7 @@ export default function App() {
         today={dayScreenToday}
         whoName={isDoctorViewShown && doctorPractitionerName ? withDoctorPrefix(doctorPractitionerName) : undefined}
       >
-        <OrganizationSuspensionNotice />
+        <OrganizationSuspensionNotice inContentFlow />
         {showRolloutWarning(identityDevice?.identity_enforced_at, identityDevice?.identity_rollout_auto_at) && (
           <p role="status" className="mb-3 rounded-card border border-copper-line bg-copper-wash px-4 py-3 text-sm text-copper-ink">
             {identityText.rolloutWarning}
