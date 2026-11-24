@@ -105,8 +105,7 @@ class SyncBootstrapPuller
         $to = now()->addDays(SyncWindow::DAYS)->toDateString();
 
         while ($stage < self::STAGE_DONE) {
-            if ($withoutClinical && in_array($stage, [self::STAGE_PRESCRIPTIONS,
-                self::STAGE_PRESCRIPTION_ITEMS, self::STAGE_VISIT_FORM_REVISIONS], true)) {
+            if ($withoutClinical && SupportAccess::omitsEntity($this->entityForStage($stage))) {
                 $stage++;
                 $afterId = null;
 
@@ -256,7 +255,19 @@ class SyncBootstrapPuller
      */
     private function toRow(int $stage, object $row, bool $identityEnforced, bool $withoutClinical): array
     {
-        $entity = match ($stage) {
+        $entity = $this->entityForStage($stage);
+
+        return [
+            'entity' => $entity,
+            'entity_id' => $row->id,
+            'rev' => (int) $row->rev,
+            'payload' => SyncPayload::fromRow($entity, $row, $identityEnforced, $withoutClinical),
+        ];
+    }
+
+    private function entityForStage(int $stage): string
+    {
+        return match ($stage) {
             self::STAGE_DAY_STATE => 'day_state',
             self::STAGE_VISITS => 'visits',
             self::STAGE_PATIENTS => 'patients',
@@ -270,13 +281,6 @@ class SyncBootstrapPuller
             self::STAGE_SCHEDULE_EXCEPTIONS => 'schedule_exceptions',
             self::STAGE_VISIT_FORM_REVISIONS => 'visit_form_revisions',
         };
-
-        return [
-            'entity' => $entity,
-            'entity_id' => $row->id,
-            'rev' => (int) $row->rev,
-            'payload' => SyncPayload::fromRow($entity, $row, $identityEnforced, $withoutClinical),
-        ];
     }
 
     /**

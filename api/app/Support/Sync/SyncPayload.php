@@ -61,10 +61,6 @@ final class SyncPayload
             }
         }
 
-        if ($withoutClinical && $table === 'visits') {
-            $payload['note'] = null;
-        }
-
         foreach ($payload as $column => $value) {
             if (is_string($value) && preg_match(self::TIMESTAMPTZ, $value) === 1) {
                 $payload[$column] = CarbonImmutable::parse($value)->utc()->format('Y-m-d\TH:i:s.v\Z');
@@ -83,6 +79,6 @@ final class SyncPayload
             }
         }
 
-        return $payload;
+        return $withoutClinical ? SupportAccess::redactEntity($table, $payload) : $payload;
     }
 }

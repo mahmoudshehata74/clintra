@@ -59,7 +59,7 @@ class SyncPuller
         $newCursor = $page->isNotEmpty() ? (int) $page->last()->seq : $since;
 
         $result = $page->filter(fn ($row) => ! $withoutClinical
-            || ! in_array($row->entity, SupportAccess::CLINICAL_ENTITIES, true))
+            || ! SupportAccess::omitsEntity($row->entity))
             ->map(function ($row) use ($identityEnforced, $withoutClinical) {
                 return [
                     'seq' => (int) $row->seq,

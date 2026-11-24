@@ -57,6 +57,14 @@ class ApplyMembership
         return DB::transaction(function () use ($request, $next, $credential) {
             if ($credential['support_read_only']) {
                 DB::statement('SET TRANSACTION READ ONLY');
+                $request->attributes->set('support_read_only', true);
+                if ($request->is('api/sync/push', 'api/audit/push', 'api/staff', 'api/staff/*',
+                    'api/auth/*', 'api/support/*')) {
+                    return response()->json([
+                        'error' => 'support_read_only',
+                        'message' => 'جهاز الدعم للقراءة بس، مفيش تغيير بيتحفظ منه',
+                    ], 403);
+                }
             }
             app(DatabaseSession::class)->applyMembership($credential['membership_id']);
             if ($credential['device_id'] !== null && DB::selectOne('select device_org_disabled(?) as disabled', [$credential['device_id']])->disabled) {
@@ -127,17 +135,6 @@ class ApplyMembership
                     } elseif (! $request->routeIs('identity.login', 'identity.recovery')) {
                         return $this->unauthenticated();
                     }
-                }
-            }
-
-            if ($credential['support_read_only']) {
-                $request->attributes->set('support_read_only', true);
-                if ($request->is('api/sync/push', 'api/audit/push', 'api/staff', 'api/staff/*',
-                    'api/auth/*', 'api/support/*')) {
-                    return response()->json([
-                        'error' => 'support_read_only',
-                        'message' => 'جهاز الدعم للقراءة بس، مفيش تغيير بيتحفظ منه',
-                    ], 403);
                 }
             }
 

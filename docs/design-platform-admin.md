@@ -726,11 +726,16 @@ fresh step-up first, validate the payload key by key, and return a logged
   pushes, never inside one; enabling takes it too, so the first push after
   enabling sees the enabled organization in full.
 - **Pull filters.** For a support device without clinical access,
-  `SyncPuller`, `SyncBootstrapPuller` and `DeviceAuditPuller` skip the
-  clinical entities and null `visits.note`; cursors advance over skipped
-  rows as they do over any row (the cursor is the ledger `seq`). The
-  `visit_form_revisions` payload also contains clinical text and is skipped.
-  Visit audit payloads null their embedded `note` field as well.
+  `SyncPuller`, `SyncBootstrapPuller` and `DeviceAuditPuller` share one PHP
+  clinical field list. They skip `visit_form_data`, `visit_form_revisions`,
+  `prescriptions` and `prescription_items`. For rows they keep, they null
+  `care_plans.diagnosis` and `goal`, `cash_close.difference_note`,
+  `invoice_items.description`, `message_templates.body`, `messages.body`,
+  `patients.note`, `payments.note`, `schedule_exceptions.reason`, and
+  `visits.cancel_reason` and `note`. Device audit `before` and `after` use
+  the same list; unknown audit JSON keys are omitted. Names, phones, money,
+  dates, statuses and IDs remain. Cursors advance over skipped rows as they
+  do over any row (the cursor is the ledger `seq`).
 - **`support_sessions`.** A new top-level field on every pull page (beside
   `device_series`), read through `device`'s own policy.
 
@@ -1082,7 +1087,8 @@ then `unchanged` for a used code, `expired`, `org_disabled`, `no_owner`,
 `support_active`, and `unchanged` for an existing device or exchange hash.
 An unknown hash is `not_found` with a null organization and target. Every
 refusal returns after one `support.open` log row with the session IP and user
-agent; no code or exchange hash is logged. Step-up failures count toward the
+agent, including expired or ended known sessions; no code or exchange hash is
+logged. Step-up failures count toward the
 existing five-in-fifteen-minute budget. Success writes the support device,
 consumes the code, creates a two-minute exchange, and writes one clinic audit
 row attributed to the owner. The clinic audit ID is generated inside the
@@ -1106,13 +1112,24 @@ The clinic audit IDs for mint and end are also generated inside their
 functions, while their payloads retain the requested `audit_id` field.
 
 `ApplyMembership` starts support request transactions with `SET TRANSACTION
-READ ONLY` before setting the membership. A token's support ability must
+READ ONLY`. It returns 403 `support_read_only` on push, audit push, staff,
+auth and support writes immediately afterward, before membership setup,
+suspension and identity checks. A token's support ability must
 match its device kind. Once the key is bound, support devices use the same
-identity proof check as clinic devices. Support tokens receive 403
-`support_read_only` on push, audit push, staff, auth, and support writes;
-Postgres rejects any other write in the transaction with SQLSTATE 25006.
+identity proof check as clinic devices on allowed routes. Postgres rejects
+any other write in the transaction with SQLSTATE 25006.
 Pull, bootstrap, and audit pull read `include_clinical` through the calling
-device's RLS policy. Without clinical access they omit clinical rows and
-null `visits.note`, advancing cursors over omitted rows. Pull and bootstrap
+device's RLS policy. Without clinical access they omit the four clinical
+entities and null `care_plans.diagnosis` and `goal`,
+`cash_close.difference_note`, `invoice_items.description`,
+`message_templates.body`, `messages.body`, `patients.note`,
+`payments.note`, `schedule_exceptions.reason`, and `visits.cancel_reason`
+and `note`, advancing cursors over omitted rows. The same list applies to
+device audit `before` and `after`. Pull and bootstrap
 carry the current organization's live `support_sessions` beside
 `device_series` and `code_notices`.
+
+The first statement in migration 000062's `down()` refuses rollback with
+SQLSTATE 55000 while any support device row remains. The check assumes the
+existing `clintra_rls` role inside the DO block so it sees those rows despite
+device's forced RLS; it resets the role before the rest of the rollback.

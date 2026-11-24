@@ -65,19 +65,12 @@ class DeviceAuditPuller
             'cursor' => (string) ($page->isNotEmpty() ? (int) $page->last()->seq : $since),
             'has_more' => $hasMore,
             'rows' => $page->filter(fn ($row) => ! $withoutClinical
-                || ! in_array($row->entity, SupportAccess::CLINICAL_ENTITIES, true))
+                || ! SupportAccess::omitsEntity($row->entity))
                 ->map(function ($row) use ($withoutClinical) {
                     $payload = SyncPayload::fromRow('device_audit_log', $row);
                     $payload['seq'] = (int) $payload['seq'];
-                    if ($withoutClinical && $row->entity === 'visits') {
-                        foreach (['before', 'after'] as $field) {
-                            if (is_array($payload[$field] ?? null) && array_key_exists('note', $payload[$field])) {
-                                $payload[$field]['note'] = null;
-                            }
-                        }
-                    }
 
-                    return $payload;
+                    return $withoutClinical ? SupportAccess::redactAuditRow($payload) : $payload;
                 })->values()->all(),
         ];
     }

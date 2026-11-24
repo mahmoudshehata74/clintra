@@ -2,9 +2,12 @@
 
 use App\Models\Device;
 use App\Support\ActivationCode;
+use App\Support\Sync\SupportAccess;
+use App\Support\Sync\SyncPayload;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\Support\IdentityHarness;
 use Tests\Support\PlatformAdminHarness;
@@ -217,6 +220,39 @@ test('support tokens enforce device kind, expiry, read only routes and transacti
     $this->withToken($support['token'])->getJson('/api/sync/pull')->assertStatus(401);
 });
 
+test('a support token is refused on disabled clinic write routes before recovery or suspension handling', function () {
+    $fx = b6Fixture();
+    $support = b6SupportToken($fx, false);
+    $this->fx()->table('organizations')->where('id', $fx['org'])->update([
+        'disabled_at' => now()->toIso8601String(), 'disabled_reason' => 'B6 review',
+    ]);
+
+    foreach (['/api/auth/owner-recovery', '/api/sync/push'] as $path) {
+        $this->withToken($support['token'])->postJson($path, [])->assertStatus(403)
+            ->assertExactJson(['error' => 'support_read_only',
+                'message' => 'جهاز الدعم للقراءة بس، مفيش تغيير بيتحفظ منه']);
+    }
+});
+
+test('an invalid known support session logs its stored network context', function (array $sessionChange) {
+    $admin = $this->platformAdmin();
+    $session = $this->platformSession($admin, array_merge([
+        'ip' => '192.0.2.81', 'user_agent' => 'B6 invalid session',
+    ], $sessionChange));
+    $logId = $this->platformId();
+    $payload = ['code_hash' => hash('sha256', 'unknown-code'), 'device_id' => $this->platformId(),
+        'exchange_hash' => hash('sha256', 'unknown-exchange')];
+
+    expect(b6Open($session, $this->platformOtp($admin['secret']), $payload, $logId))
+        ->toMatchArray(['ok' => false, 'reason' => 'session_invalid']);
+    $log = $this->asOwner()->table('platform.admin_log')->where('id', $logId)->sole();
+    expect($log->action)->toBe('support.open')->and($log->reason)->toBe('session_invalid')
+        ->and($log->ip)->toBe('192.0.2.81')->and($log->user_agent)->toBe('B6 invalid session');
+})->with([
+    'expired' => [['expires_at' => now()->subMinute()->toIso8601String()]],
+    'ended' => [['ended_at' => now()->toIso8601String()]],
+]);
+
 test('failed support step ups consume the shared five in fifteen minute budget', function () {
     $fx = b6Fixture();
     $admin = $this->platformAdmin();
@@ -310,6 +346,120 @@ test('support pulls redact clinical rows and visit notes while cursors advance',
     $bootstrapVisit = collect($rows)->firstWhere('entity', 'visits');
     expect($bootstrapVisit['payload']['note'])->toBe($includeClinical ? 'Clinical note' : null);
 })->with([false, true]);
+
+test('every listed clinical column is redacted from rows and audit snapshots', function () {
+    $safe = ['id' => $this->platformId(), 'full_name' => 'Safe name', 'name' => 'Safe name',
+        'phone' => '+201000000000', 'total_price' => 30000, 'status' => 'active'];
+
+    foreach (SupportAccess::CLINICAL_COLUMNS as $entity => $columns) {
+        $known = array_flip(Schema::getColumnListing($entity));
+        $payload = array_intersect_key($safe, $known);
+        foreach ($columns as $column) {
+            $payload[$column] = in_array($column, ['data', 'previous_data', 'new_data'], true)
+                ? ['complaint' => 'clinical text'] : 'clinical text';
+        }
+
+        $redacted = SyncPayload::fromRow($entity, $payload, withoutClinical: true);
+        $full = SyncPayload::fromRow($entity, $payload);
+        $audit = SupportAccess::redactAuditRow(['entity' => $entity, 'before' => $payload,
+            'after' => [...$payload, 'unknown_clinical' => 'clinical text']]);
+        foreach ($columns as $column) {
+            expect($redacted[$column])->toBeNull()
+                ->and($full[$column])->not->toBeNull()
+                ->and($audit['before'][$column])->toBeNull()
+                ->and($audit['after'][$column])->toBeNull();
+        }
+        foreach (array_intersect_key($safe, $known) as $column => $value) {
+            expect($redacted[$column])->toBe($value)
+                ->and($audit['before'][$column])->toBe($value)
+                ->and($audit['after'][$column])->toBe($value);
+        }
+        expect($audit['after'])->not->toHaveKey('unknown_clinical');
+    }
+});
+
+test('support care plan text is null in pull, bootstrap and both audit snapshots', function (bool $includeClinical) {
+    $fx = b6Fixture();
+    $support = b6SupportToken($fx, $includeClinical);
+    $template = $this->makeSpecialtyTemplate($fx['org']);
+    $practitioner = $this->makePractitioner($fx['org'], $template);
+    $patient = $this->makePatient($fx['org']);
+    $planId = $this->platformId();
+    $this->fx()->table('care_plans')->insert([
+        'id' => $planId, 'org_id' => $fx['org'], 'location_id' => $fx['location'],
+        'template_id' => $template, 'patient_id' => $patient, 'practitioner_id' => $practitioner,
+        'diagnosis' => 'Clinical diagnosis', 'goal' => 'Clinical goal', 'planned_count' => 1,
+        'total_price' => 30000, 'paid' => 0, 'status' => 'active',
+        'started_at' => now()->toIso8601String(), 'expected_end' => now()->addMonth()->toIso8601String(),
+    ]);
+    $this->cleanupFirst(fn () => $this->fx()->table('care_plans')->where('id', $planId)->delete());
+    $this->makeSyncLedgerRow($fx['org'], $fx['owner'], $fx['clinic'],
+        ['entity' => 'care_plans', 'entity_id' => $planId]);
+    $snapshot = ['id' => $planId, 'status' => 'active', 'total_price' => 30000,
+        'diagnosis' => 'Clinical diagnosis', 'goal' => 'Clinical goal'];
+    $this->makeDeviceAuditLog($fx['org'], $fx['owner'], $fx['clinic'], [
+        'entity' => 'care_plans', 'entity_id' => $planId, 'action' => 'update',
+        'before' => json_encode($snapshot), 'after' => json_encode([...$snapshot,
+            'unknown_clinical' => 'Clinical text']),
+    ]);
+
+    $pull = $this->withToken($support['token'])->getJson('/api/sync/pull')->assertOk();
+    $row = collect($pull->json('rows'))->firstWhere('entity', 'care_plans');
+    expect($row)->not->toBeNull();
+    foreach (['diagnosis' => 'Clinical diagnosis', 'goal' => 'Clinical goal'] as $column => $value) {
+        expect($row['payload'][$column])->toBe($includeClinical ? $value : null);
+    }
+    expect($row['payload']['status'])->toBe('active')->and($row['payload']['total_price'])->toBe(30000);
+
+    $audit = $this->withToken($support['token'])->getJson('/api/audit/pull?cursor=0')->assertOk();
+    $auditRow = collect($audit->json('rows'))->firstWhere('entity', 'care_plans');
+    expect($auditRow)->not->toBeNull();
+    foreach (['before', 'after'] as $snapshotField) {
+        foreach (['diagnosis' => 'Clinical diagnosis', 'goal' => 'Clinical goal'] as $column => $value) {
+            expect($auditRow[$snapshotField][$column])->toBe($includeClinical ? $value : null);
+        }
+        expect($auditRow[$snapshotField]['status'])->toBe('active')
+            ->and($auditRow[$snapshotField]['total_price'])->toBe(30000);
+    }
+    expect(array_key_exists('unknown_clinical', $auditRow['after']))->toBe($includeClinical);
+
+    $rows = [];
+    $cursor = null;
+    do {
+        $url = '/api/sync/bootstrap'.($cursor === null ? '' : '?cursor='.urlencode($cursor));
+        $page = $this->withToken($support['token'])->getJson($url)->assertOk();
+        array_push($rows, ...$page->json('rows'));
+        $cursor = $page->json('cursor');
+    } while ($page->json('has_more'));
+    $bootstrap = collect($rows)->firstWhere('entity', 'care_plans');
+    expect($bootstrap)->not->toBeNull();
+    foreach (['diagnosis' => 'Clinical diagnosis', 'goal' => 'Clinical goal'] as $column => $value) {
+        expect($bootstrap['payload'][$column])->toBe($includeClinical ? $value : null);
+    }
+    expect($bootstrap['payload']['status'])->toBe('active')
+        ->and($bootstrap['payload']['total_price'])->toBe(30000);
+})->with([false, true]);
+
+test('000062 refuses rollback while a support device exists and leaves its schema intact', function () {
+    $fx = b6Fixture();
+    $support = b6SupportToken($fx, false);
+    $migration = require database_path('migrations/2026_09_12_000062_add_support_access.php');
+    $previous = DB::getDefaultConnection();
+    DB::setDefaultConnection('pgsql_owner');
+    try {
+        $this->asOwner()->transaction(fn () => $migration->down());
+        $this->fail('Expected the support device to prevent rollback');
+    } catch (QueryException $error) {
+        expect($error->getCode())->toBe('55000')
+            ->and($error->getMessage())->toContain('rollback of 000062 requires that no support device rows exist');
+    } finally {
+        DB::setDefaultConnection($previous);
+    }
+    expect(Schema::hasColumn('device', 'kind'))->toBeTrue()
+        ->and($this->fx()->table('device')->where('id', $support['id'])->exists())->toBeTrue()
+        ->and($this->asOwner()->selectOne("SELECT to_regprocedure('support_exchange(jsonb)') AS fn")->fn)
+        ->not->toBeNull();
+});
 
 test('only an owner can mint for their location and another clinic cannot end or see support', function () {
     $a = b6Fixture();

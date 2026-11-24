@@ -93,9 +93,7 @@ return new class extends Migration
                 v_hours smallint; v_include boolean;
                 v_uuid text:='^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$';
             BEGIN
-                IF v_admin IS NOT NULL THEN
-                    SELECT ip,user_agent INTO v_ip,v_agent FROM platform.admin_sessions WHERE id=p_session;
-                END IF;
+                SELECT ip,user_agent INTO v_ip,v_agent FROM platform.admin_sessions WHERE id=p_session;
                 IF v_reason IS NULL THEN
                     IF p_payload IS NULL OR jsonb_typeof(p_payload)<>'object' THEN
                         v_reason:='invalid_payload';
@@ -313,6 +311,13 @@ return new class extends Migration
     public function down(): void
     {
         DB::unprepared(<<<'SQL'
+            DO $$ BEGIN
+                EXECUTE 'SET LOCAL ROLE clintra_rls';
+                IF EXISTS (SELECT 1 FROM device WHERE kind = 'support') THEN
+                    RAISE EXCEPTION 'rollback of 000062 requires that no support device rows exist' USING ERRCODE = '55000';
+                END IF;
+                EXECUTE 'RESET ROLE';
+            END $$;
             DROP FUNCTION end_support_session(jsonb);
             DROP FUNCTION support_exchange(jsonb);
             DROP FUNCTION mint_support_code(jsonb);
