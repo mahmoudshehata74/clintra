@@ -7,6 +7,7 @@ use App\Support\ActivationCode;
 use App\Support\DatabaseSession;
 use App\Support\Identity\Es256;
 use App\Support\Identity\Identity;
+use App\Support\Sync\SupportAccess;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -168,7 +169,7 @@ class SupportController extends Controller
                 $member['permissions'] = Identity::parseTextArray($row->permissions);
             }
 
-            return $member;
+            return SupportAccess::redactEntity('memberships', $member, false);
         })->all();
 
         return [

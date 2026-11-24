@@ -59,18 +59,20 @@ class DeviceAuditPuller
         $hasMore = $rows->count() > self::PAGE_SIZE;
         $page = $hasMore ? $rows->take(self::PAGE_SIZE) : $rows;
 
-        $withoutClinical = SupportAccess::withoutClinical($deviceId);
+        $filters = SupportAccess::filters($deviceId);
+        $withoutClinical = $filters['without_clinical'];
 
         return [
             'cursor' => (string) ($page->isNotEmpty() ? (int) $page->last()->seq : $since),
             'has_more' => $hasMore,
             'rows' => $page->filter(fn ($row) => ! $withoutClinical
                 || ! SupportAccess::omitsEntity($row->entity))
-                ->map(function ($row) use ($withoutClinical) {
+                ->map(function ($row) use ($filters) {
                     $payload = SyncPayload::fromRow('device_audit_log', $row);
                     $payload['seq'] = (int) $payload['seq'];
 
-                    return $withoutClinical ? SupportAccess::redactAuditRow($payload) : $payload;
+                    return $filters['support']
+                        ? SupportAccess::redactAuditRow($payload, $filters['without_clinical']) : $payload;
                 })->values()->all(),
         ];
     }

@@ -46,7 +46,8 @@ class SyncPuller
      */
     public function pull(int $since, bool $identityEnforced = false, ?string $deviceId = null): array
     {
-        $withoutClinical = SupportAccess::withoutClinical($deviceId);
+        $filters = SupportAccess::filters($deviceId);
+        $withoutClinical = $filters['without_clinical'];
         $rows = DB::table('sync_ledger')
             ->where('seq', '>', $since)
             ->orderBy('seq')
@@ -60,14 +61,14 @@ class SyncPuller
 
         $result = $page->filter(fn ($row) => ! $withoutClinical
             || ! SupportAccess::omitsEntity($row->entity))
-            ->map(function ($row) use ($identityEnforced, $withoutClinical) {
+            ->map(function ($row) use ($identityEnforced, $filters) {
                 return [
                     'seq' => (int) $row->seq,
                     'entity' => $row->entity,
                     'entity_id' => $row->entity_id,
                     'rev' => (int) $row->rev,
                     'device_id' => $row->device_id,
-                    'payload' => $this->currentPayload($row->entity, $row->entity_id, $identityEnforced, $withoutClinical),
+                    'payload' => $this->currentPayload($row->entity, $row->entity_id, $identityEnforced, $filters),
                 ];
             })->values()->all();
 
@@ -90,7 +91,7 @@ class SyncPuller
      * @return array<string, mixed>|null
      */
     private function currentPayload(string $entity, string $entityId, bool $identityEnforced,
-        bool $withoutClinical): ?array
+        array $filters): ?array
     {
         // Every value ever written to sync_ledger.entity is in this same
         // list — SyncOpApplier refuses any other entity before writing
@@ -103,6 +104,7 @@ class SyncPuller
 
         $row = DB::table($entity)->where('id', $entityId)->first();
 
-        return $row === null ? null : SyncPayload::fromRow($entity, $row, $identityEnforced, $withoutClinical);
+        return $row === null ? null : SyncPayload::fromRow($entity, $row, $identityEnforced,
+            $filters['without_clinical'], $filters['support']);
     }
 }

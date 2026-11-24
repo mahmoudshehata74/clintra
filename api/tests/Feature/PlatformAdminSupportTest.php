@@ -378,6 +378,80 @@ test('every listed clinical column is redacted from rows and audit snapshots', f
     }
 });
 
+test('every listed credential column is null for support regardless of clinical access', function () {
+    foreach (SupportAccess::CREDENTIAL_COLUMNS as $entity => $columns) {
+        $known = array_flip(Schema::getColumnListing($entity));
+        $payload = ['id' => $this->platformId()];
+        foreach ($columns as $column) {
+            expect($known)->toHaveKey($column);
+            $payload[$column] = 'stored-credential-'.$column;
+        }
+
+        foreach ([false, true] as $withoutClinical) {
+            $support = SyncPayload::fromRow($entity, $payload, withoutClinical: $withoutClinical,
+                forSupport: true);
+            $audit = SupportAccess::redactAuditRow(['entity' => $entity,
+                'before' => $payload, 'after' => $payload], $withoutClinical);
+            foreach ($columns as $column) {
+                expect($support[$column])->toBeNull()
+                    ->and($audit['before'][$column])->toBeNull()
+                    ->and($audit['after'][$column])->toBeNull();
+            }
+        }
+
+        $clinic = SyncPayload::fromRow($entity, $payload);
+        foreach ($columns as $column) {
+            expect($clinic[$column])->toBe($payload[$column]);
+        }
+    }
+});
+
+test('support pull, exchange bootstrap and audit never return PIN material', function (bool $includeClinical) {
+    $fx = b6Fixture();
+    $support = b6SupportToken($fx, $includeClinical);
+    $otherClinic = $this->makeDevice($fx['org'], $fx['location'], $fx['owner']);
+    $this->makeSyncLedgerRow($fx['org'], $fx['owner'], $fx['clinic'],
+        ['entity' => 'memberships', 'entity_id' => $fx['owner']]);
+    $snapshot = ['id' => $fx['owner'], 'pin_hash' => 'test-hash', 'pin_salt' => 'test-salt',
+        'display_name' => 'Clinic owner', 'recovery_token' => 'unknown-secret'];
+    $this->makeDeviceAuditLog($fx['org'], $fx['owner'], $otherClinic, [
+        'entity' => 'memberships', 'entity_id' => $fx['owner'], 'action' => 'update',
+        'before' => json_encode($snapshot), 'after' => json_encode($snapshot),
+    ]);
+
+    foreach (['support' => $support['token'], 'clinic' => $fx['token']] as $kind => $token) {
+        $pull = $this->withToken($token)->getJson('/api/sync/pull')->assertOk();
+        $member = collect($pull->json('rows'))->firstWhere('entity', 'memberships');
+        expect($member)->not->toBeNull();
+        $audit = $this->withToken($token)->getJson('/api/audit/pull?cursor=0')->assertOk();
+        $auditRow = collect($audit->json('rows'))->firstWhere('entity', 'memberships');
+        expect($auditRow)->not->toBeNull();
+        foreach (SupportAccess::CREDENTIAL_COLUMNS['memberships'] as $column) {
+            $expected = $kind === 'support' ? null : $snapshot[$column];
+            expect($member['payload'][$column])->toBe($expected)
+                ->and($auditRow['before'][$column])->toBe($expected)
+                ->and($auditRow['after'][$column])->toBe($expected);
+        }
+        expect($auditRow['before']['display_name'])->toBe('Clinic owner')
+            ->and(array_key_exists('recovery_token', $auditRow['before']))
+            ->toBe($kind === 'clinic');
+    }
+
+    $exchangeCode = 'exchange-'.Str::random(32);
+    $this->asOwner()->table('platform.support_exchanges')->insert([
+        'exchange_hash' => hash('sha256', $exchangeCode), 'device_id' => $support['id'],
+        'expires_at' => now()->addMinute()->toIso8601String(),
+    ]);
+    $bootstrap = $this->postJson('/api/support/exchange', [
+        'exchange_code' => $exchangeCode, 'device_public_key' => TestKey::make()->jwk,
+    ])->assertOk();
+    $owner = collect($bootstrap->json('memberships'))->firstWhere('id', $fx['owner']);
+    expect($owner)->not->toBeNull();
+    foreach (SupportAccess::CREDENTIAL_COLUMNS['memberships'] as $column) {
+        expect($owner[$column])->toBeNull();
+    }
+})->with([false, true]);
+
 test('support care plan text is null in pull, bootstrap and both audit snapshots', function (bool $includeClinical) {
     $fx = b6Fixture();
     $support = b6SupportToken($fx, $includeClinical);
@@ -421,7 +495,7 @@ test('support care plan text is null in pull, bootstrap and both audit snapshots
         expect($auditRow[$snapshotField]['status'])->toBe('active')
             ->and($auditRow[$snapshotField]['total_price'])->toBe(30000);
     }
-    expect(array_key_exists('unknown_clinical', $auditRow['after']))->toBe($includeClinical);
+    expect($auditRow['after'])->not->toHaveKey('unknown_clinical');
 
     $rows = [];
     $cursor = null;

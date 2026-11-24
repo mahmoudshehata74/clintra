@@ -98,7 +98,8 @@ class SyncBootstrapPuller
      */
     public function pull(?string $cursor, bool $identityEnforced = false, ?string $deviceId = null): array
     {
-        $withoutClinical = SupportAccess::withoutClinical($deviceId);
+        $filters = SupportAccess::filters($deviceId);
+        $withoutClinical = $filters['without_clinical'];
         [$stage, $afterId] = $this->parseCursor($cursor);
 
         $from = now()->subDays(SyncWindow::DAYS)->toDateString();
@@ -132,7 +133,7 @@ class SyncBootstrapPuller
                 'cursor' => $newCursor,
                 'has_more' => $hasMoreInStage || $stage + 1 < self::STAGE_DONE,
                 'rows' => $rows->map(fn ($row) => $this->toRow($stage, $row, $identityEnforced,
-                    $withoutClinical))->values()->all(),
+                    $filters))->values()->all(),
             ];
         }
 
@@ -253,7 +254,7 @@ class SyncBootstrapPuller
     /**
      * @return array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}
      */
-    private function toRow(int $stage, object $row, bool $identityEnforced, bool $withoutClinical): array
+    private function toRow(int $stage, object $row, bool $identityEnforced, array $filters): array
     {
         $entity = $this->entityForStage($stage);
 
@@ -261,7 +262,8 @@ class SyncBootstrapPuller
             'entity' => $entity,
             'entity_id' => $row->id,
             'rev' => (int) $row->rev,
-            'payload' => SyncPayload::fromRow($entity, $row, $identityEnforced, $withoutClinical),
+            'payload' => SyncPayload::fromRow($entity, $row, $identityEnforced,
+                $filters['without_clinical'], $filters['support']),
         ];
     }
 

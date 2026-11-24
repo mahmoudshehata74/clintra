@@ -142,8 +142,10 @@ promise of the query.
    `/#support=<exchange code>`.
 3. **The clinic app swaps it once** (`POST /api/support/exchange`,
    `support_exchange`) for a device token whose abilities include
-   `support:read-only`, and a bootstrap like registration's, without PIN
-   hashes. The app runs in support mode: no PIN, no lock, every write
+   `support:read-only`, and a bootstrap like registration's. Support devices
+   never receive PIN hashes or salts in any response; membership fields
+   `pin_hash` and `pin_salt` are null regardless of clinical access. The app
+   runs in support mode: no PIN, no lock, every write
    control hidden, `mutate()` refusing with "جهاز الدعم للقراءة بس", a
    banner "جهاز دعم — قراءة بس — بينتهي {time}".
 4. **The server refuses every write.** For a `support:read-only` token,
@@ -736,6 +738,13 @@ fresh step-up first, validate the payload key by key, and return a logged
   the same list; unknown audit JSON keys are omitted. Names, phones, money,
   dates, statuses and IDs remain. Cursors advance over skipped rows as they
   do over any row (the cursor is the ledger `seq`).
+- **Credential filters.** Every membership row sent to a support device
+  has null `pin_hash` and `pin_salt`, regardless of clinical access. Device
+  audit `before` and `after` use the same credential list;
+  unknown snapshot keys are omitted for every support device. Clinic device
+  payloads retain their existing behavior. The exchange bootstrap also
+  returns null for both PIN fields. No other pullable schema column is
+  designated to store credential material.
 - **`support_sessions`.** A new top-level field on every pull page (beside
   `device_series`), read through `device`'s own policy.
 
@@ -1104,8 +1113,9 @@ or 72 support hours are accepted. `POST /api/support/exchange` accepts
 `support_exchange`. Any invalid, used, or expired exchange returns the
 registration failure body. The exchanged token expires with the device and
 has `membership:<uuid>` and `support:read-only` abilities. Its bootstrap
-omits PIN and password hashes and includes `{support: {expires_at,
-include_clinical, admin_name}}`. `POST /api/support/devices/{device}/end`
+returns null `memberships.pin_hash` and `memberships.pin_salt`, and includes
+`{support: {expires_at, include_clinical, admin_name}}`.
+`POST /api/support/devices/{device}/end`
 requires an active owner of the same organization and revokes the support
 device and its tokens immediately; unavailable devices use one error shape.
 The clinic audit IDs for mint and end are also generated inside their
@@ -1128,6 +1138,11 @@ and `note`, advancing cursors over omitted rows. The same list applies to
 device audit `before` and `after`. Pull and bootstrap
 carry the current organization's live `support_sessions` beside
 `device_series` and `code_notices`.
+Every support response nulls `memberships.pin_hash` and `memberships.pin_salt`
+regardless of `include_clinical`, including pull, exchange bootstrap, and
+device audit `before` and `after`; this credential list is separate from the
+clinical list. Unknown audit snapshot keys are omitted for support devices.
+Clinic devices continue to receive their existing membership payloads.
 
 The first statement in migration 000062's `down()` refuses rollback with
 SQLSTATE 55000 while any support device row remains. The check assumes the

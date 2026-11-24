@@ -24,6 +24,11 @@ final class SupportAccess
         'visits' => ['cancel_reason', 'note'],
     ];
 
+    /** Stored credentials that a support device must never receive. */
+    public const CREDENTIAL_COLUMNS = [
+        'memberships' => ['pin_hash', 'pin_salt'],
+    ];
+
     /** @var array<string, array<string, int>> */
     private static array $auditColumns = [];
 
@@ -35,11 +40,16 @@ final class SupportAccess
     /** @param array<string, mixed> $payload
      * @return array<string, mixed>
      */
-    public static function redactEntity(string $entity, array $payload): array
+    public static function redactEntity(string $entity, array $payload, bool $withoutClinical = true): array
     {
-        foreach (self::CLINICAL_COLUMNS[$entity] ?? [] as $column) {
-            if (array_key_exists($column, $payload)) {
-                $payload[$column] = null;
+        foreach (self::CREDENTIAL_COLUMNS[$entity] ?? [] as $column) {
+            $payload[$column] = null;
+        }
+        if ($withoutClinical) {
+            foreach (self::CLINICAL_COLUMNS[$entity] ?? [] as $column) {
+                if (array_key_exists($column, $payload)) {
+                    $payload[$column] = null;
+                }
             }
         }
 
@@ -49,7 +59,7 @@ final class SupportAccess
     /** @param array<string, mixed> $row
      * @return array<string, mixed>
      */
-    public static function redactAuditRow(array $row): array
+    public static function redactAuditRow(array $row, bool $withoutClinical = true): array
     {
         $entity = $row['entity'];
         self::$auditColumns[$entity] ??= array_flip(Schema::getColumnListing($entity));
@@ -59,23 +69,27 @@ final class SupportAccess
                 // Audit JSON is accepted from devices. Unknown keys have no
                 // table column to classify, so they cannot be sent to support.
                 $known = array_intersect_key($row[$field], self::$auditColumns[$entity]);
-                $row[$field] = self::redactEntity($entity, $known);
+                $row[$field] = self::redactEntity($entity, $known, $withoutClinical);
             }
         }
 
         return $row;
     }
 
-    /** Read the calling device through its ordinary clinic RLS policy. */
-    public static function withoutClinical(?string $deviceId): bool
+    /** Read the calling device through its ordinary clinic RLS policy.
+     * @return array{support: bool, without_clinical: bool}
+     */
+    public static function filters(?string $deviceId): array
     {
         if ($deviceId === null) {
-            return false;
+            return ['support' => false, 'without_clinical' => false];
         }
 
         $device = DB::table('device')->where('id', $deviceId)->first(['kind', 'include_clinical']);
 
-        return $device?->kind === 'support' && ! $device->include_clinical;
+        $support = $device?->kind === 'support';
+
+        return ['support' => $support, 'without_clinical' => $support && ! $device->include_clinical];
     }
 
     /** Live sessions visible through device's own RLS policy. */
