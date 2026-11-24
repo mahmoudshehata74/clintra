@@ -29,9 +29,13 @@ test('a connection with no membership set sees zero rows everywhere, even with f
 
     foreach ($this->rlsTableNames() as $table) {
         // A table clintra_app holds no SELECT on at all is unreadable with or
-        // without a membership — stronger than empty. Exactly the two named
-        // below may be (only clintra_auth's functions read them).
-        if (! $this->asOwner()->selectOne('select has_table_privilege(?, ?, ?) as granted', ['clintra_app', $table, 'SELECT'])->granted) {
+        // without a membership — stronger than empty. B5's notice table has
+        // column-only SELECT, which still permits count(*) and must be checked.
+        $read = $this->asOwner()->selectOne(
+            'select has_table_privilege(?, ?, ?) or has_any_column_privilege(?, ?, ?) as granted',
+            ['clintra_app', $table, 'SELECT', 'clintra_app', $table, 'SELECT']
+        )->granted;
+        if (! $read) {
             $unreadable[] = $table;
 
             continue;

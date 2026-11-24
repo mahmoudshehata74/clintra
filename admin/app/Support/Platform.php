@@ -15,6 +15,10 @@ final class Platform
         'admin_org_figures' => ['uuid', 'date', 'date', 'uuid'], 'admin_org_detail' => ['uuid', 'uuid'],
         'admin_org_names' => ['uuid', 'uuid[]'], 'admin_org_list' => ['uuid'],
         'admin_set_org_disabled' => ['uuid', 'text', 'uuid', 'boolean', 'text', 'uuid'],
+        'admin_org_devices' => ['uuid', 'uuid'], 'admin_org_approvals' => ['uuid', 'uuid'],
+        'admin_revoke_device' => ['uuid', 'text', 'uuid', 'uuid'],
+        'admin_request_code' => ['uuid', 'text', 'jsonb', 'uuid'],
+        'admin_approve_code' => ['uuid', 'text', 'uuid', 'text', 'uuid'],
     ];
 
     public function whoami(?string $session): array
@@ -64,6 +68,31 @@ final class Platform
     public function orgDetail(string $session, string $org): array
     {
         return $this->call('admin_org_detail', [$session, $org]);
+    }
+
+    public function orgDevices(string $session, string $org): array
+    {
+        return $this->call('admin_org_devices', [$session, $org]);
+    }
+
+    public function orgApprovals(string $session, string $org): array
+    {
+        return $this->call('admin_org_approvals', [$session, $org]);
+    }
+
+    public function revokeDevice(string $session, mixed $otp, string $device): array
+    {
+        return $this->call('admin_revoke_device', [$session, is_string($otp) ? $otp : null, $device, (string) Str::uuid()]);
+    }
+
+    public function requestCode(string $session, mixed $otp, array $payload): array
+    {
+        return $this->call('admin_request_code', [$session, is_string($otp) ? $otp : null, $payload, (string) Str::uuid()]);
+    }
+
+    public function approveCode(string $session, mixed $otp, string $approval, string $hash): array
+    {
+        return $this->call('admin_approve_code', [$session, is_string($otp) ? $otp : null, $approval, $hash, (string) Str::uuid()]);
     }
 
     public function setOrgDisabled(string $session, mixed $otp, string $org, mixed $disabled, mixed $reason): array
@@ -127,7 +156,7 @@ final class Platform
                 return ['ok' => false, 'reason' => 'invalid_payload'];
             }
             // Bound credentials must not be included in an exception chain or application log.
-            throw new \RuntimeException('The panel database is unavailable.');
+            throw new \RuntimeException('The panel database is unavailable (SQLSTATE '.$exception->getCode().').');
         }
     }
 }

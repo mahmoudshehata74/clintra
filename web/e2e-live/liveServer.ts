@@ -8,11 +8,34 @@ import { fileURLToPath } from "node:url";
 // away mid-run. Never the dev database.
 
 const API_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../api");
+const ADMIN_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../admin");
 export const API_PORT = 8000;
 const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
 const ENV = { ...process.env, DB_DATABASE: "clintra_test" };
 
 let server: ChildProcess | null = null;
+let adminServer: ChildProcess | null = null;
+
+async function adminHealthy(): Promise<boolean> {
+  try { return (await fetch('http://127.0.0.1:8001/panel/sign-in')).ok; } catch { return false; }
+}
+
+export async function startAdmin(): Promise<void> {
+  if (adminServer) return;
+  if (await adminHealthy()) throw new Error('port 8001 is already serving a panel');
+  adminServer = spawn('php', ['-S', '127.0.0.1:8001', path.join(ADMIN_DIR, 'vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php')],
+    { cwd: path.join(ADMIN_DIR, 'public'), env: { ...ENV, APP_ENV: 'testing' }, stdio: 'ignore', windowsHide: true });
+  await waitFor(adminHealthy, 'the panel to answer /panel/sign-in');
+}
+
+export async function stopAdmin(): Promise<void> {
+  if (!adminServer) return;
+  const exited = new Promise((resolve) => adminServer!.once('exit', resolve));
+  adminServer.kill();
+  await exited;
+  adminServer = null;
+  await waitFor(async () => !(await adminHealthy()), 'the panel to stop answering');
+}
 
 async function isHealthy(): Promise<boolean> {
   try {

@@ -226,6 +226,14 @@ describe("HttpTransport: device_series", () => {
   });
 });
 
+it("maps non-op code notices on pull and bootstrap", async () => {
+  const notices = [{ id: "notice", purpose: "device", issued_at: "2026-11-23T10:00:00Z" }];
+  const transport = new HttpTransport({ token: "test-token", fetchImpl: async () => jsonResponse(200,
+    { cursor: "0", has_more: false, rows: [], code_notices: notices }) });
+  expect((await transport.pullSince(null)).codeNotices).toEqual(notices);
+  expect((await transport.pullBootstrap(null)).codeNotices).toEqual(notices);
+});
+
 it("maps the explicit enforcement timestamp from pull and bootstrap", async () => {
   const enforcement = "2026-11-20T10:34:56.123456Z";
   const fetchImpl = fetchMock();

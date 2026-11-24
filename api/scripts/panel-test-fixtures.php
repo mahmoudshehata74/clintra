@@ -23,7 +23,7 @@ try {
     }
     $command = $argv[1] ?? '';
     $id = $argv[2] ?? '';
-    $commands = ['create', 'clinic', 'log-row', 'otp', 'wrong-otp', 'idle', 'expired', 'inactive', 'retire', 'sessions', 'org-state'];
+    $commands = ['create', 'clinic', 'b5', 'solo', 'restore', 'expire-approval', 'log-row', 'otp', 'wrong-otp', 'idle', 'expired', 'inactive', 'retire', 'sessions', 'org-state'];
     if (! in_array($command, $commands, true)) {
         throw new RuntimeException('Unknown fixture command.');
     }
@@ -62,7 +62,7 @@ try {
     } else {
         $org = $db->table('platform.admin_log')->where('admin_user_id', $id)->whereNotNull('org_id')->orderBy('seq')->value('org_id');
         $result = ['ok' => true];
-        if ($command === 'clinic') {
+        if ($command === 'clinic' || $command === 'b5') {
             $payload = json_decode($extra, true, flags: JSON_THROW_ON_ERROR);
             if (isset($payload['name'])) {
                 $fx->table('organizations')->where('id', $org)->update(['name' => $payload['name']]);
@@ -91,7 +91,32 @@ try {
                 $fx->table('payments')->insert(['id' => (string) Str::uuid(), 'invoice_id' => $invoice, 'location_id' => $location, 'series' => 1, 'receipt_number' => 'B4-1',
                     'amount' => 10001, 'method' => 'cash', 'after_close' => false, 'created_by' => $member, 'created_at' => '2026-07-01T23:59:59+03:00']);
             }
-            $result = compact('org', 'location');
+            if ($command === 'b5') {
+                $member = $fx->table('memberships')->where('org_id', $org)->value('id');
+                $fx->table('memberships')->where('id', $member)->update(['role' => 'owner']);
+                $device = $fx->table('device')->where('org_id', $org)->value('id');
+                if (! $device) {
+                    $device = (string) Str::uuid();
+                    $fx->table('device')->insert(['id' => $device, 'org_id' => $org, 'location_id' => $location,
+                        'membership_id' => $member, 'registered_at' => now()->toIso8601String(), 'series' => 1]);
+                }
+                $result = compact('org', 'location', 'device');
+            } else {
+                $result = compact('org', 'location');
+            }
+        } elseif ($command === 'solo') {
+            $others = $db->table('platform.admin_users')->where('is_active', true)->where('id', '<>', $id)->pluck('id')->all();
+            $db->table('platform.admin_users')->whereIn('id', $others)->update(['is_active' => false]);
+            $result = ['others' => $others];
+        } elseif ($command === 'restore') {
+            $others = json_decode($extra, true, flags: JSON_THROW_ON_ERROR);
+            if (! is_array($others) || count($others) > 10000 || array_filter($others, fn ($value) => ! is_string($value) || ! Str::isUuid($value))) {
+                throw new RuntimeException('Invalid restoration IDs.');
+            }
+            $db->table('platform.admin_users')->whereIn('id', $others)->update(['is_active' => true]);
+        } elseif ($command === 'expire-approval') {
+            if (! Str::isUuid($extra)) throw new RuntimeException('Invalid approval ID.');
+            $db->table('platform.admin_approvals')->where('id', $extra)->where('org_id', $org)->update(['expires_at' => now()->subSecond()->toIso8601String()]);
         } elseif ($command === 'log-row') {
             $payload = json_decode($extra, true, flags: JSON_THROW_ON_ERROR);
             $logId = (string) Str::uuid();
@@ -126,6 +151,10 @@ try {
             $db->statement('UPDATE platform.admin_sessions SET ended_at=now() WHERE admin_user_id=? AND ended_at IS NULL', [$id]);
             if ($command === 'retire') {
                 // Immutable log rows keep the organization; only test clinical fixtures are removed.
+                $db->table('platform.admin_approvals')->where('org_id', $org)->delete();
+                $fx->table('audit_log')->where('org_id', $org)->delete();
+                $fx->table('activation_codes')->where('org_id', $org)->delete();
+                $fx->table('device')->where('org_id', $org)->delete();
                 $invoices = $fx->table('invoices')->where('org_id', $org)->pluck('id');
                 $users = $fx->table('memberships')->where('org_id', $org)->pluck('user_id');
                 $fx->table('payments')->whereIn('invoice_id', $invoices)->delete();

@@ -106,6 +106,7 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       has_more: boolean;
       rows: Array<{ entity: string; entity_id: string; rev: number; payload: Record<string, unknown> | null }>;
       device_series?: number | null;
+      code_notices?: PullSinceResult["codeNotices"];
       identity_enforced_at?: string;
       identity_rollout_auto_at?: string;
       identity_memberships?: PullSinceResult["identityMemberships"];
@@ -115,6 +116,7 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       cursor: body.cursor,
       hasMore: body.has_more,
       deviceSeries: body.device_series,
+      ...(body.code_notices === undefined ? {} : { codeNotices: body.code_notices }),
       identityEnforcedAt: body.identity_enforced_at ?? null,
       ...(body.identity_rollout_auto_at === undefined && body.identity_enforced_at === undefined
         ? {} : { identityRolloutAutoAt: body.identity_rollout_auto_at ?? null }),
@@ -135,6 +137,7 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       has_more: boolean;
       rows: Array<{ entity: string; entity_id: string; rev: number; payload: Record<string, unknown> | null }>;
       device_series?: number | null;
+      code_notices?: PullSinceResult["codeNotices"];
       identity_enforced_at?: string;
       identity_rollout_auto_at?: string;
       identity_memberships?: PullSinceResult["identityMemberships"];
@@ -144,6 +147,7 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       cursor: body.cursor,
       hasMore: body.has_more,
       deviceSeries: body.device_series,
+      ...(body.code_notices === undefined ? {} : { codeNotices: body.code_notices }),
       identityEnforcedAt: body.identity_enforced_at ?? null,
       ...(body.identity_rollout_auto_at === undefined && body.identity_enforced_at === undefined
         ? {} : { identityRolloutAutoAt: body.identity_rollout_auto_at ?? null }),

@@ -5,6 +5,7 @@ import { useLiveQuery } from "../db/useLiveQuery";
 import type { Membership, User } from "../db/types";
 import AppearanceToggle from "../components/AppearanceToggle";
 import OrganizationSuspensionNotice from "../components/OrganizationSuspensionNotice";
+import CodeNoticeBanner from "../components/CodeNoticeBanner";
 import Badge from "../components/ui/Badge";
 import { formatActorLabel } from "../screens/day/actorLabel";
 import { authStrings } from "./authStrings";
@@ -183,6 +184,7 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
           Clin<span className="text-copper-2">tra</span>
         </p>
         <OrganizationSuspensionNotice inLockCard />
+        <CodeNoticeBanner inLockCard />
 
         {identityMode && identity ? (
           <IdentityScreen

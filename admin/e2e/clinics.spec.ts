@@ -97,13 +97,13 @@ test('disable-reason-step-up-refusal-chip-and-enable', async ({ page }) => {
   await page.getByRole('button', { name: 'إيقاف العيادة', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await screens(page, 'clinic-step-up');
-  await page.getByLabel('كود التحقق', { exact: true }).fill(command('wrong-otp', fixture.id).otp);
+  await page.getByRole('dialog').getByLabel('كود التحقق', { exact: true }).fill(command('wrong-otp', fixture.id).otp);
   await page.getByRole('button', { name: 'تأكيد', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('كود التحقق مش صح أو اتستخدم قبل كده');
   expect(command('org-state', fixture.id)).toEqual({ disabled_at: null, disabled_reason: null });
   await reason.fill('سبب التجربة');
   await page.getByRole('button', { name: 'إيقاف العيادة', exact: true }).click();
-  await page.getByLabel('كود التحقق', { exact: true }).fill(command('otp', fixture.id).otp);
+  await page.getByRole('dialog').getByLabel('كود التحقق', { exact: true }).fill(command('otp', fixture.id).otp);
   await page.getByRole('button', { name: 'تأكيد', exact: true }).click();
   await expect(page.locator('.notice[role="status"]')).toHaveText('اتوقفت العيادة');
   await expect(page.locator('[data-disabled-reason]')).toContainText('سبب التجربة');
@@ -115,7 +115,7 @@ test('disable-reason-step-up-refusal-chip-and-enable', async ({ page }) => {
   await screens(page, 'clinics-disabled');
   await row.getByRole('link', { name: fixture.orgName, exact: true }).click();
   await page.getByRole('button', { name: 'تشغيل العيادة', exact: true }).click();
-  await page.getByLabel('كود التحقق', { exact: true }).fill(command('otp', fixture.id, '1').otp);
+  await page.getByRole('dialog').getByLabel('كود التحقق', { exact: true }).fill(command('otp', fixture.id, '1').otp);
   await page.getByRole('button', { name: 'تأكيد', exact: true }).click();
   await expect(page.locator('.notice[role="status"]')).toHaveText('اشتغلت العيادة');
   await expect(page.locator('[data-clinic-state]')).toHaveText('شغّالة');
@@ -180,7 +180,7 @@ test('clinic-cards-counter-danger-and-disabled-Cairo-summary', async ({ page }) 
   await reason.fill('<img src=x onerror=alert(1)>');
   await action.click();
   await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByLabel('كود التحقق', { exact: true }).fill(command('otp', fixture.id).otp);
+  await page.getByRole('dialog').getByLabel('كود التحقق', { exact: true }).fill(command('otp', fixture.id).otp);
   await page.getByRole('button', { name: 'تأكيد', exact: true }).click();
   const state = command('org-state', fixture.id);
   const minute = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(state.disabled_at));

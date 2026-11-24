@@ -223,3 +223,131 @@ test('hostile-log-fields-stay-literal-in-rows-and-open-details', async ({ page }
   expect(dialogs).toEqual([]);
   await page.screenshot({ path: shots + `b3-review-${test.info().project.name}-escaping-details.png`, fullPage: true });
 });
+
+test('B5 device screen and revoke', async ({ page }, info) => {
+  const clinic = fixtureCommand('b5', fixture.id, JSON.stringify({ location: '<img src=x onerror=alert(1)>' }));
+  await signIn(page, fixture, true);
+  await page.goto(`/panel/clinic/${fixture.org}`);
+  await expect(page.locator(`[data-device-id="${clinic.device}"]`)).toBeVisible();
+  await expect(page.locator('[data-device-id] img,[data-device-id] [onerror]')).toHaveCount(0);
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.screenshot({ path: shots + `b5-${info.project.name}-devices-${colorScheme}.png`, fullPage: true });
+  }
+  await page.getByRole('button', { name: 'إلغاء الجهاز' }).click();
+  await expect(page.locator('.step-up[open]')).toBeVisible();
+  await page.locator('.step-up[open] [name="otp"]').fill(code(fixture));
+  await page.locator('.step-up[open] [data-confirm-step-up]').click();
+  await expect(page.locator(`[data-device-id="${clinic.device}"]`)).toContainText('ملغي');
+  await expect(page.locator(`[data-device-id="${clinic.device}"]`).getByRole('button', { name: 'إلغاء الجهاز' })).toHaveCount(0);
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.screenshot({ path: shots + `b5-${info.project.name}-revoked-${colorScheme}.png`, fullPage: true });
+  }
+});
+
+test('B5 one admin mint shows the code only once', async ({ page }, info) => {
+  const clinic = fixtureCommand('b5', fixture.id);
+  const others: string[] = fixtureCommand('solo', fixture.id).others;
+  try {
+    await signIn(page, fixture, true);
+    await page.goto(`/panel/clinic/${fixture.org}`);
+    const form = page.locator('form').filter({ has: page.getByRole('button', { name: 'طلب كود تفعيل جهاز' }) });
+    await form.locator('[name="location_id"]').selectOption(clinic.location);
+    await form.getByRole('button', { name: 'طلب كود تفعيل جهاز' }).click();
+    await form.locator('[name="otp"]').fill(code(fixture));
+    await form.locator('[data-confirm-step-up]').click();
+    await expect(page.getByText('الكود ده بيظهر مرة واحدة بس، ابعته للعيادة دلوقتي')).toBeVisible();
+    await expect(page.locator('[data-minted-code]')).toContainText(/^CLT-/);
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme });
+      await page.screenshot({ path: shots + `b5-${info.project.name}-single-code-${colorScheme}.png`, fullPage: true });
+    }
+    await page.getByRole('link', { name: 'الرجوع للعيادة' }).click();
+    await page.reload();
+    await expect(page.locator('[data-minted-code]')).toHaveCount(0);
+  } finally {
+    fixtureCommand('restore', fixture.id, JSON.stringify(others));
+  }
+});
+
+test('B5 second admin approves while requester cannot', async ({ page, browser }, info) => {
+  const clinic = fixtureCommand('b5', fixture.id);
+  const second: Fixture = fixtureCommand('create');
+  const otherContext = await browser.newContext({ baseURL: 'http://127.0.0.1:8001', viewport: page.viewportSize()! });
+  const otherPage = await otherContext.newPage();
+  try {
+    await signIn(page, fixture, true);
+    await page.goto(`/panel/clinic/${fixture.org}`);
+    const form = page.locator('form').filter({ has: page.getByRole('button', { name: 'طلب كود استرجاع للمالك' }) });
+    await form.locator('[name="location_id"]').selectOption(clinic.location);
+    await form.getByRole('button', { name: 'طلب كود استرجاع للمالك' }).click();
+    await form.locator('[name="otp"]').fill(code(fixture));
+    await form.locator('[data-confirm-step-up]').click();
+    await expect(page.getByText('طلب الكود مستني موافقة مسؤول تاني')).toBeVisible();
+    const request = page.locator('[data-approval-id]').first();
+    const approval = await request.getAttribute('data-approval-id');
+    expect(approval).toBeTruthy();
+    await expect(request.getByRole('button', { name: 'موافقة' })).toHaveCount(0);
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme });
+      await page.screenshot({ path: shots + `b5-${info.project.name}-pending-${colorScheme}.png`, fullPage: true });
+    }
+    await signIn(otherPage, second, true);
+    await otherPage.goto(`/panel/clinic/${fixture.org}`);
+    await expect(otherPage.locator(`[data-approval-id="${approval}"]`).getByRole('button', { name: 'موافقة' })).toBeVisible();
+    await otherPage.locator(`[data-approval-id="${approval}"]`).getByRole('button', { name: 'موافقة' }).click();
+    await otherPage.locator('.step-up[open] [name="otp"]').fill(code(second));
+    await otherPage.locator('.step-up[open] [data-confirm-step-up]').click();
+    await expect(otherPage.locator('[data-minted-code]')).toContainText(/^CLT-/);
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await otherPage.emulateMedia({ colorScheme });
+      await otherPage.screenshot({ path: shots + `b5-${info.project.name}-approved-code-${colorScheme}.png`, fullPage: true });
+    }
+    await otherPage.getByRole('link', { name: 'الرجوع للعيادة' }).click();
+    await otherPage.reload();
+    await expect(otherPage.locator('[data-minted-code]')).toHaveCount(0);
+  } finally {
+    await otherContext.close();
+    fixtureCommand('retire', second.id);
+  }
+});
+
+test('B5 expired request refuses approval', async ({ page, browser }, info) => {
+  const clinic = fixtureCommand('b5', fixture.id);
+  const second: Fixture = fixtureCommand('create');
+  const otherContext = await browser.newContext({ baseURL: 'http://127.0.0.1:8001', viewport: page.viewportSize()! });
+  const otherPage = await otherContext.newPage();
+  try {
+    await signIn(page, fixture, true);
+    await page.goto(`/panel/clinic/${fixture.org}`);
+    const form = page.locator('form').filter({ has: page.getByRole('button', { name: 'طلب كود تفعيل جهاز' }) });
+    await form.locator('[name="location_id"]').selectOption(clinic.location);
+    await form.getByRole('button', { name: 'طلب كود تفعيل جهاز' }).click();
+    await form.locator('[name="otp"]').fill(code(fixture));
+    await form.locator('[data-confirm-step-up]').click();
+    const approval = await page.locator('[data-approval-id]').first().getAttribute('data-approval-id');
+    expect(approval).toBeTruthy();
+    fixtureCommand('expire-approval', fixture.id, approval!);
+    await signIn(otherPage, second, true);
+    await otherPage.goto(`/panel/clinic/${fixture.org}`);
+    await expect(otherPage.locator(`[data-approval-id="${approval}"]`)).toHaveCount(0);
+    await otherPage.evaluate(async ({ approval, org, otp }) => {
+      const csrf = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')!.content;
+      const response = await fetch(`/clinics/${org}/codes/${approval}/approve`, {
+        method: 'POST', credentials: 'same-origin', redirect: 'manual', headers: { 'X-CSRF-TOKEN': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ otp }),
+      });
+      return response.type;
+    }, { approval: approval!, org: fixture.org, otp: code(second) });
+    await otherPage.reload();
+    await expect(otherPage.getByRole('alert')).toHaveText('طلب الموافقة انتهى، اطلب كود جديد');
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await otherPage.emulateMedia({ colorScheme });
+      await otherPage.screenshot({ path: shots + `b5-${info.project.name}-expired-${colorScheme}.png`, fullPage: true });
+    }
+  } finally {
+    await otherContext.close();
+    fixtureCommand('retire', second.id);
+  }
+});

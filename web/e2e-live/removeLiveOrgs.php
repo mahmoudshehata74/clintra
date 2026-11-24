@@ -41,6 +41,8 @@ if ($orgIds === []) {
     exit(0);
 }
 
+DB::connection('pgsql_owner')->table('platform.admin_approvals')->whereIn('org_id', $orgIds)->delete();
+
 $tables = $db->table('information_schema.tables')
     ->where('table_schema', 'public')->where('table_type', 'BASE TABLE')
     ->pluck('table_name')->all();

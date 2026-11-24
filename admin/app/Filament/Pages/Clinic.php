@@ -28,6 +28,15 @@ final class Clinic extends Page
     public ?array $clinic = null;
 
     #[Locked]
+    public array $devices = [];
+
+    #[Locked]
+    public array $approvals = [];
+
+    #[Locked]
+    public int $activeAdminCount = 0;
+
+    #[Locked]
     public ?string $error = null;
 
     public static function canAccess(): bool
@@ -49,6 +58,18 @@ final class Clinic extends Page
             return;
         }
         $this->clinic = $result['org'];
+        $devices = $platform->orgDevices(Auth::guard('platform')->id(), $org);
+        $approvals = $platform->orgApprovals(Auth::guard('platform')->id(), $org);
+        if (! $devices['ok'] || ! $approvals['ok']) {
+            $this->error = Refusal::message($devices['ok'] ? $approvals : $devices);
+            return;
+        }
+        $this->devices = $devices['devices'];
+        $locationNames = array_column($this->clinic['locations'], 'name', 'id');
+        $this->approvals = array_map(fn ($approval) => $approval + [
+            'location_name' => $locationNames[$approval['location_id']] ?? '',
+        ], $approvals['approvals']);
+        $this->activeAdminCount = $approvals['active_admin_count'];
     }
 
     public function getHeading(): string

@@ -45,6 +45,7 @@ export interface PullSinceResult {
    * report (FakeTransport, or a request with no device behind it).
    */
   deviceSeries?: number | null;
+  codeNotices?: { id: string; purpose: "device" | "owner_recovery"; issued_at: string }[];
   /** The organization switch. Null means off; undefined means this transport supplies no signal. */
   identityEnforcedAt?: string | null;
   identityRolloutAutoAt?: string | null;

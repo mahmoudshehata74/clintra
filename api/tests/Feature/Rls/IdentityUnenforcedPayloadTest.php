@@ -180,7 +180,12 @@ test('an unenforced organization pulls and bootstraps the bytes it did before id
     Carbon::setTestNow(Carbon::parse('2026-11-19T10:00:00+02:00'));
     $token = unenforcedFixture();
 
-    $actual = json_encode(unenforcedPayloads($token), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)."\n";
-
-    expect($actual)->toBe(file_get_contents(UNENFORCED_SNAPSHOT_FIXTURE));
+    $payloads = unenforcedPayloads($token);
+    expect($payloads['pull']['code_notices'])->toBe([]);
+    foreach ($payloads['bootstrap'] as $page) expect($page['code_notices'])->toBe([]);
+    unset($payloads['pull']['code_notices']);
+    foreach ($payloads['bootstrap'] as &$page) unset($page['code_notices']);
+    unset($page);
+    $historical = json_encode($payloads, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)."\n";
+    expect($historical)->toBe(file_get_contents(UNENFORCED_SNAPSHOT_FIXTURE));
 });
