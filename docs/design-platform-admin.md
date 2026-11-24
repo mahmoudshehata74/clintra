@@ -440,7 +440,7 @@ GRANT SELECT (id, org_id, location_id, series, registered_at, revoked_at) ON dev
 GRANT UPDATE (revoked_at) ON device TO clintra_admin_device;
 GRANT SELECT (tokenable_type, tokenable_id), DELETE ON personal_access_tokens TO clintra_admin_device;
 GRANT SELECT (id, org_id, name) ON locations TO clintra_admin_device;
-GRANT SELECT (device_id, applied_at) ON sync_ledger TO clintra_admin_device;
+GRANT SELECT (device_id, org_id, applied_at) ON sync_ledger TO clintra_admin_device;
 GRANT SELECT (id, org_id, role, is_active) ON memberships TO clintra_admin_device;
 GRANT SELECT (id) ON organizations TO clintra_admin_device;
 GRANT SELECT (id, ip, user_agent) ON platform.admin_sessions TO clintra_admin_device;
