@@ -4,8 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\PullSyncOpsRequest;
 use App\Support\Identity\Identity;
-use App\Support\Sync\DeviceSeries;
 use App\Support\Sync\CodeNotices;
+use App\Support\Sync\DeviceSeries;
+use App\Support\Sync\SupportAccess;
 use App\Support\Sync\SyncPuller;
 use Illuminate\Http\JsonResponse;
 
@@ -40,9 +41,10 @@ class SyncPullController extends Controller
         // number series existed learns its own on its next pull
         // (docs/schema.md's v16 additions).
         return response()->json([
-            ...$this->puller->pull($since, Identity::enforced($request)),
+            ...$this->puller->pull($since, Identity::enforced($request), $request->attributes->get('device_id')),
             'device_series' => DeviceSeries::of($request->attributes->get('device_id')),
             'code_notices' => CodeNotices::current(),
+            'support_sessions' => SupportAccess::sessions(),
             ...Identity::syncMetadata($request),
         ]);
     }

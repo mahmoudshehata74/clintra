@@ -96,14 +96,22 @@ class SyncBootstrapPuller
     /**
      * @return array{cursor: string, has_more: bool, rows: list<array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}>}
      */
-    public function pull(?string $cursor, bool $identityEnforced = false): array
+    public function pull(?string $cursor, bool $identityEnforced = false, ?string $deviceId = null): array
     {
+        $withoutClinical = SupportAccess::withoutClinical($deviceId);
         [$stage, $afterId] = $this->parseCursor($cursor);
 
         $from = now()->subDays(SyncWindow::DAYS)->toDateString();
         $to = now()->addDays(SyncWindow::DAYS)->toDateString();
 
         while ($stage < self::STAGE_DONE) {
+            if ($withoutClinical && in_array($stage, [self::STAGE_PRESCRIPTIONS,
+                self::STAGE_PRESCRIPTION_ITEMS, self::STAGE_VISIT_FORM_REVISIONS], true)) {
+                $stage++;
+                $afterId = null;
+
+                continue;
+            }
             $page = $this->queryStage($stage, $afterId, $from, $to);
 
             if ($page->isEmpty()) {
@@ -124,7 +132,8 @@ class SyncBootstrapPuller
             return [
                 'cursor' => $newCursor,
                 'has_more' => $hasMoreInStage || $stage + 1 < self::STAGE_DONE,
-                'rows' => $rows->map(fn ($row) => $this->toRow($stage, $row, $identityEnforced))->values()->all(),
+                'rows' => $rows->map(fn ($row) => $this->toRow($stage, $row, $identityEnforced,
+                    $withoutClinical))->values()->all(),
             ];
         }
 
@@ -245,7 +254,7 @@ class SyncBootstrapPuller
     /**
      * @return array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}
      */
-    private function toRow(int $stage, object $row, bool $identityEnforced): array
+    private function toRow(int $stage, object $row, bool $identityEnforced, bool $withoutClinical): array
     {
         $entity = match ($stage) {
             self::STAGE_DAY_STATE => 'day_state',
@@ -266,7 +275,7 @@ class SyncBootstrapPuller
             'entity' => $entity,
             'entity_id' => $row->id,
             'rev' => (int) $row->rev,
-            'payload' => SyncPayload::fromRow($entity, $row, $identityEnforced),
+            'payload' => SyncPayload::fromRow($entity, $row, $identityEnforced, $withoutClinical),
         ];
     }
 

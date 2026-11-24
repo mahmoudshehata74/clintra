@@ -44,8 +44,9 @@ class SyncPuller
     /**
      * @return array{cursor: string, has_more: bool, rows: list<array{seq: int, entity: string, entity_id: string, rev: int, device_id: string, payload: ?array}>}
      */
-    public function pull(int $since, bool $identityEnforced = false): array
+    public function pull(int $since, bool $identityEnforced = false, ?string $deviceId = null): array
     {
+        $withoutClinical = SupportAccess::withoutClinical($deviceId);
         $rows = DB::table('sync_ledger')
             ->where('seq', '>', $since)
             ->orderBy('seq')
@@ -57,16 +58,18 @@ class SyncPuller
 
         $newCursor = $page->isNotEmpty() ? (int) $page->last()->seq : $since;
 
-        $result = $page->map(function ($row) use ($identityEnforced) {
-            return [
-                'seq' => (int) $row->seq,
-                'entity' => $row->entity,
-                'entity_id' => $row->entity_id,
-                'rev' => (int) $row->rev,
-                'device_id' => $row->device_id,
-                'payload' => $this->currentPayload($row->entity, $row->entity_id, $identityEnforced),
-            ];
-        })->values()->all();
+        $result = $page->filter(fn ($row) => ! $withoutClinical
+            || ! in_array($row->entity, SupportAccess::CLINICAL_ENTITIES, true))
+            ->map(function ($row) use ($identityEnforced, $withoutClinical) {
+                return [
+                    'seq' => (int) $row->seq,
+                    'entity' => $row->entity,
+                    'entity_id' => $row->entity_id,
+                    'rev' => (int) $row->rev,
+                    'device_id' => $row->device_id,
+                    'payload' => $this->currentPayload($row->entity, $row->entity_id, $identityEnforced, $withoutClinical),
+                ];
+            })->values()->all();
 
         return [
             'cursor' => (string) $newCursor,
@@ -86,7 +89,8 @@ class SyncPuller
      *
      * @return array<string, mixed>|null
      */
-    private function currentPayload(string $entity, string $entityId, bool $identityEnforced): ?array
+    private function currentPayload(string $entity, string $entityId, bool $identityEnforced,
+        bool $withoutClinical): ?array
     {
         // Every value ever written to sync_ledger.entity is in this same
         // list — SyncOpApplier refuses any other entity before writing
@@ -99,6 +103,6 @@ class SyncPuller
 
         $row = DB::table($entity)->where('id', $entityId)->first();
 
-        return $row === null ? null : SyncPayload::fromRow($entity, $row, $identityEnforced);
+        return $row === null ? null : SyncPayload::fromRow($entity, $row, $identityEnforced, $withoutClinical);
     }
 }

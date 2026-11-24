@@ -469,16 +469,27 @@ GRANT SELECT (id, org_id, location_id, code_hash, expires_at, used_at, purpose, 
               created_by_membership_id) ON activation_codes TO clintra_admin_support;
 GRANT UPDATE (used_at, used_by_device_id) ON activation_codes TO clintra_admin_support;
 GRANT INSERT ON device TO clintra_admin_support;
+GRANT SELECT (id, org_id, kind, revoked_at, expires_at) ON device TO clintra_admin_support;
+GRANT SELECT (id, disabled_at) ON organizations TO clintra_admin_support;
+GRANT SELECT (id, org_id, role, is_active) ON memberships TO clintra_admin_support;
+GRANT SELECT (id, ip, user_agent) ON platform.admin_sessions TO clintra_admin_support;
 GRANT INSERT ON platform.support_exchanges TO clintra_admin_support;
+GRANT SELECT (exchange_hash) ON platform.support_exchanges TO clintra_admin_support;
 GRANT INSERT ON audit_log TO clintra_admin_support;
 
 -- the clinic side of support: the owner's code and the swap
 GRANT SELECT (id, org_id, role, is_active) ON memberships TO clintra_support;
 GRANT SELECT (id, org_id) ON locations TO clintra_support;
 GRANT INSERT ON activation_codes TO clintra_support;
+GRANT SELECT (id, code_hash) ON activation_codes TO clintra_support;
 GRANT SELECT, UPDATE (used_at) ON platform.support_exchanges TO clintra_support;
 GRANT USAGE ON SCHEMA platform TO clintra_support;
-GRANT SELECT (id, org_id, location_id, membership_id) ON device TO clintra_support;
+GRANT SELECT (id, org_id, location_id, membership_id, kind, revoked_at, expires_at, public_key,
+              include_clinical, support_admin_name) ON device TO clintra_support;
+GRANT UPDATE (public_key, public_key_bound_at, revoked_at) ON device TO clintra_support;
+GRANT SELECT (tokenable_type, tokenable_id), DELETE ON personal_access_tokens TO clintra_support;
+GRANT SELECT (id, disabled_at) ON organizations TO clintra_support;
+GRANT EXECUTE ON FUNCTION current_membership() TO clintra_support;
 GRANT INSERT ON audit_log TO clintra_support;
 ```
 
@@ -678,7 +689,7 @@ fresh step-up first, validate the payload key by key, and return a logged
   `code.mint_approve`. The panel generated the code, sends its hash, and
   shows the plaintext once to the approver.
 - `platform.admin_open_support_session(session, otp, {code_hash, device_id,
-  exchange_hash, audit_id}, log_id)`: the code `purpose = 'support'`,
+  exchange_hash}, log_id)`: the code `purpose = 'support'`,
   unused, unexpired (`FOR UPDATE`); inserts the `device` row (`kind =
   'support'`, the code's org and location, `membership_id` = the code's
   `created_by_membership_id`, `expires_at = now() + support_hours`,
@@ -691,8 +702,10 @@ fresh step-up first, validate the payload key by key, and return a logged
   include_clinical, audit_id})`: the caller (`current_membership()`) is an
   active owner and the location is theirs; inserts the code (`purpose =
   'support'`, `expires_at = now() + 72 h`); one clinic audit row.
-- `support_exchange({exchange_hash})`: unused and unexpired; marks it used;
-  returns `{device_id, org_id, location_id, membership_id}` for the
+- `support_exchange({exchange_hash, device_public_key})`: unused and unexpired;
+  binds the device key, marks the exchange used, and returns
+  `{device_id, org_id, location_id, membership_id, expires_at,
+  include_clinical, admin_name}` for the
   controller to mint the token (`App\Models\Device`, abilities
   `membership:<uuid>` and `support:read-only`).
 
@@ -715,7 +728,9 @@ fresh step-up first, validate the payload key by key, and return a logged
 - **Pull filters.** For a support device without clinical access,
   `SyncPuller`, `SyncBootstrapPuller` and `DeviceAuditPuller` skip the
   clinical entities and null `visits.note`; cursors advance over skipped
-  rows as they do over any row (the cursor is the ledger `seq`).
+  rows as they do over any row (the cursor is the ledger `seq`). The
+  `visit_form_revisions` payload also contains clinical text and is skipped.
+  Visit audit payloads null their embedded `note` field as well.
 - **`support_sessions`.** A new top-level field on every pull page (beside
   `device_series`), read through `device`'s own policy.
 
@@ -1049,3 +1064,55 @@ through `admin_code_notices`' clinic-scoped RLS. Only notices younger than
 seven days are returned. They are not sync ops; older devices ignore the
 unknown field. The web app shows the device or owner-recovery Arabic banner
 using the notice time, on desktop and mobile.
+
+## B6 implementation contract
+
+Migration 000062 adds support devices and support codes. Clinic devices retain
+their number series; a support device has no series, has a fixed expiry, and
+carries the code creator and the platform admin's display name. Only one
+non-revoked, unexpired support device may be opened for an organization at a
+time. This is checked under its `sync_seq:` lock because expiry depends on
+the clock. Registration still accepts only `purpose = 'device'`.
+
+The panel function resolves the session and fresh TOTP first, validates exactly
+`{code_hash, device_id, exchange_hash}`, reads the code's organization without
+locking it, then takes the organization's `sync_seq:` lock and locks the code.
+It checks wrong purpose as `not_found` with a null organization and target,
+then `unchanged` for a used code, `expired`, `org_disabled`, `no_owner`,
+`support_active`, and `unchanged` for an existing device or exchange hash.
+An unknown hash is `not_found` with a null organization and target. Every
+refusal returns after one `support.open` log row with the session IP and user
+agent; no code or exchange hash is logged. Step-up failures count toward the
+existing five-in-fifteen-minute budget. Success writes the support device,
+consumes the code, creates a two-minute exchange, and writes one clinic audit
+row attributed to the owner. The clinic audit ID is generated inside the
+function. The log detail contains only `hours` and `include_clinical`, and its
+target is the new device ID.
+
+`POST /api/support/codes` accepts exactly `{id, code_hash, location_id,
+support_hours, include_clinical, audit_id}` and returns 201 `{id, expires_at}`.
+`mint_support_code` requires an active owner and a location in their
+organization. It creates a support code expiring after 72 hours; only 1, 24,
+or 72 support hours are accepted. `POST /api/support/exchange` accepts
+`{exchange_code, device_public_key}`, hashes the plaintext, and calls
+`support_exchange`. Any invalid, used, or expired exchange returns the
+registration failure body. The exchanged token expires with the device and
+has `membership:<uuid>` and `support:read-only` abilities. Its bootstrap
+omits PIN and password hashes and includes `{support: {expires_at,
+include_clinical, admin_name}}`. `POST /api/support/devices/{device}/end`
+requires an active owner of the same organization and revokes the support
+device and its tokens immediately; unavailable devices use one error shape.
+The clinic audit IDs for mint and end are also generated inside their
+functions, while their payloads retain the requested `audit_id` field.
+
+`ApplyMembership` starts support request transactions with `SET TRANSACTION
+READ ONLY` before setting the membership. A token's support ability must
+match its device kind. Once the key is bound, support devices use the same
+identity proof check as clinic devices. Support tokens receive 403
+`support_read_only` on push, audit push, staff, auth, and support writes;
+Postgres rejects any other write in the transaction with SQLSTATE 25006.
+Pull, bootstrap, and audit pull read `include_clinical` through the calling
+device's RLS policy. Without clinical access they omit clinical rows and
+null `visits.note`, advancing cursors over omitted rows. Pull and bootstrap
+carry the current organization's live `support_sessions` beside
+`device_series` and `code_notices`.

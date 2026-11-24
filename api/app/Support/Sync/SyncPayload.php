@@ -47,7 +47,8 @@ final class SyncPayload
      * @param  array<string, mixed>|object  $row
      * @return array<string, mixed>
      */
-    public static function fromRow(string $table, array|object $row, bool $identityEnforced = false): array
+    public static function fromRow(string $table, array|object $row, bool $identityEnforced = false,
+        bool $withoutClinical = false): array
     {
         $payload = (array) $row;
 
@@ -58,6 +59,10 @@ final class SyncPayload
             } else {
                 $payload = array_diff_key($payload, array_flip(self::IDENTITY_COLUMNS));
             }
+        }
+
+        if ($withoutClinical && $table === 'visits') {
+            $payload['note'] = null;
         }
 
         foreach ($payload as $column => $value) {
