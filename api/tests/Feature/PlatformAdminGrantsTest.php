@@ -25,7 +25,7 @@ test('the nine admin roles match design 6.1 and only the eight function roles be
     expect($this->asOwner()->select("SELECT 1 FROM pg_auth_members WHERE roleid='clintra_admin_app'::regrole OR member='clintra_app'::regrole"))->toBe([]);
 });
 
-test('the panel can reach exactly its sixteen B5 functions and no table or column', function () {
+test('the panel can reach exactly its B6a functions and no table or column', function () {
     expect($this->panel()->selectOne('SELECT current_user AS name')->name)->toBe('clintra_admin_app');
     $reachable = $this->asOwner()->select(<<<'SQL'
         SELECT n.nspname||'.'||p.proname AS name FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
@@ -35,6 +35,7 @@ test('the panel can reach exactly its sixteen B5 functions and no table or colum
     SQL);
     expect(array_column($reachable, 'name'))->toBe([
         'platform.admin_approve_code', 'platform.admin_change_password', 'platform.admin_log_page', 'platform.admin_log_refusal', 'platform.admin_login', 'platform.admin_logout',
+        'platform.admin_open_support_session',
         'platform.admin_org_approvals', 'platform.admin_org_detail', 'platform.admin_org_devices', 'platform.admin_org_figures', 'platform.admin_org_list', 'platform.admin_org_names',
         'platform.admin_request_code', 'platform.admin_revoke_device', 'platform.admin_set_org_disabled', 'platform.admin_whoami',
     ]);
@@ -63,7 +64,8 @@ test('no public or platform function exposes PUBLIC EXECUTE and crypto is schema
     expect($leaks)->toBe([]);
     foreach (['admin_org_figures(uuid,date,date,uuid)', 'admin_org_detail(uuid,uuid)', 'admin_org_names(uuid,uuid[])', 'admin_org_list(uuid)',
         'admin_org_devices(uuid,uuid)', 'admin_org_approvals(uuid,uuid)', 'admin_revoke_device(uuid,text,uuid,uuid)',
-        'admin_request_code(uuid,text,jsonb,uuid)', 'admin_approve_code(uuid,text,uuid,text,uuid)', 'admin_active_count()'] as $signature) {
+        'admin_request_code(uuid,text,jsonb,uuid)', 'admin_approve_code(uuid,text,uuid,text,uuid)', 'admin_active_count()',
+        'admin_display_name(uuid)', 'admin_open_support_session(uuid,text,jsonb,uuid)'] as $signature) {
         expect($this->asOwner()->selectOne("SELECT NOT EXISTS(SELECT 1 FROM pg_proc p,LATERAL aclexplode(p.proacl) a WHERE p.oid=?::regprocedure AND a.grantee=0 AND a.privilege_type='EXECUTE') AS guarded", ['platform.'.$signature])->guarded)->toBeTrue();
     }
     $grants = $this->asOwner()->select(<<<'SQL'
@@ -132,8 +134,79 @@ test('the auth role has column-exact grants and unused action roles have no tabl
     expect(array_map(fn ($r) => $r->table_name.':'.$r->privilege_type, $tableGrants))->toBe([
         'admin_log:INSERT', 'admin_log:SELECT', 'admin_recovery_codes:SELECT', 'admin_sessions:INSERT', 'admin_sessions:SELECT', 'admin_users:SELECT',
     ]);
-    foreach (['clintra_admin_app', 'clintra_admin_provision', 'clintra_admin_support', 'clintra_support'] as $role) {
+    foreach (['clintra_admin_app', 'clintra_admin_provision'] as $role) {
         expect($this->asOwner()->select('SELECT 1 FROM information_schema.role_column_grants WHERE grantee=?', [$role]))->toBe([]);
         expect($this->asOwner()->select('SELECT 1 FROM information_schema.role_table_grants WHERE grantee=?', [$role]))->toBe([]);
     }
+});
+
+test('B6a support role grants are column exact and keep clinical tables closed', function () {
+    $expectedColumns = [
+        'clintra_admin_support' => [
+            'activation_codes:SELECT' => ['code_hash', 'created_by_membership_id', 'expires_at', 'id', 'include_clinical', 'location_id', 'org_id', 'purpose', 'support_hours', 'used_at'],
+            'activation_codes:UPDATE' => ['used_at', 'used_by_device_id'],
+            'admin_sessions:SELECT' => ['id', 'ip', 'user_agent'],
+            'device:SELECT' => ['expires_at', 'id', 'kind', 'org_id', 'revoked_at'],
+            'memberships:SELECT' => ['id', 'is_active', 'org_id', 'role'],
+            'organizations:SELECT' => ['disabled_at', 'id'],
+            'support_exchanges:SELECT' => ['exchange_hash'],
+        ],
+        'clintra_support' => [
+            'activation_codes:SELECT' => ['code_hash', 'id'],
+            'device:SELECT' => ['expires_at', 'id', 'include_clinical', 'kind', 'location_id', 'membership_id', 'org_id', 'public_key', 'revoked_at', 'support_admin_name'],
+            'device:UPDATE' => ['public_key', 'public_key_bound_at', 'revoked_at'],
+            'locations:SELECT' => ['id', 'org_id'],
+            'memberships:SELECT' => ['id', 'is_active', 'org_id', 'role'],
+            'organizations:SELECT' => ['disabled_at', 'id'],
+            'personal_access_tokens:SELECT' => ['tokenable_id', 'tokenable_type'],
+            'support_exchanges:UPDATE' => ['used_at'],
+        ],
+    ];
+    $expectedTables = [
+        'clintra_admin_support' => ['audit_log:INSERT', 'device:INSERT', 'support_exchanges:INSERT'],
+        'clintra_support' => ['activation_codes:INSERT', 'audit_log:INSERT', 'personal_access_tokens:DELETE', 'support_exchanges:SELECT'],
+    ];
+    foreach ($expectedColumns as $role => $expected) {
+        $rows = $this->asOwner()->select(<<<'SQL'
+            SELECT c.relname AS table_name,a.attname AS column_name,x.privilege_type
+            FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid
+            JOIN pg_namespace n ON n.oid=c.relnamespace
+            CROSS JOIN LATERAL aclexplode(a.attacl) x JOIN pg_roles r ON r.oid=x.grantee
+            WHERE n.nspname IN ('public','platform') AND r.rolname=? AND a.attnum>0
+            ORDER BY c.relname,x.privilege_type,a.attname
+        SQL, [$role]);
+        $actual = [];
+        foreach ($rows as $row) {
+            $actual[$row->table_name.':'.$row->privilege_type][] = $row->column_name;
+        }
+        ksort($actual);
+        ksort($expected);
+        expect($actual)->toBe($expected);
+
+        $tableRows = $this->asOwner()->select('SELECT table_name,privilege_type FROM information_schema.role_table_grants WHERE grantee=? ORDER BY table_name,privilege_type', [$role]);
+        expect(array_map(fn ($row) => $row->table_name.':'.$row->privilege_type, $tableRows))->toBe($expectedTables[$role]);
+    }
+
+    foreach (['clintra_admin_support', 'clintra_support'] as $role) {
+        foreach (['patients', 'users', 'visit_form_data', 'prescriptions', 'prescription_items',
+            'messages', 'message_templates', 'care_plans', 'care_plan_items', 'device_audit_log'] as $table) {
+            $access = $this->asOwner()->selectOne('SELECT has_table_privilege(?, ?, ?)',
+                [$role, $table, 'SELECT,INSERT,UPDATE,DELETE']);
+            expect((array) $access)->toBe(['has_table_privilege' => false]);
+            $columns = $this->asOwner()->selectOne('SELECT has_any_column_privilege(?, ?, ?)',
+                [$role, $table, 'SELECT,INSERT,UPDATE']);
+            expect((array) $columns)->toBe(['has_any_column_privilege' => false]);
+        }
+        expect($this->asOwner()->selectOne('SELECT has_table_privilege(?, ?, ?) AS allowed',
+            [$role, 'audit_log', 'SELECT'])->allowed)->toBeFalse();
+    }
+
+    expect($this->asOwner()->selectOne('SELECT has_function_privilege(?, ?, ?) AS allowed',
+        ['clintra_admin_app', 'platform.admin_display_name(uuid)', 'EXECUTE'])->allowed)->toBeFalse();
+    expect($this->asOwner()->selectOne(<<<'SQL'
+        SELECT EXISTS(SELECT 1 FROM pg_proc p,LATERAL aclexplode(p.proacl) a
+            WHERE p.oid='platform.admin_display_name(uuid)'::regprocedure AND a.grantee=0) AS allowed
+    SQL)->allowed)->toBeFalse();
+    expect($this->asOwner()->selectOne('SELECT has_function_privilege(?, ?, ?) AS allowed',
+        ['clintra_admin_support', 'platform.admin_display_name(uuid)', 'EXECUTE'])->allowed)->toBeTrue();
 });

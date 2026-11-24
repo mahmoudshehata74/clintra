@@ -3,9 +3,9 @@
 namespace App\Http\Middleware;
 
 use App\Support\DatabaseSession;
-use App\Support\OrganizationSuspension;
 use App\Support\Identity\Identity;
 use App\Support\Identity\RequestProof;
+use App\Support\OrganizationSuspension;
 use App\Support\Sync\SyncSeqLock;
 use Closure;
 use Illuminate\Http\Request;
@@ -55,6 +55,17 @@ class ApplyMembership
         }
 
         return DB::transaction(function () use ($request, $next, $credential) {
+            if ($credential['support_read_only']) {
+                DB::statement('SET TRANSACTION READ ONLY');
+                $request->attributes->set('support_read_only', true);
+                if ($request->is('api/sync/push', 'api/audit/push', 'api/staff', 'api/staff/*',
+                    'api/auth/*', 'api/support/*')) {
+                    return response()->json([
+                        'error' => 'support_read_only',
+                        'message' => 'جهاز الدعم للقراءة بس، مفيش تغيير بيتحفظ منه',
+                    ], 403);
+                }
+            }
             app(DatabaseSession::class)->applyMembership($credential['membership_id']);
             if ($credential['device_id'] !== null && DB::selectOne('select device_org_disabled(?) as disabled', [$credential['device_id']])->disabled) {
                 if (! $request->routeIs('identity.recovery')) {
@@ -87,7 +98,8 @@ class ApplyMembership
             if ($credential['device_id'] !== null) {
                 // A write queued behind activation must check the new policy
                 // before the controller applies any operations.
-                if ($request->isMethod('POST') && $request->is('api/sync/push', 'api/audit/push', 'api/staff')) {
+                if (! $credential['support_read_only'] && $request->isMethod('POST')
+                    && $request->is('api/sync/push', 'api/audit/push', 'api/staff')) {
                     SyncSeqLock::acquire();
                     if (DB::selectOne('select device_org_disabled(?) as disabled', [$credential['device_id']])->disabled) {
                         return OrganizationSuspension::response();
@@ -96,6 +108,11 @@ class ApplyMembership
                 $device = DB::selectOne('select device_exists(?) as exists', [$credential['device_id']]);
 
                 if (! $device->exists) {
+                    return $this->unauthenticated();
+                }
+
+                $kind = DB::table('device')->where('id', $credential['device_id'])->value('kind');
+                if (($kind === 'support') !== $credential['support_read_only']) {
                     return $this->unauthenticated();
                 }
 
@@ -141,9 +158,9 @@ class ApplyMembership
     }
 
     /**
-     * @return array{membership_id: string, device_id: ?string}|null device_id is
-     *                                                               null for the local-only X-Membership-Id bridge, which has no real
-     *                                                               device behind it.
+     * @return array{membership_id: string, device_id: ?string, support_read_only: bool}|null device_id is
+     *                                                                                        null for the local-only X-Membership-Id bridge, which has no real
+     *                                                                                        device behind it.
      */
     private function resolveCredential(Request $request): ?array
     {
@@ -151,7 +168,7 @@ class ApplyMembership
             $header = $request->header('X-Membership-Id');
 
             if ($header) {
-                return ['membership_id' => $header, 'device_id' => null];
+                return ['membership_id' => $header, 'device_id' => null, 'support_read_only' => false];
             }
         }
 
@@ -162,7 +179,7 @@ class ApplyMembership
      * Replicates Sanctum's own "id|token" lookup (PersonalAccessToken::findToken())
      * by hand, against the raw table — see this class's own doc comment for why.
      *
-     * @return array{membership_id: string, device_id: ?string}|null
+     * @return array{membership_id: string, device_id: ?string, support_read_only: bool}|null
      */
     private function resolveCredentialFromToken(Request $request): ?array
     {
@@ -196,6 +213,7 @@ class ApplyMembership
         }
 
         $abilities = json_decode($row->abilities ?? '[]', true) ?? [];
+        $supportReadOnly = in_array('support:read-only', $abilities, true);
         $membershipId = null;
 
         foreach ($abilities as $ability) {
@@ -216,8 +234,11 @@ class ApplyMembership
         // config('app.timezone') would misinterpret — see
         // tests/Support/RlsFixtures.php's normalizeTimestamps() for the
         // confirmed failure mode this exact pattern caused elsewhere.
-        DB::table('personal_access_tokens')->where('id', $id)->update(['last_used_at' => now()->toIso8601String()]);
+        if (! $supportReadOnly) {
+            DB::table('personal_access_tokens')->where('id', $id)->update(['last_used_at' => now()->toIso8601String()]);
+        }
 
-        return ['membership_id' => $membershipId, 'device_id' => $row->tokenable_id];
+        return ['membership_id' => $membershipId, 'device_id' => $row->tokenable_id,
+            'support_read_only' => $supportReadOnly];
     }
 }

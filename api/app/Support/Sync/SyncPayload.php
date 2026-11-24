@@ -47,7 +47,8 @@ final class SyncPayload
      * @param  array<string, mixed>|object  $row
      * @return array<string, mixed>
      */
-    public static function fromRow(string $table, array|object $row, bool $identityEnforced = false): array
+    public static function fromRow(string $table, array|object $row, bool $identityEnforced = false,
+        bool $withoutClinical = false, bool $forSupport = false): array
     {
         $payload = (array) $row;
 
@@ -78,6 +79,7 @@ final class SyncPayload
             }
         }
 
-        return $payload;
+        return $forSupport || $withoutClinical
+            ? SupportAccess::redactEntity($table, $payload, $withoutClinical) : $payload;
     }
 }

@@ -96,14 +96,22 @@ class SyncBootstrapPuller
     /**
      * @return array{cursor: string, has_more: bool, rows: list<array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}>}
      */
-    public function pull(?string $cursor, bool $identityEnforced = false): array
+    public function pull(?string $cursor, bool $identityEnforced = false, ?string $deviceId = null): array
     {
+        $filters = SupportAccess::filters($deviceId);
+        $withoutClinical = $filters['without_clinical'];
         [$stage, $afterId] = $this->parseCursor($cursor);
 
         $from = now()->subDays(SyncWindow::DAYS)->toDateString();
         $to = now()->addDays(SyncWindow::DAYS)->toDateString();
 
         while ($stage < self::STAGE_DONE) {
+            if ($withoutClinical && SupportAccess::omitsEntity($this->entityForStage($stage))) {
+                $stage++;
+                $afterId = null;
+
+                continue;
+            }
             $page = $this->queryStage($stage, $afterId, $from, $to);
 
             if ($page->isEmpty()) {
@@ -124,7 +132,8 @@ class SyncBootstrapPuller
             return [
                 'cursor' => $newCursor,
                 'has_more' => $hasMoreInStage || $stage + 1 < self::STAGE_DONE,
-                'rows' => $rows->map(fn ($row) => $this->toRow($stage, $row, $identityEnforced))->values()->all(),
+                'rows' => $rows->map(fn ($row) => $this->toRow($stage, $row, $identityEnforced,
+                    $filters))->values()->all(),
             ];
         }
 
@@ -245,9 +254,22 @@ class SyncBootstrapPuller
     /**
      * @return array{entity: string, entity_id: string, rev: int, payload: array<string, mixed>}
      */
-    private function toRow(int $stage, object $row, bool $identityEnforced): array
+    private function toRow(int $stage, object $row, bool $identityEnforced, array $filters): array
     {
-        $entity = match ($stage) {
+        $entity = $this->entityForStage($stage);
+
+        return [
+            'entity' => $entity,
+            'entity_id' => $row->id,
+            'rev' => (int) $row->rev,
+            'payload' => SyncPayload::fromRow($entity, $row, $identityEnforced,
+                $filters['without_clinical'], $filters['support']),
+        ];
+    }
+
+    private function entityForStage(int $stage): string
+    {
+        return match ($stage) {
             self::STAGE_DAY_STATE => 'day_state',
             self::STAGE_VISITS => 'visits',
             self::STAGE_PATIENTS => 'patients',
@@ -261,13 +283,6 @@ class SyncBootstrapPuller
             self::STAGE_SCHEDULE_EXCEPTIONS => 'schedule_exceptions',
             self::STAGE_VISIT_FORM_REVISIONS => 'visit_form_revisions',
         };
-
-        return [
-            'entity' => $entity,
-            'entity_id' => $row->id,
-            'rev' => (int) $row->rev,
-            'payload' => SyncPayload::fromRow($entity, $row, $identityEnforced),
-        ];
     }
 
     /**

@@ -458,7 +458,7 @@ test('device keeps ENABLE and FORCE row level security and its one unchanged pol
     ]]);
 });
 
-test('series is NOT NULL with no default on device, invoices, payments and prescriptions, and the number constraints include it', function () {
+test('clinic device series is required while support has no series, and numbered tables retain their constraints', function () {
     $columns = $this->asOwner()->select(<<<'SQL'
         SELECT table_name, is_nullable, column_default, data_type
         FROM information_schema.columns
@@ -466,11 +466,17 @@ test('series is NOT NULL with no default on device, invoices, payments and presc
         ORDER BY table_name
     SQL);
     expect(array_map(fn ($row) => (array) $row, $columns))->toBe([
-        ['table_name' => 'device', 'is_nullable' => 'NO', 'column_default' => null, 'data_type' => 'smallint'],
+        ['table_name' => 'device', 'is_nullable' => 'YES', 'column_default' => null, 'data_type' => 'smallint'],
         ['table_name' => 'invoices', 'is_nullable' => 'NO', 'column_default' => null, 'data_type' => 'smallint'],
         ['table_name' => 'payments', 'is_nullable' => 'NO', 'column_default' => null, 'data_type' => 'smallint'],
         ['table_name' => 'prescriptions', 'is_nullable' => 'NO', 'column_default' => null, 'data_type' => 'smallint'],
     ]);
+
+    $shape = $this->asOwner()->selectOne(<<<'SQL'
+        SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint
+        WHERE conrelid='device'::regclass AND conname='device_series_shape'
+    SQL);
+    expect($shape->definition)->toBe("CHECK (((kind = 'clinic'::text) = (series IS NOT NULL)))");
 
     $constraints = $this->asOwner()->select(<<<'SQL'
         SELECT conrelid::regclass::text AS table_name, pg_get_constraintdef(oid) AS definition
@@ -523,6 +529,11 @@ test('the backfill numbers existing devices per location in registered_at order,
         }
     } finally {
         $owner->transaction(fn () => $migration->up());
+        // B6a makes series nullable only for support devices. Replaying the
+        // historical migration removes its later shape constraint, so restore
+        // the installed schema before another test runs.
+        $owner->statement('ALTER TABLE device ALTER COLUMN series DROP NOT NULL');
+        $owner->statement("ALTER TABLE device ADD CONSTRAINT device_series_shape CHECK ((kind='clinic')=(series IS NOT NULL))");
         // Recreating the column drops B5's later column ACL; restore the
         // installed-schema grant so subsequent role checks see the real state.
         $owner->statement('GRANT SELECT (series) ON device TO clintra_admin_device');

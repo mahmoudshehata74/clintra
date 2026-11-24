@@ -5,6 +5,7 @@ use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use Tests\Support\IdentityHarness;
 use Tests\TestCase;
 
 /**
@@ -23,7 +24,7 @@ use Tests\TestCase;
  * A device of a fresh organization, its owner's token, and one patient and
  * one device audit row of that organization.
  *
- * @return array{token: string, orgId: string, membershipId: string, deviceId: string, patientId: string, auditRowId: string}
+ * @return array{token: string, orgId: string, locationId: string, membershipId: string, deviceId: string, patientId: string, auditRowId: string}
  */
 function inventoryOrg(): array
 {
@@ -38,6 +39,7 @@ function inventoryOrg(): array
     return [
         'token' => $token,
         'orgId' => $orgId,
+        'locationId' => $locationId,
         'membershipId' => $membershipId,
         'deviceId' => $deviceId,
         'patientId' => $test->makePatient($orgId, 'inventory patient'),
@@ -87,6 +89,25 @@ function apiRouteInventory(): array
 
     return [
         'POST api/devices/register' => ['body' => [], 'unauthenticated' => 422, 'revoked' => 422, 'otherOrg' => null],
+        'POST api/support/exchange' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
+        'POST api/support/codes' => [
+            'body' => [], 'unauthenticated' => 401, 'revoked' => 401,
+            'otherOrg' => function (TestCase $test, array $orgA, array $orgB): void {
+                $payload = ['id' => (string) Str::uuid(), 'code_hash' => hash('sha256', Str::random(32)),
+                    'location_id' => $orgA['locationId'], 'support_hours' => 1,
+                    'include_clinical' => false, 'audit_id' => (string) Str::uuid()];
+                $test->withToken($orgB['token'])->postJson('/api/support/codes', $payload)->assertStatus(403);
+                expect(test()->fx()->table('activation_codes')->where('id', $payload['id'])->exists())->toBeFalse();
+            },
+        ],
+        'POST api/support/devices/{device}/end' => [
+            'body' => [], 'unauthenticated' => 401, 'revoked' => 401,
+            'otherOrg' => function (TestCase $test, array $orgA, array $orgB): void {
+                $test->withToken($orgB['token'])->postJson('/api/support/devices/'.$orgA['deviceId'].'/end')
+                    ->assertNotFound();
+                expect(test()->fx()->table('device')->where('id', $orgA['deviceId'])->value('revoked_at'))->toBeNull();
+            },
+        ],
         'GET api/health' => ['body' => [], 'unauthenticated' => 200, 'revoked' => 200, 'otherOrg' => null],
         'GET api/user' => ['body' => [], 'unauthenticated' => 401, 'revoked' => 401, 'otherOrg' => null],
         'GET api/isolation-probe' => [
@@ -150,9 +171,9 @@ function apiRouteInventory(): array
             'revoked' => 401,
             'otherOrg' => function (TestCase $test, array $orgA, array $orgB): void {
                 // B's owner names A's owner.
-                $org = \Tests\Support\IdentityHarness::org();
-                $owner = \Tests\Support\IdentityHarness::credential($org, $org['ownerId']);
-                $response = \Tests\Support\IdentityHarness::send($org, 'PUT', '/api/staff/'.$orgA['membershipId'].'/username', [
+                $org = IdentityHarness::org();
+                $owner = IdentityHarness::credential($org, $org['ownerId']);
+                $response = IdentityHarness::send($org, 'PUT', '/api/staff/'.$orgA['membershipId'].'/username', [
                     'username' => 'taken.by.b', 'password' => 'owner password 1',
                 ], $owner);
                 $response->assertNotFound();
@@ -210,5 +231,5 @@ test('a valid token of another organization never reads or writes its rows', fun
         $checked++;
     }
 
-    expect($checked)->toBe(6);
+    expect($checked)->toBe(8);
 });

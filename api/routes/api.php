@@ -6,6 +6,7 @@ use App\Http\Controllers\DeviceRegistrationController;
 use App\Http\Controllers\IdentityRolloutController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StaffIdentityController;
+use App\Http\Controllers\SupportController;
 use App\Http\Controllers\SyncBootstrapController;
 use App\Http\Controllers\SyncPullController;
 use App\Http\Controllers\SyncPushController;
@@ -23,6 +24,11 @@ use Illuminate\Support\Facades\Route;
 // {"error":"too_many_attempts",...} response with Laravel's own generic
 // 429 shape the moment the blunter counter tripped first.
 Route::post('/devices/register', [DeviceRegistrationController::class, 'register']);
+Route::post('/support/exchange', [SupportController::class, 'exchange']);
+Route::middleware(['membership', 'throttle:auth', 'person:enforced'])
+    ->post('/support/codes', [SupportController::class, 'codes']);
+Route::middleware(['membership', 'throttle:auth', 'person:enforced'])
+    ->post('/support/devices/{device}/end', [SupportController::class, 'end']);
 
 // Matches SyncTransport.pushOps/pullSince (web/src/sync/transport.ts)
 // exactly — see App\Http\Controllers\SyncPushController/SyncPullController.

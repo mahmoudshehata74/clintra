@@ -182,9 +182,18 @@ test('an unenforced organization pulls and bootstraps the bytes it did before id
 
     $payloads = unenforcedPayloads($token);
     expect($payloads['pull']['code_notices'])->toBe([]);
-    foreach ($payloads['bootstrap'] as $page) expect($page['code_notices'])->toBe([]);
+    foreach ($payloads['bootstrap'] as $page) {
+        expect($page['code_notices'])->toBe([]);
+    }
+    expect($payloads['pull']['support_sessions'])->toBe([]);
+    foreach ($payloads['bootstrap'] as $page) {
+        expect($page['support_sessions'])->toBe([]);
+    }
     unset($payloads['pull']['code_notices']);
-    foreach ($payloads['bootstrap'] as &$page) unset($page['code_notices']);
+    unset($payloads['pull']['support_sessions']);
+    foreach ($payloads['bootstrap'] as &$page) {
+        unset($page['code_notices'], $page['support_sessions']);
+    }
     unset($page);
     $historical = json_encode($payloads, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)."\n";
     expect($historical)->toBe(file_get_contents(UNENFORCED_SNAPSHOT_FIXTURE));

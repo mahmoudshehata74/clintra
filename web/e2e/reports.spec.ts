@@ -95,6 +95,8 @@ test("a login tied to one doctor reads that doctor's rows only, with no doctor f
   await scope.getByRole("button", { name: S.scopeSelf, exact: true }).click();
   await settings.getByRole("group", { name: S.staffPractitionerScopeLabel, exact: true }).last().getByRole("button", { name: QUEUE_DR, exact: true }).click();
   await settings.getByLabel(S.staffPinLabel, { exact: true }).fill(DOCTOR_LOGIN_PIN);
+  // The staff form can still report offline after the page itself is ready.
+  await expect(settings.getByText(S.staffAddNeedsConnection, { exact: true })).toBeHidden();
   await settings.getByRole("button", { name: S.settingsSaveAction, exact: true }).click();
   await expect(settings.getByText(DOCTOR_LOGIN_NAME)).toBeVisible();
   await settings.getByRole("button", { name: S.sheetCloseAriaLabel, exact: true }).click();
