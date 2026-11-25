@@ -695,17 +695,15 @@ first print of the same prescription. A role that bypasses the endpoint
 (`clintra_owner` in a migration, `clintra_fixtures` in a test) is not held
 to the lock; the API has no other write path to these tables.
 
-**Known gap: who writes is not enforced by the server.** The owner's rule
-is that only the visit's own practitioner writes its prescription. The web
-writers enforce it (`not_prescriber`, `web/src/db/prescriptions.ts`), but
-the policy above admits any membership in scope of the visit — an assistant
-with `all` practitioner scope included — so a client that bypassed the web
-writers could write a prescription for any visit it can see. Closing this
-needs a policy that compares the acting membership's own `practitioner_id`
-with the row's, a change to RLS that v1 deliberately does not make.
-Device tokens are also still bound to the registering membership, not the
-PIN-switched one (`docs/auth-plan.md`), so the server could not yet tell
-which person is writing in any case.
+**Actor rule:** In an identity-enforced organization, the push endpoint
+verifies the person's signed op, rejects a mismatched actor and checks that
+the proven practitioner's visits contain the prescription
+(`SyncPushController::applyProven`, `SyncOpApplier::claimsProvenActor`,
+`SyncOpApplier::isClinicalPractitioner`). The policy itself remains scoped
+more broadly. In an unenforced organization, the actor column is only an
+in-organization claim and the web's `not_prescriber` rule remains the
+practitioner check (`web/src/db/prescriptions.ts`,
+`SyncOpApplier::claimsActorInOrg`).
 
 ## Practitioners
 
@@ -744,17 +742,15 @@ the applier stores a `null` title as `""` (practitioners only).
 every practitioner of the org in a sixth stage, appended after
 `prescription_items` so an older cursor keeps its meaning.
 
-**Known gap: who edits is not enforced by the server.** Only the owner
-edits a practitioner's profile; the web writer enforces it
-(`not_owner`, `web/src/db/practitioners.ts`), but the policy admits any
-membership of the org, so a client that bypassed the web writer could
-change any practitioner's name, title or syndicate number in its own org.
-This is the same gap as every other settings write (working hours,
-services, staff): the server does not know roles per write in v1, and
-device tokens are bound to the registering membership, not the PIN-switched
-one (`docs/auth-plan.md`), so it could not yet tell which person is
-writing in any case. Closing it needs a role check in the policy or the
-endpoint, a change v1 deliberately does not make.
+**Owner-only profile editing remains a server gap.** The web writer applies
+`not_owner` (`web/src/db/practitioners.ts`), but the policy admits any
+membership in the organization. In an enforced organization, the push
+endpoint proves the actor and checks its permission catalogue; that catalogue
+does not require an owner role or a permission for `practitioners`
+(`SyncOpApplier::requiredPermissions`). In an unenforced organization,
+`SyncOpApplier::claimsActorInOrg` accepts an in-organization actor claim and
+performs no permission check. The device token remains bound to the
+registering membership in either case.
 
 ## Care plans
 
@@ -834,13 +830,13 @@ and a `care_plans.paid` other than 0 are `care_plan_invalid`, and so is a
 session `visit_id` that does not name a visit — visible to the caller — of
 the plan's own patient and practitioner.
 
-**Known gap: who writes is not enforced by the server.** Only the plan's
-own practitioner creates or edits a plan; the web writers enforce it
-(`not_plan_practitioner`, `web/src/db/carePlans.ts`), but the policy admits
-any membership in scope of the practitioner. It is the same gap as
-prescriptions, for the same reasons (a role check per write is a policy
-change v1 does not make; device tokens are bound to the registering
-membership, not the PIN-switched one).
+**Plan practitioner rule remains a server gap.** The web writer applies
+`not_plan_practitioner` (`web/src/db/carePlans.ts`), while the policy admits
+any membership in the plan's practitioner scope. In an enforced organization,
+the push endpoint proves the actor and checks its permission catalogue, but
+`SyncOpApplier::requiredPermissions` has no care-plan practitioner rule. In
+an unenforced organization it accepts an in-organization actor claim without
+a permission check (`SyncOpApplier::claimsActorInOrg`).
 
 ## Sequence-backed audit ordering
 
@@ -1083,11 +1079,12 @@ zero rows. No trigger refuses them for every role: `clintra_fixtures`
 removal delete through. `seq` is `GENERATED ALWAYS`, so no writer supplies
 one (`428C9`).
 
-**Known gap: the actor is a claim.** A device holding a stolen token could
-name any member of its own organization as the actor. That is the same
-limit as every settings write, and it closes with the backlog's
-server-side per-person identity, which would let the policy compare the
-actor with a proven acting membership without changing the table.
+**Actor proof:** In an identity-enforced organization, every device audit row
+must have a live credential on that device and a valid signature; its actor
+must equal the credential's active person (`DeviceAuditPusher::proof`). In an
+unenforced organization, the actor is an in-organization claim
+(`DeviceAuditPusher::refusal`). The device token's membership remains the
+recorded pusher in both cases (`DeviceAuditPusher::store`).
 
 **The endpoints** (`App\Http\Controllers\DeviceAuditController`), behind
 the `membership` middleware and `throttle:sync`, on the RLS-bound
@@ -1576,15 +1573,13 @@ Bootstrap returns the messages attempted inside the 60-day window (by
 org, in stages 6 and 7, appended after `practitioners` so an older cursor
 keeps its meaning.
 
-**Known gap: who edits a template is not enforced by the server.** Only the
-owner edits template overrides; the web writers enforce it (`not_owner`,
-`web/src/db/messages.ts`), but the policy admits any membership of the org.
-This is the same gap as every other settings write (working hours,
-services, staff, practitioners' profiles): the server does not know roles
-per write in v1, and device tokens are bound to the registering membership,
-not the PIN-switched one (`docs/auth-plan.md`). Closing it needs a role
-check in the policy or the endpoint, a change v1 deliberately does not
-make.
+**Owner-only template editing remains a server gap.** The web writer applies
+`not_owner` (`web/src/db/messages.ts`), but the policy admits any membership
+of the organization. In an enforced organization, the push endpoint proves
+the actor and requires `messages.send`, which is not an owner-only rule
+(`SyncOpApplier::requiredPermissions`). In an unenforced organization, it
+accepts an in-organization actor claim without a permission check
+(`SyncOpApplier::claimsActorInOrg`).
 
 ## The sync bootstrap endpoint
 

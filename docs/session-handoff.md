@@ -1,28 +1,36 @@
 # Session handoff
 
-## Phase
-Design system rebuild. The visual reference for v1 is
-`docs/reference/clintra-prototype.html` (19 screens); `docs/design-rule.md`
-defines how to use it and lists the settled deviations from it. Logic and
-data are not being rewritten: existing screens are restyled, and the new
-screens are built on top of the existing data layer.
+## Current state
 
-## Actual state (as of 8d993d7)
-- **Web** (React + Vite PWA, offline-first, IndexedDB via Dexie): assistant
-  day screen (slots and queue), booking and walk-in, visit actions, doctor
-  delay, visit form (complaint + diagnosis), invoice, payments, cash close,
-  tomorrow's day sheet, audit log, settings (working hours, services,
-  staff), PIN lock (Argon2id, 5 attempts then a delay, 10-minute idle lock)
-  and device registration.
-- **Sync transport**: `HttpTransport` exists and is selected whenever the
-  device row holds a real token (`selectSyncTransport` in
-  `web/src/sync/httpTransport.ts`); `FakeTransport` remains for demo mode.
-- **Fonts**: already bundled locally through `@fontsource` packages (IBM
-  Plex Sans Arabic 400/500/600, Readex Pro variable) — nothing is fetched at
-  runtime.
-- **API**: device registration (`POST /api/devices/register`), sync push,
-  pull and bootstrap endpoints, provisioning and activation-code CLI
-  commands, full RLS on every tenant table (see `api/docs/rls.md`).
+The v1 reference is `docs/reference/clintra-prototype.html` (19 screens);
+`docs/design-rule.md` records settled deviations. All 19 screens are
+implemented: PIN lock (`web/src/auth/LockScreen.tsx`), day/booking/invoice/
+payment/cash close/tomorrow/audit/settings (`web/src/screens/day/`), doctor
+day (`web/src/screens/doctor/`), visit and clinical corrections
+(`web/src/screens/visit/`), prescription print
+(`web/src/screens/prescription/`), care plans
+(`web/src/screens/carePlan/`), patient profile and search
+(`web/src/screens/patient/`), messages (`web/src/screens/messages/`), and
+device activation (`web/src/auth/RegistrationScreen.tsx`). The 19 screen
+specs are in `web/e2e/` (including `day-slots.spec.ts`,
+`visit-workspace.spec.ts`, `care-plan.spec.ts`, `patient-profile.spec.ts`,
+`messages.spec.ts` and `registration.spec.ts`). The reports page is in
+`web/src/screens/reports/` with `web/e2e/reports.spec.ts`. Messaging opens
+`wa.me`/`sms:` links and records attempts; it does not verify delivery
+(`web/src/screens/messages/SendMessageSheet.tsx`). The AI panel is deferred
+by `docs/design-rule.md`.
+
+The React/Vite PWA stores clinic data in Dexie. A registered device uses
+`HttpTransport`; demo mode uses `FakeTransport`
+(`web/src/sync/httpTransport.ts`). The API provides registration, sync,
+person proof and RLS (`api/routes/api.php`, `api/docs/rls.md`).
+Design A phases A1–A4 are merged (PRs #61–#65;
+`api/app/Http/Controllers/IdentityRolloutController.php`). Design B phases
+B1–B6 are merged (PRs #69–#75; `admin/app/Support/Platform.php`,
+`web/src/screens/day/SupportPanel.tsx`). Design C corrections are merged
+(PRs #58–#59; `web/src/screens/visit/VisitCorrection.tsx`); its post-identity
+revision insert policy tightening remains under review in PR #76
+(`api/database/migrations/2026_09_12_000040_create_visit_form_revisions_table.php`).
 
 ## Provisioning
 Run `php artisan clintra:provision` on the Linux server (or in WSL), in a
@@ -31,9 +39,21 @@ UTF-8 shell: a Windows console garbles the Arabic clinic and doctor names
 A-07).
 
 ## Verify
-Web: `pnpm --dir web test` (vitest, 1550 passed) · `pnpm --dir web
-exec tsc -b --noEmit` · `pnpm --dir web build` · `pnpm --dir web test:e2e`.
-API: `cd api && php artisan test` (Pest, 431 passed).
+
+The release hardening gate runs on the PR head, one suite at a time:
+`pnpm --dir web exec tsc -b --noEmit`;
+`pnpm --dir web run lint`;
+`pnpm --dir web test` (1,831 Vitest);
+`pnpm --dir web build`;
+`cd web && pnpm exec playwright test --grep-invert '@screenshot' --retries=0 --reporter=line`
+(577 passed, 2 skipped);
+`cd api && php artisan test` (993 Pest);
+`pnpm --dir web run test:live` (30 Playwright);
+`cd admin && php artisan test` (91 Pest);
+`pnpm --dir admin run test:e2e` (60 Playwright).
+These counts are confirmed by the exact-head gate recorded on the PR.
+Production setup and preflight are documented in `docs/deployment.md`;
+clinic acceptance scenarios are in `docs/dry-run.md`.
 
 ## Rebuild order (approved)
 1. `docs/design-rule.md` points at the prototype — done (PR #1).
@@ -72,8 +92,12 @@ Owner decisions it implements:
    device and by the server.
 3. Item fields: name and instructions required, form, duration and note
    optional, position 1-based in append order and never renumbered.
-4. Only the visit's own practitioner writes (`not_prescriber`); the server
-   does not enforce who writes in v1 — a known gap (`api/docs/rls.md`).
+4. Only the visit's own practitioner writes (`not_prescriber`). In an
+   identity-enforced organization, the server verifies the signed actor and
+   the visit's practitioner (`SyncOpApplier::isClinicalPractitioner`).
+   In an unenforced organization, the actor is an in-organization claim and
+   this practitioner rule is enforced by the web writer only
+   (`api/docs/rls.md`, "Prescriptions").
 5. Removing every item keeps the numbered prescription; an empty one cannot be
    printed (`prescription_empty`), and the skipped number is acceptable.
 
@@ -105,8 +129,11 @@ tab "الأطباء" (`web/src/screens/day/PractitionersPanel.tsx`,
 2. The title is stored trimmed with `""` for none (the column stays NOT
    NULL); the syndicate number is stored trimmed with null for none, at most
    50 characters. One shared helper decides "empty" for every screen.
-3. Owner only, enforced on the device like every other settings write — the
-   server does not check who edits (a known gap, `api/docs/rls.md`).
+3. Owner only in the web writer. In an identity-enforced organization, the
+   server proves the actor, but its permission catalogue does not require an
+   owner for practitioner profile edits. In an unenforced organization, it
+   accepts an in-organization actor claim without a permission check
+   (`SyncOpApplier::requiredPermissions`, `api/docs/rls.md`, "Practitioners").
 4. Renaming an assistant or other staff member was left for its own
    decision, since a staff name lived on `users`, which is not syncable —
    since decided: see "Staff identity" below.
@@ -162,9 +189,9 @@ a sheet from a visit. It reads every other screen's data and writes nothing
 of its own; what a row opens is that screen's own sheet. The owner decisions
 it implements are listed under "Screen 18 (patient profile)" below.
 
-All 19 screens are now built. Next step: the full screenshot re-capture
-(step 10) — `pnpm --dir web test:e2e:screenshots` for every screen, desktop
-and mobile, reviewed against the prototype.
+All 19 screens are built. The screenshot capture command is
+`pnpm --dir web test:e2e:screenshots`; compare its desktop and mobile output
+with `docs/reference/clintra-prototype.html` and `docs/design-rule.md`.
 
 This changes the earlier plan below ("templates seeded by migration"):
 defaults now ship with the app and only overrides live in the database,
@@ -557,7 +584,7 @@ The owner's answers to `docs/screen-comparison.md`'s questions (applied on
 
 ## Backlog
 - A-03 — done in `feat/schedule-mode-from-tomorrow`: schedules carry `next_mode` and `next_mode_from` (`docs/schema.md`'s v23 additions), and the working-hours switch takes effect from tomorrow (screen 12's notes above). Hardening scenario 24 runs on it. (`docs/bug-hunt.md`, A-03.)
-- Server-side per-person identity: the acting membership sent and verified per request (e.g. a PIN-derived proof). Today the server knows only the membership the device token was issued to (the owner who registered the device), so it cannot tell who is signed in; this would close the staff owner check's gap and the other settings-write gaps, and turn the claimed actor (device audit rows and the actor columns, `api/docs/rls.md`'s "Actor attribution") into a check.
+- Per-person identity is active for enforced organizations: a live person's credential signs each sync op and device audit row, and the server verifies the actor (`api/app/Http/Controllers/SyncPushController.php`, `api/app/Support/Sync/DeviceAuditPusher.php`). Unenforced organizations still accept in-organization actor claims. Owner-only rules for practitioner profiles and message templates still need server checks in both modes (`api/docs/rls.md`).
 - Members added locally on a device that was stuck before the staff-identity fix stay local-only — none exist today. If one appears, re-add the person online and deactivate the local row.
 
 ## Data decisions for the rebuild
