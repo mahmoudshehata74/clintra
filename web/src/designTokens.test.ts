@@ -7,6 +7,29 @@ import prototypeHtml from "../../docs/reference/clintra-prototype.html?raw";
 // Read from disk: vitest hands a stylesheet's `?raw` import over empty.
 const appCss = readFileSync(new URL("./index.css", import.meta.url), "utf8");
 
+// Keep the same recursive source-file set for every token scan, and do disk
+// I/O once during module setup rather than inside a timed assertion.
+const sourceFiles = (readdirSync(new URL(".", import.meta.url), { recursive: true }) as string[]).filter(
+  (file) => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file),
+);
+const sourceLines = sourceFiles.map((file) => ({
+  file,
+  lines: readFileSync(new URL(file.replaceAll("\\", "/"), import.meta.url), "utf8").split("\n"),
+}));
+
+/** Same token boundaries as /(?<![\w:-])text-faint(?![\w-])/, with a fixed-string search. */
+function hasFaintText(line: string): boolean {
+  const token = "text-faint";
+  for (let at = line.indexOf(token); at !== -1; at = line.indexOf(token, at + token.length)) {
+    const before = line[at - 1];
+    const after = line[at + token.length];
+    if ((before === undefined || !/[\w:-]/.test(before)) && (after === undefined || !/[\w-]/.test(after))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 type Tokens = Record<string, string>;
 
 /** The body of the first rule whose text starts at `opener`, braces balanced. */
@@ -271,19 +294,14 @@ describe("contrast", () => {
   });
 
   it("faint is text only as a placeholder", () => {
-    const sources = (readdirSync(new URL(".", import.meta.url), { recursive: true }) as string[]).filter(
-      (file) => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file),
-    );
-    expect(sources).toContain(join("components", "ui", "Field.tsx"));
+    expect(sourceFiles).toContain(join("components", "ui", "Field.tsx"));
     const faintText: string[] = [];
-    for (const file of sources) {
-      readFileSync(new URL(file.replaceAll("\\", "/"), import.meta.url), "utf8")
-        .split("\n")
-        .forEach((line, index) => {
-          if (/(?<![\w:-])text-faint(?![\w-])/.test(line)) {
-            faintText.push(`${file}:${index + 1}`);
-          }
-        });
+    for (const { file, lines } of sourceLines) {
+      lines.forEach((line, index) => {
+        if (hasFaintText(line)) {
+          faintText.push(`${file}:${index + 1}`);
+        }
+      });
     }
     expect(faintText).toEqual([]);
   });
