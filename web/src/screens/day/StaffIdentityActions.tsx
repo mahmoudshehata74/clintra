@@ -126,7 +126,7 @@ export default function StaffIdentityActions({ caller, target, locations, allowP
           </li>)}
         </ul>
       ) : (
-        <form key={action} className="grid gap-3" onSubmit={submit}>
+        <form data-support-write key={action} className="grid gap-3" onSubmit={submit}>
           {action === "username" && <Field id={`${fieldId}-username`} label={text.username}>
             <TextInput name="username" dir="ltr" defaultValue={target.username ?? ""} required maxLength={32} />
           </Field>}

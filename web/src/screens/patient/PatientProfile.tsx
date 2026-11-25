@@ -178,7 +178,7 @@ export default function PatientProfile({ patientId, initialTab = "all" }: Patien
       {access.allows("patients.archive") && <ArchiveBar patient={data.patient} />}
 
       {/* `.pt-tabs` */}
-      <div className="border-b border-rule bg-field px-[18px] py-2">
+      <div data-support-navigation className="border-b border-rule bg-field px-[18px] py-2">
         <ToggleGroup
           variant="patientTab"
           label={T.tabsLabel}
@@ -287,6 +287,7 @@ function Hero({ hero, onOpenPlan }: { hero: ProfileHero; onOpenPlan: (planId: st
         {hero.plan && (
           // `.pt-stat.plan` — opens the plan.
           <button
+            data-support-nav
             type="button"
             onClick={() => onOpenPlan(hero.plan!.planId)}
             className={`${STAT_FRAME} cursor-pointer font-[inherit] transition-colors duration-150 hover:border-copper-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-copper`}
@@ -433,7 +434,7 @@ function EventRow({ event, onOpen }: { event: ProfileEvent; onOpen?: () => void 
   );
   const surface = event.muted ? "bg-field" : "bg-card";
   return onOpen ? (
-    <button type="button" data-kind={event.kind} onClick={onOpen} className={`${ROW_BASE} ${ROW_BUTTON} ${surface}`}>
+    <button type="button" data-support-nav data-kind={event.kind} onClick={onOpen} className={`${ROW_BASE} ${ROW_BUTTON} ${surface}`}>
       {content}
     </button>
   ) : (
@@ -451,7 +452,7 @@ function CorrectedChip({ event, onOpen }: { event: ProfileEvent; onOpen: (visitI
   }
   return (
     <div className="mt-1 flex justify-end">
-      <Button variant="secondary" size="sm" onClick={() => onOpen(target.visitId)}>
+      <Button variant="secondary" size="sm" data-support-nav onClick={() => onOpen(target.visitId)}>
         {visitCorrectionStrings.correctedChip}
       </Button>
     </div>

@@ -85,6 +85,7 @@ const REASON_LABELS: Record<string, string> = {
   actor_mismatch: identityStrings.actor_mismatch,
   permission_denied: identityStrings.permission_denied,
   permission_escalation: identityStrings.permission_escalation,
+  support_read_only: "جهاز الدعم للقراءة بس، مفيش تغيير بيتحفظ منه",
 };
 
 /** A correction group another device's correction of the same form beat to the server (conflict_stale_rev). */

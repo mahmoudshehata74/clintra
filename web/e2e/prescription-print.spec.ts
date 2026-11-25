@@ -76,8 +76,8 @@ const isTopmostAtCentre = (element: Locator) =>
     return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === el;
   });
 
-/** A sheet's drag handle: the element just before its dialog panel (Sheet.tsx). */
-const handleOf = (sheet: Locator) => sheet.locator("xpath=preceding-sibling::div[1]");
+/** A sheet's drag handle: the semantic control just before its dialog panel (Sheet.tsx). */
+const handleOf = (sheet: Locator) => sheet.locator("xpath=preceding-sibling::button[1]");
 
 /**
  * A PDF of the current page: the size its first /MediaBox lays out on, in

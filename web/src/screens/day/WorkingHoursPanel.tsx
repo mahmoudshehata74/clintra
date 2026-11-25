@@ -186,7 +186,7 @@ export default function WorkingHoursPanel({
   return (
     <SetBody>
       {tomorrowMode && (
-        <div className="mb-3 flex flex-col items-start gap-1.5">
+        <div data-support-write className="mb-3 flex flex-col items-start gap-1.5">
           <ToggleGroup
             variant="channel"
             label={dayScreenStrings.hoursModeSwitchLabel}

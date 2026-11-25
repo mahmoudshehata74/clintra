@@ -1,5 +1,10 @@
 <?php
 
+test('support code hash matches the web fixed normalization vector', function () {
+    expect(\App\Support\ActivationCode::hash('CLT-7F3K-9QRT-4XWM-2BCD'))
+        ->toBe('c93b3fcfa7ef0927301056a6f3e4d61b783f3324fd8070a69c6b397305b72610');
+});
+
 use App\Models\Device;
 use App\Support\ActivationCode;
 use App\Support\Sync\SupportAccess;

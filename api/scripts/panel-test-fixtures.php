@@ -23,7 +23,7 @@ try {
     }
     $command = $argv[1] ?? '';
     $id = $argv[2] ?? '';
-    $commands = ['create', 'clinic', 'b5', 'solo', 'restore', 'expire-approval', 'log-row', 'otp', 'wrong-otp', 'idle', 'expired', 'inactive', 'retire', 'sessions', 'org-state'];
+    $commands = ['create', 'clinic', 'b5', 'support-code', 'solo', 'restore', 'expire-approval', 'log-row', 'otp', 'wrong-otp', 'idle', 'expired', 'inactive', 'retire', 'sessions', 'org-state'];
     if (! in_array($command, $commands, true)) {
         throw new RuntimeException('Unknown fixture command.');
     }
@@ -104,6 +104,36 @@ try {
             } else {
                 $result = compact('org', 'location');
             }
+        } elseif ($command === 'support-code') {
+            $payload = json_decode($extra, true, flags: JSON_THROW_ON_ERROR);
+            $location = $fx->table('locations')->where('org_id', $org)->value('id');
+            $owner = $fx->table('memberships')->where('org_id', $org)->where('role', 'owner')->value('id');
+            if (! $location || ! $owner) throw new RuntimeException('Support fixture requires the B5 clinic fixture.');
+            $code = \App\Support\ActivationCode::generate();
+            $codeId = (string) Str::uuid();
+            $purpose = ($payload['case'] ?? '') === 'wrong_purpose' ? 'device' : 'support';
+            $fx->table('activation_codes')->insert(['id' => $codeId, 'org_id' => $org, 'location_id' => $location,
+                'code_hash' => hash('sha256', $code), 'purpose' => $purpose,
+                'support_hours' => $purpose === 'support' ? 24 : null,
+                'include_clinical' => $purpose === 'support' ? false : null,
+                'created_by_membership_id' => $purpose === 'support' ? $owner : null,
+                'expires_at' => ($payload['case'] ?? '') === 'expired' ? now()->subMinute()->toIso8601String() : now()->addHours(72)->toIso8601String(),
+                'created_at' => now()->toIso8601String(),
+                'used_at' => ($payload['case'] ?? '') === 'used' ? now()->toIso8601String() : null]);
+            if (($payload['case'] ?? '') === 'org_disabled') $fx->table('organizations')->where('id', $org)->update(['disabled_at' => now()->toIso8601String(), 'disabled_reason' => 'Fixture']);
+            if (($payload['case'] ?? '') === 'no_owner') $fx->table('memberships')->where('id', $owner)->update(['is_active' => false]);
+            if (($payload['case'] ?? '') === 'support_active') {
+                $activeCode = (string) Str::uuid();
+                $fx->table('activation_codes')->insert(['id' => $activeCode, 'org_id' => $org, 'location_id' => $location,
+                    'code_hash' => hash('sha256', \App\Support\ActivationCode::generate()), 'purpose' => 'support',
+                    'support_hours' => 24, 'include_clinical' => false, 'created_by_membership_id' => $owner,
+                    'expires_at' => now()->addHours(72)->toIso8601String(), 'created_at' => now()->toIso8601String()]);
+                $fx->table('device')->insert(['id' => (string) Str::uuid(), 'org_id' => $org, 'location_id' => $location,
+                    'membership_id' => $owner, 'registered_at' => now()->toIso8601String(), 'series' => null,
+                    'kind' => 'support', 'expires_at' => now()->addHour()->toIso8601String(),
+                    'include_clinical' => false, 'support_admin_name' => 'Fixture', 'support_code_id' => $activeCode]);
+            }
+            $result = compact('code', 'codeId');
         } elseif ($command === 'solo') {
             $others = $db->table('platform.admin_users')->where('is_active', true)->where('id', '<>', $id)->pluck('id')->all();
             $db->table('platform.admin_users')->whereIn('id', $others)->update(['is_active' => false]);
@@ -153,8 +183,11 @@ try {
                 // Immutable log rows keep the organization; only test clinical fixtures are removed.
                 $db->table('platform.admin_approvals')->where('org_id', $org)->delete();
                 $fx->table('audit_log')->where('org_id', $org)->delete();
-                $fx->table('activation_codes')->where('org_id', $org)->delete();
+                $deviceIds = $fx->table('device')->where('org_id', $org)->pluck('id')->all();
+                $db->table('platform.support_exchanges')->whereIn('device_id', $deviceIds)->delete();
+                $fx->table('activation_codes')->where('org_id', $org)->update(['used_by_device_id' => null]);
                 $fx->table('device')->where('org_id', $org)->delete();
+                $fx->table('activation_codes')->where('org_id', $org)->delete();
                 $invoices = $fx->table('invoices')->where('org_id', $org)->pluck('id');
                 $users = $fx->table('memberships')->where('org_id', $org)->pluck('user_id');
                 $fx->table('payments')->whereIn('invoice_id', $invoices)->delete();

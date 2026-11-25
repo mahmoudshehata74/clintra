@@ -439,7 +439,7 @@ function NewStaffForm({
       : formError;
 
   return (
-    <div className="mt-3.5 flex flex-col gap-3 rounded-card border border-green-line bg-card p-3.5">
+    <div data-support-write className="mt-3.5 flex flex-col gap-3 rounded-card border border-green-line bg-card p-3.5">
       <Field label={dayScreenStrings.staffNameLabel} id="staff-new-name" error={errorFor("name")}>
         <TextInput type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} />
       </Field>

@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
+import { isSupportMode, supportDatabaseName } from "../auth/supportMode";
 import { numberMarkKey } from "./deviceRegistration";
 import type {
   AuditLog,
@@ -647,4 +648,4 @@ export class ClintraDatabase extends Dexie {
   }
 }
 
-export const db = new ClintraDatabase();
+export const db = new ClintraDatabase(isSupportMode() ? supportDatabaseName() : "clintra");

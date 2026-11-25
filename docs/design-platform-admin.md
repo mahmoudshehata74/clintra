@@ -164,7 +164,7 @@ promise of the query.
    wipe runs on the support machine). Every pull carries
    `support_sessions: [{device_id, admin_name, expires_at}]`, so every
    clinic device shows "فريق كلينترا عنده وصول للقراءة بس لحد {time}"; the
-   owner sees it in Settings → "الأجهزة" as "جهاز دعم كلينترا — {name} —
+   owner sees it in Settings → "دعم كلينترا" as "جهاز دعم كلينترا — {name} —
    بينتهي {time}" with "إنهاء الدعم دلوقتي", which revokes it at once.
 
 ## 5. Threat model
@@ -789,7 +789,7 @@ fresh step-up first, validate the payload key by key, and return a logged
 - A banner on every screen while disabled (4.3); the registration line.
 - Settings → "دعم كلينترا" (owner): "إنشاء كود دعم", "المدة", "الفرع",
   "يشمل البيانات الطبية", the one-time code line.
-- Settings → "الأجهزة": "جهاز دعم كلينترا — {name} — بينتهي {time}",
+- Settings → "دعم كلينترا": "جهاز دعم كلينترا — {name} — بينتهي {time}",
   "إنهاء الدعم دلوقتي".
 - A banner on every clinic device during support: "فريق كلينترا عنده وصول
   للقراءة بس لحد {time}"; and "فريق كلينترا أصدر كود تفعيل جهاز جديد للعيادة
@@ -1080,6 +1080,8 @@ unknown field. The web app shows the device or owner-recovery Arabic banner
 using the notice time, on desktop and mobile.
 
 ## B6 implementation contract
+
+The live support device row and its end action are in Settings → "دعم كلينترا".
 
 Migration 000062 adds support devices and support codes. Clinic devices retain
 their number series; a support device has no series, has a fixed expiry, and

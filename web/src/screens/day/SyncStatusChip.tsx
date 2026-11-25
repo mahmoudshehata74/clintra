@@ -20,8 +20,7 @@ import {
   SLOT_TAKEN_REASON,
   type LostCorrection,
 } from "../../sync/reviewSummary";
-import { useOnlineStatus } from "../../sync/useOnlineStatus";
-import { useServerUnreachable } from "../../sync/useTransportHealth";
+import { useConnectionStatus } from "../../sync/useOnlineStatus";
 import type { SyncReview } from "../../db/types";
 import { useVisitAdvance } from "../doctor/useVisitAdvance";
 import { visitCorrectionStrings } from "../visit/strings";
@@ -92,8 +91,7 @@ function displacedPatientId(review: SyncReview): string | null {
  * other device's order already kept, so it offers only "تمام" too.
  */
 export default function SyncStatusChip() {
-  const isOnline = useOnlineStatus();
-  const isServerUnreachable = useServerUnreachable();
+  const connection = useConnectionStatus();
   const [isListOpen, setIsListOpen] = useState(false);
   const [openVisitId, setOpenVisitId] = useState<string | null>(null);
   const access = useIdentityAccess();
@@ -122,7 +120,7 @@ export default function SyncStatusChip() {
     }, []) ?? [];
 
   const state: ChipState =
-    reviewRows.length > 0 ? "needs_review" : !isOnline ? "local" : isServerUnreachable ? "server_unreachable" : "online";
+    reviewRows.length > 0 ? "needs_review" : connection === "offline" ? "local" : connection;
   const label = {
     needs_review: dayScreenStrings.syncNeedsReview,
     local: dayScreenStrings.syncLocal,

@@ -99,7 +99,7 @@ export default function DelayControl({ delayMinutes, scheduleStartTime, onSetDel
               +<Ltr>{minutes}</Ltr> {dayScreenStrings.delayMinutesSuffix}
             </button>
           ))}
-          <form onSubmit={applyCustom} noValidate className="flex flex-col gap-2 border-t border-hair p-3">
+          <form data-support-write onSubmit={applyCustom} noValidate className="flex flex-col gap-2 border-t border-hair p-3">
             <Field
               label={dayScreenStrings.delayCustomLabel}
               id="delay-custom-minutes"

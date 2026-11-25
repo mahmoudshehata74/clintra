@@ -3,9 +3,14 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import LockScreen from "./auth/LockScreen";
 import OrganizationSuspensionNotice from "./components/OrganizationSuspensionNotice";
 import CodeNoticeBanner from "./components/CodeNoticeBanner";
+import SupportSessionBanner from "./components/SupportSessionBanner";
 import { setCodeNoticeDevice } from "./sync/codeNotices";
+import { supportDeviceText } from "./sync/supportSessions";
 import identityText from "./auth/identityStrings";
 import { showRolloutWarning } from "./auth/rollout";
+import { exchangeSupportCode, resumeSupportAccess, wipeSupportAccess } from "./auth/supportAccess";
+import { watchSupportExpiry } from "./auth/supportExpiry";
+import { isSupportMode, observeSupport401, supportEntryCode } from "./auth/supportMode";
 import { hasPermission, IdentityAccessContext } from "./auth/permissions";
 import RegistrationScreen from "./auth/RegistrationScreen";
 import {
@@ -51,6 +56,7 @@ const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Registration screen aside, before deciding what to render. See its own effect below for how each is reached. */
 type BootStatus = "checking" | "needs_registration" | "ready";
+let supportBootPromise: Promise<void> | null = null;
 
 export default function App() {
   // "checking" only ever lasts one IndexedDB read (near-instant, no
@@ -62,8 +68,9 @@ export default function App() {
   // seeding demo data (docs/auth-plan.md's registration credential
   // resolution; db/seed.ts's own emptiness guard is what makes this safe
   // either way: it never runs once real org data already exists).
-  const [bootStatus, setBootStatus] = useState<BootStatus>(() => (isDemoModeRequested() ? "ready" : "checking"));
+  const [bootStatus, setBootStatus] = useState<BootStatus>(() => (!isSupportMode() && isDemoModeRequested() ? "ready" : "checking"));
   const [authErrorDetected, setAuthErrorDetected] = useState(false);
+  const [supportError, setSupportError] = useState<string | null>(null);
 
   // The device's stored appearance (db/preferences.ts) over index.html's
   // pre-paint mirror of it — the two differ only if site storage was
@@ -77,6 +84,25 @@ export default function App() {
       return;
     }
     let cancelled = false;
+    if (isSupportMode()) {
+      supportBootPromise ??= (async () => {
+        if (supportEntryCode !== null) await exchangeSupportCode(supportEntryCode);
+        else if (!await resumeSupportAccess()) throw new Error("support_expired");
+      })();
+      void (async () => {
+        try {
+          await supportBootPromise;
+          if (!cancelled) { observeSupport401(); setBootStatus("ready"); }
+        } catch {
+          await wipeSupportAccess();
+          if (!cancelled) {
+            setSupportError(supportEntryCode === null ? "انتهى وصول الدعم" : "الكود ده مش شغال أو خلص، اطلب كود جديد");
+            setBootStatus("needs_registration");
+          }
+        }
+      })();
+      return () => { cancelled = true; };
+    }
     void isDeviceRegistered(db).then((registered) => {
       if (!cancelled) {
         setBootStatus(registered ? "ready" : "needs_registration");
@@ -114,7 +140,9 @@ export default function App() {
     let cancelled = false;
 
     function onAuthError() {
-      setAuthErrorDetected(true);
+      if (isSupportMode()) {
+        void wipeSupportAccess().then(() => { setSupportError("انتهى وصول الدعم"); setBootStatus("needs_registration"); });
+      } else setAuthErrorDetected(true);
     }
     window.addEventListener(SYNC_AUTH_ERROR_EVENT_NAME, onAuthError);
 
@@ -145,7 +173,7 @@ export default function App() {
   }, [bootStatus]);
 
   const activeMembershipId = useSyncExternalStore(subscribeSession, getActiveMembershipId);
-  const isLocked = activeMembershipId === null;
+  const isLocked = !isSupportMode() && activeMembershipId === null;
 
   // The session module remembers the last person in, so a re-lock offers their
   // PIN pad directly ("دخول <name>") while a fresh launch still shows the picker
@@ -153,7 +181,13 @@ export default function App() {
   // with the session it changes alongside.
   const lastMembershipId = getLastActiveMembershipId() ?? undefined;
 
-  useIdleLock(!isLocked, IDLE_TIMEOUT_MS, clearActiveSession);
+  useIdleLock(!isSupportMode() && !isLocked, IDLE_TIMEOUT_MS, clearActiveSession);
+
+  useEffect(() => {
+    if (bootStatus !== "ready" || !isSupportMode()) return;
+    return watchSupportExpiry(async () => (await db.device.toArray()).find((row) => row.support)?.support?.expires_at ?? null,
+      () => { void wipeSupportAccess().then(() => { setSupportError("انتهى وصول الدعم"); setBootStatus("needs_registration"); }); });
+  }, [bootStatus]);
 
   // Settings lives one level up from DayScreen now: AppShell's rail is what
   // opens it (its "الإعدادات" item, shown only to an owner per
@@ -187,7 +221,8 @@ export default function App() {
   // the patient profile — does the same, for every role.
   const [selectedView, setSelectedView] = useState<"day" | "patients" | "doctor" | "visit" | "messages" | "reports">("day");
   const viewingMembership = useGuardedActingMembership();
-  const identityDevice = useLiveQuery(async () => (await db.device.toArray()).find((row) => row.token), []);
+  const identityDevice = useLiveQuery(async () => bootStatus === "ready" && !supportError
+    ? (await db.device.toArray()).find((row) => row.token) : undefined, [bootStatus, supportError]);
   useEffect(() => { setCodeNoticeDevice(identityDevice?.id ?? null); }, [identityDevice?.id]);
   const enforced = Boolean(identityDevice?.identity_enforced_at);
   const access = { enforced, member: viewingMembership };
@@ -212,6 +247,7 @@ export default function App() {
   const [dayScreenToday, setDayScreenToday] = useState<ClinicDay>(() => todayInCairo());
 
   if (bootStatus !== "ready") {
+    if (supportError) return <main className="flex min-h-screen items-center justify-center bg-paper p-5" dir="rtl"><div className="w-full max-w-md rounded-card border border-rule bg-card p-6 text-center"><h1 className="text-lg font-semibold">كلينترا</h1><p role="alert" className="mt-4 text-sm text-danger">{supportError}</p></div></main>;
     // "checking" renders nothing rather than a spinner: it resolves from
     // one local IndexedDB read, sub-frame in practice, and there is
     // nothing yet to show a spinner over.
@@ -282,9 +318,12 @@ export default function App() {
         }
         today={dayScreenToday}
         whoName={isDoctorViewShown && doctorPractitionerName ? withDoctorPrefix(doctorPractitionerName) : undefined}
+        supportAdminName={identityDevice?.support?.admin_name}
       >
         <OrganizationSuspensionNotice inContentFlow />
         <CodeNoticeBanner inContentFlow />
+        {isSupportMode() && identityDevice?.support && <div role="status" data-support-device className="mb-3 shrink-0 rounded-card border border-copper-line bg-copper-wash px-4 py-3 text-sm text-copper-ink sm:mx-auto sm:w-[calc(100%_-_40px)] sm:max-w-[calc(var(--container-page)_-_40px)] sm:rounded-panel">{supportDeviceText(identityDevice.support.expires_at)}</div>}
+        <SupportSessionBanner />
         {showRolloutWarning(identityDevice?.identity_enforced_at, identityDevice?.identity_rollout_auto_at) && (
           <p role="status" className="mb-3 rounded-card border border-copper-line bg-copper-wash px-4 py-3 text-sm text-copper-ink">
             {identityText.rolloutWarning}

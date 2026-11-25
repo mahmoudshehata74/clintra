@@ -166,7 +166,7 @@ export default function ServicesPanel({ orgId }: { orgId: string }) {
         </SetList>
 
         {newOpen && (
-          <div className="mt-2 rounded-card border border-green-line bg-card p-3.5">
+          <div data-support-write className="mt-2 rounded-card border border-green-line bg-card p-3.5">
             <ServiceDetailsForm
               idPrefix="service-new"
               initial={null}
@@ -252,7 +252,7 @@ function ServiceDetailsForm({
     error !== null && SERVICE_DETAILS_ERROR_FIELD[error] === field ? DETAILS_ERROR_MESSAGE[error] : undefined;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div data-support-write className="flex flex-col gap-3">
       <Field label={dayScreenStrings.serviceNameLabel} id={`${idPrefix}-name`} error={errorFor("name")}>
         <TextInput type="text" value={name} onChange={(e) => setName(e.target.value)} />
       </Field>

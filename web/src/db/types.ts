@@ -596,6 +596,7 @@ export interface DevicePreference {
 
 export interface DeviceRegistration {
   id: string;
+  support?: { expires_at: string; include_clinical: boolean; admin_name: string };
   org_id: string;
   /** Last organization enforcement timestamp reported by pull or bootstrap. */
   identity_enforced_at?: string | null;

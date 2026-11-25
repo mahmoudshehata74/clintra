@@ -155,7 +155,7 @@ export default function ScheduleExceptionsSection({ practitionerId }: { practiti
       )}
       {deleteFailed && <SaveFailedLine />}
 
-      <div className="flex flex-col gap-3 rounded-card border border-rule bg-field p-3.5">
+      <div data-support-write className="flex flex-col gap-3 rounded-card border border-rule bg-field p-3.5">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
           <Field label={S.exceptionDateLabel} id="exception-date" error={error ?? undefined}>
             <TextInput

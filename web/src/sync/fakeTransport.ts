@@ -18,6 +18,17 @@ import type {
   WireAuditRow,
 } from "./transport";
 
+const SUPPORT_SESSIONS_KEY = "support_sessions";
+
+async function fakeSupportSessions(db: ClintraDatabase): Promise<NonNullable<PullSinceResult["supportSessions"]>> {
+  const row = await db.preferences.get(SUPPORT_SESSIONS_KEY);
+  if (!row) return [];
+  try {
+    const parsed: unknown = JSON.parse(row.value);
+    return Array.isArray(parsed) ? parsed as NonNullable<PullSinceResult["supportSessions"]> : [];
+  } catch { return []; }
+}
+
 /** The fields a pushed audit row carries, in one order, to compare a resend with what is stored. */
 function wireAuditRowOf(row: WireAuditRow): WireAuditRow {
   return {
@@ -276,7 +287,7 @@ export class FakeTransport implements SyncTransport, AuditTransport {
       rev: (op.payload as { rev?: number } | null)?.rev ?? 1,
       payload: op.action === AuditAction.Delete ? null : (op.payload as Record<string, unknown>),
     }));
-    return { cursor: newCursor, hasMore: false, changes };
+    return { cursor: newCursor, hasMore: false, changes, supportSessions: await fakeSupportSessions(this.db) };
   }
 
   /**
@@ -347,7 +358,7 @@ export class FakeTransport implements SyncTransport, AuditTransport {
    * job, tested against the real endpoint's behavior.
    */
   async pullBootstrap(): Promise<PullSinceResult> {
-    return { cursor: "3:", hasMore: false, changes: [] };
+    return { cursor: "3:", hasMore: false, changes: [], supportSessions: await fakeSupportSessions(this.db) };
   }
 }
 

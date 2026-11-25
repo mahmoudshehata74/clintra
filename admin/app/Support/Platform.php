@@ -19,6 +19,7 @@ final class Platform
         'admin_revoke_device' => ['uuid', 'text', 'uuid', 'uuid'],
         'admin_request_code' => ['uuid', 'text', 'jsonb', 'uuid'],
         'admin_approve_code' => ['uuid', 'text', 'uuid', 'text', 'uuid'],
+        'admin_open_support_session' => ['uuid', 'text', 'jsonb', 'uuid'],
     ];
 
     public function whoami(?string $session): array
@@ -93,6 +94,12 @@ final class Platform
     public function approveCode(string $session, mixed $otp, string $approval, string $hash): array
     {
         return $this->call('admin_approve_code', [$session, is_string($otp) ? $otp : null, $approval, $hash, (string) Str::uuid()]);
+    }
+
+    public function openSupport(string $session, mixed $otp, string $codeHash, string $deviceId, string $exchangeHash): array
+    {
+        return $this->call('admin_open_support_session', [$session, is_string($otp) ? $otp : null,
+            ['code_hash' => $codeHash, 'device_id' => $deviceId, 'exchange_hash' => $exchangeHash], (string) Str::uuid()]);
     }
 
     public function setOrgDisabled(string $session, mixed $otp, string $org, mixed $disabled, mixed $reason): array

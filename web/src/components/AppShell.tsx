@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { isSupportMode } from "../auth/supportMode";
+import { identityChipName } from "../auth/supportIdentity";
 import { authStrings } from "../auth/authStrings";
 import { clearActiveSession } from "../auth/session";
 import { useActingStaffName } from "../auth/useActingMembership";
@@ -28,6 +30,7 @@ interface AppShellProps {
    * practitioner whose day it is (reference screen 9's `.appbar .who`).
    */
   whoName?: string;
+  supportAdminName?: string;
   children: ReactNode;
 }
 
@@ -204,10 +207,10 @@ function BrandLogo() {
  * day the screen below it is actually showing (a dev-only affordance can pin
  * that away from the real current day).
  */
-function AppBar({ title, today, whoName }: { title: ReactNode; today: ClinicDay; whoName?: string }) {
+function AppBar({ title, today, whoName, supportAdminName }: { title: ReactNode; today: ClinicDay; whoName?: string; supportAdminName?: string }) {
   const actingName = useActingStaffName();
   const { dateLine, weekdayLine } = formatAppBarDate(today);
-  const shownName = whoName ?? actingName;
+  const shownName = identityChipName(isSupportMode(), whoName, actingName, supportAdminName);
 
   return (
     <header className="sticky top-0 z-40 flex flex-wrap items-center gap-3.5 bg-[linear-gradient(135deg,var(--color-ink)_0%,var(--color-ink-2)_100%)] px-5 py-[11px] text-on-dark shadow-m print:hidden">
@@ -228,18 +231,18 @@ function AppBar({ title, today, whoName }: { title: ReactNode; today: ClinicDay;
 
       {shownName && (
         <div className="flex items-center gap-2 rounded-control border border-glass/[0.14] bg-glass/[0.06] px-3 py-[5px] text-xs text-on-dark">
-          <span className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[11px] font-bold text-on-copper">
+          {!isSupportMode() && <span className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-copper)_0%,var(--color-copper-2)_100%)] text-[11px] font-bold text-on-copper">
             {shownName.charAt(0)}
-          </span>
+          </span>}
           <span>{shownName}</span>
         </div>
       )}
 
       <AppearanceToggle />
 
-      <Button variant="onDark" size="sm" onClick={() => clearActiveSession()}>
+      {!isSupportMode() && <Button variant="onDark" size="sm" onClick={() => clearActiveSession()}>
         {authStrings.lockButtonLabel}
-      </Button>
+      </Button>}
 
       <div className="flex flex-col gap-px border-s border-glass/[0.13] ps-3 text-end">
         <span className="text-[12.5px] font-semibold tracking-[-0.01em] text-on-dark tabular-nums">{dateLine}</span>
@@ -257,6 +260,7 @@ export default function AppShell({
   title,
   today,
   whoName,
+  supportAdminName,
   children,
 }: AppShellProps) {
   const items = navItemsFor(role, hasPractitioner, useIdentityAccess());
@@ -279,6 +283,7 @@ export default function AppShell({
           return (
             <button
               key={item.key}
+              data-support-nav
               type="button"
               onClick={() => onSelect(item.key)}
               aria-current={isActive ? "page" : undefined}
@@ -291,7 +296,7 @@ export default function AppShell({
         })}
       </nav>
       <div className="min-w-0 flex-1 pb-16 sm:pb-0">
-        <AppBar title={title} today={today} whoName={whoName} />
+        <AppBar title={title} today={today} whoName={whoName} supportAdminName={supportAdminName} />
         {children}
       </div>
     </div>

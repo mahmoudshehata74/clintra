@@ -607,8 +607,9 @@ B3 requires 000059. Run `composer install --no-dev --prefer-dist`,
 `php artisan filament:assets`, `php artisan config:cache`, `php artisan view:cache`
 in the panel release. Set APP_ENV=production, APP_DEBUG=false, APP_URL to its
 HTTPS domain, DB host/port/database, DB_SSLMODE=require (or verify-full with your
-provider's CA), and DB_ADMIN_APP_PASSWORD. Never run panel migrations or use an
-owner/clinic-app/superuser credential here. Required PHP extensions include
+provider's CA), and DB_ADMIN_APP_PASSWORD. Set `CLINIC_APP_URL` to the clinic
+web app's HTTPS origin; the one-time support link opens its `/#support=` entry.
+Never run panel migrations or use an owner/clinic-app/superuser credential here. Required PHP extensions include
 pdo_pgsql, intl and zip. Direct packages are pinned in the panel manifest;
 generated locks/assets/caches remain uncommitted under the repository rule.
 

@@ -154,7 +154,7 @@ export default function PaymentSheet({ invoiceId, onDismiss, onRecorded }: Payme
           />
         </Field>
 
-        <div className="flex flex-col gap-[5px]">
+        <div data-support-write className="flex flex-col gap-[5px]">
           <label className="text-[11px] font-bold tracking-[0.02em] text-muted">{dayScreenStrings.paymentMethodLabel}</label>
           <ToggleGroup
             variant="service"

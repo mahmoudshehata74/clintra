@@ -378,7 +378,7 @@ export default function CashCloseSheet({
               <Button variant="outline" disabled={isMarkingAll} onClick={handleMarkAllNoShow}>
                 {dayScreenStrings.cashClosePastDueBulkAction}
               </Button>
-              <label className="flex items-center gap-2 text-[12.5px] text-muted">
+              <label data-support-write className="flex items-center gap-2 text-[12.5px] text-muted">
                 <input
                   type="checkbox"
                   checked={acknowledgedPastDue}
