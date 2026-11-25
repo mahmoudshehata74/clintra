@@ -28,9 +28,9 @@ Design A phases A1–A4 are merged (PRs #61–#65;
 `api/app/Http/Controllers/IdentityRolloutController.php`). Design B phases
 B1–B6 are merged (PRs #69–#75; `admin/app/Support/Platform.php`,
 `web/src/screens/day/SupportPanel.tsx`). Design C corrections are merged
-(PRs #58–#59; `web/src/screens/visit/VisitCorrection.tsx`); its post-identity
-revision insert policy tightening remains under review in PR #76
-(`api/database/migrations/2026_09_12_000040_create_visit_form_revisions_table.php`).
+(PRs #58–#59; `web/src/screens/visit/VisitCorrection.tsx`). The post-identity
+revision insert policy is tightened in PR #76, migration `000063`
+(`api/database/migrations/2026_09_12_000063_tighten_visit_form_revision_actor_policy.php`).
 
 ## Provisioning
 Run `php artisan clintra:provision` on the Linux server (or in WSL), in a
