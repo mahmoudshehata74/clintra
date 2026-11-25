@@ -438,8 +438,9 @@ tests as above, including rewriting the existing late-edit cases.
    device has updated (section 8).
 8. **Ship before the identity design?** Recommended: yes, with
    `corrected_by` held to the visit's doctor or an owner of the organization
-   (a claim, the known gap); tighten the insert policy to
-   `current_membership()` when the identity design lands (6.2).
+   (a claim, the known gap); migration `2026_09_12_000063` tightens the
+   insert policy to `current_membership()` for enforced organizations (6.2).
+   Unenforced organizations retain the same-organization actor claim rule.
 9. **A limit on the number of corrections?** Recommended: none; each is
    kept and shown.
 10. **Concurrent corrections?** Recommended: the first to reach the server
@@ -465,10 +466,11 @@ Every open question in section 12 takes its recommended answer:
 7. The web release ships first; the `visit_form_data_completed_guard`
    trigger comes in a separate, second migration once every device has
    updated.
-8. Ship before the identity design, with `corrected_by` held to the visit's
-   doctor or an owner of the organization (a claim, the known gap); the
-   insert policy tightens to `current_membership()` when the identity design
-   lands.
+8. Shipped before the identity design, with `corrected_by` held to the visit's
+   doctor or an owner of the organization (a claim). Migration
+   `2026_09_12_000063` tightens the insert policy to `current_membership()`
+   for enforced organizations; unenforced organizations retain the
+   same-organization actor claim rule.
 9. No limit on the number of corrections; each is kept and shown.
 10. Concurrent corrections: the first to reach the server wins; the other is
     refused whole, shown in the review with its text, and never merged.
