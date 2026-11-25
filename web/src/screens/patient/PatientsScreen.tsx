@@ -49,7 +49,7 @@ export default function PatientsScreen() {
     <PageMain className="flex flex-col gap-3.5 pt-6 pb-16 print:hidden">
       <Card>
         <div className="px-[18px] py-4">
-          <Field label={T.searchLabel} id="patient-search">
+          <Field label={T.searchLabel} id="patient-search" supportNavigation>
             <TextInput
               data-support-nav
               type="text"
@@ -59,7 +59,7 @@ export default function PatientsScreen() {
               onChange={(event) => setQuery(event.target.value)}
             />
           </Field>
-          <div className="mt-3 flex items-center gap-2.5">
+          <div data-support-write className="mt-3 flex items-center gap-2.5">
             <Switch checked={showArchived} onCheckedChange={setShowArchived} label={T.showArchivedLabel} />
             <span aria-hidden="true" className="text-xs text-muted">
               {T.showArchivedLabel}

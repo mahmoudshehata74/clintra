@@ -47,7 +47,7 @@ export function SetRow({ layout, muted = false, children, editor }: SetRowProps)
       className={`grid items-center gap-3 rounded-card border border-rule bg-card px-3.5 py-3 ${ROW_COLUMNS[layout]} ${muted ? "opacity-60" : "opacity-100"}`}
     >
       {children}
-      {editor && <div className="col-span-full border-t border-hair pt-3">{editor}</div>}
+      {editor && <div data-support-write className="col-span-full border-t border-hair pt-3">{editor}</div>}
     </li>
   );
 }

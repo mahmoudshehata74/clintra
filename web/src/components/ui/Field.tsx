@@ -24,6 +24,7 @@ export interface FieldProps {
   hint?: string;
   error?: string;
   children: ReactElement<FieldControlProps>;
+  supportNavigation?: boolean;
 }
 
 /**
@@ -38,13 +39,13 @@ export interface FieldProps {
  * when `error` is set, `aria-invalid` plus `aria-describedby` pointing at
  * the error text; otherwise `aria-describedby` points at the hint, if any.
  */
-export default function Field({ label, id, hint, error, children }: FieldProps) {
+export default function Field({ label, id, hint, error, children, supportNavigation = false }: FieldProps) {
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
   const describedBy = error ? errorId : hint ? hintId : undefined;
 
   return (
-    <div className="flex flex-col gap-[5px]">
+    <div data-support-write={supportNavigation ? undefined : ""} className="flex flex-col gap-[5px]">
       <label htmlFor={id} className="text-[11px] font-bold tracking-[0.02em] text-muted">
         {label}
       </label>

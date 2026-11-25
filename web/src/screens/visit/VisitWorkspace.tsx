@@ -712,6 +712,7 @@ function RxItemForm({ initial, confirmLabel, onSubmit, onDone }: RxItemFormProps
 
   return (
     <form
+      data-support-write
       onSubmit={(event) => void handleSubmit(event)}
       className="flex flex-col gap-3 rounded-control border border-copper-line bg-card p-3"
       noValidate

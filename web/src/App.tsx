@@ -318,6 +318,7 @@ export default function App() {
         }
         today={dayScreenToday}
         whoName={isDoctorViewShown && doctorPractitionerName ? withDoctorPrefix(doctorPractitionerName) : undefined}
+        supportAdminName={identityDevice?.support?.admin_name}
       >
         <OrganizationSuspensionNotice inContentFlow />
         <CodeNoticeBanner inContentFlow />

@@ -139,13 +139,13 @@ export default function Sheet({ onDismiss, size = "md", children }: SheetProps) 
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onDismiss, stackToken]);
 
-  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+  function handlePointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
     setIsDragging(true);
     dragStartYRef.current = event.clientY;
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
-  function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+  function handlePointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
     if (!isDragging || dragStartYRef.current === null) {
       return;
     }
@@ -179,7 +179,7 @@ export default function Sheet({ onDismiss, size = "md", children }: SheetProps) 
 
   return (
     <>
-      <div className={`fixed inset-0 ${BACKDROP_LAYER[layer]} bg-ink/40`} onClick={onDismiss} aria-hidden="true" />
+      <button type="button" data-support-nav aria-label="إغلاق" className={`fixed inset-0 ${BACKDROP_LAYER[layer]} bg-ink/40`} onClick={onDismiss} />
       {/* pointer-events-none: this box spans the viewport from the top gap
           (top-6 — see this component's doc comment) down to the bottom,
           mobile bottom-bar height excluded, so the dialog panel inside it
@@ -199,9 +199,13 @@ export default function Sheet({ onDismiss, size = "md", children }: SheetProps) 
             its plain content, neither of which has room reserved for it.
             Not in the prototype — it's this app's own affordance for the
             drag-down gesture below. */}
-        <div
+        <button
+          type="button"
+          data-support-nav
+          aria-label="إغلاق"
           className="pointer-events-auto mb-1.5 h-1.5 w-12 shrink-0 touch-none rounded-full bg-card/70"
           style={dragTransform}
+          onClick={onDismiss}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}

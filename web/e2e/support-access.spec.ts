@@ -15,9 +15,25 @@ async function captureThemes(page: Page, name: string, project: string) {
   await page.emulateMedia({ colorScheme: "light" });
 }
 async function expectReadOnlyNavigation(page: Page) {
-  expect(await page.locator("button:visible").evaluateAll((buttons) => buttons.filter((button) =>
-    !button.hasAttribute("data-support-nav") && !button.closest("[data-support-navigation]")))).toHaveLength(0);
-  await expect(page.locator("textarea:visible, select:visible, input:visible:not([data-support-nav])")).toHaveCount(0);
+  const offenders = await page.locator("body").evaluate((body) => {
+    const visible = (element: Element) => {
+      const style = getComputedStyle(element);
+      return style.display !== "none" && style.visibility !== "hidden" && element.getClientRects().length > 0;
+    };
+    const describe = (element: Element) => `${element.tagName.toLowerCase()}: ${(element.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 100) || element.getAttribute("aria-label") || element.getAttribute("placeholder") || "(empty)"}`;
+    const controls = [...body.querySelectorAll("*")]
+      .filter((element) => visible(element) && !element.closest("[data-support-nav]")
+        && !element.closest("[data-support-navigation]")
+        && (element.matches("button, a, input, select, textarea, [role=button], [tabindex]")
+          || (getComputedStyle(element).cursor === "pointer" && getComputedStyle(element.parentElement ?? body).cursor !== "pointer")));
+    const orphanLabels = [...body.querySelectorAll("label, legend")].filter((element) => {
+      if (!visible(element)) return false;
+      const control = element instanceof HTMLLabelElement ? element.control : element.closest("fieldset")?.querySelector("input, select, textarea");
+      return control !== null && control !== undefined && !visible(control);
+    });
+    return [...controls, ...orphanLabels].map(describe);
+  });
+  expect(offenders, `Visible support write affordances:\n${offenders.join("\n")}`).toEqual([]);
 }
 
 async function writeFakeSessions(page: Page, sessions: unknown[]) {
@@ -125,6 +141,10 @@ test("support entry cleans the URL, stays read only, and wipes only support data
   await supportPage.goto("/?seedDay=1#support=CLT-7F3K-9QRT-4XWM-2BCD");
   await expect(supportPage).toHaveURL(/\?seedDay=1$/);
   await expect(supportPage.locator("[data-support-device]")).toContainText("جهاز دعم — قراءة بس — بينتهي");
+  await expect(supportPage.getByText(S.emptySlotQuickActionLabel, { exact: true })).toHaveCount(0);
+  await expect(supportPage.locator("header").first()).toContainText("دعم كلينترا — مسؤول الدعم");
+  await expect(supportPage.locator("header").first()).not.toContainText(OWNER_NAME);
+  await expect(supportPage.locator("header").first().getByRole("button", { name: /قفل|تبديل/ })).toHaveCount(0);
   await expect(supportPage.getByText("منى عبد الله").first()).toBeVisible();
   await expectReadOnlyNavigation(supportPage);
   await captureThemes(supportPage, "support-day", testInfo.project.name);
@@ -133,10 +153,34 @@ test("support entry cleans the URL, stays read only, and wipes only support data
   await expect(supportPage.getByRole("list", { name: "نتايج البحث" }).getByText("منى عبد الله")).toBeVisible();
   await expectReadOnlyNavigation(supportPage);
   await captureThemes(supportPage, "support-patients", testInfo.project.name);
-  await sidebar(supportPage).getByRole("button", { name: SIDEBAR.navSettings, exact: true }).click();
+  await supportPage.getByRole("list", { name: "نتايج البحث" }).getByRole("button").first().click();
+  await expectReadOnlyNavigation(supportPage);
+  const profileTabs = supportPage.locator("main:visible [data-support-navigation] button:visible");
+  const tabCount = await profileTabs.count();
+  expect(tabCount).toBeGreaterThan(0);
+  for (let index = 0; index < tabCount; index++) {
+    await profileTabs.nth(index).click();
+    await expectReadOnlyNavigation(supportPage);
+  }
+  await captureThemes(supportPage, "support-patient-profile", testInfo.project.name);
+  await supportPage.getByRole("button", { name: /رجوع|النتايج|البحث/ }).first().click();
+  await sidebar(supportPage).getByRole("button", { name: SIDEBAR.navMessages, exact: true }).click();
+  await expectReadOnlyNavigation(supportPage);
+  await captureThemes(supportPage, "support-messages", testInfo.project.name);
+  await sidebar(supportPage).getByRole("button", { name: SIDEBAR.navReports, exact: true }).click();
+  await expectReadOnlyNavigation(supportPage);
+  await captureThemes(supportPage, "support-reports", testInfo.project.name);
+  await sidebar(supportPage).getByRole("button", { name: SIDEBAR.navAudit, exact: true }).click();
   await expect(supportPage.getByRole("dialog").first()).toBeVisible();
   await expectReadOnlyNavigation(supportPage);
-  await captureThemes(supportPage, "support-settings", testInfo.project.name);
+  await captureThemes(supportPage, "support-audit", testInfo.project.name);
+  await sidebar(supportPage).getByRole("button", { name: SIDEBAR.navSettings, exact: true }).click();
+  await expect(supportPage.getByRole("dialog").first()).toBeVisible();
+  for (const [tab, name] of [[S.settingsHoursTab, "hours"], [S.settingsServicesTab, "services"], [S.settingsStaffTab, "staff"], [S.settingsPractitionersTab, "practitioners"]] as const) {
+    await supportPage.getByRole("dialog").first().getByRole("button", { name: tab, exact: true }).click();
+    await expectReadOnlyNavigation(supportPage);
+    await captureThemes(supportPage, `support-settings-${name}`, testInfo.project.name);
+  }
   await sidebar(supportPage).getByRole("button", { name: SIDEBAR.navVisit, exact: true }).click();
   await expectReadOnlyNavigation(supportPage);
   await captureThemes(supportPage, "support-visit", testInfo.project.name);

@@ -4,9 +4,8 @@ import Switch from "../../components/ui/Switch";
 import ToggleGroup from "../../components/ui/ToggleGroup";
 import { db } from "../../db/database";
 import { useLiveQuery } from "../../db/useLiveQuery";
-import { formatNoticeTime } from "../../sync/codeNotices";
 import { endSupportSession, mintSupportCode } from "../../sync/supportAccess";
-import { removeSupportSession, useSupportSessions } from "../../sync/supportSessions";
+import { ownerSupportSessionText, removeSupportSession, useSupportSessions } from "../../sync/supportSessions";
 import { useOnlineStatus } from "../../sync/useOnlineStatus";
 import { SetBody, SettingsFooter } from "./SettingsLayout";
 import Sheet from "./Sheet";
@@ -44,7 +43,7 @@ export default function SupportPanel({ orgId }: { orgId: string }) {
 
   return <>
     <SetBody>
-      <div className="flex flex-col gap-4 rounded-card border border-rule bg-card p-4">
+      <div data-support-write className="flex flex-col gap-4 rounded-card border border-rule bg-card p-4">
         <h3 className="font-semibold">إنشاء كود دعم</h3>
         {!online && <p role="alert" className="text-[12.5px] text-danger">إنشاء كود الدعم محتاج اتصال بالإنترنت</p>}
         <div className="space-y-2"><p className="text-xs font-bold text-muted">المدة</p>
@@ -66,7 +65,7 @@ export default function SupportPanel({ orgId }: { orgId: string }) {
         {message && <p role="alert" className="text-sm text-danger">{message}</p>}
       </div>
       {sessions.map((session) => <div key={session.device_id} className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-card border border-rule bg-card p-4">
-        <p>جهاز دعم كلينترا — {session.admin_name} — بينتهي <bdi dir="ltr">{formatNoticeTime(session.expires_at)}</bdi></p>
+        <p>{ownerSupportSessionText(session.admin_name, session.expires_at)}</p>
         <Button variant="danger" size="sm" disabled={!online || busy} onClick={() => setConfirmId(session.device_id)}>إنهاء الدعم دلوقتي</Button>
       </div>)}
     </SetBody>

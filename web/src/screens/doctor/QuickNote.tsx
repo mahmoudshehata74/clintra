@@ -49,6 +49,7 @@ export default function QuickNote({ visit }: QuickNoteProps) {
 
   return (
     <form
+      data-support-write
       className="flex flex-wrap items-center gap-2.5 border-t border-dashed border-copper-line pt-3"
       onSubmit={(event) => {
         event.preventDefault();

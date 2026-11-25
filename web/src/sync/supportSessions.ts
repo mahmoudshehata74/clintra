@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { PullSinceResult } from "./transport";
-import { formatNoticeTime } from "./codeNotices";
+import { formatSlashDate } from "../domain/slashDate";
+import { clockTimeInCairo, todayInCairo } from "../domain/time";
 
 export type SupportSession = NonNullable<PullSinceResult["supportSessions"]>[number];
 const listeners = new Set<() => void>();
@@ -25,9 +26,17 @@ export function useSupportSessions(): SupportSession[] {
   return useSyncExternalStore(subscribeSupportSessions, getSupportSessions, getSupportSessions);
 }
 
+export function formatSupportTime(instant: string): string {
+  return `${formatSlashDate(todayInCairo(new Date(instant)))} · ${clockTimeInCairo(instant)}`;
+}
+
 export function clinicSupportText(expiresAt: string): string {
-  return `فريق كلينترا عنده وصول للقراءة بس لحد ${formatNoticeTime(expiresAt)}`;
+  return `فريق كلينترا عنده وصول للقراءة بس لحد ${formatSupportTime(expiresAt)}`;
 }
 export function supportDeviceText(expiresAt: string): string {
-  return `جهاز دعم — قراءة بس — بينتهي ${formatNoticeTime(expiresAt)}`;
+  return `جهاز دعم — قراءة بس — بينتهي ${formatSupportTime(expiresAt)}`;
+}
+
+export function ownerSupportSessionText(adminName: string, expiresAt: string): string {
+  return `جهاز دعم كلينترا — ${adminName} — بينتهي ${formatSupportTime(expiresAt)}`;
 }

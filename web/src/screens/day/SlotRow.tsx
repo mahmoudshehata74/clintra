@@ -104,11 +104,11 @@ export default function SlotRow({
           >
             {dayScreenStrings.emptySlotQuickActionLabel}
           </Button>
-        ) : (
+        ) : !isSupportMode() ? (
           <span className="text-[11.5px] font-semibold text-muted" aria-hidden="true">
             {dayScreenStrings.emptySlotQuickActionLabel}
           </span>
-        )}
+        ) : null}
       </li>
     );
   }

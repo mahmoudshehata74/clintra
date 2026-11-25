@@ -2,9 +2,11 @@
 
 /* One support-mode control policy: view navigation stays available; editing controls disappear. */
 html[data-support-mode="true"] button:not([data-support-nav]),
+html[data-support-mode="true"] a:not([data-support-nav]),
 html[data-support-mode="true"] input:not([data-support-nav]),
 html[data-support-mode="true"] textarea,
-html[data-support-mode="true"] select { display:none !important; }
+html[data-support-mode="true"] select,
+html[data-support-mode="true"] [data-support-write] { display:none !important; }
 html[data-support-mode="true"] [data-support-navigation] button { display:inline-flex !important; }
 
 /* IBM Plex Sans Arabic, self-hosted (SIL OFL 1.1, see /fonts/OFL.txt). */

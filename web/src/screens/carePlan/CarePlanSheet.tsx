@@ -565,7 +565,7 @@ function GroupsEditor({
         const groupErrors = errors.groups[index] ?? {};
         const heading = `${T.groupHeading} ${index + 1}`;
         return (
-          <fieldset key={group.key} aria-label={heading} className="m-0 flex flex-col gap-3 rounded-control border border-rule bg-field p-3">
+          <fieldset data-support-write key={group.key} aria-label={heading} className="m-0 flex flex-col gap-3 rounded-control border border-rule bg-field p-3">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-[0.05em] text-muted">{heading}</span>
               {removable && (
