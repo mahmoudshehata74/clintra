@@ -1794,9 +1794,11 @@ clintra_app holds SELECT and INSERT only, PUBLIC nothing, and there is no
 UPDATE or DELETE policy, so either is refused on the grant (`42501`). The
 SELECT policy and the INSERT policy's visit test are the visits scope
 (`org_id = current_org()` and the visit within `allowed_locations()` and
-`allowed_practitioners()`); the INSERT policy also holds `corrected_by` and
-`device_id` to the organization. Each `IN` sits inside an `AND` with
-`org_id = current_org()`.
+`allowed_practitioners()`); the INSERT policy also holds `device_id` to the
+organization. Migration `2026_09_12_000063` holds `corrected_by` to
+`current_membership()` when identity is enforced; until then it accepts the
+same-organization actor claim, matching `SyncOpApplier::claimsActorInOrg()`.
+Each `IN` sits inside an `AND` with `org_id = current_org()`.
 
 `visit_form_revision_check()` (BEFORE INSERT, as the invoker, so its reads go
 through the caller's RLS) refuses, with `55000`, a revision that does not
@@ -1815,9 +1817,11 @@ applier refuses them.
 `SyncOpApplier`'s correction rule gives the same reasons before writing, sees
 the whole group (`SyncPushController` passes it), and maps the triggers'
 messages (`stateViolationReason`; `conflict_day_closed` matches only its own
-message now). `corrected_by` is an actor column (`actor_not_in_org`), a claim
-until the identity design pins it to `current_membership()` (the design's
-6.2). A revision's `device_id` is the token's.
+message now). `corrected_by` is an actor column: in an unenforced organization
+it is a same-organization claim (`actor_not_in_org`); in an enforced
+organization it must name the proven person (`actor_mismatch`), and the insert
+policy independently requires `current_membership()` (the design's 6.2).
+A revision's `device_id` is the token's.
 
 ## clintra_fixtures — test-only, never production
 

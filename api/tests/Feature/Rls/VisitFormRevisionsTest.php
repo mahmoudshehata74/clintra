@@ -4,6 +4,8 @@ use App\Models\Device;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Support\IdentityHarness;
+use Tests\Support\TestKey;
 
 /**
  * Clinical corrections after completion (docs/design-clinical-corrections.md,
@@ -326,9 +328,25 @@ test('the policies are the design\'s SELECT and INSERT, as Postgres deparses the
     expect($insert->qual)->toBeNull();
     expect(normalizeSql($insert->with_check))->toBe(
         "((org_id = current_org()) AND {$visitScope}"
-        .' AND (corrected_by IN ( SELECT memberships.id FROM memberships WHERE (memberships.org_id = current_org())))'
+        .' AND (corrected_by IN ( SELECT memberships.id FROM memberships WHERE ((memberships.org_id = current_org())'
+        .' AND ((( SELECT organizations.identity_enforced_at FROM organizations WHERE (organizations.id = current_org())) IS NULL)'
+        .' OR (memberships.id = current_membership())))))'
         .' AND (device_id IN ( SELECT device.id FROM device WHERE (device.org_id = current_org()))))'
     );
+});
+
+test('pg_policies on clintra_test exposes the enforced actor check and the original unenforced org claim', function () {
+    expect(DB::connection('pgsql_owner')->getDatabaseName())->toBe('clintra_test');
+
+    $policy = DB::connection('pgsql_owner')->table('pg_policies')
+        ->where('schemaname', 'public')->where('tablename', 'visit_form_revisions')
+        ->where('policyname', 'visit_form_revisions_insert')->first();
+
+    expect($policy)->not->toBeNull();
+    expect($policy->cmd)->toBe('INSERT');
+    expect(normalizeSql($policy->with_check))->toContain('memberships.org_id = current_org()');
+    expect(normalizeSql($policy->with_check))->toContain('organizations.identity_enforced_at');
+    expect(normalizeSql($policy->with_check))->toContain('memberships.id = current_membership()');
 });
 
 test('both triggers and the rev trigger are attached, the guard firing before visit_form_data\'s own rev trigger', function () {
@@ -660,6 +678,47 @@ test('the owner corrects another doctor\'s visit', function () {
         $correction = correctionOps($fixture, ['corrected_by' => $fixture['ownerId']]);
         $results = pushOps($fixture['credential']['token'], $correction['ops'])->assertOk()->json('results');
         expect(array_column($results, 'status'))->toBe(['accepted', 'accepted']);
+    });
+});
+
+test('an enforced correction rejects another actor and accepts the proven doctor with no partial write', function () {
+    withCorrectionFixture(function (array $fixture) {
+        $key = TestKey::make();
+        $this->fx()->table('device')->where('id', $fixture['credential']['deviceId'])->update([
+            'public_key' => json_encode($key->jwk), 'public_key_bound_at' => now()->toIso8601String(),
+        ]);
+        $this->fx()->table('organizations')->where('id', $fixture['orgId'])->update(['identity_enforced_at' => now()->toIso8601String()]);
+        $org = [
+            'orgId' => $fixture['orgId'], 'deviceId' => $fixture['credential']['deviceId'],
+            'token' => $fixture['credential']['token'], 'deviceKey' => $key,
+        ];
+        $doctor = IdentityHarness::credential($org, $fixture['doctorId']);
+
+        $claimed = correctionOps($fixture, ['corrected_by' => $fixture['ownerId']]);
+        $claimedOps = array_map(fn (array $op) => IdentityHarness::signOp($org, $op, $doctor), $claimed['ops']);
+        $results = IdentityHarness::send($org, 'POST', '/api/sync/push', ['ops' => $claimedOps])->assertOk()->json('results');
+        expect($results[0])->toBe(['op_id' => $claimed['revision']['op_id'], 'status' => 'rejected', 'reason' => 'actor_mismatch']);
+        expect($this->fx()->table('visit_form_revisions')->where('org_id', $fixture['orgId'])->count())->toBe(0);
+        expect(storedForm($fixture['formId']))->toBe(['data' => STORED_FORM, 'rev' => 1]);
+
+        $own = correctionOps($fixture, ['corrected_by' => $fixture['doctorId']]);
+        $ownOps = array_map(fn (array $op) => IdentityHarness::signOp($org, $op, $doctor), $own['ops']);
+        $accepted = IdentityHarness::send($org, 'POST', '/api/sync/push', ['ops' => $ownOps])->assertOk()->json('results');
+        expect(array_column($accepted, 'status'))->toBe(['accepted', 'accepted']);
+        expect($this->fx()->table('visit_form_revisions')->where('id', $own['revision']['entity_id'])->value('corrected_by'))
+            ->toBe($fixture['doctorId']);
+    });
+});
+
+test('the enforced insert policy rejects a different same-org actor even if the revision trigger permits that doctor', function () {
+    withCorrectionFixture(function (array $fixture) {
+        $this->fx()->table('organizations')->where('id', $fixture['orgId'])->update(['identity_enforced_at' => now()->toIso8601String()]);
+
+        $refusal = insertRevisionAsApp($fixture, revisionRow($fixture), $fixture['ownerId']);
+        expect($refusal[0])->toBe('42501');
+        expect($this->fx()->table('visit_form_revisions')->where('org_id', $fixture['orgId'])->exists())->toBeFalse();
+
+        expect(insertRevisionAsApp($fixture, revisionRow($fixture, ['corrected_by' => $fixture['ownerId']]), $fixture['ownerId']))->toBeNull();
     });
 });
 
