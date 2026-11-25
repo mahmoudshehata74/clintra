@@ -329,9 +329,9 @@ them as one rule would be wrong:
   implements the (revised) slot-conflict rule (`resolveSlotConflict`,
   always `rejected`/`conflict_slot_taken` on collision) and the
   edit-conflict `base_rev` check (`applyUpdate`/`applyDelete`,
-  `WHERE id = ? AND rev = ?`) exactly as decided here. Not yet true
-  client-side: `web/src/db/types.ts`'s `SyncOp` still carries no
-  `base_rev` field — that's `HttpTransport`'s job, a later step.
+  `WHERE id = ? AND rev = ?`) exactly as decided here. The client stores
+  `SyncOp.base_rev` (`web/src/db/types.ts`) and chains local updates before
+  push (`web/src/sync/baseRevChain.ts`, `web/src/sync/engine.ts`).
 
 ### 6. Which conflicts land in sync_review for a human, and which resolve silently? The brief says the assistant must never lose data.
 

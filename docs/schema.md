@@ -388,14 +388,13 @@ which membership activated it — needed once device registration issues a
 real Sanctum token, which must be bound to a specific membership as well
 as a specific device (`api/docs/rls.md`'s "Provisioning: the one door into
 an empty database" — the same bootstrapping concern applies to
-registration). Set once, at registration, to the owner membership whose
-phone + activation code activated the device; not reassigned afterward in
-v1 (there is no multi-staff API session yet — Layer 2's PIN switching
-stays local-only, per `docs/auth-plan.md`).
-
-Added in local database version 10 (API-side only so far — `web/src/db/database.ts`'s
-local `device` table does not yet have `membership_id`, since the web
-client does not yet talk to this endpoint); versions 1-9 are unchanged.
+registration). Registration returns the registering membership and a Sanctum
+token (`api/app/Http/Controllers/DeviceRegistrationController.php`); the web
+client stores both on its local `device` row (`web/src/db/registration.ts`,
+`web/src/db/types.ts`). Staff can sign in on the device with their own
+credentials. In an enforced organization the server verifies the person who
+signed each write (`api/app/Http/Controllers/SyncPushController.php`). The
+device token remains bound to the registering membership.
 
 ## v11 additions
 
@@ -429,14 +428,12 @@ same problem in two different concurrency models:
   constraint). `nextval()` on a real sequence is atomic under concurrency
   by construction, which a read-then-write pair never is.
 
-**Not yet reconciled**: the web's local counter and the API's identity
-column are two entirely separate sequences (per-device vs.
-database-global) with no relationship to each other today, because no
-sync mechanism exists yet that pushes a device's local `audit_log` rows to
-the API — see `docs/session-handoff.md`'s open items. Designing that
-reconciliation (whether the server re-numbers incoming rows, keeps a
-separate per-device sequence, or something else) is a later step, not
-decided by this version.
+The counters remain separate: the web's `audit_log.seq` orders writes on one
+device, while the API assigns a database-wide sequence on receipt. The web
+pushes local audit rows in local sequence order without sending that counter,
+then pulls other devices' rows into `remote_audit_log`
+(`web/src/sync/auditSync.ts`, `web/src/db/auditEntries.ts`,
+`api/app/Http/Controllers/DeviceAuditController.php`).
 
 ## v12 additions
 
