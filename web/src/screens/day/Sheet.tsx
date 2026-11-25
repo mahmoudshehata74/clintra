@@ -6,7 +6,6 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import OrganizationSuspensionNotice from "../../components/OrganizationSuspensionNotice";
 import CodeNoticeBanner from "../../components/CodeNoticeBanner";
 
 const DRAG_DISMISS_THRESHOLD_PX = 80;
@@ -220,7 +219,6 @@ export default function Sheet({ onDismiss, size = "md", children }: SheetProps) 
           role="dialog"
           aria-modal="true"
         >
-          {!isCovered && <OrganizationSuspensionNotice />}
           {!isCovered && <CodeNoticeBanner />}
           {children}
         </div>

@@ -117,10 +117,17 @@ test("a suspended clinic keeps local bookings and resumes on reconnect", async (
     await nav.getByRole("button", { name: label, exact: true }).click();
     const notice = await expectSuspensionInFlow(page);
     if (screen === 'audit' || screen === 'settings') {
-      await expect(page.getByRole('dialog').filter({ has: notice })).toBeVisible();
-      const control = page.getByRole('dialog').filter({ has: notice }).getByRole('button').first();
-      await expect(control).toBeVisible();
-      await control.click({ trial: true });
+      await expect(page.getByRole('dialog').first()).toBeVisible();
+      await expect(page.locator('[data-organization-suspension]')).toHaveCount(1);
+      await expect(page.getByRole('dialog').locator('[data-organization-suspension]')).toHaveCount(0);
+      await expect(notice).toBeVisible();
+    }
+    if (screen === 'audit') {
+      for (const colorScheme of ['light', 'dark'] as const) {
+        await page.emulateMedia({ colorScheme });
+        await page.screenshot({ path: `${shotDirectory("e2e/admin-shots")}/disabled-audit-sheet-${testInfo.project.name}-${colorScheme}.png`, fullPage: true });
+      }
+      await page.emulateMedia({ colorScheme: 'light' });
     }
     await page.screenshot({ path: `${shotDirectory("e2e/admin-shots")}/b2-review-${testInfo.project.name}-${screen}.png` });
   }
