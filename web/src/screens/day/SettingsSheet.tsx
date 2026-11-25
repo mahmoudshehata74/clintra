@@ -13,10 +13,12 @@ import ServicesPanel from "./ServicesPanel";
 import Sheet from "./Sheet";
 import SheetCardHead from "./SheetCardHead";
 import StaffPanel from "./StaffPanel";
+import SupportPanel from "./SupportPanel";
+import { isSupportMode } from "../../auth/supportMode";
 import { dayScreenStrings } from "./strings";
 import WorkingHoursPanel from "./WorkingHoursPanel";
 
-type Panel = "hours" | "services" | "staff" | "practitioners" | "rollout";
+type Panel = "hours" | "services" | "staff" | "practitioners" | "rollout" | "support";
 
 interface SettingsSheetProps {
   practitionerId: string;
@@ -31,6 +33,7 @@ const TAB_OPTIONS: readonly { value: Panel; label: string }[] = [
   { value: "staff", label: dayScreenStrings.settingsStaffTab },
   { value: "practitioners", label: dayScreenStrings.settingsPractitionersTab },
   { value: "rollout", label: text.rolloutTitle },
+  { value: "support", label: "دعم كلينترا" },
 ];
 
 /**
@@ -51,7 +54,8 @@ export default function SettingsSheet({ practitionerId, locationId, orgId, onDis
     if (value === "hours") return access.allows("schedules.manage");
     if (value === "services") return access.allows("services.manage");
     if (value === "staff") return access.allows("staff.manage");
-    if (value === "rollout") return Boolean(ownerId && ownerDevice);
+    if (value === "rollout") return Boolean(!isSupportMode() && ownerId && ownerDevice);
+    if (value === "support") return Boolean(!isSupportMode() && ownerId);
     return !access.enforced || access.member?.role === "owner";
   });
   const panel = available.some(({ value }) => value === selected) ? selected : available[0]?.value;
@@ -95,14 +99,14 @@ export default function SettingsSheet({ practitionerId, locationId, orgId, onDis
               title: dayScreenStrings.settingsStaffTab,
               subtitle: context ? `${context.activeStaffCount} ${dayScreenStrings.settingsStaffHeadActiveUnit}` : undefined,
             }
-          : { title: panel === "rollout" ? text.rolloutTitle : dayScreenStrings.settingsPractitionersTab, subtitle: undefined };
+          : { title: panel === "support" ? "دعم كلينترا" : panel === "rollout" ? text.rolloutTitle : dayScreenStrings.settingsPractitionersTab, subtitle: undefined };
 
   return (
     <Sheet onDismiss={onDismiss} size="lg">
       <SheetCardHead badge={dayScreenStrings.settingsButtonLabel} title={head.title} subtitle={head.subtitle} onDismiss={onDismiss} />
 
       {/* `.set-tabs` — the bar; the tabs themselves are the shared `.set-tab` ToggleGroup. */}
-      <div className="border-b border-hair bg-field px-[18px] py-2.5">
+      <div data-support-navigation className="border-b border-hair bg-field px-[18px] py-2.5">
         <ToggleGroup
           variant="tab"
           label={dayScreenStrings.settingsTabsGroupLabel}
@@ -118,6 +122,7 @@ export default function SettingsSheet({ practitionerId, locationId, orgId, onDis
       {panel === "staff" && <StaffPanel orgId={orgId} />}
       {panel === "practitioners" && <PractitionersPanel orgId={orgId} />}
       {panel === "rollout" && ownerId && <IdentityRolloutPanel key={ownerId} ownerId={ownerId} />}
+      {panel === "support" && ownerId && <SupportPanel orgId={orgId} />}
     </Sheet>
   );
 }

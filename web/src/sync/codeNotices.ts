@@ -74,9 +74,10 @@ export function useCodeNotices(): CodeNotice[] {
 }
 
 const cairoTime = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+export function formatNoticeTime(instant: string): string { return cairoTime.format(new Date(instant)); }
 
 export function codeNoticeText(notice: CodeNotice): string {
-  const time = cairoTime.format(new Date(notice.issued_at));
+  const time = formatNoticeTime(notice.issued_at);
   return notice.purpose === "owner_recovery"
     ? `فريق كلينترا أصدر كود استرجاع لحساب المالك في ${time}`
     : `فريق كلينترا أصدر كود تفعيل جهاز جديد للعيادة في ${time}`;

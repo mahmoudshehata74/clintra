@@ -6,6 +6,7 @@ import { seedDatabase } from "./seed";
 import {
   findGeneralFormDefinition,
   findVisitFormData,
+  readVisitFormValues,
   saveVisitFormField,
   VISIT_COMPLETED_ERROR,
   type VisitFormFieldValues,
@@ -21,6 +22,11 @@ function findByPosition<T extends { position: number }>(visits: readonly T[], po
 
 beforeEach(() => {
   db = new ClintraDatabase(`clintra-visit-form-test-${crypto.randomUUID()}`);
+});
+
+it("reads redacted clinical fields as empty values", () => {
+  const redacted = { data: { complaint: null, diagnosis: null } } as unknown as Parameters<typeof readVisitFormValues>[0];
+  expect(readVisitFormValues(redacted)).toEqual({ complaint: "", diagnosis: "" });
 });
 
 describe("findGeneralFormDefinition", () => {

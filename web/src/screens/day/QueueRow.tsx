@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { isSupportMode } from "../../auth/supportMode";
 import Badge from "../../components/ui/Badge";
 import Ltr from "../../components/Ltr";
 import Button from "../../components/ui/Button";
@@ -77,7 +78,7 @@ export default function QueueRow({
   reorder,
   isOutsideHours = false,
 }: QueueRowProps) {
-  const isTappable = Boolean(onPrimaryAction);
+  const isTappable = !isSupportMode() && Boolean(onPrimaryAction);
 
   const rowContent = (
     <>
@@ -144,6 +145,7 @@ export default function QueueRow({
       )}
       {onOpenVisitForm && (
         <button
+          data-support-nav
           type="button"
           onClick={onOpenVisitForm}
           className="shrink-0 rounded-chip bg-field px-2 py-0.5 text-xs text-muted hover:bg-green-wash hover:text-green"

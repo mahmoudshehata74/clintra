@@ -42,6 +42,14 @@ if ($orgIds === []) {
 }
 
 DB::connection('pgsql_owner')->table('platform.admin_approvals')->whereIn('org_id', $orgIds)->delete();
+// Exchange rows refer to support devices without carrying org_id themselves.
+$supportDeviceIds = $db->table('device')->whereIn('org_id', $orgIds)->where('kind', 'support')->pluck('id')->all();
+if ($supportDeviceIds !== []) {
+    DB::connection('pgsql_owner')->table('platform.support_exchanges')->whereIn('device_id', $supportDeviceIds)->delete();
+}
+// The used code points to its device while a support device points back to
+// its originating code. Break that nullable fixture-only cycle before deleting.
+$db->table('activation_codes')->whereIn('org_id', $orgIds)->update(['used_by_device_id' => null]);
 
 $tables = $db->table('information_schema.tables')
     ->where('table_schema', 'public')->where('table_type', 'BASE TABLE')
@@ -114,6 +122,7 @@ do {
 $retained = DB::connection('pgsql_owner')->table('platform.admin_log')->whereIn('org_id', $orgIds)->pluck('org_id')->all();
 $rows['organizations'] = array_values(array_filter($rows['organizations'], fn ($row) => ! in_array($row['id'], $retained, true)));
 $remaining = array_filter($rows);
+$lastErrors = [];
 for ($pass = 0; $remaining !== [] && $pass < 20; $pass++) {
     foreach ($remaining as $table => $tableRows) {
         $keys = $primaryKeys[$table] ?? null;
@@ -134,14 +143,17 @@ for ($pass = 0; $remaining !== [] && $pass < 20; $pass++) {
                 }
             });
             unset($remaining[$table]);
-        } catch (Throwable) {
+            unset($lastErrors[$table]);
+        } catch (Throwable $error) {
             // Still referenced by a row a later table holds; retried next pass.
+            $lastErrors[$table] = $error->getMessage();
         }
     }
 }
 
 if ($remaining !== []) {
     fwrite(STDERR, 'could not remove: '.implode(', ', array_keys($remaining))."\n");
+    foreach ($lastErrors as $table => $message) fwrite(STDERR, $table.': '.$message."\n");
     exit(1);
 }
 

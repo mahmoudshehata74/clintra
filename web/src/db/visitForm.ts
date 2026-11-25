@@ -71,7 +71,8 @@ export async function findVisitFormData(
 
 /** A visit_form_data row read as the general form's two fields; a visit with no row yet reads as both empty. */
 export function readVisitFormValues(row: VisitFormData | undefined): VisitFormFieldValues {
-  return (row?.data as VisitFormFieldValues | undefined) ?? EMPTY_VISIT_FORM_VALUES;
+  const values = row?.data as Partial<VisitFormFieldValues> | undefined;
+  return { complaint: values?.complaint ?? "", diagnosis: values?.diagnosis ?? "" };
 }
 
 /** saveVisitFormField's refusal once the visit is completed: from then on the form changes only by correction. */

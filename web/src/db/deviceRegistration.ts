@@ -29,6 +29,9 @@ function primeDeviceId(deviceId: string): void {
   }
 }
 
+/** Support bootstrap has its own device id and never consults the clinic's legacy storage key. */
+export function primeSupportDeviceId(deviceId: string): void { primeDeviceId(deviceId); }
+
 /**
  * Whether this tab's device id comes from the persisted device row, and a way
  * to hear the moment it does — what startSyncEngine (sync/engine.ts) waits on

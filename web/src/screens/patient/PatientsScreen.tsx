@@ -34,7 +34,7 @@ export default function PatientsScreen() {
   if (patientId !== null) {
     return (
       <PageMain className="flex flex-col gap-3.5 pt-6 pb-16 print:hidden">
-        <Button variant="secondary" size="sm" className="self-start" onClick={() => setPatientId(null)}>
+        <Button variant="secondary" size="sm" data-support-nav className="self-start" onClick={() => setPatientId(null)}>
           {T.backToSearch}
         </Button>
         <Card>
@@ -51,6 +51,7 @@ export default function PatientsScreen() {
         <div className="px-[18px] py-4">
           <Field label={T.searchLabel} id="patient-search">
             <TextInput
+              data-support-nav
               type="text"
               value={query}
               placeholder={T.searchPlaceholder}
@@ -77,6 +78,7 @@ export default function PatientsScreen() {
                 return (
                   <li key={patient.id} className="border-b border-hair last:border-b-0">
                     <button
+                      data-support-nav
                       type="button"
                       onClick={() => setPatientId(patient.id)}
                       className="flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-0.5 bg-card px-[18px] py-3 text-start font-[inherit] transition-colors duration-150 hover:bg-field focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green"

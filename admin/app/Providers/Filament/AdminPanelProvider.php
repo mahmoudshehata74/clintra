@@ -7,6 +7,7 @@ use App\Filament\Pages\ChangePassword;
 use App\Filament\Pages\Clinic;
 use App\Filament\Pages\Clinics;
 use App\Filament\Pages\SignIn;
+use App\Filament\Pages\SupportEntry;
 use App\Http\Middleware\ResolvePlatformSession;
 use App\Http\Middleware\VerifyPanelCsrf;
 use Filament\FontProviders\LocalFontProvider;
@@ -28,7 +29,7 @@ final class AdminPanelProvider extends PanelProvider
     {
         return $panel->default()->id('admin')->path('panel')->brandName('إدارة كلينترا')
             ->login(SignIn::class)->loginRouteSlug('sign-in')->authGuard('platform')
-            ->pages([AdminLog::class, ChangePassword::class, Clinics::class, Clinic::class])->homeUrl(fn () => AdminLog::getUrl())
+            ->pages([AdminLog::class, ChangePassword::class, Clinics::class, Clinic::class, SupportEntry::class])->homeUrl(fn () => AdminLog::getUrl())
             ->navigation(false)->topbar(false)
             ->font('IBM Plex Sans Arabic', url: fn () => asset('fonts.css'), provider: LocalFontProvider::class)
             ->renderHook(PanelsRenderHook::HEAD_END, fn () => new HtmlString('<link rel="stylesheet" href="'.e(asset('panel.css')).'"><script src="'.e(asset('panel.js')).'"></script>'))

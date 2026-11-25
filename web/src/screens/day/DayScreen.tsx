@@ -83,6 +83,7 @@ import { formatMoneyAmount } from "../money";
 import type { UndoAction } from "./undoAction";
 import UndoToast from "./UndoToast";
 import { SEED_DAY_QUERY_PARAM } from "../../domain/appMode";
+import { isSupportMode } from "../../auth/supportMode";
 
 interface StaticData {
   locations: Location[];
@@ -287,12 +288,13 @@ export default function DayScreen({
     let cancelled = false;
 
     async function load() {
-      await seedDatabase(db, { includeQueueDemo: true, realPinHash: true });
+      if (!isSupportMode()) await seedDatabase(db, { includeQueueDemo: true, realPinHash: true });
       // Registration is transparent (Layer 1): right after the seed, this
       // writes the device row (migrating any pre-v8 localStorage id) and primes
       // the synchronous device-id cache the write path reads. It also yields
       // the device's home location, used as the default selection below.
-      const deviceBinding = await ensureDeviceRegistration(db);
+      const deviceBinding = isSupportMode() ? (await db.device.toArray())[0] : await ensureDeviceRegistration(db);
+      if (!deviceBinding) return;
       const [locations, practitioners, schedules, services] = await Promise.all([
         db.locations.toArray(),
         db.practitioners.toArray(),
@@ -1037,7 +1039,7 @@ export default function DayScreen({
       )}
 
       {(showPractitionerFilter || showLocationSwitcher) && (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div data-support-navigation className="mt-3 flex flex-wrap items-center gap-3">
           {showPractitionerFilter && (
             <ToggleGroup
               variant="filter"

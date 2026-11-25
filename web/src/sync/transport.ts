@@ -46,6 +46,7 @@ export interface PullSinceResult {
    */
   deviceSeries?: number | null;
   codeNotices?: { id: string; purpose: "device" | "owner_recovery"; issued_at: string }[];
+  supportSessions?: { device_id: string; admin_name: string; expires_at: string }[];
   /** The organization switch. Null means off; undefined means this transport supplies no signal. */
   identityEnforcedAt?: string | null;
   identityRolloutAutoAt?: string | null;

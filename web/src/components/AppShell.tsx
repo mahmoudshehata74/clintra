@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { isSupportMode } from "../auth/supportMode";
 import { authStrings } from "../auth/authStrings";
 import { clearActiveSession } from "../auth/session";
 import { useActingStaffName } from "../auth/useActingMembership";
@@ -237,9 +238,9 @@ function AppBar({ title, today, whoName }: { title: ReactNode; today: ClinicDay;
 
       <AppearanceToggle />
 
-      <Button variant="onDark" size="sm" onClick={() => clearActiveSession()}>
+      {!isSupportMode() && <Button variant="onDark" size="sm" onClick={() => clearActiveSession()}>
         {authStrings.lockButtonLabel}
-      </Button>
+      </Button>}
 
       <div className="flex flex-col gap-px border-s border-glass/[0.13] ps-3 text-end">
         <span className="text-[12.5px] font-semibold tracking-[-0.01em] text-on-dark tabular-nums">{dateLine}</span>
@@ -279,6 +280,7 @@ export default function AppShell({
           return (
             <button
               key={item.key}
+              data-support-nav
               type="button"
               onClick={() => onSelect(item.key)}
               aria-current={isActive ? "page" : undefined}

@@ -464,6 +464,10 @@ pre {
 .device-row small { display:block; color:var(--muted) }
 .code-actions { display:flex; gap:12px; flex-wrap:wrap }
 .code-actions form { flex:1 1 220px; display:flex; flex-direction:column; gap:12px }
+.support-main { max-width:640px; margin-inline:auto; width:100% }
+.support-form { display:flex; flex-direction:column; gap:14px; align-items:start }
+.support-form .field { width:100% }
+.support-complete { width:min(100%,640px); align-items:start }
 .approval-row { display:flex; gap:16px; flex-wrap:wrap; align-items:center; padding:12px 0; border-top:1px solid var(--hair) }
 .minted-page { margin:0; background:var(--ink); color:var(--text); font-family:'IBM Plex Sans Arabic',sans-serif }
 .minted-backdrop { min-height:100vh; display:grid; place-items:center; padding:16px }
@@ -484,6 +488,6 @@ pre {
   .mobile-account summary::-webkit-details-marker { display:none }
   .account-items { position:absolute; inset-inline-end:0; top:calc(100% + 8px); z-index:10; background:var(--ink-2); border:1px solid var(--rule); border-radius:12px; padding:8px; min-width:180px; display:flex; flex-direction:column; gap:8px; box-shadow:0 8px 20px var(--shadow-mid) }
   .account-items .quiet,.account-items form { width:100% }
-  .appbar .panel-nav { grid-column:1 / -1; grid-row:2; display:grid; grid-template-columns:1fr 1fr; gap:0; padding:3px; border:1px solid var(--on-dark-dim); border-radius:10px }
+  .appbar .panel-nav { grid-column:1 / -1; grid-row:2; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; padding:3px; border:1px solid var(--on-dark-dim); border-radius:10px }
   .panel-nav .quiet { text-align:center; border-color:transparent; border-radius:7px }
 }

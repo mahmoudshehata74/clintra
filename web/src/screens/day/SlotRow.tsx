@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isSupportMode } from "../../auth/supportMode";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Ltr from "../../components/Ltr";
@@ -73,7 +74,7 @@ export default function SlotRow({
 }: SlotRowProps) {
   const visual = visit ? statusVisual(visit.status) : null;
   const handleClick = onPrimaryAction ?? onTapEmptySlot;
-  const isTappable = Boolean(handleClick);
+  const isTappable = !isSupportMode() && Boolean(handleClick);
 
   // `.until`'s "minutes since" text (in_room/no_show) is wall-clock-derived,
   // so nothing re-renders it on its own — this tick forces one every minute.
@@ -193,6 +194,7 @@ export default function SlotRow({
         </Badge>
         {onOpenVisitForm && (
           <button
+            data-support-nav
             type="button"
             onClick={onOpenVisitForm}
             className="shrink-0 rounded-chip bg-field px-2 py-0.5 text-xs text-muted hover:bg-green-wash hover:text-green"

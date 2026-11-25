@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useGuardedActingMembership } from "../../auth/useActingMembership";
+import { isSupportMode } from "../../auth/supportMode";
 import Ltr from "../../components/Ltr";
 import { saveFailedStrings } from "../../components/strings";
 import { attemptSave } from "../../components/ui/attemptSave";
@@ -287,10 +288,10 @@ export default function VisitWorkspace({ visitId, layout, onClose, completion }:
         {data.patient && (
           // `.quick` — `.qbtn` × 2.
           <div className="flex gap-1.5">
-            <button type="button" onClick={() => setProfileTab("visits")} className={QUICK_BUTTON}>
+            <button type="button" data-support-nav onClick={() => setProfileTab("visits")} className={QUICK_BUTTON}>
               {patientProfileStrings.historyQuick}
             </button>
-            <button type="button" onClick={() => setProfileTab("payments")} className={QUICK_BUTTON}>
+            <button type="button" data-support-nav onClick={() => setProfileTab("payments")} className={QUICK_BUTTON}>
               {patientProfileStrings.invoicesQuick}
             </button>
           </div>
@@ -466,6 +467,8 @@ function VisitFields({ visitId, stored, pendingSaves }: VisitFieldsProps) {
       markJustSaved(field);
     }
   }
+
+  if (isSupportMode()) return <>{FIELD_CONFIG.map((field) => <div key={field.key} className="flex flex-col gap-1"><p className="text-xs font-bold text-muted">{field.label}</p><p className="min-h-10 rounded-control border border-rule bg-field px-3 py-2 text-sm">{stored[field.key] ?? ""}</p></div>)}</>;
 
   return (
     <>

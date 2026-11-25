@@ -1,4 +1,5 @@
 import Dexie, { type Table } from "dexie";
+import { isSupportMode } from "../auth/supportMode";
 import { id } from "../domain/id";
 import { resolveActingMembership } from "./actingMembership";
 import { getDeviceId } from "./deviceRegistration";
@@ -183,6 +184,7 @@ function notifyMutationCommitted(): void {
  * by, rather than a snapshot that cannot be checked against later history.
  */
 export async function mutate<T>(db: ClintraDatabase, input: MutationInput<T>): Promise<string> {
+  if (isSupportMode()) throw new Error("جهاز الدعم للقراءة بس");
   const auditLogId = await db.transaction("rw", input.table, db.audit_log, db.sync_ops, () =>
     applyEntityWrite(db, input),
   );
@@ -215,6 +217,7 @@ export async function runAtomicMutations<R>(
   tables: readonly Table<unknown, string>[],
   callback: (write: AtomicWriter) => Promise<R>,
 ): Promise<R> {
+  if (isSupportMode()) throw new Error("جهاز الدعم للقراءة بس");
   const write: AtomicWriter = (input) => applyEntityWrite(db, input);
   const result = await db.transaction("rw", [...tables, db.audit_log, db.sync_ops], () => callback(write));
   notifyMutationCommitted();

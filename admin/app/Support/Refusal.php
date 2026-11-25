@@ -4,6 +4,19 @@ namespace App\Support;
 
 final class Refusal
 {
+    public static function supportMessage(array $result): string
+    {
+        return match ($result['reason'] ?? '') {
+            'not_found' => 'الكود ده مش صحيح',
+            'unchanged' => 'الكود ده اتستخدم قبل كده',
+            'expired' => 'الكود ده خلص، اطلب من المالك كود جديد',
+            'org_disabled' => 'حساب العيادة موقوف',
+            'no_owner' => 'اللي عمل الكود مبقاش مالك للعيادة',
+            'support_active' => 'فيه دعم شغال للعيادة دي دلوقتي',
+            default => self::message($result),
+        };
+    }
+
     public static function message(array $result): string
     {
         if ($result['all_sessions_ended'] ?? false) {

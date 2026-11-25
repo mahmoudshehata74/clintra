@@ -14,6 +14,8 @@ import { hasAuditEndpoints, SyncAuthError, type PulledChange, type PullSinceResu
 import { SyncOrganizationSuspendedError } from "./transport";
 import { isOrganizationSuspended, setOrganizationSuspended } from "./organizationSuspension";
 import { setCodeNotices } from "./codeNotices";
+import { setSupportSessions } from "./supportSessions";
+import { isSupportMode } from "../auth/supportMode";
 
 const DEFAULT_INTERVAL_MS = 10_000;
 
@@ -164,6 +166,7 @@ export function describeFailedOpEscalation(op: SyncOp): { referenceCode: string 
  * group is never resent in part.
  */
 export async function runSyncCycle(db: ClintraDatabase, transport: SyncTransport): Promise<void> {
+  if (isSupportMode()) return;
   const allOps = await db.sync_ops.toArray();
   const nowIso = new Date().toISOString();
   const unsent = allOps.filter(
@@ -448,6 +451,7 @@ async function runBootstrapWindow(db: ClintraDatabase, transport: SyncTransport,
     await applyPage(db, result.changes, result.identityMemberships);
     await recordDeviceSeries(db, result.deviceSeries);
     if (result.codeNotices !== undefined) setCodeNotices(result.codeNotices, deviceId);
+    if (result.supportSessions !== undefined) setSupportSessions(result.supportSessions);
     await db.device.update(deviceId, {
       ...(result.identityEnforcedAt === undefined ? {} : { identity_enforced_at: result.identityEnforcedAt }),
       ...(result.identityRolloutAutoAt === undefined ? {} : { identity_rollout_auto_at: result.identityRolloutAutoAt }),
@@ -515,6 +519,7 @@ export async function runPullCycle(db: ClintraDatabase, transport: SyncTransport
     await applyPage(db, result.changes, result.identityMemberships);
     await recordDeviceSeries(db, result.deviceSeries);
     if (result.codeNotices !== undefined) setCodeNotices(result.codeNotices, deviceId);
+    if (result.supportSessions !== undefined) setSupportSessions(result.supportSessions);
 
     cursor = result.cursor;
     hasMore = result.hasMore;
@@ -546,6 +551,10 @@ function recordAuditOutcome(outcome: AuditSyncOutcome): void {
  * push when the push could not reach the server.
  */
 export async function runAuditCycle(db: ClintraDatabase, transport: SyncTransport): Promise<void> {
+  if (isSupportMode()) {
+    if (hasAuditEndpoints(transport)) recordAuditOutcome(await runAuditPull(db, transport));
+    return;
+  }
   if (!hasAuditEndpoints(transport)) {
     return;
   }

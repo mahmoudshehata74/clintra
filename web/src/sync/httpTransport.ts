@@ -107,6 +107,7 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       rows: Array<{ entity: string; entity_id: string; rev: number; payload: Record<string, unknown> | null }>;
       device_series?: number | null;
       code_notices?: PullSinceResult["codeNotices"];
+      support_sessions?: PullSinceResult["supportSessions"];
       identity_enforced_at?: string;
       identity_rollout_auto_at?: string;
       identity_memberships?: PullSinceResult["identityMemberships"];
@@ -117,6 +118,7 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       hasMore: body.has_more,
       deviceSeries: body.device_series,
       ...(body.code_notices === undefined ? {} : { codeNotices: body.code_notices }),
+      ...(body.support_sessions === undefined ? {} : { supportSessions: body.support_sessions }),
       identityEnforcedAt: body.identity_enforced_at ?? null,
       ...(body.identity_rollout_auto_at === undefined && body.identity_enforced_at === undefined
         ? {} : { identityRolloutAutoAt: body.identity_rollout_auto_at ?? null }),
@@ -138,6 +140,7 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       rows: Array<{ entity: string; entity_id: string; rev: number; payload: Record<string, unknown> | null }>;
       device_series?: number | null;
       code_notices?: PullSinceResult["codeNotices"];
+      support_sessions?: PullSinceResult["supportSessions"];
       identity_enforced_at?: string;
       identity_rollout_auto_at?: string;
       identity_memberships?: PullSinceResult["identityMemberships"];
@@ -148,6 +151,7 @@ export class HttpTransport implements SyncTransport, AuditTransport {
       hasMore: body.has_more,
       deviceSeries: body.device_series,
       ...(body.code_notices === undefined ? {} : { codeNotices: body.code_notices }),
+      ...(body.support_sessions === undefined ? {} : { supportSessions: body.support_sessions }),
       identityEnforcedAt: body.identity_enforced_at ?? null,
       ...(body.identity_rollout_auto_at === undefined && body.identity_enforced_at === undefined
         ? {} : { identityRolloutAutoAt: body.identity_rollout_auto_at ?? null }),
@@ -202,6 +206,7 @@ export class HttpTransport implements SyncTransport, AuditTransport {
     }
     if (response.status === 403) {
       const body = await response.json().catch(() => null) as { error?: string } | null;
+      if (body?.error === "support_read_only") throw new Error("جهاز الدعم للقراءة بس، مفيش تغيير بيتحفظ منه");
       if (body?.error === "org_disabled") {
         setOrganizationSuspended(true);
         throw new SyncOrganizationSuspendedError();

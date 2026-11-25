@@ -5,7 +5,7 @@ import { getDeviceId } from "./deviceRegistration";
 import type { Location, Membership, Organization, Practitioner, User } from "./types";
 
 /** Matches POST /api/devices/register's response exactly (DeviceRegistrationController::register). */
-interface RegisterDeviceResponseBody {
+export interface RegisterDeviceResponseBody {
   identity_enforced_at?: string;
   token: string;
   device_id: string;
@@ -13,7 +13,7 @@ interface RegisterDeviceResponseBody {
   location_id: string;
   membership_id: string;
   /** This device's number series at its location (docs/schema.md's v16 additions). */
-  series: number;
+  series: number | null;
   organization: Organization;
   locations: Location[];
   /** syndicate_number and rev arrive from 2026_09_12_000028 on; absent from an older server. */
@@ -108,7 +108,7 @@ export async function registerDevice(
  * same class of problem in reverse). Each membership and practitioner row
  * already carries its real server `rev`, straight from the response.
  */
-async function bootstrapFromRegistration(db: ClintraDatabase, response: RegisterDeviceResponseBody): Promise<void> {
+export async function bootstrapFromRegistration(db: ClintraDatabase, response: RegisterDeviceResponseBody): Promise<void> {
   await db.transaction(
     "rw",
     [db.organizations, db.locations, db.practitioners, db.memberships, db.users, db.device],

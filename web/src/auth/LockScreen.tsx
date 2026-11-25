@@ -6,6 +6,7 @@ import type { Membership, User } from "../db/types";
 import AppearanceToggle from "../components/AppearanceToggle";
 import OrganizationSuspensionNotice from "../components/OrganizationSuspensionNotice";
 import CodeNoticeBanner from "../components/CodeNoticeBanner";
+import SupportSessionBanner from "../components/SupportSessionBanner";
 import Badge from "../components/ui/Badge";
 import { formatActorLabel } from "../screens/day/actorLabel";
 import { authStrings } from "./authStrings";
@@ -185,6 +186,7 @@ export default function LockScreen({ defaultMembershipId }: LockScreenProps) {
         </p>
         <OrganizationSuspensionNotice inLockCard />
         <CodeNoticeBanner inLockCard />
+        <SupportSessionBanner inLockCard />
 
         {identityMode && identity ? (
           <IdentityScreen
